@@ -1,0 +1,478 @@
+import json
+import re
+import tempfile
+import zipfile
+from dataclasses import asdict
+from enum import Enum
+from pathlib import Path
+
+from testbench2robotframework.json_reader import TestCaseSet
+from testbench2robotframework.model import KeywordType, TestCaseDetails
+from testbench_cli_reporter.actions import ImportJSONExecutionResults
+from testbench_cli_reporter.config_model import ImportJsonParameters
+from testbench_cli_reporter.testbench import Connection as TBConnection
+from testbench_cli_reporter.testbench import ConnectionLog
+
+from testbench_ai_service.log import logger
+from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.testbench import (
+    TestCaseSetDetails,
+)
+from testbench_ai_service.models.usecase import ExecutionContext
+from testbench_ai_service.usecases.defect_explanations.model import (
+    Comments,
+    Result,
+    TestCase,
+    TestCaseSetProtocol,
+)
+from testbench_ai_service.utils.i18n import get_translation
+
+
+def update_description(
+    updated_comment: str, test_case_set: TestCaseSet, conn: TBConnection, context: ExecutionContext
+):
+    with tempfile.TemporaryDirectory() as tmpdir:
+        zip_path = Path(tmpdir) / "report.zip"
+
+        create_import_zip(updated_comment, test_case_set.details, zip_path)
+        logger.debug(
+            "Created an import zip file containing the results for test case set '%s'",
+            test_case_set.details.uniqueID,
+        )
+
+        import_data(conn, context, zip_path)
+        logger.debug(
+            "Imported the results into TestBench for test case set '%s'",
+            test_case_set.details.uniqueID,
+        )
+
+
+def clean_up_comment(comment: str) -> str:
+    pattern = "/table><div.*</div>"
+    return re.sub(pattern, "/table>", comment)
+
+
+def import_data(conn: TBConnection, context: ExecutionContext, path: Path):
+    """
+    Imports test case execution results from a JSON file into TestBench.
+
+    Args:
+        conn (TBConnection): The active TestBench connection object.
+        context (ExecutionContext): Execution context containing project and cycle keys.
+        path (Path): The file path of the JSON file or ZIP archive to import.
+    """
+    connection = ConnectionLog()
+    connection.add_connection(conn)
+
+    parameters = ImportJsonParameters(
+        inputPath=path, projectKey=context.project_key, cycleKey=context.cycle_key
+    )
+    importer = ImportJSONExecutionResults(parameters=parameters)
+
+    importer.trigger(connection.active_connection)
+
+
+def create_import_zip(updated_comment: str, test_case_set_details: TestCaseSetDetails, path: Path):
+    """
+    Creates a ZIP file containing a test case set and its protocol JSON files.
+
+    This function generates two JSON files from a TestCaseSetDetails object:
+        1. `protocol.json`: Contains the serialized TestCaseSetProtocol object built from
+           the updated comments and test case details.
+        2. `<tcs.uniqueID>.json`: Contains the serialized TestCaseSetDetails object with
+           updated comments, using a custom serializer for Enum values.
+
+    Both JSON files are written into a ZIP archive at the specified `path`.
+
+    Args:
+        updated_comment (str): The updated HTML comment to embed in both the protocol and test case set.
+        test_case_set_details (TestCaseSetDetails): The source test case set details object.
+        path (Path): The file path where the ZIP archive will be created.
+
+    Returns:
+        None: The function writes files to disk but does not return a value.
+
+    Example:
+        >>> create_import_zip("<new comment>", test_case_set_details, Path("output.zip"))
+        # Produces 'output.zip' containing 'protocol.json' and '<tcs.uniqueID>.json'
+    """
+    tcs = build_update_test_case_set(updated_comment, test_case_set_details)
+    protocol = build_protocol_json(updated_comment, test_case_set_details)
+
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr(
+            "protocol.json", json.dumps([item.model_dump() for item in [protocol]], indent=4)
+        )
+        zipf.writestr(f"{tcs.uniqueID}.json", json.dumps(asdict(tcs), default=custom_serializer))
+
+
+def custom_serializer(obj):
+    """
+    Serializes Enum objects for JSON encoding.
+
+    If the given object is an instance of `Enum`, its `value` is returned
+    so it can be serialized into JSON. For all other object types, a
+    `TypeError` is raised.
+
+    Args:
+        obj (Any): The object to serialize.
+
+    Returns:
+        Any: The underlying value of the Enum if `obj` is an Enum.
+
+    Raises:
+        TypeError: If `obj` is not an Enum.
+
+    Example:
+        >>> from enum import Enum
+        >>> class Status(Enum):
+        ...     PASS = "PASS"
+        ...     FAIL = "FAIL"
+        ...
+        >>> custom_serializer(Status.PASS)
+        'PASS'
+        >>> custom_serializer("not enum")
+        Traceback (most recent call last):
+            ...
+        TypeError: Type <class 'str'> not serializable
+    """
+    if isinstance(obj, Enum):
+        return obj.value
+    raise TypeError(f"Type {type(obj)} not serializable")
+
+
+def build_protocol_json(
+    updated_comment: str, test_case_set_details: TestCaseSetDetails
+) -> TestCaseSetProtocol:
+    """
+    Builds a TestCaseSetProtocol object from updated comments and test case details.
+
+    This function constructs a new `TestCaseSetProtocol` based on the provided
+    `test_case_set_details`. It creates a list of `TestCase` objects by copying
+    execution-related information (keys, status, verdict, etc.) from each
+    test case in the set. The `comments` field of the new protocol is updated
+    with the given `updated_comment`.
+
+    Args:
+        updated_comment (str): The new comment string (typically HTML) to embed in the protocol.
+        test_case_set_details (TestCaseSetDetails): The source object containing test case set metadata
+            and individual test case execution details.
+
+    Returns:
+        TestCaseSetProtocol: A newly built protocol object that includes:
+            - The original test case set key and execution key
+            - A `Comments` object with the updated HTML comment
+            - A list of `TestCase` objects with their execution results
+
+    Example:
+        >>> protocol = build_protocol_json("<new comment>", test_case_set_details)
+        >>> protocol.comments.html
+        "<new comment>"
+    """
+    test_cases = []
+    for test_case in test_case_set_details.testCases:
+        test_cases.append(
+            TestCase(
+                testCaseExecutionKey=test_case.exec.key,
+                durationMillis=0,
+                uniqueID=test_case.uniqueID,
+                result=Result(
+                    execStatus=test_case.exec.execStatus,
+                    status=test_case.exec.status,
+                    verdict=test_case.exec.verdict,
+                ),
+            )
+        )
+
+    return TestCaseSetProtocol(
+        testCaseSetKey=test_case_set_details.key,
+        durationMillis=0,
+        executionKey=test_case_set_details.exec.key,
+        comments=Comments(html=updated_comment),
+        testCases=test_cases,
+    )
+
+
+def build_update_test_case_set(
+    updated_comment: str, test_case_set_details: TestCaseSetDetails
+) -> TestCaseSetDetails:
+    """
+    Updates the comments field of a TestCaseSetDetails object with new content.
+
+    This function replaces the `exec.comments` attribute of the provided
+    `test_case_set_details` with the given `updated_comment`.
+    The modified object is then returned.
+
+    Args:
+        updated_comment (str): The new comment string (typically HTML) to insert.
+        test_case_set_details (TestCaseSetDetails): The test case set details object
+            whose comments will be updated.
+
+    Returns:
+        TestCaseSetDetails: The same object with its `exec.comments` field updated.
+
+    Example:
+        >>> details = TestCaseSetDetails()
+        >>> details.exec.comments = "<old comment>"
+        >>> new_details = build_update_test_case_set("<new comment>", details)
+        >>> new_details.exec.comments
+        "<new comment>"
+    """
+    updated_test_case_set_details = test_case_set_details
+    updated_test_case_set_details.exec.comments = updated_comment
+    return updated_test_case_set_details
+
+
+def add_explanations_to_comment(comment: str, errors: dict, language: LanguageOption) -> str:
+    """
+    Inserts AI-generated explanations into an HTML comment containing test case results.
+
+    The function searches the given `comment` (HTML string) for each error entry
+    in the `errors` dictionary. For each error:
+
+        - It locates the corresponding `<pre>...</pre>` block containing the error message.
+        - If a previous explanation (`<br><b>AI-explainer:</b><br>`) already exists,
+        it replaces the old explanation with the new one from `errors['explanation']`.
+        - Otherwise, it appends a new explanation right after the error message.
+
+    Args:
+        comment (str): The original HTML comment string containing test case results.
+        errors (dict): A mapping of error IDs to their details. Each entry should contain:
+            {
+                "error": str,         # The error message as it appears in the HTML
+                "explanation": str    # The AI-generated explanation to insert
+            }
+
+    Returns:
+        str: The updated HTML comment with explanations inserted or replaced.
+
+    Example:
+        >>> comment = "<td>iTB-TC-001<pre>Error: Value mismatch</pre></td>"
+        >>> errors = {
+        ...     "iTB-TC-001": {
+        ...         "error": "Error: Value mismatch",
+        ...         "explanation": "This happens when X is not equal to Y."
+        ...     }
+        ... }
+        >>> add_explanation_to_comment(comment, errors)
+        '<td>iTB-TC-001<pre>Error: Value mismatch<br><b>AI-explainer:</b><br>This happens when X is not equal to Y.</pre></td>'
+    """
+    explainer_result_heading_message = get_translation("explainer_result_heading", language)
+    updated_html = comment
+    for details in errors:
+        try:
+            error_msg = details.get("error", "")
+            if not error_msg:
+                logger.warning(
+                    f"No error message found for error ID: {details['failed_test_case']}"
+                )
+                continue
+
+            pattern = rf"({re.escape(details['failed_test_case'])}.*?<pre>)(.*?{re.escape(error_msg)}.*?)(</pre>)"
+            matches = re.findall(pattern, updated_html, flags=re.DOTALL)
+
+            if not matches:
+                logger.warning(f"No matches found for error ID: {details['failed_test_case']}")
+                continue
+
+            explanation = details.get("explanation", "")
+            if not explanation:
+                logger.warning(f"No explanation found for error ID: {details['failed_test_case']}")
+                continue
+
+            if "<div class='ai'>" in matches[0][1]:
+                message = details["error"].split("<div class='ai'>", 1)
+                base_message = message[0] if len(message) > 0 else details["error"]
+                replacement = (
+                    r"\1"
+                    + base_message
+                    + "<div class='ai'><b>"
+                    + explainer_result_heading_message
+                    + ":</b><br>"
+                    + explanation
+                    + "</div></pre>"
+                )
+            else:
+                replacement = (
+                    r"\1"
+                    + details["error"]
+                    + "<div class='ai'><b>"
+                    + explainer_result_heading_message
+                    + ":</b><br>"
+                    + explanation
+                    + "</div></pre>"
+                )
+
+            updated_html = re.sub(pattern, replacement, updated_html, flags=re.DOTALL)
+        except (KeyError, IndexError, AttributeError) as e:
+            logger.error(f"Error processing error ID {details['failed_test_case']}: {e}")
+            continue
+
+    return add_disclaimer(updated_html, language)
+
+
+def add_disclaimer(comment: str, language: LanguageOption) -> str:
+    ai_disclaimer = get_translation("disclaimer", language)
+    disclaimer = f"<div style='padding: 5px;'><div style='border-top: 1px solid black; width: 50%; font-size: 10px;'>{ai_disclaimer}</div></div>"
+    return comment.replace("</table>", "</table>" + disclaimer, 1)
+
+
+def add_error_message(comment: str, language: LanguageOption) -> str:
+    error_message = get_translation("error_message", language)
+    failed = get_translation("defect_explainer_failed", language)
+    error_message = f"<div><b>{failed}:</b><br/>{error_message}</div>"
+    return comment.replace("</table>", "</table>" + error_message, 1)
+
+
+def get_error_message(comment: str) -> dict[str, dict[str, str]]:
+    """
+    Extracts error messages from the comments of a TestCaseSet object.
+
+    The function searches the `comments` field for an embedded HTML table.
+    From the first `<table>...</table>` block found, it parses rows (`<tr>`)
+    and cells (`<td>`). Each row with at least three cells
+    is interpreted as:
+
+        1. Error ID
+        2. Status (e.g., "PASS" or "FAIL")
+        3. Error message
+
+    Only rows with status `"FAIL"` are included in the result.
+
+    Args:
+        comment (comment): A collection of test cases whose comments are parsed.
+
+    Returns:
+        dict[str, dict[str, str]]:
+            A dictionary where the keys are error IDs and the values are dictionaries
+            of the form `{"status": <status>, "error": <message>}`.
+            Returns an empty dictionary if no table or no failures are found.
+
+    Example:
+        >>> errors = get_error_message(test_case_set)
+        >>> {
+        ...   "iTB-TC-001": {"status": "FAIL", "error": "Expected value X but got Y"},
+        ...   "iTB-TC-003": {"status": "FAIL", "error": "Timeout occurred"}
+        ... }
+    """
+    # Extract only the first <table>...</table> block
+    if "<table" not in comment or "</table>" not in comment:
+        return {}
+
+    table_content = comment.rsplit("<table", maxsplit=1)[-1].split("</table>", maxsplit=1)[0]
+    rows = table_content.split("<tr>")
+
+    errors = {}
+    for row in rows:
+        # Extract cells
+        cells = []
+        for cell in row.split("<td"):
+            _, sep, tail = cell.partition(">")
+            text = tail if sep else cell
+            clean_text = re.sub(r"^(<[^>]+>)*", "", text).strip()
+            clean_text = re.sub(r"(<[^>]+>|\n)*$", "", clean_text).strip()
+            if clean_text:
+                cells.append(clean_text)
+
+        # Ensure we have at least three cells before adding
+        if len(cells) >= 3:  # noqa: PLR2004
+            error_id, status, message = cells[:3]
+            if status == "FAIL":
+                errors[error_id] = {"status": status, "error": message}
+
+    return errors
+
+
+def get_test_case_set_as_string(test_case_set: TestCaseSet, test_case: str) -> str:
+    """
+    Converts a test case set to a formatted string using the first test case in test case set.
+
+    The output is structured as:
+    - The test case set name on the first line
+    - Each interaction (and its parameters, if any) indented on subsequent lines
+
+    Note: Since test cases in a set differ only in their actual arguments,
+    the first test case is representative for formatting purposes.
+
+    Args:
+        test_case_set: A test case set object
+
+    Returns:
+        str: Formatted string representing the test case set
+
+    ## Example output:
+    ```
+    Endpreis berechnen ohne Rabatt - Instanz
+        CarConfig starten    step_type:flow
+        Fahrzeug wählen    param:Fahrzeugname    step_type:flow
+        Sondermodell wählen    param:Sondermodellname    step_type:flow
+        Zubehör wählen    param:Zubehörname    step_type:flow
+        Preis prüfen    param:Preis    step_type:check
+        CarConfig beenden    step_type:flow
+    ```
+    """
+    # Add test case set name as first line
+    lines = [f"{test_case_set.details.name}"]
+    separator = "    "
+    # comment = "#"
+    # line_break = "\n"
+
+    testcase: TestCaseDetails = test_case_set.test_cases.get(test_case)
+    if not testcase:
+        raise ValueError(f"Test case '{test_case}' not found in the test case set.")
+    high_level_status = ""
+    for keyword_call in testcase.testSequence:
+        keyword_level = len(keyword_call.numbering.split(".")) - 1
+        verdict = keyword_call.exec.verdict.name
+        is_compound = keyword_call.spec.keywordType == KeywordType.Compound and verdict == "Fail"
+        prefix = "▼" if is_compound else "►"
+        if keyword_call.parentID is None:
+            high_level_status = verdict
+            parameters = [
+                f"{param.name.replace('*', '').strip()}={param.value}"
+                for param in keyword_call.spec.callParameters
+            ]
+            lines.append(
+                f"{separator}"
+                f"{prefix}[{verdict}]{(10 - len(verdict)) * ' '}{separator}"
+                f"{keyword_call.spec.name}"
+                + (f"{separator}{separator.join(parameters)}" if parameters else "")
+            )
+        else:
+            if high_level_status != "Fail":
+                continue
+            parameters = [
+                f"{param.name.replace('*', '').strip()}={param.value}"
+                for param in keyword_call.spec.callParameters
+            ]
+            # logs = (
+            #     keyword_call.exec.comments
+            #     if keyword_call.spec.keywordType == KeywordType.Atomic
+            #     else ""
+            # )
+            lines.append(
+                f"{separator}"
+                f"{separator * keyword_level}{prefix}[{verdict}]{(10 - len(verdict)) * ' '}{separator}"
+                f"{keyword_call.spec.name}"
+                + (f"{separator}{separator.join(parameters)}" if parameters else "")
+                # + (f"{line_break if logs else ''}{logs}")
+            )
+
+    # for interaction_call in test_case_set.test_cases[test_case].testSequence:
+    #     prefix = "# " if interaction_call.spec.interactionType == KeywordType
+    # .Compound else "  "
+
+    #     line = f"  {prefix}{interaction_call.spec.name}"
+    #     # Add parameters in format param:<parameter_name> if there are parameters
+    #     if interaction_call.spec.callParameters:
+    #         param_str = "    ".join(
+    #             [
+    #                 f"{param.name.replace('*', '').strip()}={param.value}"
+    #                 for param in interaction_call.spec.callParameters
+    #             ]
+    #         )
+    #         line += f"    {param_str}"
+
+    #     lines.append(line)
+
+    return "\n".join(lines)

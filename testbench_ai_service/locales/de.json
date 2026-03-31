@@ -1,0 +1,13 @@
+{
+    "review_started_message": "KI Review gestartet ...",
+    "review_result_heading": "KI Review",
+    "review_result_no_notes": "Keine Review Anmerkungen",
+    "description_generation_started_message": "KI-Generierung der Beschreibung gestartet ...",
+    "description_result_heading": "KI Beschreibung",
+    "explainer_result_heading": "KI-Erklärung",
+    "disclaimer": "Von KI generierte Antworten können ungenau sein.",
+    "review_failed": "KI Review ist fehlgeschalgen",
+    "error_message": "Bitte kontaktieren Sie den Systemadministrator für weitere Details.",
+    "description_failed": "KI Testfall Beschreibung ist fehlgeschalgen",
+    "defect_explainer_failed": "Beim Erstellen der KI-Fehlerbeschreibung ist ein Fehler aufgetreten"
+}

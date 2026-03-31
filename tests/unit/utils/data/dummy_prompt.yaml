@@ -1,0 +1,31 @@
+- name: "TestCaseSetReviewer"
+  description: "Dummy test prompt for unit testing."
+  default_variant: "ENG"
+  variants:
+    - name: "ENG"
+      model: "o4-mini-2025-04-16"
+      blocks:
+        - role: "system"
+          text: |
+            You will receive a blueprint from which executions are derived but will not have access to all executions.
+
+        - role: "user"
+          text: |
+            {% if glossary is defined %}
+            Additional Review Criterion - Glossary:
+            {{ glossary }}
+            {% endif %}
+            {% if test_case_set_description is defined %}
+            Additional Review Criterion - Description Appropriateness:
+            {{ test_case_set_description }}
+            {% endif %}
+            Review the following test case:
+            {{ test_case }}
+
+    - name: "DEU"
+      model: "o4-mini-2025-04-16"
+      blocks:
+        - role: "user"
+          text: |
+            Prüfe den folgenden Testfall:
+            {{ test_case }}

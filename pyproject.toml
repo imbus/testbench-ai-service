@@ -1,0 +1,131 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "testbench-ai-service"
+description = "A service supporting multiple AI-driven use cases for imbus' TestBench."
+authors = [{ name = "René Rohner", email = "rene.rohner@imbus.de" }]
+readme = "README.md"
+license = { file = "LICENSE" }
+dynamic = ["version"]
+requires-python = ">=3.10"
+keywords = [
+  "testbench",
+  "ai-proxy",
+  "artificial-intelligence",
+  "llm",
+  "openai",
+  "test-automation",
+  "test-case-review",
+  "test-case-generation",
+  "defect-explanation",
+  "fastapi",
+  "proxy-server",
+]
+classifiers = [
+  "Environment :: Console",
+  "Environment :: Web Environment",
+  "Framework :: AsyncIO",
+  "Framework :: FastAPI",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: Apache Software License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Testing",
+  "Topic :: Software Development :: Quality Assurance",
+]
+dependencies = [
+  "fastapi>=0.133.1,<1.0.0",
+  "pydantic>=2.12.5,<3.0.0",
+  "uvicorn>=0.41.0,<1.0.0",
+  "python-dotenv>=1.2.1,<2.0.0",
+  "openai>=2.24.0,<3.0.0",
+  "PyYAML>=6.0.3,<7.0.0",
+  "jinja2>=3.1.6,<4.0.0",
+  "testbench-cli-reporter>=3.0.0rc4",
+  "testbench2robotframework>=0.9.2a3",
+  "requests>=2.32.5,<3.0.0",
+  "tzdata>=2025.3",
+  "tomli>=2.4.0,<3.0.0",
+  "tomli-w>=1.2.0,<2.0.0",
+  "jsonschema>=4.26.0,<5.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.15.4",
+  "pre-commit>=4.5.1",
+  "flit>=3.12.0",
+  "wheel>=0.46.3",
+  "pytest>=9.0",
+  "pytest-mock>=3.15",
+]
+
+[project.urls]
+Homepage = "https://github.com/imbus/testbench-ai-service"
+
+[project.scripts]
+testbench-ai-service = "testbench_ai_service.cli:main"
+
+[tool.ruff]
+fix = false
+target-version = "py310"
+line-length = 100
+exclude = ["__pycache__", ".venv", "tools", "model"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ruff.lint]
+ignore = [
+  "B008", # do not perform function calls in argument defaults
+  # "B904",  # raise statement inside except without from
+  "E501",    # line too long
+  "N815",    # mixedCase variable in class scope
+  "N803",    # argument name should be lowercase
+  "N806",    # variable in function should be lowercase
+  "N812",    # lowercase imported as non lowercase
+  "N999",    # Invalid module name: 'Browser'
+  "PLR0913", # too many arguments
+  "T201",    # Print statements,
+  "PT009",   # pytest-style assertion; using unittest currently
+  "PT027",   # pytest-style raises assertion; using unittest currently
+]
+select = [
+  "E",
+  "F",
+  "W",
+  "C90",
+  "I",
+  "N",
+  "B",
+  "PYI",
+  "PL",
+  "PTH",
+  "UP",
+  "A",
+  "C4",
+  "DTZ",
+  "ISC",
+  "ICN",
+  "INP",
+  "PIE",
+  "T20",
+  "PYI",
+  "PT",
+  "RSE",
+  "RET",
+  "SIM",
+  "RUF",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,64 +1,76 @@
-# About
-TODO
+# TestBench AI Service
 
+A service supporting multiple AI-driven use cases for [imbus TestBench](https://www.imbus.de/en/testbench).
 
-# Project Structure
+## Features
+
+- **Multiple use cases** — test case set reviews, description generation, and defect explanations
+- **Pluggable LLM providers** — ships with OpenAI support; bring your own provider
+- **Configurable prompts** — YAML-based prompt templates with variants and Jinja2 placeholders
+- **Per-project configuration** — language, LLM provider, and prompt settings can be overridden per project
+- **Swagger UI** — built-in interactive API documentation at `/docs`
+- **SSL/TLS & reverse proxy support** — optional HTTPS with mTLS and trusted-proxy configuration
+
+## Requirements
+
+- Python 3.10+
+
+## Quick Start
+
+```bash
+pip install testbench-ai-service
 ```
-testbench-ai-proxy
-├── doc/                    # Documentation
-├── src/                    # Source code
-│   ├── main.py             # Main FastAPI application
-│   ├── openai_client.py    # Client for OpenAI API interactions
-│   └── request_helper.py   # Developer script to run http requests
-├── test/                   # (Unit) tests
-├── .env                    # Environment variables (OpenAI key); add this yourself
-└── requirements.txt        # Project dependencies
+
+Create a `.env` file with your OpenAI API key:
+
+```bash
+OPENAI_API_KEY=your_openai_api_key
 ```
 
+Initialize configuration and start the service:
 
-# Installation
-1. Clone the repository.
+```bash
+testbench-ai-service init
+testbench-ai-service start
+```
 
-2. Create a virtual environment and install required packages from requirements.txt.
-    ```
-    python -m venv testbenchai_venv
-    testbenchai_venv\Scripts\activate
-    pip install -r requirements.txt
-    ```
+The service runs at `http://127.0.0.1:8010` by default. Open `/docs` for the interactive Swagger UI.
 
-3. Set up your environment variables: Create a .env file in the project root or set environment variables directly.
-    ```
-    OPENAI_API_KEY=your_openai_api_key
-    ```
+## Documentation
 
+Full documentation is available in the [`docs/`](docs/) folder:
 
-# Usage
- 
-1. Use Uvicorn to start the FastAPI server.
- 
-    ```
-    cd src
-    python -m uvicorn main:app --reload
-    ```
+- [Introduction](docs/intro.md)
+- [Installation](docs/getting-started/installation.md)
+- [Quickstart](docs/getting-started/quickstart.md)
+- [Configuration](docs/configuration.md)
+- [Use Cases](docs/use-cases/index.md)
+- [Prompts](docs/prompts.md)
+- [TestBench Integration](docs/testbench-integration.md)
+- [CLI Commands](docs/cli.md)
 
-2. Once the server is running, you can view the interactive API documentation at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
+## Development
 
-3. Use HTTP requests to access AI services. For example:
-   - Endpoint: `POST /generate-test-case-description`
-   - Payload:
-       ```json
-        {
-            "test_steps":[
-                "Open the application.",
-                "Log in with credentials.",
-                "Navigate to the account management page.",
-                "Delete the account."
-            ]
-        }
-       ```
-   - Response:
-       ```json
-        {
-            "description":"This test case involves..."
-        }
-        ```
+```bash
+git clone https://git.imbus.de/testbench/testbench-ai-service.git
+cd testbench-ai-service
+python -m venv .venv && .venv\Scripts\activate
+pip install -e .[dev]
+```
+
+### Testing
+
+```bash
+# Unit tests
+python -m unittest discover -v tests\unit\
+
+# Integration tests (requires a running TestBench server)
+python -m unittest discover -v tests\integration\
+
+# Prompt engineering tests
+python -m unittest discover -v tests\prompt_engineering\<use_case>
+```
+
+## License
+
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.

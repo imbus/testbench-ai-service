@@ -1,0 +1,13 @@
+{
+    "review_started_message": "AI Review started ...",
+    "review_result_heading": "AI Review",
+    "review_result_no_notes": "No review notes",
+    "description_generation_started_message": "AI Description generation started ...",
+    "description_result_heading": "AI Description",
+    "explainer_result_heading": "AI-explanation",
+    "disclaimer": "AI-generated answers may be inaccurate.",
+    "review_failed": "AI review has failed",
+    "error_message": "Please contact the system administrator for further details.",
+    "description_failed": "AI Test Case Description has failed",
+    "defect_explainer_failed": "AI Defect Explainer has failed"
+}

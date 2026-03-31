@@ -1,0 +1,160 @@
+# yaml-language-server: $schema=./prompt.schema.json
+
+- name: "TestCaseSetDescriptions"
+  description: >
+    Generates a general description for a TestBench test case set.
+  default_variant: "full-description"
+  variants:
+    - name: "full-description"
+      model: "gpt-5.4"
+      blocks:
+        - role: "system"
+          text: |
+            <role>
+            You are an experienced QA engineer who creates descriptions for software test case sets.
+            </role>
+
+            <task>
+            Your task is to create concise, focused descriptions based on test steps and parameter data.
+            </task>
+
+        - role: "user"
+          text: |
+            <input_test_case_set_format>
+            A test case set contains an abstract execution sequence with test steps, variables, values, and a step_type.
+            The test case set template is structured as follows:
+
+            ```
+            {TestCaseSetName}
+                {Step 1}    step_type:flow
+                {Step 2}    param_name=${parameter_value}    step_type:flow
+                {Step 3}    'value'    step_type:flow
+                {Step 4}    param_name=${parameter_value}    step_type:check
+                ...
+            ```
+
+            Explanations:
+            - param_name is the name of a parameter,
+            - ${param_value} is the placeholder for its corresponding value
+            - Concrete parameter values are resolved in the parameter data table; do NOT flag their absence as an error.
+            - step_type can be flow (action) or check (validation).
+            - Values are formatted as Python representation: 'value'.
+            - If a parameter has multiple variables, they are interpreted as a list.
+            - The value "-" indicates null values.
+            </input_test_case_set_format>
+
+            <abstract_test_case_set>
+            Consider the following step sequence of a test case set:
+            ```
+            {{ step_sequence }}
+            ```
+            </abstract_test_case_set>
+
+            <parameter_data>
+            Additionally, the following parameter data is contained in this test case set:
+            The table has a header row specifying the parameter names.
+            Each subsequent row represents a concrete test case with a combination of parameter values.
+
+            ```
+            {{ parameter_combinations }}
+            ```
+            </parameter_data>
+
+            <task>
+            Create a description for this test case set with three parts:
+            1. Test objective: Summarise the main goal of the abstract test case set in one sentence.
+            2. Verifications: Briefly describe the most important verifications performed in the test case set.
+            3. Test cases: Briefly summarise each concrete test case (parameter combination).
+            </task>
+
+            <output_format>
+            Use the following format for the description.
+            It must be in plain text:
+            ```
+            {Test objective} ("This test case set verifies ...")
+
+            Verifications:
+            {Verifications}
+            
+            Test cases:
+            - {Test case 1}
+            - {Test case 2}
+            ...
+            ```
+            
+            - Remove leading whitespace and line breaks before the text.
+            - Do not alter any proper nouns, test step names, parameter names, parameter values, values, etc. from the input.
+            </output_format>
+    
+    - name: "short-description"
+      model: "gpt-5.1"
+      blocks:
+        - role: "system"
+          text: |
+            <role>
+            You are an experienced QA engineer who creates descriptions for software test case sets.
+            </role>
+
+            <task>
+            Your task is to create concise, focused descriptions based on test steps and parameter data.
+            </task>
+            
+        - role: "user"
+          text: |
+            <input_test_case_set_format>
+            A test case set contains an abstract execution sequence with test steps, variables, values, and a step_type.
+            The test case set template is structured as follows:
+
+            ```
+            {TestCaseSetName}
+                {Step 1}    step_type:flow
+                {Step 2}    param_name=${parameter_value}    step_type:flow
+                {Step 3}    'value'    step_type:flow
+                {Step 4}    param_name=${parameter_value}    step_type:check
+                ...
+            ```
+
+            Explanations:
+            - param_name is the name of a parameter,
+            - ${param_value} is the placeholder for its corresponding value
+            - Concrete parameter values are resolved in the parameter data table; do NOT flag their absence as an error.
+            - step_type can be flow (action) or check (validation).
+            - Values are formatted as Python representation: 'value'.
+            - If a parameter has multiple variables, they are interpreted as a list.
+            - The value "-" indicates null values.
+            </input_test_case_set_format>
+
+            <abstract_test_case_set>
+            Consider the following step sequence of a test case set:
+            ```
+            {{ step_sequence }}
+            ```
+            </abstract_test_case_set>
+
+            <parameter_data>
+            Additionally, the following parameter data is contained in this test case set:
+            The table has a header row specifying the parameter names.
+            Each subsequent row represents a concrete test case with a combination of parameter values.
+
+            ```
+            {{ parameter_combinations }}
+            ```
+            </parameter_data>
+
+            <task>
+            Create a description for this test case set consisting solely of the test objective.
+            Test objective: Summarise the main goal of the abstract test case set in one sentence.
+            </task>
+
+            <output_format>
+            Use the following format for the description.
+            It must be in plain text:
+            ```
+            {Test objective} ("This test case set verifies ...")
+            ...
+            ```
+            
+            - Remove leading whitespace and line breaks before the text.
+            - Do not alter any proper nouns, test step names, parameter names, parameter values, values, etc. from the input.
+
+            </output_format> 
