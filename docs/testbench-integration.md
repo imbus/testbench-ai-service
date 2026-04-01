@@ -59,12 +59,14 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 │           AI Service (FastAPI)                              │              │
 │ ┌─────────────────────────────────────────────────────────┐ │ 2. Validate  │
 │ │ 1. Extract session token from header                    │ │    token     │
-│ │ 2. Call tb_server_url/validate                          ├─┼───────────►  |
-│ │ 3. Check user roles (Admin/TestManager/TestDesigner)   │ │
+│ │ 2. Call TestBench REST API to verify token              ├─┼──────────────┘
+│ └─────────────────────────────────────────────────────────┘ │
+│ ┌─────────────────────────────────────────────────────────┐ │
+│ │ 3. Check user roles (Admin/TestManager/TestDesigner)    │ │
 │ └─────────────────────────────────────────────────────────┘ │
 └────────┬────────────────────────────────────────────────────┘
          │
-         │ 3. Return 202 Accepted
+         │ 4. Return 202 Accepted
          │    (processing in background)
          │
          ▼
@@ -77,8 +79,9 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 
 1. The user triggers an AI use case in the TestBench UI.
 2. TestBench sends a POST request to the AI Service with the user's session token as the `Authorization` header.
-3. The AI Service validates the token by calling `tb_server_url` (the TestBench REST API).
-4. If valid, the request is accepted and processed in the background.
+3. The AI Service validates the token by calling the TestBench REST API.
+4. If valid, the AI Service checks that the authenticated user has the required project role.
+5. The request is accepted and processed in the background.
 
 No separate username/password configuration is needed — the AI Service inherits the user's TestBench session.
 
@@ -126,4 +129,4 @@ Requests from users without sufficient permissions receive a `403 Forbidden` res
 
 - By default the service listens on `127.0.0.1` (loopback only). To accept connections from another machine (e.g., TestBench running on a different host), set `host = "0.0.0.0"` in `config.toml`.
 - If a firewall is in place, open the configured port (default `8010`).
-- For production deployments, consider enabling HTTPS — see [Configuration](configuration.md#ssl--tls).
+- For production deployments, consider enabling HTTPS — see [Configuration](configuration.md#https--tls).

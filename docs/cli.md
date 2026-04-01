@@ -7,6 +7,21 @@ title: CLI Commands
 
 The executable is `testbench-ai-service`. All commands support `--help` for detailed usage.
 
+```bash
+testbench-ai-service [COMMAND] [OPTIONS]
+```
+
+---
+
+## Commands overview
+
+| Command | Description |
+|---------|-------------|
+| [`init`](#init) | Generate a default configuration file and prompt files. |
+| [`start`](#start) | Start the TestBench AI Service. |
+| `--version`, `-v` | Print the installed version. |
+| `--help` | Show top-level help. |
+
 ---
 
 ## `init`
@@ -25,7 +40,7 @@ testbench-ai-service init [OPTIONS]
 | `--force`, `-f` | Flag | — | Overwrite the configuration file and prompts directory if they exist |
 | `--prompts-dir PATH` | String | `prompts` | Copy default prompt files to PATH and set `prompts_dir` in the config. Pass an empty string to skip. |
 
-### What It Does
+### What it does
 
 1. Copies built-in prompt YAML files to the specified prompts directory (default: `./prompts`).
 2. Generates a `config.toml` with default settings, including the `prompts_dir` path.
@@ -89,18 +104,7 @@ testbench-ai-service start --tb-server-url https://testbench.example.com/api/
 
 ---
 
-## Quick Reference
-
-| Command | Purpose |
-|---------|---------|
-| `init` | Create a default config and prompt files |
-| `start` | Run the service |
-| `--version`, `-v` | Print the installed version |
-| `--help` | Show top-level help |
-
----
-
-## Getting Help
+## Getting help
 
 ```bash
 # General help

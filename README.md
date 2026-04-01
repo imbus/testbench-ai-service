@@ -52,7 +52,7 @@ Full documentation is available in the [`docs/`](docs/) folder:
 ## Development
 
 ```bash
-git clone https://git.imbus.de/testbench/testbench-ai-service.git
+git clone https://github.com/imbus/testbench-ai-service.git
 cd testbench-ai-service
 python -m venv .venv && .venv\Scripts\activate
 pip install -e .[dev]
