@@ -5,7 +5,7 @@ title: Introduction
 
 # Introduction
 
-**TestBench AI Service** is a proxy server for [imbus TestBench](https://www.imbus.de/en/testbench) that integrates external AI / LLM providers to support multiple AI-driven use cases during test design and test execution.
+[**TestBench AI Service**](https://github.com/imbus/testbench-ai-service) is a proxy server for [imbus TestBench](https://www.imbus.de/en/testbench) that integrates external AI / LLM providers to support multiple AI-driven use cases during test design and test execution.
 
 ## What It Does
 
