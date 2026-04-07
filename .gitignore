@@ -184,9 +184,6 @@ config.toml
 # VS Code settings
 .vscode/
 
-# GitHub (Copilot etc.) settings
-.github/
-
 # Local prompt files
 prompts/
 !testbench_ai_service/prompts/
