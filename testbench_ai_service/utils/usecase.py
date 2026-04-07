@@ -37,7 +37,7 @@ def build_execution_context(
 
     try:
         project_name = get_project_name(conn, trigger_request.project_key)
-    except ValueError as e:
+    except Exception as e:
         logger.info(f"Resource not found in TestBench Server: {e!s}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
@@ -52,7 +52,7 @@ def build_execution_context(
         usecase=usecase,
         config=app_config,
         project_name=project_name,
-        request_config=trigger_request.prompt_config,
+        request_config=trigger_request.prompt_config,  # type: ignore[arg-type]
         language=language,
     )
 
@@ -80,7 +80,7 @@ def check_test_case_set_is_locked(
         conn, context.project_key, context.tov_key, context.cycle_key, uniqueID
     )
 
-    tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(
+    tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(  # type: ignore[assignment]
         test_structure_tree.root, tab, None
     )
     if tab_object is not None and tab_object.locker is not None:

@@ -17,9 +17,9 @@ class LLMFactory:
     Manages creation, caching, and retrieval of LLM clients for multiple LLM providers.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._clients: dict[LLMProvider, LLMClient] = {}
-        self._project_clients: dict[(str, LLMProvider), LLMClient] = {}
+        self._project_clients: dict[tuple[str, LLMProvider], LLMClient] = {}
 
     def init_clients(self, configs: list[LLMConfig]):
         """
@@ -103,7 +103,8 @@ class LLMFactory:
             return OpenAIClient(api_key=api_key)
 
         if config.provider == LLMProvider.CUSTOM:
-            client_class = load_class_from_path(config.class_path)
+            assert config.class_path is not None
+            client_class: type[LLMClient] = load_class_from_path(config.class_path)
             return client_class(api_key)
 
         raise NotImplementedError(f"Unsupported LLM provider: '{config.provider}'.")

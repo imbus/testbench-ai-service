@@ -137,11 +137,11 @@ def validate_file(path: str | Path) -> Path:
 
 
 @functools.lru_cache(maxsize=1)
-def _load_prompt_schema() -> dict:
+def _load_prompt_schema() -> dict[str, Any]:
     """Load and cache the prompt JSON schema from disk."""
     schema_path = Path(__file__).parent / "prompts" / "prompt.schema.json"
     with schema_path.open("r", encoding="utf-8") as f:
-        return json.load(f)
+        return dict(json.load(f))
 
 
 def validate_yaml_to_schema(path: Path) -> Path:

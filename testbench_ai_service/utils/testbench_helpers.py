@@ -1,3 +1,5 @@
+from typing import Any
+
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench2robotframework.model import KeywordCall, TestCaseDetails
 
@@ -46,11 +48,11 @@ def get_parameter_combinations_as_string(test_case_set: TestCaseSet) -> str:
     return _json_to_markdown_table(simple_test_cases)
 
 
-def _json_to_markdown_table(data):
-    all_keys = set()
+def _json_to_markdown_table(data: list[dict[str, Any]]) -> str:
+    all_keys_set: set[str] = set()
     for entry in data:
-        all_keys.update(entry["values"].keys())
-    all_keys = sorted(all_keys)
+        all_keys_set.update(entry["values"].keys())
+    all_keys = sorted(all_keys_set)
 
     # Prepare Markdown table header
     header = "| uniqueID | " + " | ".join(all_keys) + " |"

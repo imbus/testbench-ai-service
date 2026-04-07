@@ -11,7 +11,8 @@ from testbench_ai_service.log import logger
 
 
 def get_app_config(request: Request) -> AppConfig:
-    return request.app.state.config
+    config: AppConfig = request.app.state.config
+    return config
 
 
 def get_tb_connection(
@@ -37,4 +38,5 @@ def get_tb_connection(
 
 
 def get_llm_factory(request: Request) -> LLMFactory:
-    return request.app.state.llm_factory
+    factory: LLMFactory = request.app.state.llm_factory
+    return factory

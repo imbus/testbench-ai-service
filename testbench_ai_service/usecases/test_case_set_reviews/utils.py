@@ -101,11 +101,12 @@ def get_test_case_glossary(language: LanguageOption, prompt_config: PromptConfig
     otherwise returns the string.
     If no glossary is provided, returns a default glossary based on the specified language.
     """
-    if getattr(prompt_config, "glossary", None) is not None:
-        path = Path(prompt_config.glossary)
+    glossary = getattr(prompt_config, "glossary", None)
+    if glossary is not None:
+        path = Path(glossary)
         if path.is_file():
             return path.read_text(encoding="utf-8")
-        return prompt_config.glossary
+        return str(glossary)
     return (
         DEFAULT_GERMAN_GLOSSARY if language == LanguageOption.GERMAN else DEFAULT_ENGLISH_GLOSSARY
     )

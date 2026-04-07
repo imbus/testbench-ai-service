@@ -218,7 +218,7 @@ class TestCaseSetDescriber(UseCase):
         )
 
         description = await llm_client.query_llm(
-            model=model, messages=messages, **llm_config.model_extra
+            model=model, messages=messages, **(llm_config.model_extra or {})
         )
 
         return UseCaseResult(result=description)

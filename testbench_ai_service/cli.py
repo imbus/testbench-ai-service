@@ -3,7 +3,7 @@ import ssl
 
 import uvicorn
 
-from testbench_ai_service.__init__ import __title__, __version__
+from testbench_ai_service import __title__, __version__
 from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT
 from testbench_ai_service.log import get_log_config_dict, logger, setup_logging
 from testbench_ai_service.main import create_app

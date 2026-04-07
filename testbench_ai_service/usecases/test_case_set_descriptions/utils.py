@@ -100,7 +100,7 @@ def get_test_case_set_as_string(test_case_set: TestCaseSet) -> str:  # noqa: C90
 
     for keyword in formatted_steps:
         line = f"    {keyword.get('name', None)}    "
-        for param_name, param_value in keyword.get("parameter", None).items():
+        for param_name, param_value in keyword.get("parameter", {}).items():
             if isinstance(param_value, str) and param_value.startswith("${"):
                 line += f"{param_name}={param_value}    "
             else:

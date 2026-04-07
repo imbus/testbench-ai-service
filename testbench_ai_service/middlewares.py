@@ -1,4 +1,5 @@
 import time
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request, Response
 from starlette.concurrency import iterate_in_threadpool
@@ -8,13 +9,15 @@ from testbench_ai_service.log import logger
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: callable) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[..., Awaitable[Response]]
+    ) -> Response:
         start_time = time.time()
 
-        # Log request and request body
-        logger.debug(
-            f"Request: {request.method} {request.url} from {request.client.host}:{request.client.port}"
+        client_addr = (
+            f"{request.client.host}:{request.client.port}" if request.client else "unknown"
         )
+        logger.debug(f"Request: {request.method} {request.url} from {client_addr}")
         if request.method in ("POST", "PUT", "PATCH"):
             body_bytes = await request.body()
             body_text = body_bytes.decode("utf-8", errors="replace") if body_bytes else ""

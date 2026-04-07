@@ -102,7 +102,7 @@ def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
             )
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
-        required_roles = [
+        required_roles: list[GlobalHumanRole | ProjectRole] = [
             GlobalHumanRole.Administrator,
             ProjectRole.TestManager,
             ProjectRole.TestDesigner,

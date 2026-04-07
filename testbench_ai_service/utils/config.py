@@ -18,6 +18,7 @@ from testbench_ai_service.config import (
     PROMPTS_DIR,
     AppConfig,
     LLMConfig,
+    ProjectPromptConfig,
     PromptConfig,
     UseCaseConfig,
 )
@@ -99,10 +100,10 @@ def create_config_file(
         config_prefix: String prefix to nest config under (default: 'testbench-ai-service').
         force: Overwrite existing file if True.
     """
-    output_path: Path = Path(output_path)
-    if output_path.exists() and not force:
+    path = Path(output_path)
+    if path.exists() and not force:
         print(
-            f"Configuration file already exists at '{output_path.resolve()}'. "
+            f"Configuration file already exists at '{path.resolve()}'. "
             "Use --force to overwrite existing file."
         )
         sys.exit(1)
@@ -110,9 +111,9 @@ def create_config_file(
     config_data = config.model_dump() if isinstance(config, AppConfig) else config
     to_serialize = {config_prefix: config_data}
     toml_str = tomli_w.dumps(to_serialize)
-    output_path.write_text(toml_str, encoding="utf-8")
+    path.write_text(toml_str, encoding="utf-8")
 
-    print(f"Configuration file created at '{output_path.resolve()}'.")
+    print(f"Configuration file created at '{path.resolve()}'.")
 
 
 def print_config_errors(
@@ -197,7 +198,7 @@ def merge_model_dicts(
                 for error in e.errors():
                     error["loc"] = (key, *error["loc"])
                     errors.append(error)
-                raise ValidationError.from_exception_data(title=e.title, line_errors=errors) from e
+                raise ValidationError.from_exception_data(title=e.title, line_errors=errors) from e  # type: ignore[arg-type]
     return merged
 
 
@@ -245,7 +246,7 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
                 "This will place a default config.toml in the current directory for you to edit."
             )
             sys.exit(1)
-            return None
+            return None  # type: ignore[unreachable]
     else:
         try:
             with config_file_path.open("rb") as config_file:
@@ -255,14 +256,14 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
                 f"Configuration Error: The configuration file contains invalid TOML syntax.\nDetails: {e}"
             )
             sys.exit(1)
-            return None
+            return None  # type: ignore[unreachable]
 
         if config_prefix not in config_dict:
             print(
                 f"Configuration Error: TOML section [{config_prefix}] not found in the configuration file."
             )
             sys.exit(1)
-            return None
+            return None  # type: ignore[unreachable]
 
     try:
         return create_app_config(config_dict[config_prefix])
@@ -271,7 +272,9 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
         sys.exit(1)
 
 
-def merge_prompt_configs(default: PromptConfig, override: PromptConfig) -> PromptConfig:
+def merge_prompt_configs(
+    default: PromptConfig, override: PromptConfig | ProjectPromptConfig
+) -> PromptConfig:
     """
     Return a new PromptConfig by merging `override` into `default`.
 
@@ -405,7 +408,7 @@ def get_usecase_config(
         UseCaseConfig: Project-specific override if exists, else app-level usecase config
     """
     # Start with global config
-    usecase_config = config.usecases.get(usecase).model_copy(deep=True)
+    usecase_config = config.usecases[usecase].model_copy(deep=True)
 
     # Override with project-specific config if available
     if project_name is not None:

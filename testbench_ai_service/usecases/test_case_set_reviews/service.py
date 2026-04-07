@@ -239,7 +239,7 @@ class TestCaseSetReviewer(UseCase):
         )
 
         review_notes = await llm_client.query_llm(
-            model=model, messages=messages, **llm_config.model_extra
+            model=model, messages=messages, **(llm_config.model_extra or {})
         )
 
         return UseCaseResult(result=review_notes)

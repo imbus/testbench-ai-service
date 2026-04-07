@@ -98,8 +98,9 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
     }
 
 
-def get_log_level_int(level_str: str, default=logging.INFO) -> int:
-    return getattr(logging, level_str.upper(), default)
+def get_log_level_int(level_str: str, default: int = logging.INFO) -> int:
+    level = getattr(logging, level_str.upper(), default)
+    return int(level)
 
 
 logging.captureWarnings(True)

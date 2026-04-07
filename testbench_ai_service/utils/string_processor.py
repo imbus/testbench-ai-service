@@ -156,7 +156,7 @@ async def remove_html_from_string(
         raise ValueError("Input must be a string")
 
     # Check if input is empty or contains only whitespaces
-    if not text.strip or text.isspace():
+    if not text.strip() or text.isspace():
         return ""
 
     # Remove html (optionally preserve important tags)
@@ -223,7 +223,7 @@ class HTMLBodyTextExtractor(HTMLParser):
     Extracts visible text from the <body> of HTML, skipping <script> and <style> tags.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
         self.text_parts: list[str] = []
         self._in_body: bool = False

@@ -2,7 +2,6 @@ import json
 import re
 import tempfile
 import zipfile
-from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
 
@@ -103,7 +102,9 @@ def create_import_zip(updated_comment: str, test_case_set_details: TestCaseSetDe
         zipf.writestr(
             "protocol.json", json.dumps([item.model_dump() for item in [protocol]], indent=4)
         )
-        zipf.writestr(f"{tcs.uniqueID}.json", json.dumps(asdict(tcs), default=custom_serializer))
+        zipf.writestr(
+            f"{tcs.uniqueID}.json", json.dumps(tcs.model_dump(), default=custom_serializer)
+        )
 
 
 def custom_serializer(obj):
@@ -171,6 +172,7 @@ def build_protocol_json(
     """
     test_cases = []
     for test_case in test_case_set_details.testCases:
+        assert test_case.exec is not None
         test_cases.append(
             TestCase(
                 testCaseExecutionKey=test_case.exec.key,
@@ -184,6 +186,7 @@ def build_protocol_json(
             )
         )
 
+    assert test_case_set_details.exec is not None
     return TestCaseSetProtocol(
         testCaseSetKey=test_case_set_details.key,
         durationMillis=0,
@@ -219,6 +222,7 @@ def build_update_test_case_set(
         "<new comment>"
     """
     updated_test_case_set_details = test_case_set_details
+    assert updated_test_case_set_details.exec is not None
     updated_test_case_set_details.exec.comments = updated_comment
     return updated_test_case_set_details
 

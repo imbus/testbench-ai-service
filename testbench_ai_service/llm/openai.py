@@ -73,7 +73,7 @@ REASONING_MODELS: frozenset[str] = frozenset(
 class OpenAIClient(LLMClient):
     def __init__(
         self,
-        api_key: str,
+        api_key: str | None,
         timeout: float | Timeout | NotGiven | None = NOT_GIVEN,
         max_retries: int = DEFAULT_MAX_RETRIES,
         _strict_response_validation: bool = False,
@@ -158,7 +158,7 @@ class OpenAIClient(LLMClient):
         output_text = response.output_text
         if not output_text:
             raise RuntimeError(f"Model '{model}' returned an empty response.")
-        return output_text
+        return str(output_text)
 
     async def close(self):
         await self.client.close()

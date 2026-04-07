@@ -48,7 +48,7 @@ def init_routers(app: FastAPI):
 def init_exception_handlers(app: FastAPI):
     """Initialization of app exception handlers"""
 
-    app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+    app.add_exception_handler(StarletteHTTPException, http_exception_handler)  # type: ignore[arg-type]
 
 
 def init_middlewares(app: FastAPI):

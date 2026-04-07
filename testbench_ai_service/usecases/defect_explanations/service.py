@@ -98,7 +98,7 @@ class DefectExplainer(UseCase):
     ) -> None:
         """Generates explanations for all failed test cases in a single test case set."""
         try:
-            results = {}
+            results: list = []
 
             failed_test_cases = get_error_message(test_case_set.details.exec.comments)
             logger.debug(
@@ -112,7 +112,7 @@ class DefectExplainer(UseCase):
                 list(failed_test_cases.keys()),
             )
             results = []
-            queue = asyncio.Queue()
+            queue: asyncio.Queue = asyncio.Queue()
 
             tasks = []
             for failed_test_case, details in failed_test_cases.items():
@@ -143,9 +143,9 @@ class DefectExplainer(UseCase):
             while not queue.empty():
                 results.append(await queue.get())
 
-            if results != {}:
+            if results:
                 comment = clean_up_comment(test_case_set.details.exec.comments)
-                updated_comment = add_explanations_to_comment(comment, results, context.language)
+                updated_comment = add_explanations_to_comment(comment, results, context.language)  # type: ignore[arg-type]
                 logger.debug(
                     "Built updated comment with defect explanations for test case set '%s'",
                     test_case_set.details.uniqueID,
@@ -234,7 +234,7 @@ class DefectExplainer(UseCase):
         )
 
         explanation = await llm_client.query_llm(
-            model=model, messages=messages, **llm_config.model_extra
+            model=model, messages=messages, **(llm_config.model_extra or {})
         )
 
         return UseCaseResult(result=explanation)

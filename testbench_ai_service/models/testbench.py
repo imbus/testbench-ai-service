@@ -295,12 +295,6 @@ class TestStructureTree(BaseModel):
     nodes: list[TestThemeNode | TestCaseSetNode | TestCaseNode]
 
 
-class TestFilterType(str, Enum):
-    TestTheme = "TestTheme"
-    TestCaseSet = "TestCaseSet"
-    TestCase = "TestCase"
-
-
 class FilterInfo(BaseModel):
     name: str
     filterType: TestFilterType

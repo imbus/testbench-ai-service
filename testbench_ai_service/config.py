@@ -82,7 +82,7 @@ DEFAULT_USECASES: dict[str, UseCaseConfig] = {
         endpoint_path="/test-case-set-reviews",
         class_path="testbench_ai_service.usecases.test_case_set_reviews.service.TestCaseSetReviewer",
         prompt=PromptConfig(
-            file="test_case_set_reviews.yaml",
+            file=Path("test_case_set_reviews.yaml"),
             name="TestCaseSetReviews",
         ),
         summary="Trigger test case set reviews",
@@ -94,7 +94,7 @@ DEFAULT_USECASES: dict[str, UseCaseConfig] = {
         endpoint_path="/test-case-set-descriptions",
         class_path="testbench_ai_service.usecases.test_case_set_descriptions.service.TestCaseSetDescriber",
         prompt=PromptConfig(
-            file="test_case_set_descriptions.yaml",
+            file=Path("test_case_set_descriptions.yaml"),
             name="TestCaseSetDescriptions",
         ),
         summary="Trigger generation of test case set descriptions",
@@ -106,7 +106,7 @@ DEFAULT_USECASES: dict[str, UseCaseConfig] = {
         endpoint_path="/defect-explanations",
         class_path="testbench_ai_service.usecases.defect_explanations.service.DefectExplainer",
         prompt=PromptConfig(
-            file="defect_explanations.yaml",
+            file=Path("defect_explanations.yaml"),
             name="DefectExplanations",
         ),
         summary="Trigger generation of defect explanations",
