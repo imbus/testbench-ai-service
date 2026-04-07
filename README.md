@@ -1,5 +1,9 @@
 # TestBench AI Service
 
+[![PyPI version](https://img.shields.io/pypi/v/testbench-ai-service.svg)](https://pypi.org/project/testbench-ai-service/)
+[![Python versions](https://img.shields.io/pypi/pyversions/testbench-ai-service.svg)](https://pypi.org/project/testbench-ai-service/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 A service supporting multiple AI-driven use cases for [imbus TestBench](https://www.imbus.de/en/testbench).
 
 ## Features
