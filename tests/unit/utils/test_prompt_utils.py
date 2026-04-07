@@ -6,7 +6,7 @@ from testbench_ai_service.log import logger
 from testbench_ai_service.utils.prompt_utils import build_prompt, get_prompt_definition
 
 _DATA_DIR = Path(__file__).parent / "data"
-_DUMMY_PROMPT_PATH = str(_DATA_DIR / "dummy_prompt.yaml")
+_DUMMY_PROMPT_PATH = _DATA_DIR / "dummy_prompt.yaml"
 _PROMPT_NAME = "TestCaseSetReviewer"
 
 
@@ -32,7 +32,7 @@ class TestBuildPrompt(unittest.TestCase):
             "placeholder_data": {"test_case": "Some test case."},
         }
         defaults.update(kwargs)
-        return PromptConfig(**defaults)
+        return PromptConfig(**defaults)  # type: ignore[arg-type]
 
     def test_model_name_is_read_from_prompt_definition(self):
         prompt = build_prompt(prompt_config=self._make_config())

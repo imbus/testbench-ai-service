@@ -286,7 +286,7 @@ class TestRunUsecaseReviewTask(unittest.IsolatedAsyncioTestCase):
         llm_config: LLMConfig,
         prompt_config: PromptConfig,
     ):
-        tcs_str = prompt_config.placeholder_data.get("test_case", "")
+        tcs_str = (prompt_config.placeholder_data or {}).get("test_case", "")
         for uid, s in self.tcs_strings.items():
             if tcs_str == s:
                 return self.review_responses[uid]

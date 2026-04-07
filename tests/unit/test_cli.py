@@ -135,6 +135,7 @@ class TestStartAction(unittest.TestCase):
         with (
             patch("testbench_ai_service.cli.load_config_from_file", return_value=mock_config),
             patch("testbench_ai_service.cli.uvicorn.run") as mock_run,
+            patch("testbench_ai_service.cli.setup_logging"),
             patch("testbench_ai_service.cli.get_log_config_dict", return_value={}),
             patch("testbench_ai_service.cli.create_app", return_value=MagicMock()),
             patch("testbench_ai_service.cli.print_cli_banner"),
@@ -152,6 +153,7 @@ class TestStartAction(unittest.TestCase):
         with (
             patch("testbench_ai_service.cli.load_config_from_file", return_value=mock_config),
             patch("testbench_ai_service.cli.uvicorn.run"),
+            patch("testbench_ai_service.cli.setup_logging"),
             patch("testbench_ai_service.cli.get_log_config_dict", return_value={}),
             patch("testbench_ai_service.cli.create_app", return_value=MagicMock()),
             patch("testbench_ai_service.cli.print_cli_banner"),
@@ -170,6 +172,7 @@ class TestStartAction(unittest.TestCase):
         with (
             patch("testbench_ai_service.cli.load_config_from_file", return_value=mock_config),
             patch("testbench_ai_service.cli.uvicorn.run"),
+            patch("testbench_ai_service.cli.setup_logging"),
             patch("testbench_ai_service.cli.get_log_config_dict", return_value={}),
             patch("testbench_ai_service.cli.create_app", return_value=MagicMock()),
             patch("testbench_ai_service.cli.print_cli_banner"),

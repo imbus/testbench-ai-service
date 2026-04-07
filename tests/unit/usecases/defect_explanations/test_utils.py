@@ -55,9 +55,13 @@ from testbench_ai_service.usecases.defect_explanations.utils import (
 
 @dataclass
 class _DummyTCS:
-    """Minimal stand-in for ``TestCaseSetDetails`` that supports ``asdict()``."""
+    """Minimal stand-in for ``TestCaseSetDetails`` that supports ``model_dump()``."""
 
-    uniqueID: str = "TCS123"
+    def __init__(self, uid: str = "TCS123") -> None:
+        self.uniqueID = uid
+
+    def model_dump(self) -> dict[str, str]:
+        return {"uniqueID": self.uniqueID}
 
 
 def _make_tcs_details(key="key", test_cases=None):

@@ -205,7 +205,7 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
     # ── Side-effect helpers ───────────────────────────────────────────────────
 
     def _tb_session_get_side_effect(self, url: str):
-        base = self.mock_tb_connection.server_url
+        base = self.mock_tb_connection.server_url  # type: ignore[attr-defined]
         if url == f"{base}2/login/session":
             r = MagicMock()
             r.json.return_value = {"userKey": self.user_key}
@@ -247,7 +247,7 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         return None
 
     def _tb_session_post_side_effect(self, url: str, json: dict):
-        base = self.mock_tb_connection.server_url
+        base = self.mock_tb_connection.server_url  # type: ignore[attr-defined]
         structure_url = f"{base}2/projects/{self.project_key}/cycles/{self.cycle_key}/structure"
         if url == structure_url and json["treeRootUID"] == self.valid_request.root_uid:
             with (

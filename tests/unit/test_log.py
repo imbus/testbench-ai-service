@@ -20,6 +20,9 @@ from testbench_ai_service.models.logging import (
 class TestColoredFormatter(unittest.TestCase):
     """ColoredFormatter wraps the level-name in ANSI escape codes."""
 
+    stream: StringIO
+    handler: logging.StreamHandler[StringIO]
+
     def setUp(self):
         self.stream = StringIO()
         self.handler = logging.StreamHandler(self.stream)
