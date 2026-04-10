@@ -2,39 +2,55 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/testbench-ai-service.svg)](https://pypi.org/project/testbench-ai-service/)
 [![Python versions](https://img.shields.io/pypi/pyversions/testbench-ai-service.svg)](https://pypi.org/project/testbench-ai-service/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/imbus/testbench-ai-service/blob/main/LICENSE)
 
-A service supporting multiple AI-driven use cases for [imbus TestBench](https://www.imbus.de/en/testbench).
+A proxy service that integrates external LLM providers with [imbus TestBench](https://www.testbench.com) to automate AI-driven use cases during test design and execution.
 
 ## Features
 
-- **Multiple use cases** — test case set reviews, description generation, and defect explanations
-- **Pluggable LLM providers** — ships with OpenAI support; bring your own provider
-- **Configurable prompts** — YAML-based prompt templates with variants and Jinja2 placeholders
-- **Per-project configuration** — language, LLM provider, and prompt settings can be overridden per project
-- **Swagger UI** — built-in interactive API documentation at `/docs`
-- **SSL/TLS & reverse proxy support** — optional HTTPS with mTLS and trusted-proxy configuration
+- **Multiple use cases:** test case set reviews, description generation, and defect explanations
+- **Pluggable LLM providers:** ships with OpenAI support; implement a custom `LLMClient` to bring your own
+- **Configurable prompts:** YAML-based templates with Jinja2 placeholders and per-project overrides
+- **Session-token auth:** every request is validated against the TestBench REST API; no separate credential management
+- **Async processing:** use cases run as background tasks so the API responds immediately
+- **Swagger UI:** interactive API docs at `/docs`
+- **SSL/TLS & reverse proxy support:** optional HTTPS with mTLS and trusted-proxy headers
 
-## Requirements
+## Installation
 
-- Python 3.10+
-
-## Quick Start
+**With pip** (Python 3.10–3.14 required):
 
 ```bash
 pip install testbench-ai-service
 ```
 
-Create a `.env` file with your OpenAI API key:
+**Standalone executable** (no Python required): download the pre-built binary from the [GitHub releases page](https://github.com/imbus/testbench-ai-service/releases).
+
+## Quick Start
+
+**1. Set your OpenAI API key**
 
 ```bash
+# .env
 OPENAI_API_KEY=your_openai_api_key
 ```
 
-Initialize configuration and start the service:
+**2. Initialize configuration**
 
 ```bash
 testbench-ai-service init
+```
+
+Open `config.toml` and point `tb_server_url` at your TestBench REST API:
+
+```toml
+[testbench-ai-service]
+tb_server_url = "https://localhost:9443/api/"
+```
+
+**3. Start the service**
+
+```bash
 testbench-ai-service start
 ```
 
@@ -42,39 +58,25 @@ The service runs at `http://127.0.0.1:8010` by default. Open `/docs` for the int
 
 ## Documentation
 
-Full documentation is available in the [`docs/`](docs/) folder:
+Full documentation is available in the [docs/](https://github.com/imbus/testbench-ai-service/tree/main/docs) folder of the repository:
 
-- [Introduction](docs/intro.md)
-- [Installation](docs/getting-started/installation.md)
-- [Quickstart](docs/getting-started/quickstart.md)
-- [Configuration](docs/configuration.md)
-- [Use Cases](docs/use-cases/index.md)
-- [Prompts](docs/prompts.md)
-- [TestBench Integration](docs/testbench-integration.md)
-- [CLI Commands](docs/cli.md)
+- [Introduction](https://github.com/imbus/testbench-ai-service/blob/main/docs/intro.md)
+- [Installation](https://github.com/imbus/testbench-ai-service/blob/main/docs/getting-started/installation.md)
+- [Quickstart](https://github.com/imbus/testbench-ai-service/blob/main/docs/getting-started/quickstart.md)
+- [Configuration](https://github.com/imbus/testbench-ai-service/blob/main/docs/configuration.md)
+- [Use Cases](https://github.com/imbus/testbench-ai-service/blob/main/docs/use-cases/index.md)
+- [Prompts](https://github.com/imbus/testbench-ai-service/blob/main/docs/prompts.md)
+- [TestBench Integration](https://github.com/imbus/testbench-ai-service/blob/main/docs/testbench-integration.md)
+- [CLI Reference](https://github.com/imbus/testbench-ai-service/blob/main/docs/cli.md)
 
-## Development
+## Contributing
 
-```bash
-git clone https://github.com/imbus/testbench-ai-service.git
-cd testbench-ai-service
-python -m venv .venv && .venv\Scripts\activate
-pip install -e .[dev]
-```
+Contributions are welcome. See [CONTRIBUTING.md](https://github.com/imbus/testbench-ai-service/blob/main/CONTRIBUTING.md) for setup instructions and guidelines.
 
-### Testing
+## Changelog
 
-```bash
-# Unit tests
-python -m unittest discover -v tests\unit\
-
-# Integration tests (requires a running TestBench server)
-python -m unittest discover -v tests\integration\
-
-# Prompt engineering tests
-python -m unittest discover -v tests\prompt_engineering\<use_case>
-```
+See [CHANGELOG.md](https://github.com/imbus/testbench-ai-service/blob/main/CHANGELOG.md) for release history.
 
 ## License
 
-This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
+Apache 2.0. See [LICENSE](https://github.com/imbus/testbench-ai-service/blob/main/LICENSE) for details.
