@@ -44,7 +44,7 @@ The description prompt supports the following automatically populated placeholde
 
 | Placeholder | Description |
 |-------------|-------------|
-| `test_case_set` | Formatted string representation of the test case set (name, steps, parameters) |
+| `step_sequence` | Formatted string representation of the test case set (name, steps, parameters) |
 | `parameter_combinations` | Formatted parameter combination table |
 
 ### Project-Specific Override

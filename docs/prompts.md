@@ -86,7 +86,7 @@ Each prompt YAML file is a list of prompt definitions:
         - role: "user"
           text: |
             You are a test analyst. Review the following test case:
-            {{ test_case_set }}
+            {{ test_case }}
 
         - role: "user"
           text: |
@@ -99,7 +99,7 @@ Each prompt YAML file is a list of prompt definitions:
         - role: "user"
           text: |
             Review this test case set briefly:
-            {{ test_case_set }}
+            {{ test_case }}
 ```
 
 ### Schema Reference
@@ -147,7 +147,7 @@ Prompt block:
 - role: "user"
   text: |
     Review this test case:
-    {{ test_case_set }}
+    {{ test_case }}
 
     {% if glossary %}
     Use this glossary as reference:

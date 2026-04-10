@@ -46,7 +46,7 @@ The defect explanation prompt supports the following automatically populated pla
 
 | Placeholder | Description |
 |-------------|-------------|
-| `test_case_set` | Formatted string representation of the test case set |
+| `failed_test_case` | Formatted string representation of the failed test case (name, steps, parameters) |
 | `error_message` | The error message extracted from the failed test case |
 
 ### Project-Specific Override

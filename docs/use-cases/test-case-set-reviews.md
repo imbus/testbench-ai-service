@@ -44,10 +44,10 @@ The review prompt supports the following automatically populated placeholders:
 
 | Placeholder | Description |
 |-------------|-------------|
-| `test_case_set` | Formatted string representation of the test case set (name, steps, parameters) |
+| `test_case` | Formatted string representation of the test case set (name, steps, parameters) |
 | `parameter_combinations` | Formatted parameter combination table |
-| `description` | The existing test case set description (if any) |
-| `glossary` | Contents of a glossary file (when configured via `placeholder_data`) |
+| `test_case_set_description` | The existing test case set description, if one is present (plain text, stripped of HTML) |
+| `glossary` | Glossary content resolved from the `glossary` prompt config field (file path or inline text); falls back to a built-in default glossary |
 
 ### Optional: Glossary
 
@@ -57,7 +57,7 @@ You can provide a glossary file that the LLM uses as domain-specific context dur
 [testbench-ai-service.usecases.test_case_set_reviews.prompt]
 file = "test_case_set_reviews.yaml"
 name = "TestCaseSetReviews"
-variant = "step-based-tests-detailed-prompt"
+variant = "interaction-based-tests-detailed-prompt"
 glossary = "glossary.txt"
 ```
 
