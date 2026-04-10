@@ -1,7 +1,9 @@
 import argparse
 import ssl
+import sys
 
 import uvicorn
+from dotenv import load_dotenv
 
 from testbench_ai_service import __title__, __version__
 from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT
@@ -25,6 +27,8 @@ def print_cli_banner():
 
 
 def main():
+    load_dotenv()
+
     parser = argparse.ArgumentParser(
         description="TestBench AI Service CLI",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -124,6 +128,11 @@ def start_action(args):
     setup_logging(config.logging)
     logger.info("Starting %s v%s", __title__, __version__)
 
+    use_reload = config.debug
+    if use_reload and getattr(sys, "frozen", False):
+        logger.warning("Auto-reload is not supported in the executable. Running without reload.")
+        use_reload = False
+
     # Server configuration
     server_config = {
         "host": config.host,
@@ -139,18 +148,20 @@ def start_action(args):
         server_config["proxy_headers"] = True
         server_config["forwarded_allow_ips"] = config.trusted_proxies
 
-    if config.debug:
-        # Run in development mode with auto-reload
-        uvicorn.run(
-            "testbench_ai_service.main:create_app",
-            reload=True,
-            factory=True,
-            **server_config,
-        )
-    else:
-        # Run in production mode
-        app = create_app(config)
-        uvicorn.run(app, **server_config)
+    try:
+        if use_reload:
+            uvicorn.run(
+                "testbench_ai_service.main:create_app",
+                reload=True,
+                factory=True,
+                **server_config,
+            )
+        else:
+            app = create_app(config)
+            uvicorn.run(app, **server_config)
+    except Exception as e:
+        logger.error("Server could not start: %s", e)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

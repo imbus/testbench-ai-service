@@ -1,15 +1,10 @@
 import os
 import re
 
-from dotenv import load_dotenv
-
 from testbench_ai_service.config import LLMConfig
 from testbench_ai_service.llm.base import LLMClient, LLMProvider
 from testbench_ai_service.llm.openai import OpenAIClient
 from testbench_ai_service.utils.import_utils import load_class_from_path
-
-# Load environment variables from .env file
-load_dotenv()
 
 
 class LLMFactory:

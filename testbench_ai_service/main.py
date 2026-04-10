@@ -61,7 +61,6 @@ def init_middlewares(app: FastAPI):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
-    init_services(app)
     yield  # App runs here
     # Shutdown
     await close_services(app)
@@ -80,5 +79,6 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     init_routers(app)
     init_exception_handlers(app)
     init_middlewares(app)
+    init_services(app)
 
     return app
