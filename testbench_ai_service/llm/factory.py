@@ -2,6 +2,7 @@ import os
 import re
 
 from testbench_ai_service.config import LLMConfig
+from testbench_ai_service.llm.anthropic import AnthropicClient
 from testbench_ai_service.llm.base import LLMClient, LLMProvider
 from testbench_ai_service.llm.openai import OpenAIClient
 from testbench_ai_service.utils.import_utils import load_class_from_path
@@ -96,6 +97,9 @@ class LLMFactory:
         """
         if config.provider == LLMProvider.OPENAI:
             return OpenAIClient(api_key=api_key)
+
+        if config.provider == LLMProvider.ANTHROPIC:
+            return AnthropicClient(api_key=api_key)
 
         if config.provider == LLMProvider.CUSTOM:
             assert config.class_path is not None
