@@ -4,8 +4,8 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "testbench-ai-service"
-description = "A service supporting multiple AI-driven use cases for imbus' TestBench."
-authors = [{ name = "René Rohner", email = "rene.rohner@imbus.de" }]
+description = "REST API service supporting multiple AI-driven use cases for imbus TestBench"
+authors = [{ name = "imbus AG", email = "support@imbus.de" }]
 readme = "README.md"
 license = { file = "LICENSE" }
 dynamic = ["version"]
@@ -76,7 +76,7 @@ dev = [
 
 [project.urls]
 Homepage = "https://github.com/imbus/testbench-ai-service"
-Documentation = "https://github.com/imbus/testbench-ai-service/tree/main/docs"
+Documentation = "https://imbus.github.io/testbench-ecosystem-documentation/testbench-ai-service/intro"
 Source = "https://github.com/imbus/testbench-ai-service"
 Changelog = "https://github.com/imbus/testbench-ai-service/blob/main/CHANGELOG.md"
 

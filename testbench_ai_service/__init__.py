@@ -1,7 +1,7 @@
 """
 TestBench AI Service
 
-Service supporting multiple AI-driven use cases for imbus' TestBench.
+Service supporting multiple AI-driven use cases for imbus TestBench.
 """
 
 __title__ = "TestBenchAIService"
