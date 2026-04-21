@@ -9,7 +9,7 @@ AI-generated explanations for defects found during test execution. The service a
 
 **Endpoint:** `POST /defect-explanations`
 
-## How It Works
+## How it works
 
 1. The service retrieves all test case sets from the specified test-object-version and **cycle** (a `cycle_key` is required).
 2. For each test case set, it checks that the **execution tab** is not locked by another user.
@@ -25,9 +25,10 @@ Unlike the other use cases, defect explanations require a `cycle_key` in the req
 
 ## Configuration
 
-### Default Configuration
+### Default configuration
 
 ```toml
+# config.toml
 [testbench-ai-service.usecases.defect_explanations]
 enabled = true
 endpoint_path = "/defect-explanations"
@@ -40,18 +41,19 @@ file = "defect_explanations.yaml"
 name = "DefectExplanations"
 ```
 
-### Prompt Placeholders
+### Prompt placeholders
 
 The defect explanation prompt supports the following automatically populated placeholders:
 
 | Placeholder | Description |
 |-------------|-------------|
-| `failed_test_case` | Formatted string representation of the failed test case (name, steps, parameters) |
-| `error_message` | The error message extracted from the failed test case |
+| `failed_test_case` | Formatted string representation of the failed test case (name, steps, parameters). |
+| `error_message` | The error message extracted from the failed test case. |
 
-### Project-Specific Override
+### Project-specific override
 
 ```toml
+# config.toml
 [testbench-ai-service.projects."My Project".usecases.defect_explanations]
 enabled = false
 
@@ -59,6 +61,6 @@ enabled = false
 variant = "my-custom-variant"
 ```
 
-## Prompt Variants
+## Prompt variants
 
 The built-in prompt file (`defect_explanations.yaml`) ships with variants for different explanation styles. See [Prompts](../prompts.md) for details on how to customize or create your own variants.

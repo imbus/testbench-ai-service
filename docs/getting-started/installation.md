@@ -30,11 +30,15 @@ C:\TestBenchAIService\
   <support files>
 ```
 
-**3. Verify**
+**3. Verify installation from the command line**
 
 ```cmd
 C:\TestBenchAIService\testbench-ai-service.exe --version
 ```
+
+:::tip[Running as a Windows service]
+Point NSSM or FireDaemon directly to `testbench-ai-service.exe` in the extracted folder. See the [Windows service guide](../windows-service-installation.md).
+:::
 
 ---
 
@@ -48,6 +52,10 @@ Use this option if you have Python installed or are about to install it.
 - **pip** (included with Python)
 
 ### Set up a virtual environment
+
+:::note
+If you are installing [from source](#from-source-developers): create the virtual environment inside the cloned repository instead.
+:::
 
 A virtual environment keeps the installation isolated and provides a stable, predictable path to the executable. Navigate to the directory where you want the service to live, then run:
 
@@ -63,6 +71,10 @@ python -m venv .venv
 source .venv/bin/activate
 ```
 
+:::tip[Running as a Windows service]
+With a venv, point NSSM or FireDaemon to `.venv\Scripts\testbench-ai-service.exe` (full absolute path). See the [Windows service guide](../windows-service-installation.md).
+:::
+
 ---
 
 ### From PyPI *(online, recommended)*
@@ -71,7 +83,7 @@ source .venv/bin/activate
 pip install testbench-ai-service
 ```
 
-Verify:
+Verify installation:
 
 ```bash
 testbench-ai-service --version
@@ -87,10 +99,16 @@ Use this if you received a `.whl` file or downloaded one from the [GitHub releas
 pip install testbench_ai_service-x.y.z-py3-none-any.whl
 ```
 
-:::note Fully offline install
+Verify installation:
+
+```bash
+testbench-ai-service --version
+```
+
+:::note[Fully offline install]
 By default pip still fetches dependencies from PyPI. To install on a machine with no internet access:
 
-**On a machine with internet access**, download the wheel and all its dependencies into a local folder:
+**On another machine which has internet access**, download the wheel and all its dependencies into a local folder:
 
 ```bash
 pip download "testbench_ai_service-x.y.z-py3-none-any.whl" -d ./wheels
@@ -122,7 +140,7 @@ Install with development dependencies:
 pip install -e .[dev]
 ```
 
-Verify:
+Verify installation:
 
 ```bash
 testbench-ai-service --version

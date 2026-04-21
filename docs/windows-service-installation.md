@@ -17,7 +17,7 @@ Use these values when following the central guide:
 | `<servicePort>` | `8010` |
 | `<serviceInstallDir>` | Your installation directory, e.g. `C:\TestBenchAIService` |
 
-:::note Executable path
+:::note[Executable path]
 - **Ready-to-use executable**: `C:\TestBenchAIService\testbench-ai-service.exe`
 - **Python venv**: `C:\TestBenchAIService\.venv\Scripts\testbench-ai-service.exe`
 

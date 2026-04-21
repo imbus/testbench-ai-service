@@ -32,18 +32,17 @@ Generate a default configuration file and copy built-in prompt files.
 testbench-ai-service init [OPTIONS]
 ```
 
-### Options
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `--path PATH` | String | `config.toml` | Path to the configuration file to generate |
-| `--force`, `-f` | Flag | — | Overwrite the configuration file and prompts directory if they exist |
-| `--prompts-dir PATH` | String | `prompts` | Copy default prompt files to PATH and set `prompts_dir` in the config. Pass an empty string to skip. |
-
-### What it does
-
+**What it does**
 1. Copies built-in prompt YAML files to the specified prompts directory (default: `./prompts`).
 2. Generates a `config.toml` with default settings, including the `prompts_dir` path.
+
+### Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--path PATH` | Path to the configuration file to generate. | `config.toml` |
+| `--force`, `-f` | Overwrite the configuration file and prompts directory if they exist. | — |
+| `--prompts-dir PATH` | Copy default prompt files to PATH and set `prompts_dir` in the config.<br/>Pass an empty string to skip. | `prompts` |
 
 ### Examples
 
@@ -73,13 +72,13 @@ testbench-ai-service start [OPTIONS]
 
 ### Options
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `--config PATH` | String | `config.toml` | Path to the app configuration file |
-| `--host HOST` | String | `127.0.0.1` | Host to bind to |
-| `--port PORT` | Integer | `8010` | Port to listen on |
-| `--dev` | Flag | — | Run in development mode (debug logging + auto-reload) |
-| `--tb-server-url URL` | String | from config | Base URL of the TestBench REST API Server |
+| Option | Description | Default |
+|--------|-------------|--------|
+| `--config PATH` | Path to the app configuration file. | `config.toml` |
+| `--host HOST` | Host to bind to. | `127.0.0.1` |
+| `--port PORT` | Port to listen on. | `8010` |
+| `--dev` | Run in development mode (debug logging + auto-reload). | — |
+| `--tb-server-url URL` | Base URL of the TestBench REST API Server. | from config |
 
 Command-line arguments take **precedence** over configuration file settings.
 

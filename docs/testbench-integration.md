@@ -11,13 +11,13 @@ This page explains how TestBench communicates with the AI Service and how to con
 
 ## Overview
 
-TestBench triggers AI use cases by calling the AI Service's HTTP API. Unlike the Requirement Service or Defect Service, the AI Service does **not** use a proxy wrapper — TestBench connects directly via its built-in AI integration.
+TestBench triggers AI use cases by calling the AI Service's REST API. Unlike the Requirement Service or Defect Service, the AI Service does **not** use a proxy wrapper — TestBench connects directly via its built-in AI integration.
 
 Authentication is handled via **session tokens**: TestBench passes the current user's session token with every request, and the AI Service validates it against the TestBench REST API.
 
 ---
 
-## Prerequisites
+## Requirements
 
 - TestBench AI Service is installed and running (see [Quickstart](getting-started/quickstart.md)).
 - The `tb_server_url` in the AI Service config points to the TestBench REST API.
@@ -38,28 +38,27 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 
 ---
 
-## Authentication Flow
+## Authentication flow
 
 ```
-┌─────────────────┐                                               ┌──────────────────┐
-│    TestBench    │                                               │ TestBench REST   │
-│       UI        │                                               │      API         │
-└────────┬────────┘                                               └──────────▲───────┘
-         │                                                                   │
-         │ 1. User triggers AI use case                                      │
-         │                                                                   │
-         ▼                                                                   │
-┌─────────────────────────────────────────────────────────────┐              │
-│ POST /api/use-case                                          │              │
-│ Header: Authorization: Bearer <session_token>               │              │
-└────────┬────────────────────────────────────────────────────┘              │
-         │                                                                   │
-         ▼                                                                   │
-┌─────────────────────────────────────────────────────────────┐              │
-│           AI Service (FastAPI)                              │              │
-│ ┌─────────────────────────────────────────────────────────┐ │ 2. Validate  │
-│ │ 1. Extract session token from header                    │ │    token     │
-│ │ 2. Call TestBench REST API to verify token              ├─┼──────────────┘
+┌─────────────────┐                                                ┌─────────────────┐
+│    TestBench    │                                                │    TestBench    │
+│       UI        │                                                │     REST API    │
+└────────┬────────┘                                                └────────▲────────┘
+         │                                                                  │
+         │ 1. User triggers AI use case                                     │
+         │                                                                  │
+┌────────┴────────────────────────────────────────────────────┐             │
+│ POST /test-case-set-reviews                                 │             │
+│ Header: Authorization: <session_token>                      │             │
+└────────┬────────────────────────────────────────────────────┘             │
+         │                                                                  │
+         │                                                                  │
+┌────────▼────────────────────────────────────────────────────┐             │
+│ TestBench AI Service (FastAPI)                              │             │
+│ ┌─────────────────────────────────────────────────────────┐ │ 2. Validate │
+│ │ - Extract session token from header                     │ │    token    │
+│ │ - Call TestBench REST API to verify token               ├─┼─────────────┘
 │ └─────────────────────────────────────────────────────────┘ │
 │ ┌─────────────────────────────────────────────────────────┐ │
 │ │ 3. Check user roles (Admin/TestManager/TestDesigner)    │ │
@@ -69,25 +68,22 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
          │ 4. Return 202 Accepted
          │    (processing in background)
          │
-         ▼
-┌─────────────────┐
-│    TestBench    │
-│   (receives     │
-│   response)     │
+┌────────▼────────┐
+│   TestBench UI  │
+│    (response)   │
 └─────────────────┘
 ```
 
-1. The user triggers an AI use case in the TestBench UI.
-2. TestBench sends a POST request to the AI Service with the user's session token as the `Authorization` header.
-3. The AI Service validates the token by calling the TestBench REST API.
-4. If valid, the AI Service checks that the authenticated user has the required project role.
-5. The request is accepted and processed in the background.
+1. The user triggers an AI use case in the TestBench UI. TestBench sends a POST request to the AI Service with the user's session token as the `Authorization` header.
+2. The AI Service validates the token by calling the TestBench REST API.
+3. If valid, the AI Service checks that the authenticated user has the required project role.
+4. The request is accepted and processed in the background.
 
-No separate username/password configuration is needed — the AI Service inherits the user's TestBench session.
+No separate username/password configuration is needed. The AI Service inherits the user's TestBench session.
 
 ---
 
-## Role Requirements
+## Role requirements
 
 The authenticated user must have at least one of the following TestBench roles:
 
@@ -99,15 +95,13 @@ Requests from users without sufficient permissions receive a `403 Forbidden` res
 
 ---
 
-## Verifying the Connection
+## Verifying the connection
 
 1. Start the AI Service:
    ```bash
    testbench-ai-service start
    ```
-
-2. Open [http://127.0.0.1:8010/docs](http://127.0.0.1:8010/docs) in a browser — the Swagger UI should load.
-
+2. Open [http://127.0.0.1:8010/docs](http://127.0.0.1:8010/docs) in a browser. The Swagger UI should load.
 3. Trigger an AI use case from TestBench. Check the AI Service logs for incoming requests.
 
 ---
@@ -116,16 +110,16 @@ Requests from users without sufficient permissions receive a `403 Forbidden` res
 
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
-| `Connection refused` | Service is not running or port mismatch | Start the service; verify `host` and `port` in config. |
-| `401 Unauthorized` | Invalid or expired session token | Re-login to TestBench and retry. |
-| `502 Bad Gateway` | AI Service cannot reach TestBench REST API | Verify `tb_server_url` in `config.toml` is correct and reachable. |
-| `404 Not Found` | Use case disabled for the project | Check `enabled = true` in the use case config; check project-specific overrides. |
-| `409 Conflict` | Precheck failed (e.g., all items locked) | Unlock the test structure elements in TestBench and retry. |
-| LLM errors in logs | Missing or invalid API key | Verify `OPENAI_API_KEY` is set in `.env` or environment. |
+| `Connection refused` | Service is not running or port mismatch. | Start the service; verify `host` and `port` in config. |
+| `401 Unauthorized` | Invalid or expired session token. | Re-login to TestBench and retry. |
+| `502 Bad Gateway` | AI Service cannot reach TestBench REST API. | Verify `tb_server_url` in `config.toml` is correct and reachable. |
+| `404 Not Found` | Use case disabled for the project. | Check `enabled = true` in the use case config; check project-specific overrides. |
+| `409 Conflict` | Precheck failed (e.g., all items locked). | Unlock the test structure elements in TestBench and retry. |
+| LLM errors in logs | Missing or invalid API key. | Verify `OPENAI_API_KEY` is set in `.env` or environment. |
 
 ---
 
-## Network Considerations
+## Network considerations
 
 - By default the service listens on `127.0.0.1` (loopback only). To accept connections from another machine (e.g., TestBench running on a different host), set `host = "0.0.0.0"` in `config.toml`.
 - If a firewall is in place, open the configured port (default `8010`).

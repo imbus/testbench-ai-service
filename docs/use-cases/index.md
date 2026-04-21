@@ -7,13 +7,13 @@ title: Use Cases
 
 A **use case** is a self-contained AI-driven workflow that the service exposes as an HTTP endpoint. Each use case follows the same lifecycle:
 
-1. **Trigger** — TestBench sends a POST request with project, test-object-version, and (optionally) cycle information.
-2. **Precheck** — The service validates prerequisites (e.g., that test structure elements are not locked by another user) and collects the items to process.
-3. **Background execution** — The API responds with `202 Accepted` immediately. In the background, prompt templates are rendered with test data, sent to the configured LLM, and the results are written back to TestBench.
+1. **Trigger**: TestBench sends a POST request with project, test-object-version, and (optionally) cycle information.
+2. **Precheck**: The service validates prerequisites (e.g., that test structure elements are not locked by another user) and collects the items to process.
+3. **Background execution**: The API responds with `202 Accepted` immediately. In the background, prompt templates are rendered with test data, sent to the configured LLM, and the results are written back to TestBench.
 
 ---
 
-## Built-in Use Cases
+## Built-in use cases
 
 | Use Case | Endpoint | Description |
 |----------|----------|-------------|
@@ -23,7 +23,7 @@ A **use case** is a self-contained AI-driven workflow that the service exposes a
 
 ---
 
-## Common Request Format
+## Common request format
 
 All use case endpoints accept the same request body:
 
@@ -49,15 +49,15 @@ All use case endpoints accept the same request body:
 }
 ```
 
-| Field | Type | Required | Description |
+| Field | Type | Description | Required |
 |-------|------|----------|-------------|
-| `project_key` | String | Yes | TestBench project key |
-| `tov_key` | String | Yes | Test-object-version key |
-| `cycle_key` | String | No | Test cycle key (required for defect explanations) |
-| `root_uid` | String | No | Root UID to limit scope to a subtree |
-| `language` | String | No | Override language (`"en"` or `"de"`) |
-| `prompt_config` | Object | No | Override prompt configuration for this request |
-| `llm_config` | Object | No | Override LLM configuration for this request |
+| `project_key` | String | TestBench project key. | Yes |
+| `tov_key` | String | Test-object-version key. | Yes |
+| `cycle_key` | String | Test cycle key (required for defect explanations). | No |
+| `root_uid` | String | Root UID to limit scope to a subtree. | No |
+| `language` | String | Override language (`"en"` or `"de"`). | No |
+| `prompt_config` | Object | Override prompt configuration for this request. | No |
+| `llm_config` | Object | Override LLM configuration for this request. | No |
 
 ### Response
 
@@ -70,14 +70,14 @@ On success, `202 Accepted`:
 }
 ```
 
-### Error Responses
+### Error responses
 
 | Status | Meaning |
 |--------|---------|
-| `401` | Missing or invalid session token |
-| `403` | Insufficient permissions (requires Administrator, TestManager, or TestDesigner role) |
-| `404` | Project not found, or use case is disabled for the project |
-| `409` | Precheck failed — no items passed validation |
+| `401` | Missing or invalid session token. |
+| `403` | Insufficient permissions (requires Administrator, TestManager, or TestDesigner role). |
+| `404` | Project not found, or use case is disabled for the project. |
+| `409` | Precheck failed. No items passed validation. |
 
 ---
 
@@ -91,6 +91,6 @@ All use case endpoints require a valid **TestBench session token** passed as the
 
 ---
 
-## Configuring Use Cases
+## Configuring use cases
 
 Each use case can be enabled/disabled, assigned a different prompt, or overridden per project in `config.toml`. See the [Configuration](../configuration.md#use-case-settings) page for details.

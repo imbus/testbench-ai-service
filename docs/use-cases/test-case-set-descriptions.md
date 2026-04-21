@@ -9,7 +9,7 @@ Automatic generation of descriptive summaries for test case sets. The service an
 
 **Endpoint:** `POST /test-case-set-descriptions`
 
-## How It Works
+## How it works
 
 1. The service retrieves all test case sets from the specified test-object-version (and optional cycle / subtree).
 2. For each test case set, it checks that the **specification tab** is not locked by another user.
@@ -23,9 +23,10 @@ Automatic generation of descriptive summaries for test case sets. The service an
 
 ## Configuration
 
-### Default Configuration
+### Default configuration
 
 ```toml
+# config.toml
 [testbench-ai-service.usecases.test_case_set_descriptions]
 enabled = true
 endpoint_path = "/test-case-set-descriptions"
@@ -38,18 +39,19 @@ file = "test_case_set_descriptions.yaml"
 name = "TestCaseSetDescriptions"
 ```
 
-### Prompt Placeholders
+### Prompt placeholders
 
 The description prompt supports the following automatically populated placeholders:
 
 | Placeholder | Description |
 |-------------|-------------|
-| `step_sequence` | Formatted string representation of the test case set (name, steps, parameters) |
-| `parameter_combinations` | Formatted parameter combination table |
+| `step_sequence` | Formatted string representation of the test case set (name, steps, parameters). |
+| `parameter_combinations` | Formatted parameter combination table. |
 
-### Project-Specific Override
+### Project-specific override
 
 ```toml
+# config.toml
 [testbench-ai-service.projects."My Project".usecases.test_case_set_descriptions]
 enabled = false
 
@@ -57,6 +59,6 @@ enabled = false
 variant = "my-custom-variant"
 ```
 
-## Prompt Variants
+## Prompt variants
 
 The built-in prompt file (`test_case_set_descriptions.yaml`) ships with variants for different description styles. See [Prompts](../prompts.md) for details on how to customize or create your own variants.

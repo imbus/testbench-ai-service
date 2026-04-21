@@ -5,9 +5,9 @@ title: Quickstart
 
 # Quickstart
 
-## 1. Set the OpenAI API Key
+## 1. Set the OpenAI API key
 
-Since OpenAI is the default language model provider, you need to set your API key. Create a `.env` file at the root of your project:
+Since OpenAI is the default language model provider, you need to set your API key. Create a `.env` file at the root of your installation directory:
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key
@@ -15,7 +15,7 @@ OPENAI_API_KEY=your_openai_api_key
 
 The server automatically loads environment variables from this file.
 
-## 2. Create a Configuration
+## 2. Create a configuration
 
 ```bash
 testbench-ai-service init
@@ -37,7 +37,7 @@ testbench-ai-service init --prompts-dir ./path/to/prompts
 ```
 :::
 
-## 3. Start the Service
+## 3. Start the service
 
 ```bash
 testbench-ai-service start
@@ -51,17 +51,17 @@ Visit [http://127.0.0.1:8010/docs](http://127.0.0.1:8010/docs) to explore the AP
 
 ---
 
-## API Documentation Endpoints
+## API documentation endpoints
 
 Once the service is running, these endpoints are available without authentication:
 
 | Endpoint | Description |
 |----------|-------------|
-| `/docs` | Interactive Swagger UI |
-| `/redoc` | ReDoc API documentation |
-| `/openapi.json` | OpenAPI specification (JSON) |
+| `/docs` | Interactive Swagger UI. |
+| `/redoc` | ReDoc API documentation. |
+| `/openapi.json` | OpenAPI specification (JSON). |
 
-## Next Steps
+## Next steps
 
 - Customize the service → [Configuration](../configuration.md)
 - Learn about use cases → [Use Cases overview](../use-cases/index.md)

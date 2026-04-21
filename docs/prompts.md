@@ -9,7 +9,7 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 
 ---
 
-## How Prompts Work
+## How prompts work
 
 ```
 ┌─────────────────────────────────────┐
@@ -40,7 +40,7 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 
 ---
 
-## File Location
+## File location
 
 Prompt files are organized by language under the `prompts_dir` directory:
 
@@ -59,6 +59,7 @@ prompts/
 The service resolves prompt files relative to `prompts_dir/<language>/`. So a config of:
 
 ```toml
+# config.toml
 [testbench-ai-service]
 language = "en"
 prompts_dir = "prompts"
@@ -71,7 +72,7 @@ will load `prompts/en/test_case_set_reviews.yaml`.
 
 ---
 
-## YAML Schema
+## YAML schema
 
 Each prompt YAML file is a list of prompt definitions:
 
@@ -87,9 +88,6 @@ Each prompt YAML file is a list of prompt definitions:
           text: |
             You are a test analyst. Review the following test case:
             {{ test_case }}
-
-        - role: "user"
-          text: |
             Parameter combinations:
             {{ parameter_combinations }}
 
@@ -102,44 +100,44 @@ Each prompt YAML file is a list of prompt definitions:
             {{ test_case }}
 ```
 
-### Schema Reference
+### Schema reference
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | String | Yes | Unique identifier for the prompt definition |
-| `description` | String | Yes | Human-readable description |
-| `default_variant` | String | Yes | Name of the default variant to use when none is specified |
-| `variants` | List | Yes | At least one variant is required |
+| Field | Type | Description | Required | 
+|-------|------|-------------|----------|
+| `name` | String | Unique identifier for the prompt definition. | Yes |
+| `description` | String | Human-readable description. | Yes |
+| `default_variant` | String | Name of the default variant to use when none is specified. | Yes |
+| `variants` | List | At least one variant is required. | Yes |
 
-#### Variant Fields
+#### Variant fields
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `name` | String | Yes | Unique variant identifier |
-| `model` | String | Yes | LLM model to use (e.g., `"gpt-4.1"`, `"o3"`) |
-| `blocks` | List | Yes | Ordered list of content blocks |
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `name` | String | Unique variant identifier. | Yes |
+| `model` | String | LLM model to use (e.g., `"gpt-4.1"`, `"o3"`). | Yes |
+| `blocks` | List | Ordered list of content blocks. | Yes |
 
-#### Block Fields
+#### Block fields
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `role` | String | `"user"` | Message role: `"system"`, `"user"`, or `"assistant"` |
-| `text` | String | — | The prompt text. Supports Jinja2 template syntax. |
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `role` | String | Message role: `"system"`, `"user"`, or `"assistant"`. | `"user"` |
+| `text` | String | The prompt text. Supports Jinja2 template syntax. | — |
 
 A JSON Schema for validation is available at `prompts/prompt.schema.json`.
 
 ---
 
-## Jinja2 Placeholders
+## Jinja2 placeholders
 
 Block text supports [Jinja2](https://jinja.palletsprojects.com/) template syntax. Placeholders are rendered at runtime with data from two sources:
 
-1. **Automatically built data** — the use case service populates placeholders like `test_case_set`, `parameter_combinations`, `description`, etc.
-2. **`placeholder_data`** — custom key-value pairs from the config or the API request.
+1. **Automatically built data**: the use case service populates placeholders like `test_case_set`, `parameter_combinations`, `description`, etc.
+2. **`placeholder_data`**: custom key-value pairs from the config or the API request.
 
 Values from `placeholder_data` take precedence over automatically built data.
 
-### Example
+**Example:**
 
 Prompt block:
 
@@ -148,16 +146,16 @@ Prompt block:
   text: |
     Review this test case:
     {{ test_case }}
-
     {% if glossary %}
     Use this glossary as reference:
     {{ glossary }}
     {% endif %}
 ```
 
-Config:
+Configuration:
 
 ```toml
+# config.toml
 [testbench-ai-service.usecases.test_case_set_reviews.prompt]
 file = "test_case_set_reviews.yaml"
 name = "TestCaseSetReviews"
@@ -168,13 +166,13 @@ glossary = "Domain: automotive\nABS = Anti-lock Braking System"
 
 ---
 
-## Customizing Prompts
+## Customizing prompts
 
-### Using the `init` Command
+### Using the `init` command
 
 When you run `testbench-ai-service init`, the built-in prompt files are copied to a local `./prompts` directory. You can edit these files directly to customize prompts without modifying the package.
 
-### Adding a New Variant
+### Adding a new variant
 
 Add a new entry to the `variants` list in the YAML file:
 
@@ -198,19 +196,13 @@ Add a new entry to the `variants` list in the YAML file:
             # Quick review instructions...
 ```
 
-Then reference the variant in your config:
+### Creating a new prompt file
 
-```toml
-[testbench-ai-service.usecases.test_case_set_reviews.prompt]
-variant = "quick-review"
-```
-
-### Creating a New Prompt File
-
-1. Create a new YAML file in `prompts/<language>/` following the schema above.
+1. Create a new YAML file in `prompts/<language>/` following the [schema](#yaml-schema).
 2. Reference it in your config:
 
 ```toml
+# config.toml
 [testbench-ai-service.usecases.test_case_set_reviews.prompt]
 file = "my_custom_reviews.yaml"
 name = "MyCustomReviews"
@@ -218,7 +210,7 @@ name = "MyCustomReviews"
 
 ---
 
-## Inspecting Prompts via API
+## Inspecting prompts via API
 
 The service exposes a read-only endpoint to inspect the configured prompt and its variants:
 
