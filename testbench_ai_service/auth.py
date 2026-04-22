@@ -24,9 +24,9 @@ def validate_session_token(request: Request, session_token: str = Security(auth_
     config: AppConfig = request.app.state.config
     server_url = config.tb_server_url
 
-    conn = TBConnection(server_url, verify=False, sessionToken=session_token)
     try:
-        conn.check_is_working()
+        conn = TBConnection(server_url, verify=False, sessionToken=session_token)
+        # conn.check_is_working()
     except requests.exceptions.HTTPError as e:
         logger.warning("Invalid authorization token")
         raise HTTPException(

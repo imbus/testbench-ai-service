@@ -20,10 +20,9 @@ def get_tb_connection(
     session_token: str = Depends(validate_session_token),
 ) -> Generator[TBConnection, None, None]:
     server_url = config.tb_server_url
-    conn = TBConnection(server_url=server_url, verify=False, sessionToken=session_token)
-
     try:
-        conn.check_is_working()
+        conn = TBConnection(server_url=server_url, verify=False, sessionToken=session_token)
+        # conn.check_is_working()
     except requests.exceptions.RequestException as e:
         logger.error(f"Could not connect to TestBench server: {e!s}")
         raise HTTPException(

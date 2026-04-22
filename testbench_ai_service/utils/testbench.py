@@ -19,8 +19,8 @@ from testbench_ai_service.models.testbench import (
 
 
 def get_user_key(conn: TBConnection) -> str:
-    login_data = conn.session.get(f"{conn.server_url}2/login/session").json()
-    return login_data["userKey"]  # type: ignore[no-any-return]
+    login_data = conn.session.get(f"{conn.server_url}2/users/self").json()
+    return login_data["key"]  # type: ignore[no-any-return]
 
 
 def get_project_name(conn: TBConnection, project_key: str) -> str:
@@ -112,6 +112,7 @@ async def patch_test_structure_element_spec(
     spec_key: str,
     spec_update: SpecificationDetailsForUpdate,
 ):
+    print(spec_update)
     return conn.session.patch(
         f"{conn.server_url}2/projects/{project_key}/specifications/{spec_key}",
         json=spec_update.model_dump(exclude_unset=True),
