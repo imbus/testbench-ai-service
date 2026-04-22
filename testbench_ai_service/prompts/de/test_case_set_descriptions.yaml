@@ -1,12 +1,12 @@
-# yaml-language-server: $schema=./prompt.schema.json
+# yaml-language-server: $schema=../prompt.schema.json
 
 - name: "TestCaseSetDescriptions"
   description: >
     Generates a general description for a TestBench test case set.
+  default_model: "gpt-5.4"
   default_variant: "full-description"
   variants:
     - name: "full-description"
-      model: "gpt-5.4"
       blocks:
         - role: "system"
           text: |
@@ -75,19 +75,18 @@
 
             Überprüfungen:
             {Überprüfungen}
-            
+
             Testfälle:
             - {Testfall 1}
             - {Testfall 2}
             ...
             ```
-            
+
             - entferne Leerzeiche und Zeilenumbrüche vor dem Text
             - Ändere keine Eigennamen, Testschrittnamen, Parameternamen, Parameterwerte, Werte etc. aus dem Input.
             </output_format>
-    
+
     - name: "short-description"
-      model: "gpt-5.1"
       blocks:
         - role: "system"
           text: |
@@ -98,7 +97,7 @@
             <aufgabe>
             Deine Aufgabe ist es, prägnante, zielgerichtete Beschreibungen basierend auf Testschritten und Parameterdaten zu erstellen.
             </aufgabe>
-            
+
         - role: "user"
           text: |
             <input_test_case_set_format>
@@ -153,9 +152,8 @@
             {Testziel} ("Dieser Testfallsatz prüft ...")
             ...
             ```
-            
+
             - entferne Leerzeiche und Zeilenumbrüche vor dem Text
             - Ändere keine Eigennamen, Testschrittnamen, Parameternamen, Parameterwerte, Werte etc. aus dem Input.
 
             </output_format> 
-  

@@ -1,10 +1,12 @@
-# yaml-language-server: $schema=./prompt.schema.json
+# yaml-language-server: $schema=../prompt.schema.json
 
 - name: "TestCaseSetReviews"
   description: >
-    Reviews test case sets from the TestBench based on defined review criteria. 
-    Some variants allow for glossary- and description-specific reviews via optional blocks.
-    The system role is intentionally unused, as reasoning models yield the best results but do not support that role.
+    Reviews test case sets from the TestBench based on defined review
+    criteria.  Some variants allow for glossary- and description-specific
+    reviews via optional blocks. The system role is intentionally unused, as
+    reasoning models yield the best results but do not support that role.
+  default_model: "gpt-5.4"
   default_variant: "interaction-based-tests-detailed-prompt"
   variants:
     - name: "interaction-based-tests-detailed-prompt"

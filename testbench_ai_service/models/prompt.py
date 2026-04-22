@@ -14,7 +14,7 @@ class PromptVariant(BaseModel):
     """A variant of a prompt with specific model and blocks."""
 
     name: str
-    model: str
+    model: str | None = None
     blocks: list[Block]
 
 

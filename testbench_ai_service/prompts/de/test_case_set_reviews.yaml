@@ -1,10 +1,13 @@
-# yaml-language-server: $schema=./prompt.schema.json
+# yaml-language-server: $schema=../prompt.schema.json
 
 - name: "TestCaseSetReviews"
   description: >
-    Reviews test case sets from the TestBench based on defined review criteria. 
-    Some variants allow for glossary- and description-specific reviews via optional blocks.
-    The system role is intentionally unused, as reasoning models yield the best results but do not support that role.
+    Reviews test case sets from the TestBench based on defined review
+    criteria.  Some variants allow for glossary- and description-specific
+    reviews via optional blocks. The system role is intentionally unused, as
+    reasoning models yield the best results but do not support that role.
+  default_model: "gpt-5.3"
+
   default_variant: "interaction-based-tests-detailed-prompt"
   variants:
     - name: "interaction-based-tests-detailed-prompt"
@@ -285,7 +288,7 @@
             - Stichpunktartig
             - Möglichst kurz formuliert
             - Erklärungen nur wenn zum Verständnis notwendig
-            
+
             # Projektkontext:
             Testobjekt ist pretalx, mit dem wir unsere Konferenzen organisieren.
             pretalx ist eine Open-Source-Konferenzmanagement-Software, mit der Veranstalter den gesamten Prozess von Call for Papers über Review und Speaker-Kommunikation bis zur Veröffentlichung des Programms organisieren können.
@@ -295,8 +298,6 @@
             # Glossar
             {{ glossary }}
             {% endif %}
-
-
 
         - role: "user"
           text: |

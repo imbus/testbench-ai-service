@@ -1,8 +1,9 @@
-# yaml-language-server: $schema=./prompt.schema.json
+# yaml-language-server: $schema=../prompt.schema.json
 
 - name: "DefectExplanations"
   description: >
     Generates an explanation for a failed Robot Framework test run.
+  default_model: gpt-5.4
   default_variant: "DEU"
   variants:
     - name: "DEU"
@@ -111,7 +112,7 @@
             Erkläre den Fehler!
 
     - name: "separated"
-      model: "gpt-5.4"
+      model: "claude-opus-4-1"
       blocks:
         - role: "system"
           text: |
@@ -206,8 +207,6 @@
             Testobjekt ist pretalx, mit dem wir unsere Konferenzen organisieren.
             pretalx ist eine Open-Source-Konferenzmanagement-Software, mit der Veranstalter den gesamten Prozess von Call for Papers über Review und Speaker-Kommunikation bis zur Veröffentlichung des Programms organisieren können.
 
-
-
         - role: "user"
           text: |
             # Testfall zur Analyse
@@ -215,6 +214,6 @@
 
             ## Robot Framework Fehlermeldung
             {{ error_message }}
-            
+
             # Anweisung
             Erkläre den Fehler!

@@ -43,7 +43,7 @@ class LLMFactory:
                 provider = LLMProvider.OPENAI
             elif prompt_model.startswith("claude-"):
                 provider = LLMProvider.ANTHROPIC
-
+        
         # If a project name is provided, handle project-specific client retrieval/creation
         if project_name is not None:
             # Check if a project-specific client already exists
