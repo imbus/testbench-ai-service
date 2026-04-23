@@ -5,6 +5,7 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
+from testbench_ai_service.utils.testbench import get_user_key
 
 auth_header = APIKeyHeader(
     name="Authorization",
@@ -62,7 +63,7 @@ def validate_jwt_token(request: Request, jwt_token: str = Security(jwt_auth_head
 
     try:
         conn = TBConnection(server_url, verify=False, sessionToken=jwt_token)
-        # conn.check_is_working()
+        get_user_key(conn)
     except requests.exceptions.HTTPError as e:
         logger.warning("Invalid authorization token")
         raise HTTPException(
