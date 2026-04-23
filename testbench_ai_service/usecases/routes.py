@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.auth import get_validated_token, validate_any_token
+from testbench_ai_service.auth import get_validated_token, validate_auth_token
 from testbench_ai_service.config import AppConfig, UseCaseConfig
 from testbench_ai_service.dependencies import (
     get_app_config,
@@ -53,7 +53,7 @@ def create_usecase_service(config: UseCaseConfig) -> UseCase:
 def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
     router = APIRouter(
         tags=["Usecases"],
-        dependencies=[Depends(validate_any_token)],
+        dependencies=[Depends(validate_auth_token)],
     )
 
     @router.post(
@@ -94,7 +94,7 @@ def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
         conn: TBConnection = Depends(get_tb_connection),
         llm_factory: LLMFactory = Depends(get_llm_factory),
         app_config: AppConfig = Depends(get_app_config),
-        auth_type: str = Depends(validate_any_token),
+        auth_type: str = Depends(validate_auth_token),
         token: str = Depends(get_validated_token),
     ) -> TriggerUseCaseResponse:
         logger.debug(

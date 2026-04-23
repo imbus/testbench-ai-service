@@ -81,7 +81,7 @@ def validate_jwt_token(request: Request, jwt_token: str = Security(jwt_auth_head
     return jwt_token
 
 
-def validate_any_token(
+def validate_auth_token(
     request: Request,
     session_token: str = Security(auth_header),
     jwt_token: str = Security(jwt_auth_header),

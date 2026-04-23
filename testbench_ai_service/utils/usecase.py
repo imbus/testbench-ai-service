@@ -95,7 +95,7 @@ def build_execution_context_jwt_token(
     user_key = get_user_key(conn)
 
     try:
-        token_info = decode(token.replace("Bearer ", ""), options={"verify_signature": False})
+        token_info = decode(token, options={"verify_signature": False})
     except Exception as e:
         logger.warning(f"Invalid JWT token: {e!s}")
         raise HTTPException(

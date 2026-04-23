@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import RedirectResponse
 
-from testbench_ai_service.auth import validate_any_token
+from testbench_ai_service.auth import validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.log import logger
@@ -24,7 +24,7 @@ async def get_usecases(
     app_config: AppConfig = Depends(get_app_config),
     enabled: bool | None = Query(None, description="Filter by enabled status"),
     project: str | None = Query(None, description="Filter by project name"),
-    auth_type: str = Depends(validate_any_token),
+    auth_type: str = Depends(validate_auth_token),
 ):
     logger.debug("get_usecases called, authenticated via %s", auth_type)
     usecases = [
@@ -40,7 +40,7 @@ async def get_usecases(
 
 @router.get(
     "/usecases/{usecase_key}/prompt",
-    dependencies=[Depends(validate_any_token)],
+    dependencies=[Depends(validate_auth_token)],
 )
 async def get_prompt_details(
     usecase_key: str = Path(description="The usecase key (e.g. 'test_case_set_reviews')"),
