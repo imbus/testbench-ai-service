@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+from jwt import decode
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.config import AppConfig
@@ -20,7 +21,7 @@ from testbench_ai_service.utils.testbench import (
 )
 
 
-def build_execution_context(
+def build_execution_context_session_token(
     usecase: str,
     trigger_request: TriggerUseCaseRequest,
     conn: TBConnection,
@@ -41,6 +42,24 @@ def build_execution_context(
         logger.info(f"Resource not found in TestBench Server: {e!s}")
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
+    language, llm_config, prompt_config = build_usecase_execution_configs(
+        usecase, trigger_request, app_config, project_name
+    )
+
+    return ExecutionContext(
+        user_key=user_key,
+        project_name=project_name,
+        project_key=trigger_request.project_key,
+        tov_key=trigger_request.tov_key,
+        cycle_key=trigger_request.cycle_key,
+        root_uid=trigger_request.root_uid,
+        language=language,
+        llm_config=llm_config,
+        prompt_config=prompt_config,
+    )
+
+
+def build_usecase_execution_configs(usecase, trigger_request, app_config, project_name):
     language = trigger_request.language or get_language_from_config(app_config, project_name)
 
     llm_config = get_llm_config(
@@ -56,12 +75,69 @@ def build_execution_context(
         language=language,
     )
 
+    return language, llm_config, prompt_config
+
+
+def build_execution_context_jwt_token(
+    usecase: str,
+    trigger_request: TriggerUseCaseRequest,
+    conn: TBConnection,
+    app_config: AppConfig,
+    token: str,
+) -> ExecutionContext:
+    """
+    Builds a fully-resolved ExecutionContext from a trigger request and app config.
+
+    Resolves project info, language, LLM config and prompt config so that all
+    downstream code (usecase service, tasks) operates on plain data without
+    knowing about the request or the global config.
+    """
+    user_key = get_user_key(conn)
+
+    try:
+        token_info = decode(token.replace("Bearer ", ""), options={"verify_signature": False})
+    except Exception as e:
+        logger.warning(f"Invalid JWT token: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization token",
+        ) from e
+
+    scope = token_info.get("scope")
+    if not isinstance(scope, dict):
+        logger.warning("Invalid JWT token scope: missing or malformed scope payload")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization token",
+        )
+
+    project_key = scope.get("proj")
+    tov_key = scope.get("tov")
+    cycle_key = scope.get("ccl")
+
+    if not project_key or not tov_key:
+        logger.warning("Invalid JWT token scope: missing required project or test object keys")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization token",
+        )
+
+    try:
+        project_name = get_project_name(conn, project_key)
+    except Exception as e:
+        logger.info(f"Resource not found in TestBench Server: {e!s}")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    language, llm_config, prompt_config = build_usecase_execution_configs(
+        usecase, trigger_request, app_config, project_name
+    )
+
     return ExecutionContext(
         user_key=user_key,
         project_name=project_name,
-        project_key=trigger_request.project_key,
-        tov_key=trigger_request.tov_key,
-        cycle_key=trigger_request.cycle_key,
+        project_key=project_key,
+        tov_key=tov_key,
+        cycle_key=cycle_key,
         root_uid=trigger_request.root_uid,
         language=language,
         llm_config=llm_config,

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import RedirectResponse
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import validate_any_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
+from testbench_ai_service.log import logger
 from testbench_ai_service.utils.config import get_prompt_config, get_usecase_config
 from testbench_ai_service.utils.prompt_utils import (
     get_placeholders_from_blocks,
@@ -18,12 +19,14 @@ async def redirect_to_docs(request: Request):
     return RedirectResponse(url=request.app.docs_url)
 
 
-@router.get("/usecases", dependencies=[Depends(validate_session_token)])
+@router.get("/usecases")
 async def get_usecases(
     app_config: AppConfig = Depends(get_app_config),
     enabled: bool | None = Query(None, description="Filter by enabled status"),
     project: str | None = Query(None, description="Filter by project name"),
+    auth_type: str = Depends(validate_any_token),
 ):
+    logger.debug("get_usecases called, authenticated via %s", auth_type)
     usecases = [
         {"key": key, **get_usecase_config(key, app_config, project).model_dump()}
         for key in app_config.usecases
@@ -35,7 +38,10 @@ async def get_usecases(
     return usecases
 
 
-@router.get("/usecases/{usecase_key}/prompt", dependencies=[Depends(validate_session_token)])
+@router.get(
+    "/usecases/{usecase_key}/prompt",
+    dependencies=[Depends(validate_any_token)],
+)
 async def get_prompt_details(
     usecase_key: str = Path(description="The usecase key (e.g. 'test_case_set_reviews')"),
     app_config: AppConfig = Depends(get_app_config),

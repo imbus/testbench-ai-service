@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import get_validated_token, validate_any_token
 from testbench_ai_service.config import AppConfig, UseCaseConfig
 from testbench_ai_service.dependencies import (
     get_app_config,
@@ -18,7 +18,10 @@ from testbench_ai_service.usecases.base import UseCase
 from testbench_ai_service.utils.config import get_usecase_config, usecase_enabled
 from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.testbench import has_any_required_role
-from testbench_ai_service.utils.usecase import build_execution_context
+from testbench_ai_service.utils.usecase import (
+    build_execution_context_jwt_token,
+    build_execution_context_session_token,
+)
 
 
 def create_usecase_service(config: UseCaseConfig) -> UseCase:
@@ -50,7 +53,7 @@ def create_usecase_service(config: UseCaseConfig) -> UseCase:
 def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
     router = APIRouter(
         tags=["Usecases"],
-        dependencies=[Depends(validate_session_token)],
+        dependencies=[Depends(validate_any_token)],
     )
 
     @router.post(
@@ -91,8 +94,27 @@ def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
         conn: TBConnection = Depends(get_tb_connection),
         llm_factory: LLMFactory = Depends(get_llm_factory),
         app_config: AppConfig = Depends(get_app_config),
+        auth_type: str = Depends(validate_any_token),
+        token: str = Depends(get_validated_token),
     ) -> TriggerUseCaseResponse:
-        context = build_execution_context(usecase, trigger_request, conn, app_config)
+        logger.debug(
+            "trigger_usecase_execution called for usecase '%s', authenticated via %s",
+            usecase,
+            auth_type,
+        )
+
+        if auth_type == "jwt_token":
+            context = build_execution_context_jwt_token(
+                usecase,
+                trigger_request,
+                conn,
+                app_config,
+                token,
+            )
+        elif auth_type == "session_token":
+            context = build_execution_context_session_token(
+                usecase, trigger_request, conn, app_config
+            )
 
         if not usecase_enabled(usecase, app_config, context.project_name):
             logger.debug(
@@ -107,7 +129,7 @@ def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
             ProjectRole.TestManager,
             ProjectRole.TestDesigner,
         ]
-        if not has_any_required_role(conn, trigger_request.project_key, required_roles):
+        if not has_any_required_role(conn, context.project_key, required_roles):
             logger.warning(
                 "Access denied: User does not have any of the required roles for the usecase '%s'",
                 usecase,
