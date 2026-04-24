@@ -1,7 +1,12 @@
 import unittest
 from unittest.mock import AsyncMock, patch
 
-from testbench_ai_service.llm.openai import CHAT_MODELS, REASONING_MODELS, OpenAIClient
+from testbench_ai_service.llm.openai import (
+    CHAT_MODELS,
+    REASONING_MODELS,
+    AzureOpenAIClient,
+    OpenAIClient,
+)
 from testbench_ai_service.models.prompt import Message
 
 
@@ -56,6 +61,30 @@ class TestOpenAIClientQueryLlm(unittest.IsolatedAsyncioTestCase):
         messages = [Message(role="user", content="Reason about this")]
         result = await client.query_llm("o1", messages)
         self.assertEqual(result, "Reasoning response")
+        client.client.responses.create.assert_awaited_once()
+
+
+class TestAzureOpenAIClientQueryLlm(unittest.IsolatedAsyncioTestCase):
+    """Tests for ``AzureOpenAIClient``."""
+
+    def _make_client(self):
+        with patch("testbench_ai_service.llm.openai.AsyncAzureOpenAI"):
+            return AzureOpenAIClient(
+                api_key="test-key",
+                azure_endpoint="https://example.openai.azure.com",
+                api_version="2024-10-21",
+            )
+
+    async def test_chat_model_uses_responses_api(self):
+        client = self._make_client()
+        mock_response = AsyncMock()
+        mock_response.output_text = "Azure chat response"
+        client.client.responses.create = AsyncMock(return_value=mock_response)
+
+        messages = [Message(role="user", content="Hello Azure")]
+        result = await client.query_llm("gpt-4o", messages)
+
+        self.assertEqual(result, "Azure chat response")
         client.client.responses.create.assert_awaited_once()
 
 

@@ -26,7 +26,7 @@ Highest priority first:
 1. **Request-level overrides** (per-request `prompt_config` and `llm_config` in the API body)
 2. **Project-specific overrides** (`[testbench-ai-service.projects.<name>]`)
 3. **Command-line flags** (`start --host ... --port ...`)
-4. **Environment variables** (for API keys: `OPENAI_API_KEY`)
+4. **Environment variables** (for API keys: `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`)
 5. **`config.toml`**
 6. **Built-in defaults**
 
@@ -208,8 +208,10 @@ trusted_proxies = ["10.0.0.1"]
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
-| `provider` | String | LLM provider to use: `"openai"` or `"custom"` | `"openai"` |
+| `provider` | String | LLM provider to use: `"openai"`, `"azure_openai"`, or `"custom"` | `"openai"` |
 | `model` | String | Override the default model (if not set, the model from the prompt variant is used) | — |
+| `azure_endpoint` | String | Azure OpenAI endpoint URL (required when `provider = "azure_openai"`) | — |
+| `api_version` | String | Azure OpenAI API version (required when `provider = "azure_openai"`) | — |
 | `class_path` | String | Full Python class path for a custom LLM client (required when `provider = "custom"`) | — |
 
 Additional provider-specific keys can be added to this section and will be passed through to the client.
@@ -221,6 +223,16 @@ Additional provider-specific keys can be added to this section and will be passe
 provider = "openai"
 ```
 
+**Azure OpenAI example:**
+
+```toml
+[testbench-ai-service.llm_config]
+provider = "azure_openai"
+azure_endpoint = "https://your-resource.openai.azure.com"
+api_version = "2024-10-21"
+model = "gpt-4o" # Azure deployment name
+```
+
 ### Setting the API key
 
 API keys are loaded from environment variables using the pattern `{PROVIDER}_API_KEY`:
@@ -228,12 +240,14 @@ API keys are loaded from environment variables using the pattern `{PROVIDER}_API
 | Provider | Environment variable |
 |----------|---------------------|
 | `openai` | `OPENAI_API_KEY` |
+| `azure_openai` | `AZURE_OPENAI_API_KEY` |
 | `custom` | Not required (handled by your implementation) |
 
 **Recommended:** Create a `.env` file at the project root:
 
 ```bash
 OPENAI_API_KEY=your_openai_api_key
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key
 ```
 
 ### Project-specific API keys
@@ -243,6 +257,9 @@ You can set a separate API key per TestBench project using the pattern `{NORMALI
 ```bash
 # For a project named "Car Configurator" using OpenAI:
 CAR_CONFIGURATOR_OPENAI_API_KEY=sk-project-specific-key
+
+# For a project named "Car Configurator" using Azure OpenAI:
+CAR_CONFIGURATOR_AZURE_OPENAI_API_KEY=azure-project-specific-key
 ```
 
 If a project-specific key is found, the service creates a dedicated LLM client for that project. Otherwise, the global client is used.

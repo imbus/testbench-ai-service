@@ -13,6 +13,9 @@ class TestLLMProvider(unittest.TestCase):
     def test_custom_value(self):
         self.assertEqual(LLMProvider.CUSTOM.value, "custom")
 
+    def test_azure_openai_value(self):
+        self.assertEqual(LLMProvider.AZURE_OPENAI.value, "azure_openai")
+
     def test_str_returns_value(self):
         self.assertEqual(str(LLMProvider.OPENAI), "openai")
 

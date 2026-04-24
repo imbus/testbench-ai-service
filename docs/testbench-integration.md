@@ -21,7 +21,7 @@ Authentication is handled via **session tokens**: TestBench passes the current u
 
 - TestBench AI Service is installed and running (see [Quickstart](getting-started/quickstart.md)).
 - The `tb_server_url` in the AI Service config points to the TestBench REST API.
-- The `OPENAI_API_KEY` (or your provider's key) is set in the environment.
+- The provider API key is set in the environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`).
 - The TestBench version supports the AI Service integration.
 
 ---
@@ -121,7 +121,7 @@ Requests from users without sufficient permissions receive a `403 Forbidden` res
 | `502 Bad Gateway` | AI Service cannot reach TestBench REST API | Verify `tb_server_url` in `config.toml` is correct and reachable. |
 | `404 Not Found` | Use case disabled for the project | Check `enabled = true` in the use case config; check project-specific overrides. |
 | `409 Conflict` | Precheck failed (e.g., all items locked) | Unlock the test structure elements in TestBench and retry. |
-| LLM errors in logs | Missing or invalid API key | Verify `OPENAI_API_KEY` is set in `.env` or environment. |
+| LLM errors in logs | Missing or invalid API key | Verify your provider key is set in `.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
 
 ---
 
