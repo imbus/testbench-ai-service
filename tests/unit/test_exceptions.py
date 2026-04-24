@@ -63,6 +63,19 @@ class TestHandleRequestsHttpError(unittest.TestCase):
             handle_requests_http_error(self._make_error(status_code=None))
         self.assertEqual(ctx.exception.status_code, 500)
 
+    def test_non_json_response_falls_back_to_response_text(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.json.side_effect = ValueError("No JSON body")
+        mock_response.text = "Forbidden"
+
+        error = requests.exceptions.HTTPError("error", response=mock_response)
+        with self.assertRaises(HTTPException) as ctx:
+            handle_requests_http_error(error)
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertEqual(ctx.exception.detail, "Forbidden")
+
 
 if __name__ == "__main__":
     unittest.main()

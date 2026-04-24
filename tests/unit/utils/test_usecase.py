@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import requests
 from fastapi import HTTPException
 
 from testbench_ai_service.config import LLMConfig, PromptConfig
@@ -73,6 +74,35 @@ class TestCheckTestCaseSetIsLocked(unittest.TestCase):
             MagicMock(), _Context("proj1", "tov1", "cycle1", "user1"), "uid1", "nonexistent_tab"
         )
         self.assertFalse(result)
+
+    @patch("testbench_ai_service.utils.usecase.get_test_structure_tree")
+    def test_http_error_is_converted_to_http_exception(self, mock_get_tree):
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.json.return_value = {"message": "Forbidden"}
+        mock_get_tree.side_effect = requests.exceptions.HTTPError(
+            "Forbidden", response=mock_response
+        )
+
+        with self.assertRaises(HTTPException) as ctx:
+            check_test_case_set_is_locked(
+                MagicMock(), _Context("proj1", "tov1", "cycle1", "user1"), "uid1", "tab"
+            )
+
+        self.assertEqual(ctx.exception.status_code, 403)
+        self.assertEqual(ctx.exception.detail, "Forbidden")
+
+    @patch("testbench_ai_service.utils.usecase.get_test_structure_tree")
+    def test_connection_error_is_converted_to_502(self, mock_get_tree):
+        mock_get_tree.side_effect = requests.exceptions.ConnectionError("Connection refused")
+
+        with self.assertRaises(HTTPException) as ctx:
+            check_test_case_set_is_locked(
+                MagicMock(), _Context("proj1", "tov1", "cycle1", "user1"), "uid1", "tab"
+            )
+
+        self.assertEqual(ctx.exception.status_code, 502)
+        self.assertIn("Could not connect to TestBench server", ctx.exception.detail)
 
 
 class TestBuildExecutionContext(unittest.TestCase):

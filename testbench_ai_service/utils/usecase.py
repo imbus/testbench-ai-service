@@ -1,8 +1,10 @@
+import requests
 from fastapi import HTTPException, status
 from jwt import decode
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.testbench import (
     TestStructureItemExecution,
@@ -152,9 +154,18 @@ def check_test_case_set_is_locked(
     Returns True if the given test structure element tab is locked by a *different* user.
     Returns False if it is free or locked by the current user.
     """
-    test_structure_tree = get_test_structure_tree(
-        conn, context.project_key, context.tov_key, context.cycle_key, uniqueID
-    )
+    try:
+        test_structure_tree = get_test_structure_tree(
+            conn, context.project_key, context.tov_key, context.cycle_key, uniqueID
+        )
+    except requests.exceptions.HTTPError as e:
+        handle_requests_http_error(e)
+    except requests.exceptions.ConnectionError as e:
+        logger.error(f"Could not connect to TestBench server: {e!s}")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not connect to TestBench server: {e!s}",
+        ) from e
 
     tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(  # type: ignore[assignment]
         test_structure_tree.root, tab, None

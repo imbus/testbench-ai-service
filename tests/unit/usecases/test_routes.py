@@ -202,6 +202,19 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
         self.assertEqual(response.status_code, 403)
 
+    def test_precheck_lock_lookup_http_403_returns_403(self):
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_response.json.return_value = {"message": "Forbidden"}
+        self.mock_tb_connection.session.post.side_effect = requests.exceptions.HTTPError(
+            "Forbidden", response=mock_response
+        )
+
+        response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": "Forbidden"})
+
     # ── Side-effect helpers ───────────────────────────────────────────────────
 
     def _tb_session_get_side_effect(self, url: str):
