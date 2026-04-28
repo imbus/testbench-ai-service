@@ -1,10 +1,11 @@
-# yaml-language-server: $schema=./prompt.schema.json
+# yaml-language-server: $schema=../prompt.schema.json
 
 - name: "TestCaseSetReviews"
   description: >
     Reviews test case sets based on defined quality criteria. Supports optional glossary integration
     via template blocks. One variant uses a single user block (optimized for reasoning models);
     the other uses separate system and user blocks.
+  default_model: "gpt-5.4"
   default_variant: "Single Block"
   variants:
     - name: "Single Block"

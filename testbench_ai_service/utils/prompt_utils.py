@@ -172,7 +172,13 @@ def build_prompt(prompt_config: PromptConfig) -> Prompt:
     rendered_blocks = get_rendered_blocks(prompt_variant.blocks, placeholder_data)
     messages = build_messages(rendered_blocks)
 
-    return Prompt(model_name=prompt_variant.model, messages=messages)
+    return Prompt(model_name=get_prompt_model(prompt_config), messages=messages)
+
+
+def get_prompt_model(prompt_config: PromptConfig) -> str:
+    prompt_definition = get_prompt_definition(prompt_config.file, prompt_config.name)
+    prompt_variant = get_prompt_variant(prompt_definition, prompt_config.variant)
+    return prompt_variant.model or prompt_definition.default_model
 
 
 def pretty_messages(messages: list[Message]) -> str:

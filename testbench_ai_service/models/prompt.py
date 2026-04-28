@@ -16,7 +16,7 @@ class PromptVariant(BaseModel):
 
     name: str
     description: str | None = None
-    model: str
+    model: str | None = None
     blocks: list[Block]
 
 
@@ -25,7 +25,8 @@ class PromptDefinition(BaseModel):
 
     name: str
     description: str | None = None
-    default_variant: str | None = None
+    default_model: str
+    default_variant: str
     variants: list[PromptVariant]
 
     @field_validator("variants")
@@ -66,5 +67,5 @@ class PromptDetailsResponse(BaseModel):
     name: str
     file: Path
     generated_placeholders: list[str]
-    default_variant: str | None
+    default_variant: str
     variants: list[PromptVariantResponse]

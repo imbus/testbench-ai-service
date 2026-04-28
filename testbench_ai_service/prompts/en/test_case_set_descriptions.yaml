@@ -1,8 +1,9 @@
-# yaml-language-server: $schema=./prompt.schema.json
+# yaml-language-server: $schema=../prompt.schema.json
 
 - name: "TestCaseSetDescriptions"
   description: >
     Generates a general description for a TestBench test case set.
+  default_model: "gpt-5.4"
   default_variant: "Full Description"
   variants:
     - name: "Full Description"
@@ -76,17 +77,16 @@
 
             Verifications:
             {Verifications}
-            
+
             Test cases:
             - {Test case 1}
             - {Test case 2}
             ...
             ```
-            
+
             - Remove leading whitespace and line breaks before the text.
             - Do not alter any proper nouns, test step names, parameter names, parameter values, values, etc. from the input.
             </output_format>
-    
     - name: "Short Description"
       description: "Generates a concise one-sentence description stating the test objective only."
       model: "gpt-5.1"
@@ -100,7 +100,7 @@
             <task>
             Your task is to create concise, focused descriptions based on test steps and parameter data.
             </task>
-            
+
         - role: "user"
           text: |
             <input_test_case_set_format>
@@ -155,7 +155,7 @@
             {Test objective} ("This test case set verifies ...")
             ...
             ```
-            
+
             - Remove leading whitespace and line breaks before the text.
             - Do not alter any proper nouns, test step names, parameter names, parameter values, values, etc. from the input.
 

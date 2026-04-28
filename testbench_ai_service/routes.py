@@ -115,7 +115,7 @@ async def get_prompt_details(
         PromptVariantResponse(
             name=variant.name,
             description=variant.description,
-            model=variant.model,
+            model=variant.model or prompt_definition.default_model,
             placeholders=(all_placeholders := get_placeholders_from_blocks(variant.blocks)),
             user_placeholders=sorted(set(all_placeholders) - generated_placeholders),
         )

@@ -6,6 +6,7 @@ from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.usecase import ExecutionContext
 from testbench_ai_service.usecases.base import UseCase
+from testbench_ai_service.utils.prompt_utils import get_prompt_model
 
 
 async def run_usecase(
@@ -36,6 +37,7 @@ async def run_usecase(
     try:
         llm_client = llm_factory.get_client(
             config=context.llm_config,
+            prompt_model=get_prompt_model(context.prompt_config),
             project_name=context.project_name,
         )
         logger.debug("Initialised llm_client for usecase '%s': %s", usecase, llm_client.__class__)

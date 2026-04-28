@@ -2,6 +2,7 @@ import os
 import re
 
 from testbench_ai_service.config import LLMConfig
+from testbench_ai_service.llm.anthropic import AnthropicClient
 from testbench_ai_service.llm.base import LLMClient, LLMProvider
 from testbench_ai_service.llm.openai import OpenAIClient
 from testbench_ai_service.utils.import_utils import load_class_from_path
@@ -23,9 +24,14 @@ class LLMFactory:
         for config in configs:
             self.get_client(config)
 
-    def get_client(self, config: LLMConfig, project_name: str | None = None) -> LLMClient:
+    def get_client(
+        self, config: LLMConfig, prompt_model: str | None = None, project_name: str | None = None
+    ) -> LLMClient:
         """
         Retrieve a client instance for the specified provider and (optionally) project.
+
+        The provider is resolved from `prompt_model` when possible (via model-name prefix),
+        falling back to `config.provider`.
 
         If a project name is provided, this method checks for an existing client instance specific
         to that project. If none exists, it attempts to retrieve a project-specific API key.
@@ -34,25 +40,27 @@ class LLMFactory:
         If no project name is given, this method checks for a global (default) client for the provider.
         If not already created, it retrieves the API key for the provider, creates the client, caches it and returns it.
         """
+        provider = self._resolve_provider(config, prompt_model)
+
         # If a project name is provided, handle project-specific client retrieval/creation
         if project_name is not None:
             # Check if a project-specific client already exists
-            key = (project_name, config.provider)
+            key = (project_name, provider)
             if key in self._project_clients:
                 return self._project_clients[key]
             # Attempt to retrieve a project-specific API key
-            api_key = self._get_project_api_key(project_name, config.provider)
+            api_key = self._get_project_api_key(project_name, provider)
             if api_key is not None:
                 # Create, cache, and return the new project-specific client
-                self._project_clients[key] = self._create_client(config, api_key)
+                self._project_clients[key] = self._create_client(provider, config, api_key)
                 return self._project_clients[key]
 
         # If no global client for provider is found, retrieves the API key and creates the client
-        if config.provider not in self._clients:
-            api_key = self._get_api_key(config.provider)
-            self._clients[config.provider] = self._create_client(config, api_key)
+        if provider not in self._clients:
+            api_key = self._get_api_key(provider)
+            self._clients[provider] = self._create_client(provider, config, api_key)
 
-        return self._clients[config.provider]
+        return self._clients[provider]
 
     async def close_clients(self):
         """
@@ -61,6 +69,21 @@ class LLMFactory:
         all_clients = list(self._clients.values()) + list(self._project_clients.values())
         for client in all_clients:
             await client.close()
+
+    def _resolve_provider(self, config: LLMConfig, prompt_model: str | None) -> LLMProvider:
+        """
+        Determine the LLM provider from the model name, falling back to `config.provider`.
+
+        Model-name prefix takes precedence so that a prompt variant using a Claude
+        model is always routed to the Anthropic client, even if the global config
+        specifies a different provider.
+        """
+        if prompt_model is not None:
+            if prompt_model.startswith("gpt-"):
+                return LLMProvider.OPENAI
+            if prompt_model.startswith("claude-"):
+                return LLMProvider.ANTHROPIC
+        return config.provider
 
     def _get_api_key(self, provider: LLMProvider) -> str | None:
         """
@@ -90,16 +113,21 @@ class LLMFactory:
         env_key = f"{normalized}_{provider.value.upper()}_API_KEY"
         return os.getenv(env_key)
 
-    def _create_client(self, config: LLMConfig, api_key: str | None) -> LLMClient:
+    def _create_client(
+        self, provider: LLMProvider, config: LLMConfig, api_key: str | None
+    ) -> LLMClient:
         """
         Create an LLM client instance using the given LLMConfig and API key.
         """
-        if config.provider == LLMProvider.OPENAI:
+        if provider == LLMProvider.OPENAI:
             return OpenAIClient(api_key=api_key)
 
-        if config.provider == LLMProvider.CUSTOM:
+        if provider == LLMProvider.ANTHROPIC:
+            return AnthropicClient(api_key=api_key)
+
+        if provider == LLMProvider.CUSTOM:
             assert config.class_path is not None
             client_class: type[LLMClient] = load_class_from_path(config.class_path)
             return client_class(api_key)
 
-        raise NotImplementedError(f"Unsupported LLM provider: '{config.provider}'.")
+        raise NotImplementedError(f"Unsupported LLM provider: '{provider}'.")

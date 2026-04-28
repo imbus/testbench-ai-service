@@ -1,8 +1,9 @@
-# yaml-language-server: $schema=./prompt.schema.json
+# yaml-language-server: $schema=../prompt.schema.json
 
 - name: "DefectExplanations"
   description: >
     Generates an explanation for a failed Robot Framework test run.
+  default_model: gpt-5.4
   default_variant: "Single Block"
   variants:
     - name: "Single Block"
@@ -207,6 +208,6 @@
 
             ## Robot Framework Fehlermeldung
             {{ error_message }}
-            
+
             # Anweisung
             Erkläre den Fehler!
