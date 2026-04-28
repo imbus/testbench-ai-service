@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -7,6 +8,8 @@ from testbench_ai_service.models.usecase import ExecutionContext, PrecheckResult
 
 
 class UseCase(ABC):
+    GENERATED_PLACEHOLDERS: ClassVar[frozenset[str]] = frozenset()
+
     @abstractmethod
     async def precheck(
         self,

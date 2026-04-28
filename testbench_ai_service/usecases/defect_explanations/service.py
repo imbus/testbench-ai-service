@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any
+from typing import Any, ClassVar
 
 import requests
 from testbench2robotframework.json_reader import TestCaseSet
@@ -25,6 +25,13 @@ from testbench_ai_service.utils.usecase import check_test_case_set_is_locked
 
 
 class DefectExplainer(UseCase):
+    GENERATED_PLACEHOLDERS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "failed_test_case",
+            "error_message",
+        }
+    )
+
     async def precheck(
         self,
         context: ExecutionContext,
