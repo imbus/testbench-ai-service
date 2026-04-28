@@ -3,9 +3,10 @@
 - name: "TestCaseSetDescriptions"
   description: >
     Generates a general description for a TestBench test case set.
-  default_variant: "full-description"
+  default_variant: "Full Description"
   variants:
-    - name: "full-description"
+    - name: "Full Description"
+      description: "Generates a complete description with test objective, verifications, and a summary of each test case."
       model: "gpt-5.4"
       blocks:
         - role: "system"
@@ -86,7 +87,8 @@
             - Do not alter any proper nouns, test step names, parameter names, parameter values, values, etc. from the input.
             </output_format>
     
-    - name: "short-description"
+    - name: "Short Description"
+      description: "Generates a concise one-sentence description stating the test objective only."
       model: "gpt-5.1"
       blocks:
         - role: "system"

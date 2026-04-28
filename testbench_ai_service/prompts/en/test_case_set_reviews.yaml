@@ -2,12 +2,13 @@
 
 - name: "TestCaseSetReviews"
   description: >
-    Reviews test case sets from the TestBench based on defined review criteria. 
-    Some variants allow for glossary- and description-specific reviews via optional blocks.
-    The system role is intentionally unused, as reasoning models yield the best results but do not support that role.
-  default_variant: "interaction-based-tests-detailed-prompt"
+    Reviews test case sets based on defined quality criteria. Supports optional glossary integration
+    via template blocks. One variant uses a single user block (optimized for reasoning models);
+    the other uses separate system and user blocks.
+  default_variant: "Single Block"
   variants:
-    - name: "interaction-based-tests-detailed-prompt"
+    - name: "Single Block"
+      description: "Delivers all instructions in a single user message; best suited for reasoning models that don't support a system role."
       model: "gpt-5.4"
       blocks:
         - role: "user"
@@ -61,7 +62,6 @@
             - Ignore capitalisation and potentially project-specific terms.
             - Report only clear errors and obvious problems! (Test cases can be error-free)
             - Make no assumptions.
-            - Take the project description into account.
 
             ## Test Case Set Name
             - Does it reflect the most important aspects of the test case set description?
@@ -126,10 +126,6 @@
             - As concise as possible
             - Explanations only when necessary for understanding
 
-            # Project Context:
-            Test subject is pretalx.
-            pretalx is an open-source conference management platform that helps organizers handle the entire process, from the call for papers and review workflow to speaker communication and publishing the program.
-
             {% if glossary %}
             # Glossary
             {{ glossary }}
@@ -166,7 +162,8 @@
             Evaluate only.
             Do not make improvement suggestions.
 
-    - name: "separated-prompt"
+    - name: "Separated Roles"
+      description: "Splits the prompt into system and user message blocks; best suited for chat models that support a system role."
       model: "gpt-5.2-pro"
       blocks:
         - role: "system"
@@ -220,7 +217,6 @@
             - Ignore capitalisation and potentially project-specific terms.
             - Report only clear errors and obvious problems! (Test cases can be error-free)
             - Make no assumptions.
-            - Take the project description into account.
 
             ## Test Case Set Name
             - Does it reflect the most important aspects of the test case set description?
@@ -284,11 +280,6 @@
             - Bullet points
             - As concise as possible
             - Explanations only when necessary for understanding
-
-            # Project Context:
-            Test subject is pretalx.
-            pretalx is an open-source conference management platform that helps organizers handle the entire process, from the call for papers and review workflow to speaker communication and publishing the program.
-
 
             {% if glossary %}
             # Glossary

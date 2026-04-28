@@ -3,9 +3,10 @@
 - name: "DefectExplanations"
   description: >
     Generates an explanation for a failed Robot Framework test run.
-  default_variant: "DEU"
+  default_variant: "Single Block"
   variants:
-    - name: "DEU"
+    - name: "Single Block"
+      description: "Liefert alle Anweisungen in einer einzigen Nutzernachricht; geeignet für Reasoning-Modelle ohne System-Rollenunterstützung."
       model: "gpt-5.4"
       blocks:
         - role: "user"
@@ -32,7 +33,7 @@
             - Präfix "▼" = übergeordneter Schritt
             - Präfix "►" = atomarer Schritt
             - Je höher die Schritte in der Hierarchie sind, desto fachlicher sind sie.
-            - Je tiefer die Schritte in der Hierarchie sind, desto technischer sind die sie.
+            - Je tiefer die Schritte in der Hierarchie sind, desto technischer sind sie.
 
             ## Parameter
             - Parameter sind key=value
@@ -71,7 +72,7 @@
             ## Ursachenidentifikation & Lösungsvorschläge
             - Beschreibe wahrscheinliche Fehlerursachen.
             - Beachte, dass die Ursache in der Testspezifikation ODER im Testobjekt (Webanwendung) liegen kann.
-            - Sage dem Nutzer nur, wo die Abweichung ist, aber vermute nicht ob die Ursache in der Testpezifikation oder in der Anwendung liegt.
+            - Sage dem Nutzer nur, wo die Abweichung ist, aber vermute nicht ob die Ursache in der Testspezifikation oder in der Anwendung liegt.
 
             ## Unsicherheiten & Annahmen
             - Markiere fehlende Informationen explizit mit „Annahme:" oder „Unbekannt:".
@@ -84,22 +85,18 @@
             - Keine Listen.
             - Keine technischen Begriffe oder Abkürzungen.
 
-            Regeln
+            ## Regeln
             - Alle Identifier (Keywordnamen, Parameternamen, Parameterwerte etc.) mit single Backticks (`) quoten.
             - Keine Identifier verändern.
             - Sprache allgemeinverständlich.
             - Orientierung am fachlich höchsten betroffenen Schritt.
 
-            {% if validate %}
+            {% if validate_output %}
             ## Output Validierung
             Vor Ausgabe prüfen:
             - Ist nur die Management Summary (1 Satz, Plain Text) enthalten?
             - Wenn keine sichere Analyse möglich: gib ein **Minimal-Befund-Template** mit offenen Fragen/Next Steps zurück.
             {% endif %}
-
-            # Projektkontext:
-            Testobjekt ist pretalx, mit dem wir unsere Konferenzen organisieren.
-            pretalx ist eine Open-Source-Konferenzmanagement-Software, mit der Veranstalter den gesamten Prozess von Call for Papers über Review und Speaker-Kommunikation bis zur Veröffentlichung des Programms organisieren können.
 
             # Testfall zur Analyse
             {{ failed_test_case }}
@@ -110,7 +107,8 @@
             # Anweisung
             Erkläre den Fehler!
 
-    - name: "separated"
+    - name: "Separated Roles"
+      description: "Teilt den Prompt in System- und Nutzernachricht auf; geeignet für Chat-Modelle mit System-Rollenunterstützung."
       model: "gpt-5.4"
       blocks:
         - role: "system"
@@ -137,7 +135,7 @@
             - Präfix "▼" = übergeordneter Schritt
             - Präfix "►" = atomarer Schritt
             - Je höher die Schritte in der Hierarchie sind, desto fachlicher sind sie.
-            - Je tiefer die Schritte in der Hierarchie sind, desto technischer sind die sie.
+            - Je tiefer die Schritte in der Hierarchie sind, desto technischer sind sie.
 
             ## Parameter
             - Parameter sind key=value
@@ -176,7 +174,7 @@
             ## Ursachenidentifikation & Lösungsvorschläge
             - Beschreibe wahrscheinliche Fehlerursachen.
             - Beachte, dass die Ursache in der Testspezifikation ODER im Testobjekt (Webanwendung) liegen kann.
-            - Sage dem Nutzer nur, wo die Abweichung ist, aber vermute nicht ob die Ursache in der Testpezifikation oder in der Anwendung liegt.
+            - Sage dem Nutzer nur, wo die Abweichung ist, aber vermute nicht ob die Ursache in der Testspezifikation oder in der Anwendung liegt.
 
             ## Unsicherheiten & Annahmen
             - Markiere fehlende Informationen explizit mit „Annahme:" oder „Unbekannt:".
@@ -189,24 +187,18 @@
             - Keine Listen.
             - Keine technischen Begriffe oder Abkürzungen.
 
-            Regeln
+            ## Regeln
             - Alle Identifier (Keywordnamen, Parameternamen, Parameterwerte etc.) mit single Backticks (`) quoten.
             - Keine Identifier verändern.
             - Sprache allgemeinverständlich.
             - Orientierung am fachlich höchsten betroffenen Schritt.
 
-            {% if validate %}
+            {% if validate_output %}
             ## Output Validierung
             Vor Ausgabe prüfen:
             - Ist nur die Management Summary (1 Satz, Plain Text) enthalten?
             - Wenn keine sichere Analyse möglich: gib ein **Minimal-Befund-Template** mit offenen Fragen/Next Steps zurück.
             {% endif %}
-
-            # Projektkontext:
-            Testobjekt ist pretalx, mit dem wir unsere Konferenzen organisieren.
-            pretalx ist eine Open-Source-Konferenzmanagement-Software, mit der Veranstalter den gesamten Prozess von Call for Papers über Review und Speaker-Kommunikation bis zur Veröffentlichung des Programms organisieren können.
-
-
 
         - role: "user"
           text: |

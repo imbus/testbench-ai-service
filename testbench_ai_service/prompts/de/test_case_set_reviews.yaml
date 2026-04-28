@@ -2,12 +2,13 @@
 
 - name: "TestCaseSetReviews"
   description: >
-    Reviews test case sets from the TestBench based on defined review criteria. 
-    Some variants allow for glossary- and description-specific reviews via optional blocks.
-    The system role is intentionally unused, as reasoning models yield the best results but do not support that role.
-  default_variant: "interaction-based-tests-detailed-prompt"
+    Bewertet Testfallsätze anhand definierter Qualitätskriterien. Unterstützt optionale Glossarintegration
+    via Template-Blöcken. Eine Variante nutzt einen einzelnen Nutzerblock (optimiert für Reasoning-Modelle);
+    die andere teilt in System- und Nutzerblock auf.
+  default_variant: "Single Block"
   variants:
-    - name: "interaction-based-tests-detailed-prompt"
+    - name: "Single Block"
+      description: "Liefert alle Anweisungen in einer einzigen Nutzernachricht; geeignet für Reasoning-Modelle ohne System-Rollenunterstützung."
       model: "gpt-5.4"
       blocks:
         - role: "user"
@@ -52,7 +53,7 @@
             - step_type: **flow** (Aktion) oder **check** (Validierung)
             - Werte sind als Python Repräsentation formatiert: 'Wert'.
             - Hat ein Parameter mehrere Variablen, werden diese als Liste interpretiert.
-            - Mit dem Wert "-" werden Nullwerte angegeben. 
+            - Mit dem Wert "-" werden Nullwerte angegeben.
 
             # Review-Kriterien
 
@@ -61,26 +62,25 @@
             - Ignoriere Groß-/Kleinschreibung und evtl. projektspezifische Begriffe.
             - Melde nur klare Fehler und offensichtliche Probleme! (Testfälle können fehlerfrei sein)
             - Triff keine Annahmen.
-            - Berücksichtige die Projektbeschreibung.
 
             ## Testfallsatzname
             - Wichtigste Aspekte der Testfallsatzbeschreibung wiedergespiegelt?
-            - Kein Wiederspruch zur Testfallsatzbeschreibung (falls vorhanden)
-            - Kein Wiederspruch zu Testschritten
-            - Keine generischen Testfallsatznamen (z.B.'Test1', '2DT1923x-2', 'Case_ABC')
+            - Kein Widerspruch zur Testfallsatzbeschreibung (falls vorhanden)
+            - Kein Widerspruch zu Testschritten
+            - Keine generischen Testfallsatznamen (z.B. 'Test1', '2DT1923x-2', 'Case_ABC')
             - Wenn unsicher, gehe davon aus, dass der Name akzeptabel ist. (Keine "false negatives")
-            - mindestens ein Validierungsschritt? (step_type:check)
+            - Mindestens ein Validierungsschritt? (step_type:check)
               - Formulierung des Validierungsschritts deutet auf Überprüfung hin (z.B. "Prüfe", "Validiere", ..)
-            - Formulierung von Validierungsschritten sollten nicht auf Aktion hinweisen
+            - Formulierung von Validierungsschritten sollte nicht auf Aktion hinweisen
 
             ## Testfallsatzbeschreibung
             - Testfallsatzbeschreibung vorhanden?
             - Unpassender Inhalt?
-            - Einen Hinweis enthält, dass sie von einer KI generiert wurde (Das deutet darauf hin, dass kein Mensch die Testfallsatzbeschreibung überprüft hat)
+            - Enthält einen Hinweis, dass sie von einer KI generiert wurde (deutet darauf hin, dass kein Mensch die Beschreibung überprüft hat)
 
             ## Testschritte
-            - Wird Keyword Driven Test angewendet?
-            - im Infinitiv formuliert? ("Editor öffnen", "Passwort eingeben")
+            - Wird Keyword Driven Testing angewendet?
+            - Im Infinitiv formuliert? ("Editor öffnen", "Passwort eingeben")
               - Falsch: 'Editor wird geöffnet' / 'Nutzer geht zur Startseite' / 'Öffne Editor'
             - Ein Schritt = eine Aktion / Prüfung?
               - Korrekt: Mehrfachaktionen ("Startseite öffnen und aktualisieren")
@@ -96,15 +96,15 @@
             - Gib kein Feedback zu Parameterwerten
 
             ## Konsistenz
-            - Name <-> Testfallbebschreibung <-> Schritte konsistent?
-            - Name <-> Testfallbebschreibung <-> Parameterkombinationen konsitent?
-            - Schritte <-> Ziel (Testfallbebschreibung) konsistent?
+            - Name <-> Testfallsatzbeschreibung <-> Schritte konsistent?
+            - Name <-> Testfallsatzbeschreibung <-> Parameterkombinationen konsistent?
+            - Schritte <-> Ziel (Testfallsatzbeschreibung) konsistent?
             - Keine Scope-Vermischung?
 
             # Output Format
             ## Format
             - Ändere keine Eigennamen, Testschrittnamen, Parameternamen, Parameterwerte, Werte etc. aus dem Input.
-            - Verwende nur unformatiertern Klartext (kein Markdown, keine Erklärungen).
+            - Verwende nur unformatierten Klartext (kein Markdown, keine Erklärungen).
             - Gruppiere Anmerkungen, wenn sinnvoll.
             - Liste jedes Problem als eigenen Stichpunkt mit einem Bindestrich '-'.
             - Fasse Stichpunkte zusammen, wenn sinnvoll.
@@ -117,7 +117,7 @@
 
             ## Inhalt
             ### Zusammenfassung
-            - Maximal 1 Satz. 
+            - Maximal 1 Satz.
             - Wenn **keine** Probleme gefunden wurden, gib **nur** diese Zeile aus:
               'Review erfolgreich! Keine Befunde.'
 
@@ -126,11 +126,6 @@
             - Möglichst kurz formuliert
             - Erklärungen nur wenn zum Verständnis notwendig
 
-            # Projektkontext:
-            Testobjekt ist pretalx, mit dem wir unsere Konferenzen organisieren.
-            pretalx ist eine Open-Source-Konferenzmanagement-Software, mit der Veranstalter den gesamten Prozess von Call for Papers über Review und Speaker-Kommunikation bis zur Veröffentlichung des Programms organisieren können.
-
-
             {% if glossary %}
             # Glossar
             {{ glossary }}
@@ -138,7 +133,7 @@
 
             # Zu Prüfender Testfall
 
-            ## Testfallbebschreibung (HTML)
+            ## Testfallsatzbeschreibung (HTML)
             {% if test_case_set_description %}
             ```
             {{ test_case_set_description }}
@@ -151,23 +146,24 @@
             ```
             {{ test_case }}
             ```
-            ### konkrete Parameterkombinatonen:
+            ### Konkrete Parameterkombinationen:
             {% if parameter_combinations %}
             ```
             {{ parameter_combinations }}
             ```
             {% else %}
-            Keine konkreten Parameterkombinatonen
+            Keine konkreten Parameterkombinationen
             {% endif %}
 
             # Anweisung
             Beginne mit dem Review.
-            Halte dich an die Review-Kriterien
+            Halte dich an die Review-Kriterien.
             Halte dich strikt an das Output-Format.
             Bewerte nur.
-            Mach keine Verbesserungsvorschläge
+            Mach keine Verbesserungsvorschläge.
 
-    - name: "separated-prompt"
+    - name: "Separated Roles"
+      description: "Teilt den Prompt in System- und Nutzernachricht auf; geeignet für Chat-Modelle mit System-Rollenunterstützung."
       model: "gpt-5.2-pro"
       blocks:
         - role: "system"
@@ -212,7 +208,7 @@
             - step_type: **flow** (Aktion) oder **check** (Validierung)
             - Werte sind als Python Repräsentation formatiert: 'Wert'.
             - Hat ein Parameter mehrere Variablen, werden diese als Liste interpretiert.
-            - Mit dem Wert "-" werden Nullwerte angegeben. 
+            - Mit dem Wert "-" werden Nullwerte angegeben.
 
             # Review-Kriterien
 
@@ -221,26 +217,25 @@
             - Ignoriere Groß-/Kleinschreibung und evtl. projektspezifische Begriffe.
             - Melde nur klare Fehler und offensichtliche Probleme! (Testfälle können fehlerfrei sein)
             - Triff keine Annahmen.
-            - Berücksichtige die Projektbeschreibung.
 
             ## Testfallsatzname
             - Wichtigste Aspekte der Testfallsatzbeschreibung wiedergespiegelt?
-            - Kein Wiederspruch zur Testfallsatzbeschreibung (falls vorhanden)
-            - Kein Wiederspruch zu Testschritten
-            - Keine generischen Testfallsatznamen (z.B.'Test1', '2DT1923x-2', 'Case_ABC')
+            - Kein Widerspruch zur Testfallsatzbeschreibung (falls vorhanden)
+            - Kein Widerspruch zu Testschritten
+            - Keine generischen Testfallsatznamen (z.B. 'Test1', '2DT1923x-2', 'Case_ABC')
             - Wenn unsicher, gehe davon aus, dass der Name akzeptabel ist. (Keine "false negatives")
-            - mindestens ein Validierungsschritt? (step_type:check)
+            - Mindestens ein Validierungsschritt? (step_type:check)
               - Formulierung des Validierungsschritts deutet auf Überprüfung hin (z.B. "Prüfe", "Validiere", ..)
-            - Formulierung von Validierungsschritten sollten nicht auf Aktion hinweisen
+            - Formulierung von Validierungsschritten sollte nicht auf Aktion hinweisen
 
             ## Testfallsatzbeschreibung
             - Testfallsatzbeschreibung vorhanden?
             - Unpassender Inhalt?
-            - Einen Hinweis enthält, dass sie von einer KI generiert wurde (Das deutet darauf hin, dass kein Mensch die Testfallsatzbeschreibung überprüft hat)
+            - Enthält einen Hinweis, dass sie von einer KI generiert wurde (deutet darauf hin, dass kein Mensch die Beschreibung überprüft hat)
 
             ## Testschritte
-            - Wird Keyword Driven Test angewendet?
-            - im Infinitiv formuliert? ("Editor öffnen", "Passwort eingeben")
+            - Wird Keyword Driven Testing angewendet?
+            - Im Infinitiv formuliert? ("Editor öffnen", "Passwort eingeben")
               - Falsch: 'Editor wird geöffnet' / 'Nutzer geht zur Startseite' / 'Öffne Editor'
             - Ein Schritt = eine Aktion / Prüfung?
               - Korrekt: Mehrfachaktionen ("Startseite öffnen und aktualisieren")
@@ -256,15 +251,15 @@
             - Gib kein Feedback zu Parameterwerten
 
             ## Konsistenz
-            - Name <-> Testfallbebschreibung <-> Schritte konsistent?
-            - Name <-> Testfallbebschreibung <-> Parameterkombinationen konsitent?
-            - Schritte <-> Ziel (Testfallbebschreibung) konsistent?
+            - Name <-> Testfallsatzbeschreibung <-> Schritte konsistent?
+            - Name <-> Testfallsatzbeschreibung <-> Parameterkombinationen konsistent?
+            - Schritte <-> Ziel (Testfallsatzbeschreibung) konsistent?
             - Keine Scope-Vermischung?
 
             # Output Format
             ## Format
             - Ändere keine Eigennamen, Testschrittnamen, Parameternamen, Parameterwerte, Werte etc. aus dem Input.
-            - Verwende nur unformatiertern Klartext (kein Markdown, keine Erklärungen).
+            - Verwende nur unformatierten Klartext (kein Markdown, keine Erklärungen).
             - Gruppiere Anmerkungen, wenn sinnvoll.
             - Liste jedes Problem als eigenen Stichpunkt mit einem Bindestrich '-'.
             - Fasse Stichpunkte zusammen, wenn sinnvoll.
@@ -277,7 +272,7 @@
 
             ## Inhalt
             ### Zusammenfassung
-            - Maximal 1 Satz. 
+            - Maximal 1 Satz.
             - Wenn **keine** Probleme gefunden wurden, gib **nur** diese Zeile aus:
               'Review erfolgreich! Keine Befunde.'
 
@@ -285,24 +280,17 @@
             - Stichpunktartig
             - Möglichst kurz formuliert
             - Erklärungen nur wenn zum Verständnis notwendig
-            
-            # Projektkontext:
-            Testobjekt ist pretalx, mit dem wir unsere Konferenzen organisieren.
-            pretalx ist eine Open-Source-Konferenzmanagement-Software, mit der Veranstalter den gesamten Prozess von Call for Papers über Review und Speaker-Kommunikation bis zur Veröffentlichung des Programms organisieren können.
-
 
             {% if glossary %}
             # Glossar
             {{ glossary }}
             {% endif %}
 
-
-
         - role: "user"
           text: |
             # Zu Prüfender Testfall
 
-            ## Testfallbebschreibung (HTML)
+            ## Testfallsatzbeschreibung (HTML)
             {% if test_case_set_description %}
             ```
             {{ test_case_set_description }}
@@ -315,18 +303,18 @@
             ```
             {{ test_case }}
             ```
-            ### konkrete Parameterkombinatonen:
+            ### Konkrete Parameterkombinationen:
             {% if parameter_combinations %}
             ```
             {{ parameter_combinations }}
             ```
             {% else %}
-            Keine konkreten Parameterkombinatonen
+            Keine konkreten Parameterkombinationen
             {% endif %}
 
             # Anweisung
             Beginne mit dem Review.
-            Halte dich an die Review-Kriterien
+            Halte dich an die Review-Kriterien.
             Halte dich strikt an das Output-Format.
             Bewerte nur.
-            Mach keine Verbesserungsvorschläge
+            Mach keine Verbesserungsvorschläge.
