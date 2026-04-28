@@ -21,7 +21,7 @@ At its core the service:
 ## Features
 
 - **Multiple use cases**: test case set reviews, test case set description generation, and defect explanations, each configurable independently.
-- **Pluggable LLM providers**: ships with OpenAI support; bring your own provider by implementing a custom `LLMClient`.
+- **Pluggable LLM providers**: ships with OpenAI and Azure OpenAI support; bring your own provider by implementing a custom `LLMClient`.
 - **Configurable prompts**: YAML-based prompt definitions with variants, Jinja2 placeholders, and per-project overrides.
 - **Per-project configuration**: language, LLM provider, prompt variant, and enabled use cases can all be overridden per TestBench project.
 - **Session-token authentication**: every API call is validated against the TestBench server; no separate credential management required.
@@ -53,10 +53,10 @@ Built on [FastAPI](https://fastapi.tiangolo.com/) and [Uvicorn](https://www.uvic
 ┌─────────────▼──────────┴─────────────┐
 │             LLM Provider             │
 ├───────────────────┬──────────────────┤
-│      OpenAI       │      Custom      │
-└──────────┬────────┴────────┬─────────┘
-           │                 │
-      OpenAI API       Your LLM API
+│ OpenAI/Azure OpenAI  │      Custom      │
+└──────────┬───────────┴────────┬─────────┘
+               │                    │
+          OpenAI APIs        Your LLM API
 ```
 
 ## Built-in use cases

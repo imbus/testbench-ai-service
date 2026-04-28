@@ -9,6 +9,9 @@ def _make_llm_config(provider=LLMProvider.OPENAI, model="gpt-4o"):
     config = MagicMock()
     config.provider = provider
     config.model = model
+    config.model_extra = {}
+    config.azure_endpoint = None
+    config.api_version = None
     return config
 
 
@@ -93,6 +96,39 @@ class TestLLMFactoryCloseClients(unittest.IsolatedAsyncioTestCase):
         await factory.close_clients()
         client_a.close.assert_awaited_once()
         client_b.close.assert_awaited_once()
+
+
+class TestLLMFactoryCreateClient(unittest.TestCase):
+    @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
+    def test_creates_azure_openai_client(self, mock_azure_client_class):
+        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
+        config.azure_endpoint = "https://example.openai.azure.com"
+        config.api_version = "2024-10-21"
+        config.model_extra = {
+            "deployment_mapping": {"azure-gpt-4o-prod": "gpt-4o"},
+        }
+
+        factory = LLMFactory()
+        client = factory._create_client(config, api_key="azure-key")
+
+        self.assertIs(client, mock_azure_client_class.return_value)
+        mock_azure_client_class.assert_called_once_with(
+            api_key="azure-key",
+            azure_endpoint="https://example.openai.azure.com",
+            api_version="2024-10-21",
+            deployment_mapping={"azure-gpt-4o-prod": "gpt-4o"},
+        )
+
+    def test_invalid_deployment_mapping_raises_value_error(self):
+        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
+        config.azure_endpoint = "https://example.openai.azure.com"
+        config.api_version = "2024-10-21"
+        config.model_extra = {"deployment_mapping": ["invalid"]}
+
+        factory = LLMFactory()
+
+        with self.assertRaises(ValueError):
+            factory._create_client(config, api_key="azure-key")
 
 
 if __name__ == "__main__":

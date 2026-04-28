@@ -6,6 +6,7 @@ from testbench_ai_service.models.prompt import Message
 
 class LLMProvider(str, Enum):
     OPENAI = "openai"
+    AZURE_OPENAI = "azure_openai"
     ANTHROPIC = "anthropic"
     CUSTOM = "custom"
 

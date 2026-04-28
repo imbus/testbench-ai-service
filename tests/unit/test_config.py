@@ -58,6 +58,25 @@ class TestLLMConfig(unittest.TestCase):
         )
         self.assertEqual(cfg.provider, LLMProvider.CUSTOM)
 
+    def test_azure_openai_provider_requires_endpoint(self):
+        with self.assertRaises(ValidationError):
+            LLMConfig(provider=LLMProvider.AZURE_OPENAI, api_version="2024-10-21")
+
+    def test_azure_openai_provider_requires_api_version(self):
+        with self.assertRaises(ValidationError):
+            LLMConfig(
+                provider=LLMProvider.AZURE_OPENAI,
+                azure_endpoint="https://example.openai.azure.com",
+            )
+
+    def test_azure_openai_provider_with_required_fields_succeeds(self):
+        cfg = LLMConfig(
+            provider=LLMProvider.AZURE_OPENAI,
+            azure_endpoint="https://example.openai.azure.com",
+            api_version="2024-10-21",
+        )
+        self.assertEqual(cfg.provider, LLMProvider.AZURE_OPENAI)
+
 
 class TestPromptConfig(unittest.TestCase):
     def test_requires_file_field(self):

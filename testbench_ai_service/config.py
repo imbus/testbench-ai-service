@@ -21,6 +21,8 @@ PROMPTS_DIR = (Path(__file__).parent / "prompts").resolve()
 class LLMConfig(BaseModel):
     provider: LLMProvider = LLMProvider.OPENAI
     model: str | None = None
+    azure_endpoint: str | None = None
+    api_version: str | None = None
     class_path: str | None = None
 
     model_config = ConfigDict(extra="allow")
@@ -32,6 +34,20 @@ class LLMConfig(BaseModel):
                 validate_custom_class_path(self.class_path)
             except ValueError as e:
                 raise_field_validation_error(self, "class_path", e)
+
+        if self.provider == LLMProvider.AZURE_OPENAI:
+            if not self.azure_endpoint:
+                raise_field_validation_error(
+                    self,
+                    "azure_endpoint",
+                    ValueError("'azure_endpoint' must be set for provider 'azure_openai'."),
+                )
+            if not self.api_version:
+                raise_field_validation_error(
+                    self,
+                    "api_version",
+                    ValueError("'api_version' must be set for provider 'azure_openai'."),
+                )
         return self
 
 

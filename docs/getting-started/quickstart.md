@@ -5,12 +5,16 @@ title: Quickstart
 
 # Quickstart
 
-## 1. Set the OpenAI API key
+## 1. Set Your LLM API Key
 
-Since OpenAI is the default language model provider, you need to set your API key. Create a `.env` file at the root of your installation directory:
+OpenAI is the default language model provider. If you use Azure OpenAI, set that key instead. Create a `.env` file at the root of your installation directory:
 
 ```bash
+# OpenAI
 OPENAI_API_KEY=your_openai_api_key
+
+# Azure OpenAI
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key
 ```
 
 The server automatically loads environment variables from this file.
@@ -29,6 +33,15 @@ tb_server_url = "https://localhost:9443/api/"
 ```
 
 Make sure `tb_server_url` points to your TestBench REST API Server.
+
+If you want to use Azure OpenAI, configure the provider in `config.toml`:
+
+```toml
+[testbench-ai-service.llm_config]
+provider = "azure_openai"
+azure_endpoint = "https://your-resource.openai.azure.com"
+api_version = "2024-10-21"
+```
 
 :::tip
 To copy prompts to a different location, use:

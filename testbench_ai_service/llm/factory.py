@@ -1,10 +1,11 @@
 import os
 import re
+from typing import Any
 
 from testbench_ai_service.config import LLMConfig
 from testbench_ai_service.llm.anthropic import AnthropicClient
 from testbench_ai_service.llm.base import LLMClient, LLMProvider
-from testbench_ai_service.llm.openai import OpenAIClient
+from testbench_ai_service.llm.openai import AzureOpenAIClient, OpenAIClient
 from testbench_ai_service.utils.import_utils import load_class_from_path
 
 
@@ -119,15 +120,55 @@ class LLMFactory:
         """
         Create an LLM client instance using the given LLMConfig and API key.
         """
+        common_kwargs = self._get_common_client_kwargs(config)
+
         if provider == LLMProvider.OPENAI:
-            return OpenAIClient(api_key=api_key)
+            return OpenAIClient(api_key=api_key, **common_kwargs)
+
+        if config.provider == LLMProvider.AZURE_OPENAI:
+            assert config.azure_endpoint is not None
+            assert config.api_version is not None
+            return AzureOpenAIClient(
+                api_key=api_key,
+                azure_endpoint=config.azure_endpoint,
+                api_version=config.api_version,
+                deployment_mapping=self._get_deployment_mapping(config),
+                **common_kwargs,
+            )
 
         if provider == LLMProvider.ANTHROPIC:
-            return AnthropicClient(api_key=api_key)
+            return AnthropicClient(api_key=api_key, **common_kwargs)
 
         if provider == LLMProvider.CUSTOM:
             assert config.class_path is not None
             client_class: type[LLMClient] = load_class_from_path(config.class_path)
-            return client_class(api_key)
+            return client_class(api_key, **common_kwargs)
 
         raise NotImplementedError(f"Unsupported LLM provider: '{provider}'.")
+
+    def _get_common_client_kwargs(self, config: LLMConfig) -> dict[str, Any]:
+        extra = config.model_extra or {}
+        allowed_keys = {"timeout", "max_retries", "_strict_response_validation"}
+        return {key: value for key, value in extra.items() if key in allowed_keys}
+
+    def _get_deployment_mapping(self, config: LLMConfig) -> dict[str, str] | None:
+        extra = config.model_extra or {}
+        deployment_mapping = extra.get("deployment_mapping")
+
+        if deployment_mapping is None:
+            return None
+
+        if not isinstance(deployment_mapping, dict):
+            raise ValueError(
+                "'deployment_mapping' must be a dictionary mapping deployment names to canonical model names."
+            )
+
+        if not all(
+            isinstance(deployment_name, str) and isinstance(canonical_model, str)
+            for deployment_name, canonical_model in deployment_mapping.items()
+        ):
+            raise ValueError(
+                "'deployment_mapping' must only contain string keys and string values."
+            )
+
+        return deployment_mapping

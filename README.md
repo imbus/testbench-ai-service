@@ -9,7 +9,7 @@ A proxy service that integrates external LLM providers with [imbus TestBench](ht
 ## Features
 
 - **Multiple use cases:** test case set reviews, description generation, and defect explanations
-- **Pluggable LLM providers:** ships with OpenAI support; implement a custom `LLMClient` to bring your own
+- **Pluggable LLM providers:** ships with OpenAI and Azure OpenAI support; implement a custom `LLMClient` to bring your own
 - **Configurable prompts:** YAML-based templates with Jinja2 placeholders and per-project overrides
 - **Session-token auth:** every request is validated against the TestBench REST API; no separate credential management
 - **Async processing:** use cases run as background tasks so the API responds immediately
@@ -28,11 +28,15 @@ pip install testbench-ai-service
 
 ## Quick Start
 
-**1. Set your OpenAI API key**
+**1. Set your LLM API key**
 
 ```bash
 # .env
+# For OpenAI
 OPENAI_API_KEY=your_openai_api_key
+
+# For Azure OpenAI
+AZURE_OPENAI_API_KEY=your_azure_openai_api_key
 ```
 
 **2. Initialize configuration**
@@ -46,6 +50,10 @@ Open `config.toml` and point `tb_server_url` at your TestBench REST API:
 ```toml
 [testbench-ai-service]
 tb_server_url = "https://localhost:9443/api/"
+
+[testbench-ai-service.llm_config]
+# openai (default) or azure_openai
+provider = "openai"
 ```
 
 **3. Start the service**

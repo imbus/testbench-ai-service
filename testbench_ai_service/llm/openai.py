@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, cast
 
 from httpx import Timeout
-from openai import AsyncOpenAI
+from openai import AsyncAzureOpenAI, AsyncOpenAI
 from openai._constants import DEFAULT_MAX_RETRIES
 from openai._types import (
     NOT_GIVEN,
@@ -162,3 +162,50 @@ class OpenAIClient(LLMClient):
 
     async def close(self):
         await self.client.close()
+
+
+class AzureOpenAIClient(OpenAIClient):
+    def __init__(
+        self,
+        api_key: str | None,
+        azure_endpoint: str,
+        api_version: str,
+        deployment_mapping: dict[str, str] | None = None,
+        timeout: float | Timeout | NotGiven | None = NOT_GIVEN,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        _strict_response_validation: bool = False,
+    ):
+        self.client = AsyncAzureOpenAI(
+            api_key=api_key,
+            azure_endpoint=azure_endpoint,
+            api_version=api_version,
+            timeout=timeout,
+            max_retries=max_retries,
+            _strict_response_validation=_strict_response_validation,
+        )
+        # Store the mapping. If none provided, default to an empty dict.
+        self.deployment_mapping = deployment_mapping or {}
+
+    async def query_llm(
+        self,
+        model: str,  # will be the Azure Deployment Name
+        messages: list[Message],
+        **kwargs: Any,
+    ) -> str:
+        # 1. Look up the base model using the deployment name.
+        canonical_model = self.deployment_mapping.get(model, model)
+
+        input_messages = cast(ResponseInputParam, [message.model_dump() for message in messages])
+
+        # 2. Route the logic based on the CANONICAL model string...
+        if canonical_model in CHAT_MODELS:
+            return await self._query_chat_model(model, input_messages)
+
+        if canonical_model in REASONING_MODELS:
+            return await self._query_reasoning_model(
+                model=model,
+                input_messages=input_messages,
+                reasoning_effort=kwargs.get("reasoning_effort", "medium"),
+            )
+
+        return await self._query_fallback_model(model, input_messages, **kwargs)
