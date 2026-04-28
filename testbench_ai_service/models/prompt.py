@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -47,3 +48,23 @@ class Prompt(BaseModel):
 
     model_name: str = Field(description="The name of the model that should be used for this prompt")
     messages: list[Message] = Field(description="The messages, ready to be sent to an LLM")
+
+
+class PromptVariantResponse(BaseModel):
+    """Public representation of a prompt variant, safe to expose via the API."""
+
+    name: str
+    description: str | None = None
+    model: str
+    placeholders: list[str]
+    user_placeholders: list[str]
+
+
+class PromptDetailsResponse(BaseModel):
+    """Response model for the prompt details endpoint."""
+
+    name: str
+    file: Path
+    generated_placeholders: list[str]
+    default_variant: str | None
+    variants: list[PromptVariantResponse]

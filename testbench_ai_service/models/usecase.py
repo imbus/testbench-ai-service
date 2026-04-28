@@ -57,3 +57,12 @@ class PrecheckResult(BaseModel, Generic[T]):
     passed: bool
     items: list[T] = []
     warnings: list[str] = []
+
+
+class UseCaseDetailsResponse(BaseModel):
+    """Public representation of a usecase, safe to expose via the API."""
+
+    key: str
+    enabled: bool
+    summary: str | None = None
+    description: str | None = None
