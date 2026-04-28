@@ -301,6 +301,12 @@ class FilterInfo(BaseModel):
     testThemeUID: str | None = None
 
 
+class FilteringOptions(BaseModel):
+    appliedFilters: list[FilterInfo] | None = None
+    excludedTestThemes: list[str] | None = None
+    labelFilter: str | None = None
+
+
 class TovStructureOptions(BaseModel):
     treeRootUID: str | None = None
     suppressFilteredData: bool | None = Field(None, examples=[False])

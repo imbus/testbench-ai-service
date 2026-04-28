@@ -63,6 +63,7 @@ def build_execution_context(
         tov_key=trigger_request.tov_key,
         cycle_key=trigger_request.cycle_key,
         root_uid=trigger_request.root_uid,
+        filtering=trigger_request.filtering,
         language=language,
         llm_config=llm_config,
         prompt_config=prompt_config,
@@ -77,7 +78,12 @@ def check_test_case_set_is_locked(
     Returns False if it is free or locked by the current user.
     """
     test_structure_tree = get_test_structure_tree(
-        conn, context.project_key, context.tov_key, context.cycle_key, uniqueID
+        conn=conn,
+        project_key=context.project_key,
+        tov_key=context.tov_key,
+        cycle_key=context.cycle_key,
+        root_uid=uniqueID,
+        filtering=context.filtering,
     )
 
     tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(  # type: ignore[assignment]

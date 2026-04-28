@@ -57,6 +57,7 @@ class DefectExplainer(UseCase):
                 tov_key=context.tov_key,
                 cycle_key=context.cycle_key,
                 root_uid=context.root_uid,
+                filtering=context.filtering,
             )
             logger.debug("Retrieved test case sets: %s", list(test_case_set_catalog.keys()))
         except requests.exceptions.HTTPError as e:

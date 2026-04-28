@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict
 
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.testbench import FilteringOptions
 
 T = TypeVar("T")
 
@@ -23,6 +24,7 @@ class TriggerUseCaseRequest(BaseModel):
     tov_key: str
     cycle_key: str | None = None
     root_uid: str | None = None
+    filtering: FilteringOptions | None = None
     language: LanguageOption | None = None
     prompt_config: PromptConfigRequest | None = None
     llm_config: LLMConfig | None = None
@@ -42,6 +44,7 @@ class ExecutionContext(BaseModel):
     tov_key: str
     cycle_key: str | None = None
     root_uid: str | None = None
+    filtering: FilteringOptions | None = None
     language: LanguageOption
     llm_config: LLMConfig
     prompt_config: PromptConfig
