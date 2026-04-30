@@ -1,7 +1,7 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import AuthInfo, get_auth_info, validate_auth_token
 from testbench_ai_service.config import AppConfig, UseCaseConfig
 from testbench_ai_service.dependencies import (
     get_app_config,
@@ -84,6 +84,7 @@ async def trigger_usecase_execution(
     conn: TBConnection,
     llm_factory: LLMFactory,
     app_config: AppConfig,
+    auth_info: AuthInfo,
 ) -> TriggerUseCaseResponse:
     """Execute the trigger flow shared by all usecase endpoints.
 
@@ -98,6 +99,7 @@ async def trigger_usecase_execution(
         conn:             Active TestBench connection.
         llm_factory:      Factory for obtaining the LLM client.
         app_config:       The application configuration.
+        auth_info:        Validated authentication context for this request.
 
     Returns:
         ``TriggerUseCaseResponse`` with ``status="accepted"`` and any precheck warnings.
@@ -107,7 +109,13 @@ async def trigger_usecase_execution(
         HTTPException 403: If the caller lacks all required roles.
         HTTPException 409: If the usecase-specific precheck fails.
     """
-    context = build_execution_context(usecase, trigger_request, conn, app_config)
+    logger.debug(
+        "trigger_usecase_execution called for usecase '%s', authenticated via %s",
+        usecase,
+        auth_info.auth_type.value,
+    )
+
+    context = build_execution_context(usecase, trigger_request, conn, app_config, auth_info)
 
     if not usecase_enabled(usecase, app_config, context.project_name):
         logger.debug(
@@ -122,7 +130,7 @@ async def trigger_usecase_execution(
         ProjectRole.TestManager,
         ProjectRole.TestDesigner,
     ]
-    if not has_any_required_role(conn, trigger_request.project_key, required_roles):
+    if not has_any_required_role(conn, context.project_key, required_roles):
         logger.warning(
             "Access denied: User does not have any of the required roles for the usecase '%s'",
             usecase,
@@ -161,7 +169,7 @@ async def trigger_usecase_execution(
 def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
     router = APIRouter(
         tags=["Usecases"],
-        dependencies=[Depends(validate_session_token)],
+        dependencies=[Depends(validate_auth_token)],
     )
 
     @router.post(
@@ -176,6 +184,7 @@ def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
         conn: TBConnection = Depends(get_tb_connection),
         llm_factory: LLMFactory = Depends(get_llm_factory),
         app_config: AppConfig = Depends(get_app_config),
+        auth_info: AuthInfo = Depends(get_auth_info),
     ) -> TriggerUseCaseResponse:
         return await trigger_usecase_execution(
             usecase=usecase,
@@ -184,6 +193,7 @@ def create_usecase_router(usecase: str, config: UseCaseConfig) -> APIRouter:
             conn=conn,
             llm_factory=llm_factory,
             app_config=app_config,
+            auth_info=auth_info,
         )
 
     return router

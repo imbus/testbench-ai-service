@@ -4,7 +4,7 @@ import requests
 from fastapi import Depends, HTTPException, Request, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import AuthInfo, get_auth_info
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
@@ -17,15 +17,14 @@ def get_app_config(request: Request) -> AppConfig:
 
 def get_tb_connection(
     config: AppConfig = Depends(get_app_config),
-    session_token: str = Depends(validate_session_token),
+    auth_info: AuthInfo = Depends(get_auth_info),
 ) -> Generator[TBConnection, None, None]:
+    """Yield an authenticated TestBench connection for the duration of a request."""
     server_url = config.tb_server_url
-    conn = TBConnection(server_url=server_url, verify=False, sessionToken=session_token)
-
     try:
-        conn.check_is_working()
+        conn = TBConnection(server_url=server_url, verify=False, sessionToken=auth_info.token)
     except requests.exceptions.RequestException as e:
-        logger.error(f"Could not connect to TestBench server: {e!s}")
+        logger.error("Could not connect to TestBench server: %s", e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Could not connect to TestBench server: {e!s}",

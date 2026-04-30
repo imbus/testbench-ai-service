@@ -24,8 +24,8 @@ from testbench_ai_service.models.testbench import (
 
 
 def get_user_key(conn: TBConnection) -> str:
-    login_data = conn.session.get(f"{conn.server_url}2/login/session").json()
-    return login_data["userKey"]  # type: ignore[no-any-return]
+    login_data = conn.session.get(f"{conn.server_url}2/users/self").json()
+    return login_data["key"]  # type: ignore[no-any-return]
 
 
 def get_project_name(conn: TBConnection, project_key: str) -> str:

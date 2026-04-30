@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import AuthInfo, AuthType, get_auth_info
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_llm_factory, get_tb_connection
 from testbench_ai_service.main import create_app
@@ -27,7 +27,9 @@ def app():
     mock_llm_factory = MagicMock()
     mock_llm_factory.get_client.return_value = mock_llm_client
 
-    application.dependency_overrides[validate_session_token] = lambda: "test-session-token"
+    application.dependency_overrides[get_auth_info] = lambda: AuthInfo(
+        auth_type=AuthType.SESSION_TOKEN, token="test-session-token", user_key=USER_KEY
+    )
     application.dependency_overrides[get_tb_connection] = lambda: MagicMock(
         server_url=TB_SERVER_URL
     )

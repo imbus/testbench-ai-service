@@ -4,11 +4,11 @@ import unittest
 import zipfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import requests
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import AuthInfo, AuthType, get_auth_info
 from testbench_ai_service.config import AppConfig, ProjectConfig, ProjectUseCaseConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
 from testbench_ai_service.main import create_app
@@ -40,7 +40,9 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         cls.mock_tb_connection.server_url = cls.app_config.tb_server_url
         cls.mock_llm_factory = MagicMock()
 
-        cls.app.dependency_overrides[validate_session_token] = lambda: cls.mock_validate_token
+        cls.app.dependency_overrides[get_auth_info] = lambda: AuthInfo(
+            auth_type=AuthType.SESSION_TOKEN, token="test-token", user_key="1"
+        )
         cls.app.dependency_overrides[get_tb_connection] = lambda: cls.mock_tb_connection
         cls.app.dependency_overrides[get_llm_factory] = lambda: cls.mock_llm_factory
 
@@ -134,24 +136,23 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
     # ── Authentication ────────────────────────────────────────────────────────
 
     def test_missing_auth_token_returns_401(self):
-        self.app.dependency_overrides.pop(validate_session_token, None)
+        self.app.dependency_overrides.pop(get_auth_info, None)
         try:
             response = self.client.post(
                 "/test-case-set-reviews", json={"project_key": "P", "tov_key": "T", "root_uid": "R"}
             )
             self.assertEqual(response.status_code, 401)
         finally:
-            self.app.dependency_overrides[validate_session_token] = lambda: self.mock_validate_token
+            self.app.dependency_overrides[get_auth_info] = lambda: AuthInfo(
+                auth_type=AuthType.SESSION_TOKEN, token="test-token", user_key="1"
+            )
 
     def test_invalid_auth_token_returns_401(self):
-        self.app.dependency_overrides.pop(validate_session_token, None)
+        self.app.dependency_overrides.pop(get_auth_info, None)
         try:
-            with patch("testbench_ai_service.auth.TBConnection") as MockConn:
-                mock_conn = MockConn.return_value
-                mock_response = MagicMock()
-                mock_response.status_code = 401
-                mock_conn.check_is_working.side_effect = requests.exceptions.HTTPError(
-                    "Invalid token", response=mock_response
+            with patch("testbench_ai_service.auth._validate_token") as mock_validate:
+                mock_validate.side_effect = HTTPException(
+                    status_code=401, detail="Invalid authorization token"
                 )
                 response = self.client.post(
                     "/test-case-set-reviews",
@@ -160,7 +161,9 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
                 )
             self.assertEqual(response.status_code, 401)
         finally:
-            self.app.dependency_overrides[validate_session_token] = lambda: self.mock_validate_token
+            self.app.dependency_overrides[get_auth_info] = lambda: AuthInfo(
+                auth_type=AuthType.SESSION_TOKEN, token="test-token", user_key="1"
+            )
 
     # ── Feature flags ─────────────────────────────────────────────────────────
 
@@ -201,6 +204,18 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         self.project_roles = [ProjectRole.ReadOnlyDesigner]
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
         self.assertEqual(response.status_code, 403)
+
+    def test_precheck_lock_lookup_http_403_returns_403(self):
+        """When precheck raises an HTTPException 403 (e.g. from a TB lock-check call),
+        the endpoint must propagate it as 403."""
+        self.mock_reviewer.precheck = AsyncMock(
+            side_effect=HTTPException(status_code=403, detail="Forbidden")
+        )
+
+        response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json(), {"detail": "Forbidden"})
 
     # ── Side-effect helpers ───────────────────────────────────────────────────
 

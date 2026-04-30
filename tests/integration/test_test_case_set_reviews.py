@@ -4,9 +4,9 @@ from unittest.mock import AsyncMock
 import pytest
 from fastapi import status
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import get_auth_info
 from testbench_ai_service.config import AppConfig, ProjectConfig, ProjectUseCaseConfig
-from tests.integration.conftest import CYCLE_KEY, PROJECT_KEY, PROJECT_NAME, TOV_KEY, USER_KEY
+from tests.integration.conftest import CYCLE_KEY, PROJECT_KEY, PROJECT_NAME, TOV_KEY
 from tests.integration.helpers import (
     build_locked_structure_tree,
     build_tcs_catalog,
@@ -16,7 +16,6 @@ from tests.integration.helpers import (
 _ENDPOINT = "/test-case-set-reviews"
 
 # Patch targets — these are the real functions that touch external systems.
-_PATCH_GET_USER_KEY = "testbench_ai_service.utils.usecase.get_user_key"
 _PATCH_GET_PROJECT_NAME = "testbench_ai_service.utils.usecase.get_project_name"
 _PATCH_HAS_ROLE = "testbench_ai_service.usecases.routes.has_any_required_role"
 _PATCH_GET_CATALOG = (
@@ -32,7 +31,6 @@ _PATCH_PATCH_RESULT = "testbench_ai_service.usecases.test_case_set_reviews.servi
 def patches(mocker):
     """Default happy-path patch state. Tests override only what differs."""
     return SimpleNamespace(
-        get_user_key=mocker.patch(_PATCH_GET_USER_KEY, return_value=USER_KEY),
         get_project_name=mocker.patch(_PATCH_GET_PROJECT_NAME, return_value=PROJECT_NAME),
         has_role=mocker.patch(_PATCH_HAS_ROLE, return_value=True),
         get_catalog=mocker.patch(_PATCH_GET_CATALOG, return_value=build_tcs_catalog()),
@@ -121,7 +119,7 @@ class TestErrorPaths:
 
     def test_missing_auth_returns_401(self, app, client):
         """No Authorization header → 401 Unauthorized."""
-        app.dependency_overrides.pop(validate_session_token, None)
+        app.dependency_overrides.pop(get_auth_info, None)
         response = client.post(_ENDPOINT, json={"project_key": PROJECT_KEY, "tov_key": TOV_KEY})
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED

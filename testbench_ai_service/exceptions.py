@@ -21,9 +21,18 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
 
 def handle_requests_http_error(e: requests.exceptions.HTTPError):
     status_code = e.response.status_code if e.response is not None else None
-    message = (
-        e.response.json().get("message", "Unknown Error") if e.response is not None else str(e)
-    )
+    message = str(e)
+    if e.response is not None:
+        message = "Unknown Error"
+        try:
+            response_json = e.response.json()
+            if isinstance(response_json, dict):
+                message = response_json.get("message") or response_json.get("detail") or message
+        except ValueError:
+            response_text = e.response.text.strip()
+            if response_text:
+                message = response_text
+
     if status_code == status.HTTP_404_NOT_FOUND:
         logger.info(f"Resource not found in TestBench Server: {message}")
     elif status_code and 400 <= status_code < 500:  # noqa: PLR2004

@@ -3,10 +3,14 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import AuthInfo, AuthType, get_auth_info
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.main import create_app
+
+
+def _make_auth_info() -> AuthInfo:
+    return AuthInfo(auth_type=AuthType.SESSION_TOKEN, token="valid-token", user_key="user1")
 
 
 def _make_test_client():
@@ -16,7 +20,7 @@ def _make_test_client():
     client = TestClient(app, follow_redirects=False)
     client.__enter__()
 
-    app.dependency_overrides[validate_session_token] = lambda: "valid-token"
+    app.dependency_overrides[get_auth_info] = _make_auth_info
     app.dependency_overrides[get_app_config] = lambda: app_config
 
     return client, app, app_config

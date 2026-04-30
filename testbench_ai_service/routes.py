@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Qu
 from fastapi.responses import RedirectResponse
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.auth import validate_session_token
+from testbench_ai_service.auth import AuthInfo, get_auth_info, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
 from testbench_ai_service.llm.factory import LLMFactory
@@ -45,7 +45,7 @@ async def redirect_to_docs(request: Request):
 
 @router.get(
     "/usecases",
-    dependencies=[Depends(validate_session_token)],
+    dependencies=[Depends(validate_auth_token)],
     response_model=list[UseCaseDetailsResponse],
 )
 async def get_usecases(
@@ -70,7 +70,7 @@ async def get_usecases(
 
 @router.get(
     "/usecases/{usecase_key}",
-    dependencies=[Depends(validate_session_token)],
+    dependencies=[Depends(validate_auth_token)],
     response_model=UseCaseDetailsResponse,
 )
 async def get_usecase_details(
@@ -90,7 +90,7 @@ async def get_usecase_details(
 
 @router.get(
     "/usecases/{usecase_key}/prompt",
-    dependencies=[Depends(validate_session_token)],
+    dependencies=[Depends(validate_auth_token)],
     response_model=PromptDetailsResponse,
 )
 async def get_prompt_details(
@@ -133,7 +133,7 @@ async def get_prompt_details(
 
 @router.post(
     "/usecases/{usecase_key}/trigger",
-    dependencies=[Depends(validate_session_token)],
+    dependencies=[Depends(validate_auth_token)],
     summary="Trigger a usecase by key",
     description="Trigger a usecase execution by providing the usecase key and necessary parameters.",
     **TRIGGER_USECASE_ROUTE_KWARGS,
@@ -145,6 +145,7 @@ async def trigger_usecase(
     conn: TBConnection = Depends(get_tb_connection),
     llm_factory: LLMFactory = Depends(get_llm_factory),
     app_config: AppConfig = Depends(get_app_config),
+    auth_info: AuthInfo = Depends(get_auth_info),
 ) -> TriggerUseCaseResponse:
     return await trigger_usecase_execution(
         usecase=usecase_key,
@@ -153,4 +154,5 @@ async def trigger_usecase(
         conn=conn,
         llm_factory=llm_factory,
         app_config=app_config,
+        auth_info=auth_info,
     )
