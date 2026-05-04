@@ -11,7 +11,7 @@ This page explains how TestBench communicates with the AI Service and how to con
 
 ## Overview
 
-TestBench triggers AI use cases by calling the AI Service's REST API. Unlike the Requirement Service or Defect Service, the AI Service does **not** use a proxy wrapper — TestBench connects directly via its built-in AI integration.
+TestBench triggers AI Agents by calling the AI Service's REST API. Unlike the Requirement Service or Defect Service, the AI Service does **not** use a proxy wrapper — TestBench connects directly via its built-in AI integration.
 
 Authentication is handled via **session tokens**: TestBench passes the current user's session token with every request, and the AI Service validates it against the TestBench REST API.
 
@@ -46,7 +46,7 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 │       UI        │                                                │     REST API    │
 └────────┬────────┘                                                └────────▲────────┘
          │                                                                  │
-         │ 1. User triggers AI use case                                     │
+         │ 1. User triggers AI agent                                        │
          │                                                                  │
 ┌────────┴────────────────────────────────────────────────────┐             │
 │ POST /test-case-set-reviews                                 │             │
@@ -74,7 +74,7 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 └─────────────────┘
 ```
 
-1. The user triggers an AI use case in the TestBench UI. TestBench sends a POST request to the AI Service with the user's session token as the `Authorization` header.
+1. The user triggers an AI agent in the TestBench UI. TestBench sends a POST request to the AI Service with the user's session token as the `Authorization` header.
 2. The AI Service validates the token by calling the TestBench REST API.
 3. If valid, the AI Service checks that the authenticated user has the required project role.
 4. The request is accepted and processed in the background.
@@ -102,7 +102,7 @@ Requests from users without sufficient permissions receive a `403 Forbidden` res
    testbench-ai-service start
    ```
 2. Open [http://127.0.0.1:8010/docs](http://127.0.0.1:8010/docs) in a browser. The Swagger UI should load.
-3. Trigger an AI use case from TestBench. Check the AI Service logs for incoming requests.
+3. Trigger an AI agent from TestBench. Check the AI Service logs for incoming requests.
 
 ---
 
@@ -113,7 +113,7 @@ Requests from users without sufficient permissions receive a `403 Forbidden` res
 | `Connection refused` | Service is not running or port mismatch. | Start the service; verify `host` and `port` in config. |
 | `401 Unauthorized` | Invalid or expired session token. | Re-login to TestBench and retry. |
 | `502 Bad Gateway` | AI Service cannot reach TestBench REST API. | Verify `tb_server_url` in `config.toml` is correct and reachable. |
-| `404 Not Found` | Use case disabled for the project. | Check `enabled = true` in the use case config; check project-specific overrides. |
+| `404 Not Found` | agent disabled for the project. | Check `enabled = true` in the agent config; check project-specific overrides. |
 | `409 Conflict` | Precheck failed (e.g., all items locked). | Unlock the test structure elements in TestBench and retry. |
 | LLM errors in logs | Missing or invalid API key. | Verify your provider key is set in `.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
 

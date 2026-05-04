@@ -4,15 +4,15 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/testbench-ai-service.svg)](https://pypi.org/project/testbench-ai-service/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/imbus/testbench-ai-service/blob/main/LICENSE)
 
-A proxy service that integrates external LLM providers with [imbus TestBench](https://www.testbench.com) to automate AI-driven use cases during test design and execution.
+A proxy service that integrates external LLM providers with [imbus TestBench](https://www.testbench.com) to automate AI-driven Agents during test design and execution.
 
 ## Features
 
-- **Multiple use cases:** test case set reviews, description generation, and defect explanations
+- **Multiple Agents:** test case set reviews, description generation, and defect explanations
 - **Pluggable LLM providers:** ships with OpenAI and Azure OpenAI support; implement a custom `LLMClient` to bring your own
 - **Configurable prompts:** YAML-based templates with Jinja2 placeholders and per-project overrides
 - **Session-token auth:** every request is validated against the TestBench REST API; no separate credential management
-- **Async processing:** use cases run as background tasks so the API responds immediately
+- **Async processing:** Agents run as background tasks so the API responds immediately
 - **Swagger UI:** interactive API docs at `/docs`
 - **SSL/TLS & reverse proxy support:** optional HTTPS with mTLS and trusted-proxy headers
 
@@ -72,7 +72,7 @@ Full documentation is available in the [docs/](https://github.com/imbus/testbenc
 - [Installation](https://github.com/imbus/testbench-ai-service/blob/main/docs/getting-started/installation.md)
 - [Quickstart](https://github.com/imbus/testbench-ai-service/blob/main/docs/getting-started/quickstart.md)
 - [Configuration](https://github.com/imbus/testbench-ai-service/blob/main/docs/configuration.md)
-- [Use Cases](https://github.com/imbus/testbench-ai-service/blob/main/docs/use-cases/index.md)
+- [Agents](https://github.com/imbus/testbench-ai-service/blob/main/docs/agents/index.md)
 - [Prompts](https://github.com/imbus/testbench-ai-service/blob/main/docs/prompts.md)
 - [TestBench Integration](https://github.com/imbus/testbench-ai-service/blob/main/docs/testbench-integration.md)
 - [CLI Reference](https://github.com/imbus/testbench-ai-service/blob/main/docs/cli.md)

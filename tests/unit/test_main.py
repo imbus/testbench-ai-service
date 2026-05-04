@@ -93,21 +93,18 @@ class TestCloseServices(unittest.IsolatedAsyncioTestCase):
 class TestInitRouters(unittest.TestCase):
     def test_includes_main_router(self):
         app = MagicMock()
-        with patch("testbench_ai_service.main.get_usecase_routers", return_value=[]):
+        with patch("testbench_ai_service.main.get_agent_routers", return_value=[]):
             init_routers(app)
 
         app.include_router.assert_called()
 
-    def test_includes_usecase_routers(self):
-        mock_usecase_router = MagicMock()
+    def test_includes_agent_routers(self):
+        mock_agent_router = MagicMock()
         app = MagicMock()
 
-        with patch(
-            "testbench_ai_service.main.get_usecase_routers", return_value=[mock_usecase_router]
-        ):
+        with patch("testbench_ai_service.main.get_agent_routers", return_value=[mock_agent_router]):
             init_routers(app)
 
-        # include_router called at least twice (main router + usecase router)
         self.assertGreaterEqual(app.include_router.call_count, 2)
 
 

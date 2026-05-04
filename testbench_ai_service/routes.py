@@ -2,22 +2,22 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Qu
 from fastapi.responses import RedirectResponse
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
+from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.agents.routes import (
+    TRIGGER_AGENT_ROUTE_KWARGS,
+    trigger_agent_execution,
+)
 from testbench_ai_service.auth import AuthInfo, get_auth_info, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
 from testbench_ai_service.llm.factory import LLMFactory
+from testbench_ai_service.models.agent import (
+    AgentDetailsResponse,
+    TriggerAgentRequest,
+    TriggerAgentResponse,
+)
 from testbench_ai_service.models.prompt import PromptDetailsResponse, PromptVariantResponse
-from testbench_ai_service.models.usecase import (
-    TriggerUseCaseRequest,
-    TriggerUseCaseResponse,
-    UseCaseDetailsResponse,
-)
-from testbench_ai_service.usecases.base import UseCase
-from testbench_ai_service.usecases.routes import (
-    TRIGGER_USECASE_ROUTE_KWARGS,
-    trigger_usecase_execution,
-)
-from testbench_ai_service.utils.config import get_prompt_config, get_usecase_config
+from testbench_ai_service.utils.config import get_agent_config, get_prompt_config
 from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.prompt_utils import (
     get_placeholders_from_blocks,
@@ -44,72 +44,72 @@ async def redirect_to_docs(request: Request):
 
 
 @router.get(
-    "/usecases",
+    "/agents",
     dependencies=[Depends(validate_auth_token)],
-    response_model=list[UseCaseDetailsResponse],
+    response_model=list[AgentDetailsResponse],
 )
-async def get_usecases(
+async def get_agents(
     app_config: AppConfig = Depends(get_app_config),
     conn: TBConnection = Depends(get_tb_connection),
     enabled: bool | None = Query(None, description="Filter by enabled status"),
     project_key: str | None = Query(None, description="Filter by project key"),
-) -> list[UseCaseDetailsResponse]:
+) -> list[AgentDetailsResponse]:
     project_name = _resolve_project_name(conn, project_key)
-    usecases = [
-        UseCaseDetailsResponse(
-            key=key, **get_usecase_config(key, app_config, project_name).model_dump()
+    agents = [
+        AgentDetailsResponse(
+            key=agent_key, **get_agent_config(agent_key, app_config, project_name).model_dump()
         )
-        for key in app_config.usecases
+        for agent_key in app_config.agents
     ]
 
     if enabled is not None:
-        usecases = [uc for uc in usecases if uc.enabled == enabled]
+        agents = [a for a in agents if a.enabled == enabled]
 
-    return usecases
+    return agents
 
 
 @router.get(
-    "/usecases/{usecase_key}",
+    "/agents/{agent_key}",
     dependencies=[Depends(validate_auth_token)],
-    response_model=UseCaseDetailsResponse,
+    response_model=AgentDetailsResponse,
 )
-async def get_usecase_details(
-    usecase_key: str = Path(description="The usecase key (e.g. 'test_case_set_reviews')"),
+async def get_agent_details(
+    agent_key: str = Path(description="The agent key (e.g. 'test_case_set_reviewer')"),
     app_config: AppConfig = Depends(get_app_config),
     conn: TBConnection = Depends(get_tb_connection),
     project_key: str | None = Query(None, description="Filter by project key"),
-) -> UseCaseDetailsResponse:
-    if usecase_key not in app_config.usecases:
-        raise HTTPException(status_code=404, detail=f"Usecase '{usecase_key}' not found")
+) -> AgentDetailsResponse:
+    if agent_key not in app_config.agents:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_key}' not found")
 
     project_name = _resolve_project_name(conn, project_key)
-    return UseCaseDetailsResponse(
-        key=usecase_key, **get_usecase_config(usecase_key, app_config, project_name).model_dump()
+    return AgentDetailsResponse(
+        key=agent_key, **get_agent_config(agent_key, app_config, project_name).model_dump()
     )
 
 
 @router.get(
-    "/usecases/{usecase_key}/prompt",
+    "/agents/{agent_key}/prompt",
     dependencies=[Depends(validate_auth_token)],
     response_model=PromptDetailsResponse,
 )
 async def get_prompt_details(
-    usecase_key: str = Path(description="The usecase key (e.g. 'test_case_set_reviews')"),
+    agent_key: str = Path(description="The agent key (e.g. 'test_case_set_reviewer')"),
     app_config: AppConfig = Depends(get_app_config),
     conn: TBConnection = Depends(get_tb_connection),
     project_key: str | None = Query(None, description="Filter by project key"),
 ) -> PromptDetailsResponse:
     """Returns available variants and their placeholders."""
-    if usecase_key not in app_config.usecases:
-        raise HTTPException(status_code=404, detail=f"Usecase '{usecase_key}' not found")
+    if agent_key not in app_config.agents:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_key}' not found")
 
     project_name = _resolve_project_name(conn, project_key)
     prompt_config = get_prompt_config(
-        usecase=usecase_key, config=app_config, project_name=project_name
+        agent_key=agent_key, config=app_config, project_name=project_name
     )
     prompt_definition = get_prompt_definition(prompt_config.file, prompt_config.name)
-    usecase_class: type[UseCase] = load_class_from_path(app_config.usecases[usecase_key].class_path)
-    generated_placeholders = usecase_class.GENERATED_PLACEHOLDERS
+    agent_class: type[Agent] = load_class_from_path(app_config.agents[agent_key].class_path)
+    generated_placeholders = agent_class.GENERATED_PLACEHOLDERS
 
     variants = [
         PromptVariantResponse(
@@ -132,23 +132,23 @@ async def get_prompt_details(
 
 
 @router.post(
-    "/usecases/{usecase_key}/trigger",
+    "/agents/{agent_key}/trigger",
     dependencies=[Depends(validate_auth_token)],
-    summary="Trigger a usecase by key",
-    description="Trigger a usecase execution by providing the usecase key and necessary parameters.",
-    **TRIGGER_USECASE_ROUTE_KWARGS,
+    summary="Trigger an agent by key",
+    description="Trigger an agent execution by providing the agent key and necessary parameters.",
+    **TRIGGER_AGENT_ROUTE_KWARGS,
 )
-async def trigger_usecase(
-    trigger_request: TriggerUseCaseRequest,
+async def trigger_agent(
+    trigger_request: TriggerAgentRequest,
     background_tasks: BackgroundTasks,
-    usecase_key: str = Path(description="The usecase key (e.g. 'test_case_set_reviews')"),
+    agent_key: str = Path(description="The agent key (e.g. 'test_case_set_reviewer')"),
     conn: TBConnection = Depends(get_tb_connection),
     llm_factory: LLMFactory = Depends(get_llm_factory),
     app_config: AppConfig = Depends(get_app_config),
     auth_info: AuthInfo = Depends(get_auth_info),
-) -> TriggerUseCaseResponse:
-    return await trigger_usecase_execution(
-        usecase=usecase_key,
+) -> TriggerAgentResponse:
+    return await trigger_agent_execution(
+        agent_key=agent_key,
         trigger_request=trigger_request,
         background_tasks=background_tasks,
         conn=conn,

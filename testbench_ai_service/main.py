@@ -8,12 +8,12 @@ from fastapi import FastAPI
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from testbench_ai_service import __version__
+from testbench_ai_service.agents.routes import get_agent_routers
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import http_exception_handler
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.middlewares import LoggingMiddleware
 from testbench_ai_service.routes import router
-from testbench_ai_service.usecases.routes import get_usecase_routers
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import load_translations
 
@@ -40,9 +40,9 @@ def init_routers(app: FastAPI):
 
     app.include_router(router)
 
-    usecase_routers = get_usecase_routers(app.state.config)
-    for usecase_router in usecase_routers:
-        app.include_router(usecase_router)
+    agent_routers = get_agent_routers(app.state.config)
+    for agent_router in agent_routers:
+        app.include_router(agent_router)
 
 
 def init_exception_handlers(app: FastAPI):

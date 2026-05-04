@@ -3,7 +3,7 @@
 - get_llm_config: global, project, request overrides in correct priority order
 - get_prompt_config: same layered override logic for prompt configs
 - get_language_from_config: global and per-project language resolution
-- get_usecase_config: global and per-project usecase config merging
+- get_agent_config: global and per-project agent config merging
 - merge_dicts: shallow dict merge with override precedence
 - merge_model_dicts: pydantic model dict merging, new-key creation, validation
 - merge_prompt_configs: prompt config model merging
@@ -19,10 +19,10 @@ from pydantic import BaseModel, ValidationError
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.utils.config import (
     CONFIG_PREFIX,
+    get_agent_config,
     get_language_from_config,
     get_llm_config,
     get_prompt_config,
-    get_usecase_config,
     load_config_from_file,
     merge_dicts,
     merge_model_dicts,
@@ -160,16 +160,16 @@ class TestGetPromptConfig(unittest.TestCase):
         self.prompt_config = MagicMock()
         self.prompt_config.model_copy.return_value = self.prompt_config
 
-        self.usecase_config = MagicMock()
-        self.usecase_config.prompt = self.prompt_config
+        self.agent_config = MagicMock()
+        self.agent_config.prompt = self.prompt_config
 
         self.config = MagicMock()
         self.config.projects = {}
 
-    @patch("testbench_ai_service.utils.config.get_usecase_config")
+    @patch("testbench_ai_service.utils.config.get_agent_config")
     @patch("testbench_ai_service.utils.config.merge_prompt_configs")
     def test_global_only_returns_deep_copy(self, mock_merge, mock_get_uc):
-        mock_get_uc.return_value = self.usecase_config
+        mock_get_uc.return_value = self.agent_config
 
         result = get_prompt_config("uc1", self.config)
 
@@ -177,13 +177,13 @@ class TestGetPromptConfig(unittest.TestCase):
         mock_merge.assert_not_called()
         self.assertEqual(result, self.prompt_config)
 
-    @patch("testbench_ai_service.utils.config.get_usecase_config")
+    @patch("testbench_ai_service.utils.config.get_agent_config")
     @patch("testbench_ai_service.utils.config.merge_prompt_configs")
     def test_project_override_is_merged(self, mock_merge, mock_get_uc):
-        mock_get_uc.return_value = self.usecase_config
+        mock_get_uc.return_value = self.agent_config
         project_prompt_config = MagicMock()
         self.config.projects["proj1"] = MagicMock(
-            usecases={"uc1": MagicMock(prompt=project_prompt_config)}
+            agents={"uc1": MagicMock(prompt=project_prompt_config)}
         )
         merged = MagicMock()
         mock_merge.return_value = merged
@@ -193,10 +193,10 @@ class TestGetPromptConfig(unittest.TestCase):
         mock_merge.assert_called_once_with(self.prompt_config, project_prompt_config)
         self.assertIs(result, merged)
 
-    @patch("testbench_ai_service.utils.config.get_usecase_config")
+    @patch("testbench_ai_service.utils.config.get_agent_config")
     @patch("testbench_ai_service.utils.config.merge_prompt_configs")
     def test_request_override_is_merged(self, mock_merge, mock_get_uc):
-        mock_get_uc.return_value = self.usecase_config
+        mock_get_uc.return_value = self.agent_config
         request_prompt_config = MagicMock()
         merged = MagicMock()
         mock_merge.return_value = merged
@@ -206,14 +206,14 @@ class TestGetPromptConfig(unittest.TestCase):
         mock_merge.assert_called_once_with(self.prompt_config, request_prompt_config)
         self.assertIs(result, merged)
 
-    @patch("testbench_ai_service.utils.config.get_usecase_config")
+    @patch("testbench_ai_service.utils.config.get_agent_config")
     @patch("testbench_ai_service.utils.config.merge_prompt_configs")
     def test_request_override_applied_after_project(self, mock_merge, mock_get_uc):
-        mock_get_uc.return_value = self.usecase_config
+        mock_get_uc.return_value = self.agent_config
         project_prompt_config = MagicMock()
         request_prompt_config = MagicMock()
         self.config.projects["proj1"] = MagicMock(
-            usecases={"uc1": MagicMock(prompt=project_prompt_config)}
+            agents={"uc1": MagicMock(prompt=project_prompt_config)}
         )
         after_project = MagicMock()
         after_request = MagicMock()
@@ -229,11 +229,11 @@ class TestGetPromptConfig(unittest.TestCase):
         )
         self.assertIs(result, after_request)
 
-    @patch("testbench_ai_service.utils.config.get_usecase_config")
+    @patch("testbench_ai_service.utils.config.get_agent_config")
     @patch("testbench_ai_service.utils.config.merge_prompt_configs")
     def test_project_without_prompt_skips_merge(self, mock_merge, mock_get_uc):
-        mock_get_uc.return_value = self.usecase_config
-        self.config.projects["proj1"] = MagicMock(usecases={"uc1": MagicMock(prompt=None)})
+        mock_get_uc.return_value = self.agent_config
+        self.config.projects["proj1"] = MagicMock(agents={"uc1": MagicMock(prompt=None)})
 
         result = get_prompt_config("uc1", self.config, project_name="proj1")
 
@@ -264,43 +264,43 @@ class TestGetLanguageFromConfig(unittest.TestCase):
         self.assertEqual(get_language_from_config(self.config, "unknown"), "en")
 
 
-class TestGetUseCaseConfig(unittest.TestCase):
-    """get_usecase_config merges global and per-project usecase configurations."""
+class TestGetAgentConfig(unittest.TestCase):
+    """get_agent_config merges global and per-project agent configurations."""
 
     def setUp(self):
-        self.usecase_config = MagicMock()
-        self.usecase_config.model_copy.return_value = self.usecase_config
-        self.usecase_config.model_dump.return_value = {"key": "value"}
+        self.agent_config = MagicMock()
+        self.agent_config.model_copy.return_value = self.agent_config
+        self.agent_config.model_dump.return_value = {"key": "value"}
 
         self.config = MagicMock()
-        self.config.usecases = {"uc1": self.usecase_config}
+        self.config.agents = {"uc1": self.agent_config}
         self.config.projects = {}
 
     def test_global_only_returns_deep_copy(self):
-        result = get_usecase_config("uc1", self.config)
-        self.usecase_config.model_copy.assert_called_with(deep=True)
-        self.assertEqual(result, self.usecase_config)
+        result = get_agent_config("uc1", self.config)
+        self.agent_config.model_copy.assert_called_with(deep=True)
+        self.assertEqual(result, self.agent_config)
 
     def test_project_without_override_returns_global(self):
-        self.config.projects["proj1"] = MagicMock(usecases=None)
-        result = get_usecase_config("uc1", self.config, "proj1")
-        self.assertEqual(result, self.usecase_config)
+        self.config.projects["proj1"] = MagicMock(agents=None)
+        result = get_agent_config("uc1", self.config, "proj1")
+        self.assertEqual(result, self.agent_config)
 
     def test_project_partial_override_is_applied(self):
         project_override = MagicMock()
         project_override.model_dump.return_value = {"override_key": "override_value"}
-        self.config.projects["proj1"] = MagicMock(usecases={"uc1": project_override})
+        self.config.projects["proj1"] = MagicMock(agents={"uc1": project_override})
 
-        result = get_usecase_config("uc1", self.config, "proj1")
+        result = get_agent_config("uc1", self.config, "proj1")
 
-        self.usecase_config.model_copy.assert_has_calls(
+        self.agent_config.model_copy.assert_has_calls(
             [call(deep=True), call(update={"override_key": "override_value"})]
         )
-        self.assertEqual(result, self.usecase_config)
+        self.assertEqual(result, self.agent_config)
 
     def test_unknown_project_returns_global(self):
-        result = get_usecase_config("uc1", self.config, "unknown_project")
-        self.assertEqual(result, self.usecase_config)
+        result = get_agent_config("uc1", self.config, "unknown_project")
+        self.assertEqual(result, self.agent_config)
 
 
 class TestMergeDicts(unittest.TestCase):

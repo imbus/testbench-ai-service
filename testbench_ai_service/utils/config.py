@@ -16,11 +16,11 @@ from pydantic import BaseModel, ValidationError
 
 from testbench_ai_service.config import (
     PROMPTS_DIR,
+    AgentConfig,
     AppConfig,
     LLMConfig,
     ProjectPromptConfig,
     PromptConfig,
-    UseCaseConfig,
 )
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.language import LanguageOption
@@ -65,7 +65,7 @@ def create_default_config_file(
     Write the default config to a TOML configuration file.
 
     When *prompts_dir* is given the built-in prompt files are copied there and
-    all usecase prompt paths in the generated config are made relative so that
+    all agent prompt paths in the generated config are made relative so that
     the config is portable and the prompts are easy to customise.
 
     Args:
@@ -285,14 +285,14 @@ def merge_prompt_configs(
 
 
 def get_prompt_config(
-    usecase: str,
+    agent_key: str,
     config: AppConfig,
     project_name: str | None = None,
     request_config: PromptConfig | None = None,
     language: LanguageOption | None = None,
 ) -> PromptConfig:
     """
-    Get the prompt configuration for the given usecase.
+    Get the prompt configuration for the given agent.
 
     Resolving config overrides in the following order:
     1. Request config (highest priority)
@@ -300,7 +300,7 @@ def get_prompt_config(
     3. Global config (lowest priority)
 
     Args:
-        usecase: Name of the usecase (e.g., "test_case_set_reviews")
+        agent_key: Registry key of the agent (e.g., "test_case_set_reviewer")
         config: AppConfig containing global and project configurations
         project_name: Optional project name
         request_config: Optional prompt config from request
@@ -309,20 +309,20 @@ def get_prompt_config(
         PromptConfig: Prompt configuration with overrides applied
     """
     # Start with global config
-    global_usecase_config = get_usecase_config(usecase, config)
-    global_prompt_config = global_usecase_config.prompt
+    global_agent_config = get_agent_config(agent_key, config)
+    global_prompt_config = global_agent_config.prompt
 
     prompt_config = global_prompt_config.model_copy(deep=True)
 
     # Override with project-specific config if available
     if project_name is not None:
         project_config = config.projects.get(project_name)
-        project_usecase_config = None
-        if project_config and project_config.usecases:
-            project_usecase_config = project_config.usecases.get(usecase)
+        project_agent_config = None
+        if project_config and project_config.agents:
+            project_agent_config = project_config.agents.get(agent_key)
 
-        if project_usecase_config and project_usecase_config.prompt:
-            project_prompt_config = project_usecase_config.prompt
+        if project_agent_config and project_agent_config.prompt:
+            project_prompt_config = project_agent_config.prompt
             prompt_config = merge_prompt_configs(prompt_config, project_prompt_config)
 
     # Override with request config if provided
@@ -394,38 +394,39 @@ def get_language_from_config(config: AppConfig, project_name: str | None = None)
     return config.language
 
 
-def get_usecase_config(
-    usecase: str, config: AppConfig, project_name: str | None = None
-) -> UseCaseConfig:
+def get_agent_config(
+    agent_key: str, config: AppConfig, project_name: str | None = None
+) -> AgentConfig:
     """
-    Get the usecase configuration based on the given app configuration and optional project name.
+    Get the agent configuration based on the given app configuration and optional project name.
 
     Args:
+        agent_key: Registry key of the agent.
         config: AppConfig containing global and project configurations.
         project_name: Optional project name. If provided, checks for a project-specific override.
 
     Returns:
-        UseCaseConfig: Project-specific override if exists, else app-level usecase config
+        AgentConfig: Project-specific override if exists, else app-level agent config
     """
     # Start with global config
-    usecase_config = config.usecases[usecase].model_copy(deep=True)
+    agent_config = config.agents[agent_key].model_copy(deep=True)
 
     # Override with project-specific config if available
     if project_name is not None:
         project_config = config.projects.get(project_name)
-        if project_config is not None and project_config.usecases is not None:
-            project_usecase_config = project_config.usecases.get(usecase, None)
-            if project_usecase_config is not None:
-                usecase_config = usecase_config.model_copy(
-                    update=project_usecase_config.model_dump(exclude_unset=True)
+        if project_config is not None and project_config.agents is not None:
+            project_agent_config = project_config.agents.get(agent_key, None)
+            if project_agent_config is not None:
+                agent_config = agent_config.model_copy(
+                    update=project_agent_config.model_dump(exclude_unset=True)
                 )
 
-    return usecase_config
+    return agent_config
 
 
-def usecase_enabled(usecase: str, config: AppConfig, project_name: str | None = None) -> bool:
+def agent_enabled(agent_key: str, config: AppConfig, project_name: str | None = None) -> bool:
     """
-    Checks if a specific usecase is enabled based on the given global or project-specific configuration.
+    Checks if a specific agent is enabled based on the given global or project-specific configuration.
     """
-    usecase_config = get_usecase_config(usecase, config, project_name)
-    return usecase_config.enabled
+    agent_config = get_agent_config(agent_key, config, project_name)
+    return agent_config.enabled

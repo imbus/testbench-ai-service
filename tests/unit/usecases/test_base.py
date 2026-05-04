@@ -2,10 +2,10 @@ import unittest
 from abc import ABC
 from unittest.mock import MagicMock
 
-from testbench_ai_service.usecases.base import UseCase
+from testbench_ai_service.agents.base import Agent
 
 
-class _ConcreteUseCase(UseCase):
+class _ConcreteAgent(Agent):
     """Minimal concrete implementation for testing."""
 
     async def precheck(self, context, conn):
@@ -15,18 +15,18 @@ class _ConcreteUseCase(UseCase):
         pass
 
 
-class TestUseCaseABC(unittest.TestCase):
-    """Tests for the ``UseCase`` abstract base class."""
+class TestAgentABC(unittest.TestCase):
+    """Tests for the ``Agent`` abstract base class."""
 
     def test_is_abstract(self):
-        self.assertTrue(issubclass(UseCase, ABC))
+        self.assertTrue(issubclass(Agent, ABC))
 
     def test_cannot_instantiate_directly(self):
         with self.assertRaises(TypeError):
-            UseCase()  # type: ignore[abstract]
+            Agent()  # type: ignore[abstract]
 
     def test_partial_subclass_raises_type_error(self):
-        class _Partial(UseCase):
+        class _Partial(Agent):
             async def precheck(self, context, conn):
                 pass
 
@@ -36,8 +36,8 @@ class TestUseCaseABC(unittest.TestCase):
             _Partial()
 
     def test_concrete_subclass_can_be_instantiated(self):
-        uc = _ConcreteUseCase()
-        self.assertIsInstance(uc, UseCase)
+        uc = _ConcreteAgent()
+        self.assertIsInstance(uc, Agent)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,9 @@
 [testbench-ai-service]
 tb_server_url = "https://localhost:9443/api/"
+host = "127.0.0.1"
+port = 8010
+debug = false
+prompts_dir = "C:\\TestBenchAIService\\prompts"
 language = "de"
 
 # Global llm configuration
@@ -15,54 +19,55 @@ log_format = "%(levelname)s: %(message)s"
 [testbench-ai-service.logging.file]
 file_name = "testbench-ai-service.log"
 log_level = "DEBUG"
+log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 
-# Global usecase configurations
 
-# Global usecase configuration for test case set reviews
-[testbench-ai-service.usecases.test_case_set_reviews]
+# Global agent configurations
+
+# Global agent configuration for test case set reviewer
+[testbench-ai-service.agents.test_case_set_reviewer]
 enabled = true
 endpoint_path = "/test-case-set-reviews"
-class_path = "testbench_ai_service.usecases.test_case_set_reviews.service.TestCaseSetReviewer"
+class_path = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
 summary = "Trigger test case set reviews"
 description = """This endpoint triggers asynchronous reviews for the specified test case sets.
 The review results will be added as comments to the `reviewComment` attribute (review comments section) of corresponding test structure element specifications."""
 
-# Global prompt configuration for test case set reviews
-[testbench-ai-service.usecases.test_case_set_reviews.prompt]
-file = "prompts/test_case_set_reviews_de.yaml"
-name = "TestCaseSetReviews"
-variant = "step-based-tests-detailed-prompt"
+# Global prompt configuration for test case set reviewer
+[testbench-ai-service.agents.test_case_set_reviewer.prompt]
+file = "test_case_set_reviewer.yaml"
+name = "TestCaseSetReviewer"
 # Additional custom attributes (like 'glossary') are supported and can be utilized by the application.
 # You may define extra fields here as required.
 glossary = "glossary.txt"
 
-# Global usecase configuration for test case set descriptions
-[testbench-ai-service.usecases.test_case_set_descriptions]
+# Global agent configuration for test case set describer
+[testbench-ai-service.agents.test_case_set_describer]
 enabled = true
 endpoint_path = "/test-case-set-descriptions"
-class_path = "testbench_ai_service.usecases.test_case_set_descriptions.service.TestCaseSetDescriber"
+class_path = "testbench_ai_service.agents.test_case_set_describer.agent.TestCaseSetDescriber"
 summary = "Trigger generation of test case set descriptions"
 description = """This endpoint triggers asynchronous generation of descriptions for the specified test case sets.
 The generated descriptions will be assigned to their respective test structure element specifications."""
 
-# Global prompt configuration for test case set descriptions
-[testbench-ai-service.usecases.test_case_set_descriptions.prompt]
-file = "prompts/test_case_set_descriptions_de.yaml"
-name = "TestCaseSetDescriptions"
+# Global prompt configuration for test case set describer
+[testbench-ai-service.agents.test_case_set_describer.prompt]
+file = "test_case_set_describer.yaml"
+name = "TestCaseSetDescriber"
 
-# Global usecase configuration for defect explanations
-[testbench-ai-service.usecases.defect_explanations]
+# Global agent configuration for defect explainer
+[testbench-ai-service.agents.defect_explainer]
 enabled = true
 endpoint_path = "/defect-explanations"
-class_path = "testbench_ai_service.usecases.defect_explanations.service.DefectExplainer"
+class_path = "testbench_ai_service.agents.defect_explainer.agent.DefectExplainer"
 summary = "Trigger generation of defect explanations"
 description = """This endpoint triggers asynchronous generation of defect explanations for the specified test case sets.
             The generated explanations will be added to the comment section of the corresponding test structure element execution overview."""
 
-# Global prompt configuration for defect explanations
-[testbench-ai-service.usecases.defect_explanations.prompt]
-file = "prompts/defect_explanations_de.yaml"
-name = "DefectExplanations"
+# Global prompt configuration for defect explainer
+[testbench-ai-service.agents.defect_explainer.prompt]
+file = "defect_explainer.yaml"
+name = "DefectExplainer"
 
 
 # Project-specific configurations (override global configurations)
@@ -70,12 +75,11 @@ name = "DefectExplanations"
 [testbench-ai-service.projects."Car Configurator"]
 language = "en"
 
-# Project-specific usecase configuration for test case set reviews (override global review usecase configuration)
-[testbench-ai-service.projects."Car Configurator".usecases.test_case_set_reviews]
+# Project-specific agent configuration for test case set reviewer (override global reviewer agent configuration)
+[testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer]
 enabled = false
 
-# Project-specific prompt configuration for test case set reviews (override global review prompt configuration)
-[testbench-ai-service.projects."Car Configurator".usecases.test_case_set_reviews.prompt]
-file = "prompts/CarConfigurator_reviews_prompt.yaml"
-name = "TestCaseSetReviews"
-variant = "simple-generic-prompt-no-glossary"
+# Project-specific prompt configuration for test case set reviewer (override global reviewer prompt configuration)
+[testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer.prompt]
+file = "CarConfigurator_reviews_prompt.yaml"
+name = "TestCaseSetReviewer"

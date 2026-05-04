@@ -8,13 +8,13 @@ from testbench_ai_service.config import (
     DEFAULT_HOST,
     DEFAULT_PORT,
     PROMPTS_DIR,
+    AgentConfig,
     AppConfig,
     LLMConfig,
+    ProjectAgentConfig,
     ProjectConfig,
     ProjectPromptConfig,
-    ProjectUseCaseConfig,
     PromptConfig,
-    UseCaseConfig,
 )
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.language import LanguageOption
@@ -107,30 +107,30 @@ class TestProjectPromptConfig(unittest.TestCase):
         self.assertIsNone(cfg.placeholder_data)
 
 
-class TestUseCaseConfig(unittest.TestCase):
+class TestAgentConfig(unittest.TestCase):
     def test_required_fields(self):
         with self.assertRaises(ValidationError):
-            UseCaseConfig()  # All required fields missing
+            AgentConfig()  # All required fields missing
 
     def test_valid_use_case_config(self):
-        cfg = UseCaseConfig(
+        cfg = AgentConfig(
             enabled=True,
             endpoint_path="/test",
-            class_path="testbench_ai_service.usecases.base.UseCase",
+            class_path="testbench_ai_service.agents.base.Agent",
             prompt=PromptConfig(file="prompts/test.yaml", name="Test"),
         )
         self.assertTrue(cfg.enabled)
         self.assertEqual(cfg.endpoint_path, "/test")
 
 
-class TestProjectUseCaseConfig(unittest.TestCase):
+class TestProjectAgentConfig(unittest.TestCase):
     def test_all_fields_optional(self):
-        cfg = ProjectUseCaseConfig()
+        cfg = ProjectAgentConfig()
         self.assertIsNone(cfg.enabled)
         self.assertIsNone(cfg.prompt)
 
     def test_can_override_enabled(self):
-        cfg = ProjectUseCaseConfig(enabled=False)
+        cfg = ProjectAgentConfig(enabled=False)
         self.assertFalse(cfg.enabled)
 
 
@@ -139,7 +139,7 @@ class TestProjectConfig(unittest.TestCase):
         cfg = ProjectConfig()
         self.assertIsNone(cfg.language)
         self.assertIsNone(cfg.llm_config)
-        self.assertIsNone(cfg.usecases)
+        self.assertIsNone(cfg.agents)
 
     def test_can_set_language(self):
         cfg = ProjectConfig(language=LanguageOption.ENGLISH)
@@ -170,11 +170,11 @@ class TestAppConfigDefaults(unittest.TestCase):
         config = _make_app_config()
         self.assertIsNone(config.trusted_proxies)
 
-    def test_default_usecases_loaded(self):
+    def test_default_agents_loaded(self):
         config = _make_app_config()
-        self.assertIn("test_case_set_reviews", config.usecases)
-        self.assertIn("test_case_set_descriptions", config.usecases)
-        self.assertIn("defect_explanations", config.usecases)
+        self.assertIn("test_case_set_reviewer", config.agents)
+        self.assertIn("test_case_set_describer", config.agents)
+        self.assertIn("defect_explainer", config.agents)
 
     def test_projects_defaults_to_empty_dict(self):
         config = _make_app_config()

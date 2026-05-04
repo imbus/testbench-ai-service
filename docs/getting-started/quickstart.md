@@ -77,7 +77,7 @@ Once the service is running, these endpoints are available without authenticatio
 ## Next steps
 
 - Customize the service → [Configuration](../configuration.md)
-- Learn about use cases → [Use Cases overview](../use-cases/index.md)
+- Learn about Agents → [Agents overview](../agents/index.md)
 - Customize prompts → [Prompts](../prompts.md)
 - Connect TestBench → [TestBench Integration](../testbench-integration.md)
 - Explore all CLI options → [CLI Commands](../cli.md)

@@ -43,7 +43,7 @@ class TestRootRedirect(unittest.TestCase):
 
 
 @patch("testbench_ai_service.main.LLMFactory")
-class TestGetUsecases(unittest.TestCase):
+class TestGetAgents(unittest.TestCase):
     def setUp(self):
         self.mock_factory = MagicMock()
         self.mock_factory.init_clients = MagicMock()
@@ -53,28 +53,28 @@ class TestGetUsecases(unittest.TestCase):
         mock_factory_cls.return_value = self.mock_factory
         return _make_test_client()
 
-    def test_returns_all_usecases_by_default(self, mock_factory_cls):
+    def test_returns_all_agents_by_default(self, mock_factory_cls):
         client, _, _ = self._client(mock_factory_cls)
-        response = client.get("/usecases")
+        response = client.get("/agents")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIsInstance(data, list)
         keys = [item["key"] for item in data]
-        self.assertIn("test_case_set_reviews", keys)
-        self.assertIn("test_case_set_descriptions", keys)
-        self.assertIn("defect_explanations", keys)
+        self.assertIn("test_case_set_reviewer", keys)
+        self.assertIn("test_case_set_describer", keys)
+        self.assertIn("defect_explainer", keys)
 
     def test_filter_by_enabled_true(self, mock_factory_cls):
         client, _, _ = self._client(mock_factory_cls)
-        response = client.get("/usecases?enabled=true")
+        response = client.get("/agents?enabled=true")
         self.assertEqual(response.status_code, 200)
         for item in response.json():
             self.assertTrue(item["enabled"])
 
     def test_filter_by_enabled_false_returns_empty(self, mock_factory_cls):
-        """All default usecases are enabled, so filtering by enabled=false yields empty list."""
+        """All default agents are enabled, so filtering by enabled=false yields empty list."""
         client, _, _ = self._client(mock_factory_cls)
-        response = client.get("/usecases?enabled=false")
+        response = client.get("/agents?enabled=false")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])
 
@@ -86,7 +86,7 @@ class TestGetUsecases(unittest.TestCase):
         client = TestClient(app, follow_redirects=False)
         client.__enter__()
         # No dependency override — real auth will reject the empty token
-        response = client.get("/usecases")
+        response = client.get("/agents")
         self.assertIn(response.status_code, (401, 403))
 
 
@@ -101,18 +101,18 @@ class TestGetPromptDetails(unittest.TestCase):
         mock_factory_cls.return_value = self.mock_factory
         return _make_test_client()
 
-    def test_returns_prompt_details_for_known_usecase(self, mock_factory_cls):
+    def test_returns_prompt_details_for_known_agent(self, mock_factory_cls):
         client, _, _ = self._client(mock_factory_cls)
-        response = client.get("/usecases/test_case_set_reviews/prompt")
+        response = client.get("/agents/test_case_set_reviewer/prompt")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("name", data)
         self.assertIn("variants", data)
         self.assertIsInstance(data["variants"], list)
 
-    def test_returns_404_for_unknown_usecase(self, mock_factory_cls):
+    def test_returns_404_for_unknown_agent(self, mock_factory_cls):
         client, _, _ = self._client(mock_factory_cls)
-        response = client.get("/usecases/nonexistent_usecase/prompt")
+        response = client.get("/agents/nonexistent_agent/prompt")
         self.assertEqual(response.status_code, 404)
 
     def test_requires_auth_for_prompt_details(self, mock_factory_cls):
@@ -121,7 +121,7 @@ class TestGetPromptDetails(unittest.TestCase):
         app = create_app(app_config)
         client = TestClient(app, follow_redirects=False)
         client.__enter__()
-        response = client.get("/usecases/test_case_set_reviews/prompt")
+        response = client.get("/agents/test_case_set_reviewer/prompt")
         self.assertIn(response.status_code, (401, 403))
 
 

@@ -57,7 +57,7 @@ def raise_field_validation_error(
 
     Args:
         model_instance: Pydantic model instance (self in validators)
-        field: Field name (str) or full loc tuple (e.g. ("usecases", "foo", "prompt", "file"))
+        field: Field name (str) or full loc tuple (e.g. ("agents", "foo", "prompt", "file"))
         error: ValueError instance
         error_type: Optional error type string (default: "value_error")
     """

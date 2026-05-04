@@ -31,7 +31,7 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 └─────────────────────────────────────┘
 ```
 
-1. The service loads the YAML file specified in the use case's `prompt.file` config.
+1. The service loads the YAML file specified in the agent's `prompt.file` config.
 2. It finds the **prompt definition** matching `prompt.name`.
 3. It selects the **variant** matching `prompt.variant` (or the `default_variant`).
 4. Each block's `text` is rendered with Jinja2, substituting placeholders with data from `placeholder_data` and automatically built context.
@@ -47,13 +47,13 @@ Prompt files are organized by language under the `prompts_dir` directory:
 ```
 prompts/
 ├── en/
-│   ├── test_case_set_reviews.yaml
-│   ├── test_case_set_descriptions.yaml
-│   └── defect_explanations.yaml
+│   ├── test_case_set_reviewer.yaml
+│   ├── test_case_set_describer.yaml
+│   └── defect_explainer.yaml
 └── de/
-    ├── test_case_set_reviews.yaml
-    ├── test_case_set_descriptions.yaml
-    └── defect_explanations.yaml
+    ├── test_case_set_reviewer.yaml
+    ├── test_case_set_describer.yaml
+    └── defect_explainer.yaml
 ```
 
 The service resolves prompt files relative to `prompts_dir/<language>/`. So a config of:
@@ -64,11 +64,11 @@ The service resolves prompt files relative to `prompts_dir/<language>/`. So a co
 language = "en"
 prompts_dir = "prompts"
 
-[testbench-ai-service.usecases.test_case_set_reviews.prompt]
-file = "test_case_set_reviews.yaml"
+[testbench-ai-service.agents.test_case_set_reviewer.prompt]
+file = "test_case_set_reviewer.yaml"
 ```
 
-will load `prompts/en/test_case_set_reviews.yaml`.
+will load `prompts/en/test_case_set_reviewer.yaml`.
 
 ---
 
@@ -77,7 +77,7 @@ will load `prompts/en/test_case_set_reviews.yaml`.
 Each prompt YAML file is a list of prompt definitions:
 
 ```yaml
-- name: "TestCaseSetReviews"
+- name: "TestCaseSetReviewer"
   description: "Reviews test case sets from TestBench."
   default_variant: "interaction-based-tests-detailed-prompt"
   variants:
@@ -132,7 +132,7 @@ A JSON Schema for validation is available at `prompts/prompt.schema.json`.
 
 Block text supports [Jinja2](https://jinja.palletsprojects.com/) template syntax. Placeholders are rendered at runtime with data from two sources:
 
-1. **Automatically built data**: the use case service populates placeholders like `test_case_set`, `parameter_combinations`, `description`, etc.
+1. **Automatically built data**: the agent service populates placeholders like `test_case_set`, `parameter_combinations`, `description`, etc.
 2. **`placeholder_data`**: custom key-value pairs from the config or the API request.
 
 Values from `placeholder_data` take precedence over automatically built data.
@@ -156,11 +156,11 @@ Configuration:
 
 ```toml
 # config.toml
-[testbench-ai-service.usecases.test_case_set_reviews.prompt]
-file = "test_case_set_reviews.yaml"
-name = "TestCaseSetReviews"
+[testbench-ai-service.agents.test_case_set_reviewer.prompt]
+file = "test_case_set_reviewer.yaml"
+name = "TestCaseSetReviewer"
 
-[testbench-ai-service.usecases.test_case_set_reviews.prompt.placeholder_data]
+[testbench-ai-service.agents.test_case_set_reviewer.prompt.placeholder_data]
 glossary = "Domain: automotive\nABS = Anti-lock Braking System"
 ```
 
@@ -177,7 +177,7 @@ When you run `testbench-ai-service init`, the built-in prompt files are copied t
 Add a new entry to the `variants` list in the YAML file:
 
 ```yaml
-- name: "TestCaseSetReviews"
+- name: "TestCaseSetReviewer"
   description: "Reviews test case sets."
   default_variant: "detailed-prompt"
   variants:
@@ -203,7 +203,7 @@ Add a new entry to the `variants` list in the YAML file:
 
 ```toml
 # config.toml
-[testbench-ai-service.usecases.test_case_set_reviews.prompt]
+[testbench-ai-service.agents.test_case_set_reviewer.prompt]
 file = "my_custom_reviews.yaml"
 name = "MyCustomReviews"
 ```
@@ -215,7 +215,7 @@ name = "MyCustomReviews"
 The service exposes a read-only endpoint to inspect the configured prompt and its variants:
 
 ```
-GET /usecases/{usecase_key}/prompt?project=<project_name>
+GET /agents/{agent_key}/prompt?project=<project_name>
 ```
 
 This returns the prompt definition including all variants and their placeholders, useful for debugging and integration.

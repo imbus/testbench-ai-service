@@ -9,15 +9,15 @@ from fastapi.testclient import TestClient
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
 from testbench_ai_service.auth import AuthInfo, AuthType, get_auth_info
-from testbench_ai_service.config import AppConfig, ProjectConfig, ProjectUseCaseConfig
+from testbench_ai_service.config import AppConfig, ProjectAgentConfig, ProjectConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
 from testbench_ai_service.main import create_app
-from testbench_ai_service.models.testbench import ProjectMember, ProjectRole
-from testbench_ai_service.models.usecase import (
+from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
-    TriggerUseCaseRequest,
+    TriggerAgentRequest,
 )
+from testbench_ai_service.models.testbench import ProjectMember, ProjectRole
 from tests.unit.helpers.data import get_test_data_path
 
 
@@ -73,7 +73,7 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
 
         # Patch the reviewer so no real AI calls are made
         self.reviewer_patcher = patch(
-            "testbench_ai_service.usecases.test_case_set_reviews.service.TestCaseSetReviewer"
+            "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
         )
         self.mock_reviewer_class = self.reviewer_patcher.start()
         self.mock_reviewer = AsyncMock()
@@ -82,7 +82,7 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         self.mock_reviewer_class.return_value = self.mock_reviewer
 
         # Default valid request payload
-        self.valid_request = TriggerUseCaseRequest(
+        self.valid_request = TriggerAgentRequest(
             project_key=self.project_key,
             tov_key=self.tov_key,
             cycle_key=self.cycle_key,
@@ -115,7 +115,7 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         self.assertEqual(response.json(), {"status": "accepted", "warnings": []})
         mock_add_task.assert_called_once()
         call_kwargs = mock_add_task.call_args.kwargs
-        self.assertIs(call_kwargs["usecase_service"], self.mock_reviewer)
+        self.assertIs(call_kwargs["agent"], self.mock_reviewer)
         self.assertIs(call_kwargs["conn"], self.mock_tb_connection)
         self.assertIs(call_kwargs["llm_factory"], self.mock_llm_factory)
         self.assertIsInstance(call_kwargs["context"], ExecutionContext)
@@ -169,7 +169,7 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
 
     def test_globally_disabled_feature_returns_404(self):
         config = self.app_config.model_copy(deep=True)
-        config.usecases["test_case_set_reviews"].enabled = False
+        config.agents["test_case_set_reviewer"].enabled = False
         self.app.dependency_overrides[get_app_config] = lambda: config
         try:
             response = self.client.post(
@@ -182,7 +182,7 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
     def test_per_project_disabled_feature_returns_404(self):
         config = self.app_config.model_copy(deep=True)
         config.projects[self.project_name] = ProjectConfig(
-            usecases={"test_case_set_reviews": ProjectUseCaseConfig(enabled=False)}
+            agents={"test_case_set_reviewer": ProjectAgentConfig(enabled=False)}
         )
         self.app.dependency_overrides[get_app_config] = lambda: config
         try:

@@ -58,41 +58,39 @@ file_name = "testbench-ai-service.log"
 log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 
-# Use case: Test Case Set Reviews
-[testbench-ai-service.usecases.test_case_set_reviews]
+# agent: Test Case Set Reviewer
+[testbench-ai-service.agents.test_case_set_reviewer]
 enabled = true
 endpoint_path = "/test-case-set-reviews"
-class_path = "testbench_ai_service.usecases.test_case_set_reviews.service.TestCaseSetReviewer"
-summary = "Trigger test case set reviews"
-description = "Triggers asynchronous reviews for specified test case sets."
+class_path = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
 
-[testbench-ai-service.usecases.test_case_set_reviews.prompt]
-file = "test_case_set_reviews.yaml"
-name = "TestCaseSetReviews"
+[testbench-ai-service.agents.test_case_set_reviewer.prompt]
+file = "test_case_set_reviewer.yaml"
+name = "TestCaseSetReviewer"
 
-# Use case: Test Case Set Descriptions
-[testbench-ai-service.usecases.test_case_set_descriptions]
+# agent: Test Case Set Describer
+[testbench-ai-service.agents.test_case_set_describer]
 enabled = true
 endpoint_path = "/test-case-set-descriptions"
-class_path = "testbench_ai_service.usecases.test_case_set_descriptions.service.TestCaseSetDescriber"
+class_path = "testbench_ai_service.agents.test_case_set_describer.agent.TestCaseSetDescriber"
 summary = "Trigger generation of test case set descriptions"
 description = "Triggers asynchronous generation of descriptions for specified test case sets."
 
-[testbench-ai-service.usecases.test_case_set_descriptions.prompt]
-file = "test_case_set_descriptions.yaml"
-name = "TestCaseSetDescriptions"
+[testbench-ai-service.agents.test_case_set_describer.prompt]
+file = "test_case_set_describer.yaml"
+name = "TestCaseSetDescriber"
 
-# Use case: Defect Explanations
-[testbench-ai-service.usecases.defect_explanations]
+# agent: Defect Explainer
+[testbench-ai-service.agents.defect_explainer]
 enabled = true
 endpoint_path = "/defect-explanations"
-class_path = "testbench_ai_service.usecases.defect_explanations.service.DefectExplainer"
+class_path = "testbench_ai_service.agents.defect_explainer.agent.DefectExplainer"
 summary = "Trigger generation of defect explanations"
 description = "Triggers asynchronous generation of defect explanations."
 
-[testbench-ai-service.usecases.defect_explanations.prompt]
-file = "defect_explanations.yaml"
-name = "DefectExplanations"
+[testbench-ai-service.agents.defect_explainer.prompt]
+file = "defect_explainer.yaml"
+name = "DefectExplainer"
 
 # Project-specific overrides
 [testbench-ai-service.projects."My Project"]
@@ -297,21 +295,21 @@ The module must be importable from the working directory where the service is st
 
 ---
 
-## Use case settings
+## agent settings
 
-**`[testbench-ai-service.usecases.<usecase_key>]`**
+**`[testbench-ai-service.agents.<agent_key>]`**
 
-Each use case is configured under its own key. The three built-in use cases are `test_case_set_reviews`, `test_case_set_descriptions`, and `defect_explanations`.
+Each agent is configured under its own key. The three built-in Agents are `test_case_set_reviewer`, `test_case_set_describer`, and `defect_explainer`.
 
 | Option | Type | Description | Required |
 |--------|------|-------------|----------|
-| `enabled` | Boolean | Whether this use case is active. | Yes |
+| `enabled` | Boolean | Whether this agent is active. | Yes |
 | `endpoint_path` | String | The HTTP endpoint path (e.g., `"/test-case-set-reviews"`). | Yes |
-| `class_path` | String | Full Python class path to the use case service implementation. | Yes |
+| `class_path` | String | Full Python class path to the agent service implementation. | Yes |
 | `summary` | String | Short summary shown in OpenAPI docs. | No |
 | `description` | String | Detailed description shown in OpenAPI docs. | No |
 
-**`[testbench-ai-service.usecases.<usecase_key>.prompt]`**
+**`[testbench-ai-service.agents.<agent_key>.prompt]`**
 
 | Option | Type | Description | Required |
 |--------|------|-------------|----------|
@@ -320,7 +318,7 @@ Each use case is configured under its own key. The three built-in use cases are 
 | `variant` | String | Prompt variant to use (falls back to `default_variant` in the YAML file). | No |
 | `placeholder_data` | Table | Key-value pairs for Jinja2 placeholder rendering in prompt blocks. | No |
 
-Additional custom attributes (like `glossary`) are supported and can be utilized by the use case implementation.
+Additional custom attributes (like `glossary`) are supported and can be utilized by the agent implementation.
 
 For details on how prompts work, see the [Prompts](prompts.md) page.
 
@@ -328,16 +326,16 @@ For details on how prompts work, see the [Prompts](prompts.md) page.
 
 ```toml
 # config.toml
-[testbench-ai-service.usecases.test_case_set_reviews]
+[testbench-ai-service.agents.test_case_set_reviewer]
 enabled = true
 endpoint_path = "/test-case-set-reviews"
-class_path = "testbench_ai_service.usecases.test_case_set_reviews.service.TestCaseSetReviewer"
+class_path = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
 summary = "Trigger test case set reviews"
 description = "This endpoint triggers asynchronous reviews for the specified test case sets."
 
-[testbench-ai-service.usecases.test_case_set_reviews.prompt]
-file = "test_case_set_reviews.yaml"
-name = "TestCaseSetReviews"
+[testbench-ai-service.agents.test_case_set_reviewer.prompt]
+file = "test_case_set_reviewer.yaml"
+name = "TestCaseSetReviewer"
 ...
 ```
 
@@ -353,11 +351,11 @@ Any global setting can be overridden per TestBench project. The project name mus
 |--------|------|-------------|
 | `language` | String | Override the default language for this project. |
 | `llm_config` | Table | Override the LLM provider configuration. |
-| `usecases.<key>.enabled` | Boolean | Enable or disable a specific use case. |
-| `usecases.<key>.prompt.file` | String | Override the prompt file. |
-| `usecases.<key>.prompt.name` | String | Override the prompt definition name. |
-| `usecases.<key>.prompt.variant` | String | Override the prompt variant. |
-| `usecases.<key>.prompt.placeholder_data` | Table | Override placeholder values. |
+| `agents.<key>.enabled` | Boolean | Enable or disable a specific agent. |
+| `agents.<key>.prompt.file` | String | Override the prompt file. |
+| `agents.<key>.prompt.name` | String | Override the prompt definition name. |
+| `agents.<key>.prompt.variant` | String | Override the prompt variant. |
+| `agents.<key>.prompt.placeholder_data` | Table | Override placeholder values. |
 
 **Example:**
 
@@ -372,13 +370,13 @@ language = "de"
 [testbench-ai-service.projects."Car Configurator"]
 language = "en"
 
-[testbench-ai-service.projects."Car Configurator".usecases.test_case_set_reviews]
+[testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer]
 enabled = false
 
 # Use a different prompt variant for this project
-[testbench-ai-service.projects."Car Configurator".usecases.test_case_set_reviews.prompt]
+[testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer.prompt]
 file = "CarConfigurator_reviews_prompt.yaml"
-name = "TestCaseSetReviews"
+name = "TestCaseSetReviewer"
 variant = "simple-generic-prompt-no-glossary"
 ```
 

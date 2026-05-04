@@ -67,7 +67,7 @@ class ProjectPromptConfig(BaseModel):
     placeholder_data: dict[str, str] | None = None
 
 
-class UseCaseConfig(BaseModel):
+class AgentConfig(BaseModel):
     enabled: bool
     endpoint_path: str
     class_path: str
@@ -81,7 +81,7 @@ class UseCaseConfig(BaseModel):
     #     return validate_custom_class_path(value)
 
 
-class ProjectUseCaseConfig(BaseModel):
+class ProjectAgentConfig(BaseModel):
     enabled: bool | None = None
     prompt: ProjectPromptConfig | None = None
 
@@ -89,41 +89,41 @@ class ProjectUseCaseConfig(BaseModel):
 class ProjectConfig(BaseModel):
     language: LanguageOption | None = None
     llm_config: LLMConfig | None = None
-    usecases: dict[str, ProjectUseCaseConfig] | None = None
+    agents: dict[str, ProjectAgentConfig] | None = None
 
 
-DEFAULT_USECASES: dict[str, UseCaseConfig] = {
-    "test_case_set_reviews": UseCaseConfig(
+DEFAULT_AGENTS: dict[str, AgentConfig] = {
+    "test_case_set_reviewer": AgentConfig(
         enabled=True,
         endpoint_path="/test-case-set-reviews",
-        class_path="testbench_ai_service.usecases.test_case_set_reviews.service.TestCaseSetReviewer",
+        class_path="testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer",
         prompt=PromptConfig(
-            file=Path("test_case_set_reviews.yaml"),
-            name="TestCaseSetReviews",
+            file=Path("test_case_set_reviewer.yaml"),
+            name="TestCaseSetReviewer",
         ),
         summary="Trigger test case set reviews",
         description="""This endpoint triggers asynchronous reviews for the specified test case sets.
             The review results will be added as comments to the `reviewComment` attribute (review comments section) of corresponding test structure element specifications.""",
     ),
-    "test_case_set_descriptions": UseCaseConfig(
+    "test_case_set_describer": AgentConfig(
         enabled=True,
         endpoint_path="/test-case-set-descriptions",
-        class_path="testbench_ai_service.usecases.test_case_set_descriptions.service.TestCaseSetDescriber",
+        class_path="testbench_ai_service.agents.test_case_set_describer.agent.TestCaseSetDescriber",
         prompt=PromptConfig(
-            file=Path("test_case_set_descriptions.yaml"),
-            name="TestCaseSetDescriptions",
+            file=Path("test_case_set_describer.yaml"),
+            name="TestCaseSetDescriber",
         ),
         summary="Trigger generation of test case set descriptions",
         description="""This endpoint triggers asynchronous generation of descriptions for the specified test case sets.
             The generated descriptions will be assigned to their respective test structure element specifications.""",
     ),
-    "defect_explanations": UseCaseConfig(
+    "defect_explainer": AgentConfig(
         enabled=True,
         endpoint_path="/defect-explanations",
-        class_path="testbench_ai_service.usecases.defect_explanations.service.DefectExplainer",
+        class_path="testbench_ai_service.agents.defect_explainer.agent.DefectExplainer",
         prompt=PromptConfig(
-            file=Path("defect_explanations.yaml"),
-            name="DefectExplanations",
+            file=Path("defect_explainer.yaml"),
+            name="DefectExplainer",
         ),
         summary="Trigger generation of defect explanations",
         description="""This endpoint triggers asynchronous generation of defect explanations for the specified test case sets.
@@ -169,7 +169,7 @@ class AppConfig(BaseModel):
     language: LanguageOption = LanguageOption.GERMAN
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
-    usecases: dict[str, UseCaseConfig] = DEFAULT_USECASES
+    agents: dict[str, AgentConfig] = DEFAULT_AGENTS
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
 
     @field_validator("tb_server_url", mode="after")
@@ -212,31 +212,31 @@ class AppConfig(BaseModel):
     @model_validator(mode="after")
     def validate_prompt_paths(self):
         """Validate and resolve all prompt file paths."""
-        for uc_key, usecase in self.usecases.items():
+        for agent_key, agent in self.agents.items():
             try:
                 validate_prompt_file(
-                    usecase.prompt.file,
-                    name=usecase.prompt.name,
+                    agent.prompt.file,
+                    name=agent.prompt.name,
                     prompts_dir=self.prompts_dir,
                     language=self.language.value,
                 )
             except ValueError as e:
-                raise_field_validation_error(self, ("usecases", uc_key, "prompt", "file"), e)
+                raise_field_validation_error(self, ("agents", agent_key, "prompt", "file"), e)
         for proj_key, project in self.projects.items():
-            for uc_key, uc_override in (project.usecases or {}).items():
-                if uc_override.prompt is None or uc_override.prompt.file is None:
+            for agent_key, agent_override in (project.agents or {}).items():
+                if agent_override.prompt is None or agent_override.prompt.file is None:
                     continue
                 try:
                     validate_prompt_file(
-                        uc_override.prompt.file,
-                        name=uc_override.prompt.name,
+                        agent_override.prompt.file,
+                        name=agent_override.prompt.name,
                         prompts_dir=self.prompts_dir,
                         language=self.language.value,
                     )
                 except ValueError as e:
                     raise_field_validation_error(
                         self,
-                        ("projects", proj_key, "usecases", uc_key, "prompt", "file"),
+                        ("projects", proj_key, "agents", agent_key, "prompt", "file"),
                         e,
                     )
         return self

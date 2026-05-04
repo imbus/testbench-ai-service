@@ -7,31 +7,31 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
+from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
+from testbench_ai_service.agents.test_case_set_reviewer.utils import get_test_case_set_as_string
 from testbench_ai_service.config import (
-    DEFAULT_USECASES,
+    DEFAULT_AGENTS,
     AppConfig,
     LLMConfig,
     PromptConfig,
 )
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
+from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.testbench import (
     OptionalUser,
     RichTextInfo,
     SpecificationDetailsForUpdate,
 )
-from testbench_ai_service.models.usecase import ExecutionContext, UseCaseResult
-from testbench_ai_service.tasks import run_usecase
-from testbench_ai_service.usecases.test_case_set_reviews.service import TestCaseSetReviewer
-from testbench_ai_service.usecases.test_case_set_reviews.utils import get_test_case_set_as_string
+from testbench_ai_service.tasks import run_agent
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.i18n import get_translation, load_translations
 from testbench_ai_service.utils.string_processor import strip_html_body_tags
 from tests.unit.helpers.data import get_test_data_path
 
 
-class TestRunUsecaseReviewTask(unittest.IsolatedAsyncioTestCase):
-    """run_usecase runs the full review pipeline and writes back results via PATCH."""
+class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
+    """run_agent runs the full review pipeline and writes back results via PATCH."""
 
     def setUp(self):
         # ── TB connection mock ────────────────────────────────────────────────
@@ -47,7 +47,7 @@ class TestRunUsecaseReviewTask(unittest.IsolatedAsyncioTestCase):
 
         # ── Reviewer mock ─────────────────────────────────────────────────────
         self.reviewer_patcher = patch(
-            "testbench_ai_service.usecases.test_case_set_reviews.service.TestCaseSetReviewer"
+            "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
         )
         self.mock_reviewer_class = self.reviewer_patcher.start()
         self.mock_reviewer = TestCaseSetReviewer()
@@ -62,9 +62,9 @@ class TestRunUsecaseReviewTask(unittest.IsolatedAsyncioTestCase):
         self.mock_llm_factory.get_client.return_value = self.mock_llm_client
 
         # ── Config ────────────────────────────────────────────────────────────
-        self.prompt_config = DEFAULT_USECASES["test_case_set_reviews"].prompt
+        self.prompt_config = DEFAULT_AGENTS["test_case_set_reviewer"].prompt
         self.app_config = AppConfig(tb_server_url=self.mock_tb_connection.server_url)
-        self.app_config.usecases["test_case_set_reviews"].prompt = self.prompt_config
+        self.app_config.agents["test_case_set_reviewer"].prompt = self.prompt_config
 
         # ── Test identifiers ──────────────────────────────────────────────────
         self.user_key = "1"
@@ -108,9 +108,9 @@ class TestRunUsecaseReviewTask(unittest.IsolatedAsyncioTestCase):
         }
 
         self.review_responses = {
-            self.test_case_sets[0].details.uniqueID: UseCaseResult(result="TCS1 Review Notes"),
-            self.test_case_sets[1].details.uniqueID: UseCaseResult(result="TCS2 review notes"),
-            self.test_case_sets[2].details.uniqueID: UseCaseResult(result=""),
+            self.test_case_sets[0].details.uniqueID: AgentResult(result="TCS1 Review Notes"),
+            self.test_case_sets[1].details.uniqueID: AgentResult(result="TCS2 review notes"),
+            self.test_case_sets[2].details.uniqueID: AgentResult(result=""),
         }
 
         self.patch_url_prefix = (
@@ -128,12 +128,12 @@ class TestRunUsecaseReviewTask(unittest.IsolatedAsyncioTestCase):
         """Happy path: all test case sets are patched with started + result payloads."""
         fake_now = datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
         with patch(
-            "testbench_ai_service.usecases.test_case_set_reviews.utils.datetime"
+            "testbench_ai_service.agents.test_case_set_reviewer.utils.datetime"
         ) as mock_datetime:
             mock_datetime.now.return_value = fake_now
-            await run_usecase(
-                usecase="test_case_set_reviews",
-                usecase_service=self.mock_reviewer,
+            await run_agent(
+                agent_key="test_case_set_reviewer",
+                agent=self.mock_reviewer,
                 context=self.context,
                 conn=self.mock_tb_connection,
                 llm_factory=self.mock_llm_factory,
@@ -179,18 +179,18 @@ class TestRunUsecaseReviewTask(unittest.IsolatedAsyncioTestCase):
             )
 
     async def test_patch_failure_is_logged_as_error(self):
-        """When a PATCH call raises, run_usecase logs the error and continues."""
+        """When a PATCH call raises, run_agent logs the error and continues."""
         self.mock_tb_connection.session.patch.side_effect = Exception("patch error")
 
         fake_now = datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
         with patch(
-            "testbench_ai_service.usecases.test_case_set_reviews.utils.datetime"
+            "testbench_ai_service.agents.test_case_set_reviewer.utils.datetime"
         ) as mock_datetime:
             mock_datetime.now.return_value = fake_now
             with self.assertLogs(logger, level="ERROR"):
-                await run_usecase(
-                    usecase="test_case_set_reviews",
-                    usecase_service=self.mock_reviewer,
+                await run_agent(
+                    agent_key="test_case_set_reviewer",
+                    agent=self.mock_reviewer,
                     context=self.context,
                     conn=self.mock_tb_connection,
                     llm_factory=self.mock_llm_factory,
@@ -221,18 +221,18 @@ class TestRunUsecaseReviewTask(unittest.IsolatedAsyncioTestCase):
         self.mock_tb_connection.session.patch.side_effect = None
 
     async def test_reviewer_failure_is_logged_as_error(self):
-        """When the AI reviewer raises, run_usecase logs the error and patches failure."""
+        """When the AI reviewer raises, run_agent logs the error and patches failure."""
         self.mock_reviewer._get_ai_response = AsyncMock(side_effect=Exception("service error"))
 
         fake_now = datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
         with patch(
-            "testbench_ai_service.usecases.test_case_set_reviews.utils.datetime"
+            "testbench_ai_service.agents.test_case_set_reviewer.utils.datetime"
         ) as mock_datetime:
             mock_datetime.now.return_value = fake_now
             with self.assertLogs(logger, level="ERROR"):
-                await run_usecase(
-                    usecase="test_case_set_reviews",
-                    usecase_service=self.mock_reviewer,
+                await run_agent(
+                    agent_key="test_case_set_reviewer",
+                    agent=self.mock_reviewer,
                     context=self.context,
                     conn=self.mock_tb_connection,
                     llm_factory=self.mock_llm_factory,

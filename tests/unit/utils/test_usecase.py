@@ -8,7 +8,7 @@ from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.testbench import FilteringOptions
-from testbench_ai_service.utils.usecase import (
+from testbench_ai_service.utils.agent import (
     build_execution_context,
     check_test_case_set_is_locked,
 )
@@ -75,17 +75,17 @@ def resolved_mocks(mocker):
     """Patches all external collaborators used by build_execution_context."""
     return {
         "project_name": mocker.patch(
-            "testbench_ai_service.utils.usecase.get_project_name", return_value="My Project"
+            "testbench_ai_service.utils.agent.get_project_name", return_value="My Project"
         ),
         "language": mocker.patch(
-            "testbench_ai_service.utils.usecase.get_language_from_config", return_value="en"
+            "testbench_ai_service.utils.agent.get_language_from_config", return_value="en"
         ),
         "llm_config": mocker.patch(
-            "testbench_ai_service.utils.usecase.get_llm_config",
+            "testbench_ai_service.utils.agent.get_llm_config",
             return_value=LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o"),
         ),
         "prompt_config": mocker.patch(
-            "testbench_ai_service.utils.usecase.get_prompt_config",
+            "testbench_ai_service.utils.agent.get_prompt_config",
             return_value=PromptConfig(file="prompts/test.yaml", name="test"),
         ),
     }
@@ -94,28 +94,28 @@ def resolved_mocks(mocker):
 class TestCheckTestCaseSetIsLocked:
     def test_locked_by_another_user_returns_true(self, mocker, base_context):
         mocker.patch(
-            "testbench_ai_service.utils.usecase.get_test_structure_tree",
+            "testbench_ai_service.utils.agent.get_test_structure_tree",
             return_value=_Tree(_Root(_Tab(_Locker("other_user")), "tab")),
         )
         assert check_test_case_set_is_locked(MagicMock(), base_context, "uid1", "tab") is True
 
     def test_locked_by_same_user_returns_false(self, mocker, base_context):
         mocker.patch(
-            "testbench_ai_service.utils.usecase.get_test_structure_tree",
+            "testbench_ai_service.utils.agent.get_test_structure_tree",
             return_value=_Tree(_Root(_Tab(_Locker("user1")), "tab")),
         )
         assert check_test_case_set_is_locked(MagicMock(), base_context, "uid1", "tab") is False
 
     def test_unlocked_tab_returns_false(self, mocker, base_context):
         mocker.patch(
-            "testbench_ai_service.utils.usecase.get_test_structure_tree",
+            "testbench_ai_service.utils.agent.get_test_structure_tree",
             return_value=_Tree(_Root(_Tab(locker=None), "tab")),
         )
         assert check_test_case_set_is_locked(MagicMock(), base_context, "uid1", "tab") is False
 
     def test_nonexistent_tab_attribute_returns_false(self, mocker, base_context):
         mocker.patch(
-            "testbench_ai_service.utils.usecase.get_test_structure_tree",
+            "testbench_ai_service.utils.agent.get_test_structure_tree",
             return_value=_Tree(_Root(_Tab(), "tab")),
         )
         assert (
@@ -128,7 +128,7 @@ class TestCheckTestCaseSetIsLocked:
         mock_response.status_code = 403
         mock_response.json.return_value = {"message": "Forbidden"}
         mocker.patch(
-            "testbench_ai_service.utils.usecase.get_test_structure_tree",
+            "testbench_ai_service.utils.agent.get_test_structure_tree",
             side_effect=requests.exceptions.HTTPError("Forbidden", response=mock_response),
         )
 
@@ -142,7 +142,7 @@ class TestCheckTestCaseSetIsLocked:
 
     def test_connection_error_is_converted_to_502(self, mocker):
         mocker.patch(
-            "testbench_ai_service.utils.usecase.get_test_structure_tree",
+            "testbench_ai_service.utils.agent.get_test_structure_tree",
             side_effect=requests.exceptions.ConnectionError("Connection refused"),
         )
 
@@ -160,7 +160,7 @@ class TestBuildExecutionContextSessionToken:
 
     def test_builds_context_with_resolved_fields(self, resolved_mocks, base_request):
         ctx = build_execution_context(
-            "test_case_set_reviews", base_request, MagicMock(), MagicMock(), _session_auth()
+            "test_case_set_reviewer", base_request, MagicMock(), MagicMock(), _session_auth()
         )
 
         assert ctx.user_key == "U1"
@@ -192,7 +192,7 @@ class TestBuildExecutionContextSessionToken:
 
     def test_unknown_project_raises_http_404(self, mocker, base_request):
         mocker.patch(
-            "testbench_ai_service.utils.usecase.get_project_name",
+            "testbench_ai_service.utils.agent.get_project_name",
             side_effect=ValueError("Project not found"),
         )
 
