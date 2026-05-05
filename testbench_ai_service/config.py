@@ -137,6 +137,14 @@ class AppConfig(BaseModel):
         "https://localhost:9443/api/",
         description="Base URL of the TestBench REST API server",
     )
+    tb_ssl_verify: bool = Field(
+        True,
+        description="Verify the SSL/TLS certificate of the TestBench server. Set to False to disable verification (insecure).",
+    )
+    tb_ssl_ca_bundle: str | None = Field(
+        default=None,
+        description="Path to a CA bundle file used to verify the TestBench server certificate. When set, takes precedence over tb_ssl_verify.",
+    )
     host: str = Field(
         DEFAULT_HOST,
         description="Hostname or IP address to run the service on",
@@ -178,7 +186,7 @@ class AppConfig(BaseModel):
         validate_tb_server_url(tb_server_url)
         return tb_server_url
 
-    @field_validator("ssl_cert", "ssl_key", "ssl_ca_cert")
+    @field_validator("ssl_cert", "ssl_key", "ssl_ca_cert", "tb_ssl_ca_bundle")
     @classmethod
     def validate_ssl_files_exist(cls, v: str | None) -> str | None:
         """Validate that SSL certificate files exist if provided."""

@@ -7,7 +7,8 @@
   default_variant: "Full Description"
   variants:
     - name: "Full Description"
-      description: "Erstellt eine vollständige Beschreibung mit Testziel, Prüfungen und einer Zusammenfassung je Testfall."
+      description: "Erstellt eine vollständige Beschreibung mit Testziel, Prüfungen
+        und einer Zusammenfassung je Testfall."
       model: "gpt-5.4"
       blocks:
         - role: "system"
@@ -83,13 +84,14 @@
             - {Testfall 2}
             ...
             ```
-            
+
             - entferne Leerzeichen und Zeilenumbrüche vor dem Text
             - Ändere keine Eigennamen, Testschrittnamen, Parameternamen, Parameterwerte, Werte etc. aus dem Input.
             </output_format>
-    
+
     - name: "Short Description"
-      description: "Erstellt eine kompakte Beschreibung, die ausschließlich das Testziel in einem Satz beschreibt."
+      description: "Erstellt eine kompakte Beschreibung, die ausschließlich das
+        Testziel in einem Satz beschreibt."
       model: "gpt-5.1"
       blocks:
         - role: "system"
@@ -156,7 +158,7 @@
             {Testziel} ("Dieser Testfallsatz prüft ...")
             ...
             ```
-            
+
             - entferne Leerzeichen und Zeilenumbrüche vor dem Text
             - Ändere keine Eigennamen, Testschrittnamen, Parameternamen, Parameterwerte, Werte etc. aus dem Input.
 

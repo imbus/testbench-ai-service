@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from collections.abc import Generator
+from dataclasses import dataclass, field
 from enum import Enum
 
 import requests
@@ -24,6 +25,7 @@ class AuthInfo:
     auth_type: AuthType
     token: str
     user_key: str
+    conn: TBConnection | None = field(default=None, hash=False, compare=False)
 
 
 _session_token_scheme = APIKeyHeader(
@@ -58,12 +60,12 @@ def _is_jwt(token: str) -> bool:
         return False
 
 
-def _validate_token(server_url: str, token: str) -> str:
-    """Validate *token* against TestBench and return the authenticated user key.
+def _validate_token(server_url: str, token: str, verify: bool | str) -> tuple[str, TBConnection]:
+    """Validate *token* against TestBench and return the user key and open connection.
 
-    Opens a short-lived connection exclusively for validation so that the
-    result (the user key) can be cached in ``AuthInfo`` and reused by
-    downstream code without making a second API call.
+    The returned connection is intentionally left open so it can be reused for
+    the remainder of the request.  The caller is responsible for closing it.
+    On error the connection is closed before re-raising.
 
     Raises:
         HTTPException 401: Token is rejected by TestBench.
@@ -71,34 +73,41 @@ def _validate_token(server_url: str, token: str) -> str:
     """
     conn: TBConnection | None = None
     try:
-        conn = TBConnection(server_url, verify=False, sessionToken=token)
-        return get_user_key(conn)
+        conn = TBConnection(server_url, verify=verify, sessionToken=token)
+        user_key = get_user_key(conn)
+        return user_key, conn
     except requests.exceptions.HTTPError as e:
         logger.warning("Invalid authorization token")
+        if conn is not None:
+            conn.close()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization token"
         ) from e
     except requests.exceptions.ConnectionError as e:
         logger.error("Could not connect to TestBench server: %s", e)
+        if conn is not None:
+            conn.close()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Could not connect to TestBench server: {e!s}",
         ) from e
-    finally:
-        if conn is not None:
-            conn.close()
 
 
 def get_auth_info(
     request: Request,
     session_token: str = Security(_session_token_scheme),
     jwt_token: str = Security(_jwt_token_scheme),
-) -> AuthInfo:
-    """FastAPI dependency: validate the Authorization header and return auth context.
+) -> Generator[AuthInfo, None, None]:
+    """FastAPI dependency: validate the Authorization header and yield auth context.
 
     Both ``session_token`` and ``jwt_token`` read the same ``Authorization`` header; the
     different scheme names exist only for OpenAPI documentation.  Token type is
     auto-detected by inspecting whether the value is a well-formed JWT.
+
+    The TestBench connection opened during token validation is kept alive and
+    attached to ``AuthInfo.conn`` for the duration of the request.  It is closed
+    in the ``finally`` block after the response has been sent, regardless of
+    whether the request succeeded or failed.
 
     FastAPI caches this dependency's result for the entire request scope, so
     every other dependency that declares ``Depends(get_auth_info)`` — including
@@ -120,8 +129,12 @@ def get_auth_info(
     auth_type = AuthType.JWT_TOKEN if _is_jwt(token) else AuthType.SESSION_TOKEN
     logger.debug("Authenticating via %s", auth_type.value)
 
-    user_key = _validate_token(config.tb_server_url, token)
-    return AuthInfo(auth_type=auth_type, token=token, user_key=user_key)
+    verify: bool | str = config.tb_ssl_ca_bundle or config.tb_ssl_verify
+    user_key, conn = _validate_token(config.tb_server_url, token, verify)
+    try:
+        yield AuthInfo(auth_type=auth_type, token=token, user_key=user_key, conn=conn)
+    finally:
+        conn.close()
 
 
 def validate_auth_token(auth_info: AuthInfo = Depends(get_auth_info)) -> AuthInfo:
