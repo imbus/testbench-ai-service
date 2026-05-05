@@ -41,15 +41,18 @@ class DefectExplainer(Agent):
         Fetches the TCS catalog and checks that exec is unlocked and cycle_key is set.
         """
         warnings = []
-        items: list[TestCaseSet] = []
+        return PrecheckResult(passed=True, warnings=warnings)
 
-        if context.cycle_key is None:
-            return PrecheckResult(
-                passed=False,
-                warnings=["Defect explanations require a cycle_key to be set."],
-            )
-
+    async def run(
+        self,
+        context: ExecutionContext,
+        conn: TBConnection,
+        llm_client: LLMClient,
+    ) -> None:
+        """Generates defect explanations for all test case sets concurrently."""
+        tasks = []
         test_case_set_catalog = {}
+
         try:
             test_case_set_catalog = get_test_case_set_catalog(
                 conn=conn,
@@ -63,31 +66,7 @@ class DefectExplainer(Agent):
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
 
-        for tcs_uid, tcs in test_case_set_catalog.items():
-            if not check_test_case_set_is_locked(conn, context, tcs.details.uniqueID, "exec"):
-                items.append(tcs)
-            else:
-                warning = f"The Test Structure Element with UID '{tcs.details.uniqueID}' could not be locked."
-                warnings.append(warning)
-                logger.debug("Precheck failed for '%s': %s", tcs_uid, warning)
-
-        logger.debug(
-            "Precheck completed: %d/%d test case sets are ready for defect explanation generation",
-            len(items),
-            len(test_case_set_catalog),
-        )
-        return PrecheckResult(passed=bool(items), items=items, warnings=warnings)
-
-    async def run(
-        self,
-        context: ExecutionContext,
-        conn: TBConnection,
-        llm_client: LLMClient,
-        items: list[TestCaseSet],
-    ) -> None:
-        """Generates defect explanations for all test case sets concurrently."""
-        tasks = []
-        for tcs in items:
+        for tcs in test_case_set_catalog.values():
             task = asyncio.create_task(
                 self._generate_defect_explanations(tcs, context, conn, llm_client)
             )

@@ -159,7 +159,6 @@ async def trigger_agent_execution(
         context=context,
         conn=conn,
         llm_factory=llm_factory,
-        items=precheck_result.items,
     )
     logger.debug("Scheduled background task for agent '%s'", agent_key)
 

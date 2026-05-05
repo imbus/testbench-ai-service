@@ -42,7 +42,6 @@ class Agent(ABC):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        items: list,
     ) -> None:
         """
         Executes the agent for all items that passed ``precheck()``.

@@ -117,12 +117,11 @@ class TestTestCaseSetDescriberRun(unittest.IsolatedAsyncioTestCase):
         context = _make_context()
         conn = MagicMock()
         llm_client = MagicMock()
-        items = [_make_tcs("TCS1"), _make_tcs("TCS2")]
 
         with patch.object(
             self.service, "_generate_test_case_set_description", new_callable=AsyncMock
         ) as mock_generate:
-            await self.service.run(context, conn, llm_client, items)
+            await self.service.run(context, conn, llm_client)
 
         self.assertEqual(mock_generate.await_count, 2)
 
@@ -134,7 +133,7 @@ class TestTestCaseSetDescriberRun(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             self.service, "_generate_test_case_set_description", new_callable=AsyncMock
         ) as mock_generate:
-            await self.service.run(context, conn, llm_client, [])
+            await self.service.run(context, conn, llm_client)
 
         mock_generate.assert_not_awaited()
 
