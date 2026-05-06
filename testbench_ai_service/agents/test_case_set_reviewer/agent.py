@@ -1,4 +1,5 @@
 import asyncio
+from time import sleep
 from typing import Any, ClassVar
 
 import requests
@@ -24,10 +25,11 @@ from testbench_ai_service.models.agent import (
     PrecheckResult,
 )
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.testbench import ProjectRole, SpecStatus
 from testbench_ai_service.utils.agent import check_test_case_set_is_locked
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.string_processor import extract_text_from_html_body
-from testbench_ai_service.utils.testbench import get_test_case_set_catalog
+from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
 from testbench_ai_service.utils.testbench_helpers import (
     get_parameter_combinations_as_string,
 )
@@ -52,7 +54,31 @@ class TestCaseSetReviewer(Agent):
         Fetches the test case set catalog and checks that each spec tab is unlocked.
         """
         warnings = []
-        return PrecheckResult(passed=True, warnings=warnings)
+        project_roles = get_project_roles(conn, context.project_key)
+        if context.element_type != "TESTCASESET":
+            warnings.append("The selected element must be a TestCaseSet.")
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        test_case_set = conn.get_project_test_case_set(context.project_key, context.tree_root_key)
+        _sufficient_roles = {
+            ProjectRole.TestDesigner,
+            ProjectRole.TestManager,
+        }
+
+        if check_test_case_set_is_locked(conn, context, context.root_uid, "spec"):
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        if _sufficient_roles.intersection(project_roles):
+            return PrecheckResult(passed=True, warnings=warnings)
+
+        if ProjectRole.Tester in project_roles:
+            spec = test_case_set.get("spec") or {}
+            is_in_review = spec.get("status", "") == SpecStatus.InReview.value
+            is_current_reviewer = (spec.get("reviewer") or {}).get("key", "") == context.user_key
+            if is_in_review and is_current_reviewer:
+                return PrecheckResult(passed=True, warnings=warnings)
+
+        return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(
         self,
