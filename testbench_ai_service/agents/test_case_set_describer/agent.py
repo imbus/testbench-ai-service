@@ -22,9 +22,10 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
+from testbench_ai_service.models.testbench import ProjectRole, SpecStatus
 from testbench_ai_service.utils.agent import check_test_case_set_is_locked
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
-from testbench_ai_service.utils.testbench import get_test_case_set_catalog
+from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
 from testbench_ai_service.utils.testbench_helpers import get_parameter_combinations_as_string
 
 
@@ -46,7 +47,27 @@ class TestCaseSetDescriber(Agent):
         Fetches the test case set catalog and checks that each spec tab is unlocked.
         """
         warnings = []
-        return PrecheckResult(passed=True, warnings=warnings)
+        project_roles = get_project_roles(conn, context.project_key)
+        if context.element_type != "TESTCASESET":
+            warnings.append("The selected element must be a TestCaseSet.")
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        test_case_set = conn.get_project_test_case_set(context.project_key, context.tree_root_key)
+        spec = test_case_set.get("spec") or {}
+        _sufficient_roles = {ProjectRole.TestManager}
+
+        if check_test_case_set_is_locked(conn, context, context.root_uid, "spec"):
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        if _sufficient_roles.intersection(project_roles):
+            return PrecheckResult(passed=True, warnings=warnings)
+
+        if ProjectRole.TestDesigner in project_roles:
+            responsible = (spec.get("responsible") or {}).get("key")
+            if responsible == context.user_key or responsible is None:
+                return PrecheckResult(passed=True, warnings=warnings)
+
+        return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(
         self,
