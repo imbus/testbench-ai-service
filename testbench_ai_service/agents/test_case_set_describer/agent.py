@@ -63,10 +63,12 @@ class TestCaseSetDescriber(Agent):
             PermissionWithCode.ModifySpecManagementInfo,
             PermissionWithCode.ReadTestThemeDetails,
         }
+
         if auth_info.auth_type == AuthType.JWT_TOKEN:
             token_info = decode(auth_info.token, options={"verify_signature": False})
             token_perms = token_info.get("perms", [])
             if not has_required_permissions(requierd_permissions, token_perms):
+                warnings.append("Insufficient permissions in JWT token.")
                 return PrecheckResult(passed=False, warnings=warnings)
 
         if context.element_type == "TESTCASESET":
@@ -82,6 +84,7 @@ class TestCaseSetDescriber(Agent):
         _sufficient_roles = {ProjectRole.TestManager}
 
         if check_test_case_set_is_locked(conn, context, context.root_uid, "spec"):
+            warnings.append("The test case set specification is currently locked.")
             return PrecheckResult(passed=False, warnings=warnings)
 
         if _sufficient_roles.intersection(project_roles):
@@ -91,6 +94,7 @@ class TestCaseSetDescriber(Agent):
             if responsible == context.user_key or responsible is None:
                 return PrecheckResult(passed=True, warnings=warnings)
 
+        warnings.append("Insufficient project role to generate a description.")
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(

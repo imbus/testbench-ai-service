@@ -147,9 +147,19 @@ async def trigger_agent_execution(
     logger.debug("Precheck result for agent '%s': %s", agent_key, precheck_result)
 
     if not precheck_result.passed:
-        logger.debug("Conflict: The precheck failed for agent '%s'.", agent_key)
+        logger.debug(
+            "Conflict: The precheck failed for agent '%s'.",
+            agent_key,
+        )
+        warnings_text = "; ".join(precheck_result.warnings)
+        detail = (
+            f"Conflict: The precheck failed. {warnings_text}"
+            if warnings_text
+            else "Conflict: The precheck failed."
+        )
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Conflict: The precheck failed."
+            status_code=status.HTTP_409_CONFLICT,
+            detail=detail,
         )
 
     background_tasks.add_task(

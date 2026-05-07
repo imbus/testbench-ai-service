@@ -71,6 +71,7 @@ class DefectExplainer(Agent):
             token_info = decode(auth_info.token, options={"verify_signature": False})
             token_perms = token_info.get("perms", [])
             if not has_required_permissions(requierd_permissions, token_perms):
+                warnings.append("Insufficient permissions in JWT token.")
                 return PrecheckResult(passed=False, warnings=warnings)
 
         if context.element_type not in ["TESTCASESET", "TESTTHEME"]:
@@ -82,17 +83,21 @@ class DefectExplainer(Agent):
         _sufficient_roles = {ProjectRole.TestManager, ProjectRole.Tester}
 
         if test_structure_tree.root.exec.verdict != VerdictStatus.ToVerify:
+            warnings.append("The test case verdict must be 'To Verify'.")
             return PrecheckResult(passed=False, warnings=warnings)
 
         if test_structure_tree.root.exec.status != ActivityStatus.Performed:
+            warnings.append("The test case execution status must be 'Performed'.")
             return PrecheckResult(passed=False, warnings=warnings)
 
         if is_test_case_locked_by_user(test_structure_tree, context, "exec"):
+            warnings.append("The test case execution is currently locked.")
             return PrecheckResult(passed=False, warnings=warnings)
 
         if _sufficient_roles.intersection(project_roles):
             return PrecheckResult(passed=True, warnings=warnings)
 
+        warnings.append("Insufficient project role to explain defects.")
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(

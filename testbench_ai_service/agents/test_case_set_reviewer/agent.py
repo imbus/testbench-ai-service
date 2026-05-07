@@ -76,6 +76,7 @@ class TestCaseSetReviewer(Agent):
             token_info = decode(auth_info.token, options={"verify_signature": False})
             token_perms = token_info.get("perms", [])
             if not has_required_permissions(requierd_permissions, token_perms):
+                warnings.append("Insufficient permissions in JWT token.")
                 return PrecheckResult(passed=False, warnings=warnings)
 
         if context.element_type == "TESTCASESET":
@@ -91,11 +92,12 @@ class TestCaseSetReviewer(Agent):
         _sufficient_roles = {ProjectRole.TestManager}
 
         if check_test_case_set_is_locked(conn, context, context.root_uid, "spec"):
+            warnings.append("The test case set specification is currently locked.")
             return PrecheckResult(passed=False, warnings=warnings)
 
         if _sufficient_roles.intersection(project_roles):
             return PrecheckResult(passed=True, warnings=warnings)
-        if ProjectRole.Tester in project_roles:
+        if ProjectRole.TestDesigner in project_roles:
             responsible = (spec.get("responsible") or {}).get("key")
             is_responsible = responsible == context.user_key or responsible is None
             if is_responsible:
@@ -106,6 +108,7 @@ class TestCaseSetReviewer(Agent):
             if is_in_review and is_current_reviewer:
                 return PrecheckResult(passed=True, warnings=warnings)
 
+        warnings.append("Insufficient project role to perform a review.")
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(
