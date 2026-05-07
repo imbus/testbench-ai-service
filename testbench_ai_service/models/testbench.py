@@ -3,6 +3,60 @@ from enum import Enum
 from pydantic import BaseModel, Field
 
 
+class PermissionWithCode(int, Enum):
+    AccessSecuredData = 1
+    ReadUserDetails = 2
+    ReadUserMemberships = 3
+    SynchronizeUsers = 4
+    ReadUserSessions = 5
+    DeleteUserSession = 6
+    ModifyUserData = 7
+    DeleteUserAccount = 8
+    RestrictProjectUDFs = 9
+    ReadProjectDetails = 10
+    ReadProjectMembers = 11
+    ReadProjectHierarchy = 12
+    ModifyProjectDetails = 13
+    ModifyUserRolesInProject = 14
+    ReadProjectExportOverRMI = 15
+    ReadTovReportOverRMI = 16
+    ReadCycleReportOverRMI = 17
+    ReadTovReport = 18
+    ReadCycleReport = 19
+    DownloadReportFile = 20
+    ReadProjectUDFs = 21
+    ModifyProjectUDFs = 22
+    ReadProjectDefectsAndTheirAssignments = 23
+    ReadTestThemeStatusDistribution = 24
+    ReadTovRequirements = 25
+    ReadCycleRequirements = 26
+    ReadTestThemeTree = 27
+    ReadTestThemeDetails = 28
+    ReadTestCaseSetDetails = 29
+    ReadTestCaseDetails = 30
+    ReadReportingJobDetails = 31
+    ReadExecutionImportingJobDetails = 32
+    ReadDefectsMetricDistribution = 33
+    ReadTestLabels = 34
+    ModifyTestLabels = 35
+    ImportExecutionResults = 36
+    ReadTestElements = 37
+    ModifyTestElements = 38
+    ModifySpecifications = 39
+    ModifyGlobalTestLabels = 40
+    PrivatizeGlobalTestLabels = 41
+    ReadCompleteProjectsList = 42
+    ReadOwnProjectsList = 43
+    ReadInvisibleProjectContent = 44
+    UnlockForeignTestElements = 45
+    UnlockForeignSpecs = 46
+    ModifySpecManagementInfo = 47
+    ModifySpecPriorityAndDueDate = 48
+    ReadCompleteUsersList = 49
+    ReadActiveUsersList = 50
+    ReadOwnUserDetails = 51
+
+
 class Priority(str, Enum):
     Undefined = "Undefined"
     Low = "Low"

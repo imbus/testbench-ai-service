@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any, ClassVar
 
+from jwt import decode
 import requests
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -14,7 +15,7 @@ from testbench_ai_service.agents.test_case_set_reviewer.utils import (
     patch_review_result_for_test_structure_element,
     patch_review_started_for_test_structure_element,
 )
-from testbench_ai_service.auth import AuthInfo
+from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
@@ -25,9 +26,10 @@ from testbench_ai_service.models.agent import (
     PrecheckResult,
 )
 from testbench_ai_service.models.language import LanguageOption
-from testbench_ai_service.models.testbench import ProjectRole, SpecStatus
+from testbench_ai_service.models.testbench import PermissionWithCode, ProjectRole, SpecStatus
 from testbench_ai_service.utils.agent import (
     check_test_case_set_is_locked,
+    has_required_permissions,
 )
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.string_processor import extract_text_from_html_body
@@ -57,6 +59,26 @@ class TestCaseSetReviewer(Agent):
         Fetches the test case set catalog and checks that each spec tab is unlocked.
         """
         warnings = []
+        requierd_permissions = {
+            PermissionWithCode.AccessSecuredData,
+            PermissionWithCode.ReadOwnUserDetails,
+            PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadCycleReport,
+            PermissionWithCode.ReadReportingJobDetails,
+            PermissionWithCode.DownloadReportFile,
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ModifySpecifications,
+            PermissionWithCode.ReadTestThemeDetails,
+        }
+
+        if auth_info.auth_type == AuthType.JWT_TOKEN:
+            token_info = decode(auth_info.token, options={"verify_signature": False})
+            token_perms = token_info.get("perms", [])
+            if not has_required_permissions(requierd_permissions, token_perms):
+                return PrecheckResult(passed=False, warnings=warnings)
+
+        print("here")
 
         if context.element_type == "TESTCASESET":
             test_case_set = conn.get_project_test_case_set(context.project_key, context.root_key)
@@ -78,7 +100,7 @@ class TestCaseSetReviewer(Agent):
         if _sufficient_roles.intersection(project_roles):
             return PrecheckResult(passed=True, warnings=warnings)
 
-        if ProjectRole.Tester in project_roles:
+        if ProjectRole.Tester in project_roles or ProjectRole.TestProgrammer in project_roles:
             spec = test_case_set.get("spec") or {}
             is_in_review = spec.get("status", "") == SpecStatus.InReview.value
             is_current_reviewer = (spec.get("reviewer") or {}).get("key", "") == context.user_key

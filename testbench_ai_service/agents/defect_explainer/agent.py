@@ -2,6 +2,7 @@ import asyncio
 from typing import Any, ClassVar
 
 import requests
+from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -14,15 +15,21 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     get_test_case_set_as_string,
     update_description,
 )
-from testbench_ai_service.auth import AuthInfo
+from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext, PrecheckResult
-from testbench_ai_service.models.testbench import ActivityStatus, ProjectRole, VerdictStatus
+from testbench_ai_service.models.testbench import (
+    ActivityStatus,
+    PermissionWithCode,
+    ProjectRole,
+    VerdictStatus,
+)
 from testbench_ai_service.utils.agent import (
     fetch_test_structure_tree,
+    has_required_permissions,
     is_test_case_locked_by_user,
 )
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
@@ -47,6 +54,24 @@ class DefectExplainer(Agent):
         Fetches the TCS catalog and checks that exec is unlocked and cycle_key is set.
         """
         warnings = []
+        requierd_permissions = {
+            PermissionWithCode.AccessSecuredData,
+            PermissionWithCode.ReadOwnUserDetails,
+            PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadCycleReport,
+            PermissionWithCode.ReadReportingJobDetails,
+            PermissionWithCode.DownloadReportFile,
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ModifySpecifications,
+            PermissionWithCode.ReadTestThemeDetails,
+        }
+
+        if auth_info.auth_type == AuthType.JWT_TOKEN:
+            token_info = decode(auth_info.token, options={"verify_signature": False})
+            token_perms = token_info.get("perms", [])
+            if not has_required_permissions(requierd_permissions, token_perms):
+                return PrecheckResult(passed=False, warnings=warnings)
 
         if context.element_type not in ["TESTCASESET", "TESTTHEME"]:
             warnings.append("The selected element must be a TestCaseSet.")
@@ -68,7 +93,6 @@ class DefectExplainer(Agent):
         if _sufficient_roles.intersection(project_roles):
             return PrecheckResult(passed=True, warnings=warnings)
 
-        # TODO: Tester must be assigned the TestManager or Tester role in the project to use this agent.
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(

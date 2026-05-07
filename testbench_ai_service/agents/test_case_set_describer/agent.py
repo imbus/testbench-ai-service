@@ -24,8 +24,8 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
-from testbench_ai_service.models.testbench import ProjectRole
-from testbench_ai_service.utils.agent import check_test_case_set_is_locked
+from testbench_ai_service.models.testbench import PermissionWithCode, ProjectRole
+from testbench_ai_service.utils.agent import check_test_case_set_is_locked, has_required_permissions
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
 from testbench_ai_service.utils.testbench_helpers import get_parameter_combinations_as_string
@@ -50,9 +50,24 @@ class TestCaseSetDescriber(Agent):
         Fetches the test case set catalog and checks that each spec tab is unlocked.
         """
         warnings = []
+        requierd_permissions = {
+            PermissionWithCode.AccessSecuredData,
+            PermissionWithCode.ReadOwnUserDetails,
+            PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadCycleReport,
+            PermissionWithCode.ReadReportingJobDetails,
+            PermissionWithCode.DownloadReportFile,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ModifySpecifications,
+            PermissionWithCode.ModifySpecManagementInfo,
+            PermissionWithCode.ReadTestThemeDetails,
+        }
         if auth_info.auth_type == AuthType.JWT_TOKEN:
             token_info = decode(auth_info.token, options={"verify_signature": False})
-            print(token_info.get("perms", []))
+            token_perms = token_info.get("perms", [])
+            if not has_required_permissions(requierd_permissions, token_perms):
+                return PrecheckResult(passed=False, warnings=warnings)
 
         if context.element_type == "TESTCASESET":
             test_case_set = conn.get_project_test_case_set(context.project_key, context.root_key)

@@ -9,6 +9,7 @@ from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext, TriggerAgentRequest
 from testbench_ai_service.models.testbench import (
+    PermissionWithCode,
     TestStructureItemExecution,
     TestStructureItemSpecification,
     TestStructureTree,
@@ -177,6 +178,14 @@ def is_test_case_locked_by_user(
     if tab_object is not None and tab_object.locker is not None:
         return tab_object.locker.key != context.user_key
     return False
+
+
+def has_required_permissions(
+    required_permissions: set[PermissionWithCode],
+    token_perms: list[int],
+) -> bool:
+    token_perm_set = set(token_perms)
+    return all(perm.value in token_perm_set for perm in required_permissions)
 
 
 def fetch_test_structure_tree(conn, context, uniqueID):
