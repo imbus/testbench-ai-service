@@ -47,7 +47,7 @@ class ExecutionContext(BaseModel):
     tov_key: str
     cycle_key: str | None = None
     root_uid: str | None = None
-    tree_root_key: str | None = None
+    root_key: str | None = None
     element_type: str | None = None
     tree_type: str | None = None
     filtering: FilteringOptions | None = None

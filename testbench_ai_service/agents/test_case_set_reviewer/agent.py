@@ -1,5 +1,4 @@
 import asyncio
-from time import sleep
 from typing import Any, ClassVar
 
 import requests
@@ -15,6 +14,7 @@ from testbench_ai_service.agents.test_case_set_reviewer.utils import (
     patch_review_result_for_test_structure_element,
     patch_review_started_for_test_structure_element,
 )
+from testbench_ai_service.auth import AuthInfo
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
@@ -26,7 +26,9 @@ from testbench_ai_service.models.agent import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import ProjectRole, SpecStatus
-from testbench_ai_service.utils.agent import check_test_case_set_is_locked
+from testbench_ai_service.utils.agent import (
+    check_test_case_set_is_locked,
+)
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.string_processor import extract_text_from_html_body
 from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
@@ -49,17 +51,22 @@ class TestCaseSetReviewer(Agent):
         self,
         context: ExecutionContext,
         conn: TBConnection,
+        auth_info: AuthInfo,
     ) -> PrecheckResult[TestCaseSet]:
         """
         Fetches the test case set catalog and checks that each spec tab is unlocked.
         """
         warnings = []
-        project_roles = get_project_roles(conn, context.project_key)
-        if context.element_type != "TESTCASESET":
+
+        if context.element_type == "TESTCASESET":
+            test_case_set = conn.get_project_test_case_set(context.project_key, context.root_key)
+        elif context.element_type == "TESTTHEME":
+            test_case_set = conn.get_project_test_theme(context.project_key, context.root_key)
+        else:
             warnings.append("The selected element must be a TestCaseSet.")
             return PrecheckResult(passed=False, warnings=warnings)
 
-        test_case_set = conn.get_project_test_case_set(context.project_key, context.tree_root_key)
+        project_roles = get_project_roles(conn, context.project_key)
         _sufficient_roles = {
             ProjectRole.TestDesigner,
             ProjectRole.TestManager,

@@ -2,6 +2,7 @@ import asyncio
 from typing import ClassVar
 
 import requests
+from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -13,6 +14,7 @@ from testbench_ai_service.agents.test_case_set_describer.utils import (
     patch_generated_description_for_test_structure_element,
     patch_previous_description_for_test_structure_element,
 )
+from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
@@ -22,7 +24,7 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
-from testbench_ai_service.models.testbench import ProjectRole, SpecStatus
+from testbench_ai_service.models.testbench import ProjectRole
 from testbench_ai_service.utils.agent import check_test_case_set_is_locked
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
@@ -42,17 +44,25 @@ class TestCaseSetDescriber(Agent):
         self,
         context: ExecutionContext,
         conn: TBConnection,
+        auth_info: AuthInfo,
     ) -> PrecheckResult[TestCaseSet]:
         """
         Fetches the test case set catalog and checks that each spec tab is unlocked.
         """
         warnings = []
-        project_roles = get_project_roles(conn, context.project_key)
-        if context.element_type != "TESTCASESET":
+        if auth_info.auth_type == AuthType.JWT_TOKEN:
+            token_info = decode(auth_info.token, options={"verify_signature": False})
+            print(token_info.get("perms", []))
+
+        if context.element_type == "TESTCASESET":
+            test_case_set = conn.get_project_test_case_set(context.project_key, context.root_key)
+        elif context.element_type == "TESTTHEME":
+            test_case_set = conn.get_project_test_theme(context.project_key, context.root_key)
+        else:
             warnings.append("The selected element must be a TestCaseSet.")
             return PrecheckResult(passed=False, warnings=warnings)
 
-        test_case_set = conn.get_project_test_case_set(context.project_key, context.tree_root_key)
+        project_roles = get_project_roles(conn, context.project_key)
         spec = test_case_set.get("spec") or {}
         _sufficient_roles = {ProjectRole.TestManager}
 

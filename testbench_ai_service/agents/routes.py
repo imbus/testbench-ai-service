@@ -143,7 +143,7 @@ async def trigger_agent_execution(
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
     agent = load_agent(agent_config)
 
-    precheck_result = await agent.precheck(context, conn)
+    precheck_result = await agent.precheck(context, conn, auth_info)
     logger.debug("Precheck result for agent '%s': %s", agent_key, precheck_result)
 
     if not precheck_result.passed:

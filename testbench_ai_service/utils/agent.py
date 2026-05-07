@@ -11,6 +11,7 @@ from testbench_ai_service.models.agent import ExecutionContext, TriggerAgentRequ
 from testbench_ai_service.models.testbench import (
     TestStructureItemExecution,
     TestStructureItemSpecification,
+    TestStructureTree,
 )
 from testbench_ai_service.utils.config import (
     get_language_from_config,
@@ -121,7 +122,7 @@ def build_execution_context(
         tov_key=tov_key,
         cycle_key=cycle_key,
         root_uid=trigger_request.root_uid,
-        tree_root_key=trigger_request.tree_root_key,
+        root_key=trigger_request.tree_root_key,
         element_type=trigger_request.element_type,
         tree_type=trigger_request.tree_type,
         filtering=trigger_request.filtering,
@@ -162,6 +163,23 @@ def check_test_case_set_is_locked(
     Returns True if the given test structure element tab is locked by a *different* user.
     Returns False if it is free or locked by the current user.
     """
+    test_structure_tree = fetch_test_structure_tree(conn, context, uniqueID)
+
+    return is_test_case_locked_by_user(test_structure_tree, context, tab)
+
+
+def is_test_case_locked_by_user(
+    test_structure_tree: TestStructureTree, context: ExecutionContext, tab: str
+):
+    tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(  # type: ignore[assignment]
+        test_structure_tree.root, tab, None
+    )
+    if tab_object is not None and tab_object.locker is not None:
+        return tab_object.locker.key != context.user_key
+    return False
+
+
+def fetch_test_structure_tree(conn, context, uniqueID):
     try:
         test_structure_tree = get_test_structure_tree(
             conn=conn,
@@ -180,9 +198,4 @@ def check_test_case_set_is_locked(
             detail=f"Could not connect to TestBench server: {e!s}",
         ) from e
 
-    tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(  # type: ignore[assignment]
-        test_structure_tree.root, tab, None
-    )
-    if tab_object is not None and tab_object.locker is not None:
-        return tab_object.locker.key != context.user_key
-    return False
+    return test_structure_tree
