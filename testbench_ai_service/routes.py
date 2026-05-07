@@ -46,19 +46,21 @@ async def redirect_to_docs(request: Request):
 async def get_agents(
     app_config: AppConfig = Depends(get_app_config),
     conn: TBConnection = Depends(get_tb_connection),
-    enabled: bool | None = Query(None, description="Filter by enabled status"),
+    keys: list[str] | None = Query(None, description="Filter by agent keys"),
     project_key: str | None = Query(None, description="Filter by project key"),
+    enabled: bool | None = Query(None, description="Filter by enabled status"),
 ) -> list[AgentDetailsResponse]:
     project_name = _resolve_project_name(conn, project_key)
-    agents = [
-        AgentDetailsResponse(
-            key=agent_key, **get_agent_config(agent_key, app_config, project_name).model_dump()
-        )
-        for agent_key in app_config.agents
-    ]
 
-    if enabled is not None:
-        agents = [a for a in agents if a.enabled == enabled]
+    agents = []
+    agent_keys = keys if keys is not None else app_config.agents.keys()
+    for key in agent_keys:
+        if key not in app_config.agents:
+            continue
+        config = get_agent_config(key, app_config, project_name)
+        if enabled is not None and config.enabled != enabled:
+            continue
+        agents.append(AgentDetailsResponse(key=key, **config.model_dump()))
 
     return agents
 

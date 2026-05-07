@@ -110,30 +110,6 @@ def build_execution_context(
         logger.info("Resource not found in TestBench Server: %s", e)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
-    language, llm_config, prompt_config = _build_agent_execution_configs(
-        agent_key, trigger_request, app_config, project_name
-    )
-
-    return ExecutionContext(
-        user_key=auth_info.user_key,
-        project_name=project_name,
-        project_key=project_key,
-        tov_key=tov_key,
-        cycle_key=cycle_key,
-        root_uid=trigger_request.root_uid,
-        filtering=trigger_request.filtering,
-        language=language,
-        llm_config=llm_config,
-        prompt_config=prompt_config,
-    )
-
-
-def _build_agent_execution_configs(
-    agent_key: str,
-    trigger_request: TriggerAgentRequest,
-    app_config: AppConfig,
-    project_name: str,
-) -> tuple:
     language = trigger_request.language or get_language_from_config(app_config, project_name)
 
     llm_config = get_llm_config(
@@ -149,7 +125,21 @@ def _build_agent_execution_configs(
         language=language,
     )
 
-    return language, llm_config, prompt_config
+    return ExecutionContext(
+        user_key=auth_info.user_key,
+        project_name=project_name,
+        project_key=project_key,
+        tov_key=tov_key,
+        cycle_key=cycle_key,
+        root_uid=trigger_request.root_uid,
+        root_key=trigger_request.root_key,
+        element_type=trigger_request.element_type,
+        tree_type=trigger_request.tree_type,
+        filtering=trigger_request.filtering,
+        language=language,
+        llm_config=llm_config,
+        prompt_config=prompt_config,
+    )
 
 
 def check_test_case_set_is_locked(
