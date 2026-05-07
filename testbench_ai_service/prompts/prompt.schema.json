@@ -18,7 +18,7 @@
         "type": "array",
         "items": {
           "type": "object",
-          "required": ["name", "blocks"],
+          "required": ["name", "messages"],
           "properties": {
             "name": { "type": "string" },
             "description": { "type": "string" },
@@ -55,7 +55,7 @@
                 "additionalProperties": false
               }
             },
-            "blocks": {
+            "messages": {
               "type": "array",
               "items": {
                 "type": "object",

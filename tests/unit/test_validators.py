@@ -148,12 +148,13 @@ class TestValidateYamlToSchema(unittest.TestCase):
             {
                 "name": "Test Item",
                 "description": "desc",
+                "default_model": "ModelA",
                 "default_variant": "default",
                 "variants": [
                     {
                         "name": "Variant 1",
                         "model": "ModelA",
-                        "blocks": [{"role": "user", "text": "Hi"}],
+                        "messages": [{"role": "user", "text": "Hi"}],
                     }
                 ],
             }

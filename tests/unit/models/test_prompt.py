@@ -3,44 +3,46 @@ import unittest
 from pydantic import ValidationError
 
 from testbench_ai_service.models.prompt import (
-    Block,
     Message,
+    MessageTemplate,
     Prompt,
     PromptDefinition,
     PromptVariant,
 )
 
 
-class TestBlock(unittest.TestCase):
-    """Tests for the ``Block`` model."""
+class TestMessageTemplate(unittest.TestCase):
+    """Tests for the ``MessageTemplate`` model."""
 
     def test_default_role_is_user(self):
-        block = Block(text="Hello")
-        self.assertEqual(block.role, "user")
+        template = MessageTemplate(text="Hello")
+        self.assertEqual(template.role, "user")
 
     def test_system_role_is_accepted(self):
-        block = Block(role="system", text="You are a helpful assistant.")
-        self.assertEqual(block.role, "system")
+        template = MessageTemplate(role="system", text="You are a helpful assistant.")
+        self.assertEqual(template.role, "system")
 
     def test_invalid_role_raises_validation_error(self):
         with self.assertRaises(ValidationError):
-            Block(role="unknown", text="bad")
+            MessageTemplate(role="unknown", text="bad")
 
 
 class TestPromptVariant(unittest.TestCase):
     """Tests for the ``PromptVariant`` model."""
 
     def test_valid_variant(self):
-        variant = PromptVariant(name="default", model="gpt-4o", blocks=[Block(text="Hello")])
+        variant = PromptVariant(
+            name="default", model="gpt-4o", messages=[MessageTemplate(text="Hello")]
+        )
         self.assertEqual(variant.name, "default")
-        self.assertEqual(len(variant.blocks), 1)
+        self.assertEqual(len(variant.messages), 1)
 
 
 class TestPromptDefinition(unittest.TestCase):
     """Tests for the ``PromptDefinition`` model."""
 
     def _make_variant(self, name="v1"):
-        return PromptVariant(name=name, model="gpt-4o", blocks=[Block(text="Hi")])
+        return PromptVariant(name=name, model="gpt-4o", messages=[MessageTemplate(text="Hi")])
 
     def test_valid_definition(self):
         defn = PromptDefinition(

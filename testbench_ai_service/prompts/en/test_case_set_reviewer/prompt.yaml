@@ -17,7 +17,7 @@
           description: "Optional glossary of project-specific keyword terms. When provided, test steps are checked against it."
           value_type: "text"
           required: false
-      blocks:
+      messages:
         - role: "user"
           file: "single_block.jinja"
 
@@ -30,7 +30,7 @@
           description: "Optional glossary of project-specific keyword terms. When provided, test steps are checked against it."
           value_type: "text"
           required: false
-      blocks:
+      messages:
         - role: "system"
           file: "separated_roles_system.jinja"
         - role: "user"

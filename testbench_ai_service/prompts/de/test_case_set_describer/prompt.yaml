@@ -9,7 +9,7 @@
     - name: "Full Description"
       description: "Erstellt eine vollständige Beschreibung mit Testziel, Prüfungen und einer Zusammenfassung je Testfall."
       model: "gpt-5.4"
-      blocks:
+      messages:
         - role: "system"
           file: "system.jinja"
         - role: "user"
@@ -17,7 +17,7 @@
     - name: "Short Description"
       description: "Erstellt eine kompakte Beschreibung, die ausschließlich das Testziel in einem Satz beschreibt."
       model: "gpt-5.1"
-      blocks:
+      messages:
         - role: "system"
           file: "system.jinja"
         - role: "user"

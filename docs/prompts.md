@@ -19,7 +19,7 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 │  │  ┌──────────────────────────┐  │ │
 │  │  │  Variant (by name)       │  │ │
 │  │  │  - model: "gpt-4.1"      │  │ │
-│  │  │  - blocks:               │  │ │
+│  │  │  - messages:             │  │ │
 │  │  │    - role: "user"        │  │ │
 │  │  │      text: "..."         │  │ │
 │  │  └──────────────────────────┘  │ │
@@ -34,8 +34,8 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 1. The service loads the YAML file specified in the agent's `prompt.file` config.
 2. It finds the **prompt definition** matching `prompt.name`.
 3. It selects the **variant** matching `prompt.variant` (or the `default_variant`).
-4. Each block is rendered with Jinja2. Content is either an inline `text` string or loaded from an external `file`. Template variables are resolved from two namespaces: `{{ agent.<key> }}` for agent-generated data and `{{ vars.<key> }}` for user-provided values.
-5. Blocks with the same `role` are merged into a single message.
+4. Each message is rendered with Jinja2. Content is either an inline `text` string or loaded from an external `file`. Template variables are resolved from two namespaces: `{{ agent.<key> }}` for agent-generated data and `{{ vars.<key> }}` for user-provided values.
+5. Messages with the same `role` are merged into a single message.
 6. The resulting messages and the variant's `model` (or the definition's `default_model`) are sent to the LLM.
 
 ---
@@ -96,7 +96,7 @@ Each prompt YAML file is a list of prompt definitions:
           description: "Optional glossary of project-specific terms."
           value_type: "text"
           required: false
-      blocks:
+      messages:
         - role: "system"
           text: |                   # inline Jinja2 template
             You are a test analyst.
@@ -105,7 +105,7 @@ Each prompt YAML file is a list of prompt definitions:
 
     - name: "quick-review"
       model: "gpt-4.1-mini"
-      blocks:
+      messages:
         - role: "user"
           text: |
             Review this test case:
@@ -140,11 +140,11 @@ Each block must have **either** `text` (inline template) **or** `file` (path to 
 | `description` | String | Human-readable description. | No |
 | `model` | String | LLM model to use (e.g., `"gpt-4.1"`, `"o3"`). Falls back to `default_model` if not set. | No |
 | `vars` | Object | Declared user-provided variables for this variant (see [Variable declarations](#variable-declarations)). | No |
-| `blocks` | List | Ordered list of content blocks. | Yes |
+| `messages` | List | Ordered list of message blocks. | Yes |
 
-#### Block fields
+#### Message fields
 
-Exactly one of `text` or `file` must be provided per block.
+Exactly one of `text` or `file` must be provided per message.
 
 | Field | Type | Description | Default |
 |-------|------|-------------|---------|
@@ -171,7 +171,7 @@ A JSON Schema for validation is available at `prompts/prompt.schema.json`.
 
 ## Jinja2 variables
 
-Block templates (both inline `text` and external `file`) support [Jinja2](https://jinja.palletsprojects.com/) template syntax. Two separate variable namespaces are available at render time:
+Message templates (both inline `text` and external `file`) support [Jinja2](https://jinja.palletsprojects.com/) template syntax. Two separate variable namespaces are available at render time:
 
 | Namespace | Source | Example |
 |-----------|--------|---------|
@@ -182,7 +182,7 @@ See each agent's documentation for the full list of available `agent.*` variable
 
 **Example:**
 
-Prompt block (inline `text`):
+Prompt message (inline `text`):
 
 ```yaml
 - role: "user"
@@ -242,7 +242,7 @@ Add a new entry to the `variants` list in the YAML file:
   variants:
     - name: "detailed-prompt"
       model: "gpt-4.1"
-      blocks:
+      messages:
         - role: "system"
           text: |
             You are a test analyst.
@@ -251,7 +251,7 @@ Add a new entry to the `variants` list in the YAML file:
 
     - name: "quick-review"
       model: "gpt-4.1-mini"
-      blocks:
+      messages:
         - role: "user"
           text: |
             Review this test case: {{ agent.test_case }}

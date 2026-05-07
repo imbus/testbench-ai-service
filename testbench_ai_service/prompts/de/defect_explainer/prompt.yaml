@@ -15,7 +15,7 @@
           description: "Wenn aktiviert, werden zusätzliche Anweisungen zur Validierung der Ausgabe gegeben (z.B. auf Einhaltung von Formatvorgaben)."
           value_type: "boolean"
           required: false
-      blocks:
+      messages:
         - role: "user"
           file: "single_block.jinja"
     - name: "Separated Roles"
@@ -27,7 +27,7 @@
           description: "Wenn aktiviert, werden zusätzliche Anweisungen zur Validierung der Ausgabe gegeben (z.B. auf Einhaltung von Formatvorgaben)."
           value_type: "boolean"
           required: false
-      blocks:
+      messages:
         - role: "system"
           file: "separated_roles_system.jinja"
         - role: "user"

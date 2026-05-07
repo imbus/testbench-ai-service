@@ -17,7 +17,7 @@
           description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschritte dagegen geprüft."
           value_type: "text"
           required: false
-      blocks:
+      messages:
         - role: "user"
           file: "single_block.jinja"
     - name: "Separated Roles"
@@ -29,7 +29,7 @@
           description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschritte dagegen geprüft."
           value_type: "text"
           required: false
-      blocks:
+      messages:
         - role: "system"
           file: "separated_roles_system.jinja"
         - role: "user"

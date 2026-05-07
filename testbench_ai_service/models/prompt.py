@@ -23,8 +23,8 @@ class PromptVariableDefinition(BaseModel):
         return self
 
 
-class Block(BaseModel):
-    """A content block within a prompt variant.
+class MessageTemplate(BaseModel):
+    """A message template with Jinja2 content, either inline or from an external file.
 
     Exactly one of ``text`` (inline Jinja2 template) or ``file`` (path to an
     external template file, e.g. ``.jinja``, ``.j2``, or ``.md``) must be provided.
@@ -35,9 +35,9 @@ class Block(BaseModel):
     file: str | None = None
 
     @model_validator(mode="after")
-    def validate_content_source(self) -> "Block":
+    def validate_content_source(self) -> "MessageTemplate":
         if self.text is None and self.file is None:
-            raise ValueError("Either 'text' or 'file' must be provided for a block.")
+            raise ValueError("Either 'text' or 'file' must be provided for a message template.")
         if self.text is not None and self.file is not None:
             raise ValueError("Only one of 'text' or 'file' may be provided, not both.")
         return self
@@ -61,13 +61,13 @@ class Block(BaseModel):
 
 
 class PromptVariant(BaseModel):
-    """A variant of a prompt with specific model, variable declarations, and blocks."""
+    """A variant of a prompt with specific model, variable declarations, and messages."""
 
     name: str
     description: str | None = None
     model: str | None = None
     vars: dict[str, PromptVariableDefinition] = {}
-    blocks: list[Block]
+    messages: list[MessageTemplate]
 
 
 class PromptDefinition(BaseModel):

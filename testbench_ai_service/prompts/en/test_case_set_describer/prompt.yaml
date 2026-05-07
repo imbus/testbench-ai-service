@@ -9,7 +9,7 @@
     - name: "Full Description"
       description: "Generates a complete description with test objective, verifications, and a summary of each test case."
       model: "gpt-5.4"
-      blocks:
+      messages:
         - role: "system"
           file: "system.jinja"
         - role: "user"
@@ -17,7 +17,7 @@
     - name: "Short Description"
       description: "Generates a concise one-sentence description stating the test objective only."
       model: "gpt-5.1"
-      blocks:
+      messages:
         - role: "system"
           file: "system.jinja"
         - role: "user"

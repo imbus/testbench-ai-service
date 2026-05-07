@@ -15,7 +15,7 @@
           description: "If enabled, the model will first output a management summary and then validate that the output contains only the summary."
           value_type: "boolean"
           required: false
-      blocks:
+      messages:
         - role: "user"
           file: "single_block.jinja"
     - name: "Separated Roles"
@@ -27,7 +27,7 @@
           description: "If enabled, the model will first output a management summary and then validate that the output contains only the summary."
           value_type: "boolean"
           required: false
-      blocks:
+      messages:
         - role: "system"
           file: "separated_roles_system.jinja"
         - role: "user"
