@@ -9,6 +9,7 @@ from testbench_ai_service import __title__, __version__
 from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT
 from testbench_ai_service.log import get_log_config_dict, logger, setup_logging
 from testbench_ai_service.main import create_app
+from testbench_ai_service.models.logging import LogLevel
 from testbench_ai_service.utils.config import (
     create_default_config_file,
     load_config_from_file,
@@ -122,6 +123,10 @@ def start_action(args):
     if "port" in args and args.port is not None:
         config.port = args.port
     config.debug = getattr(args, "dev", False) or config.debug
+
+    if config.debug:
+        config.logging.console.log_level = LogLevel.DEBUG
+        config.logging.file.log_level = LogLevel.DEBUG
 
     print_cli_banner()
 
