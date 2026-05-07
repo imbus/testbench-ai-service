@@ -86,7 +86,6 @@ class TestCaseSetDescriber(Agent):
 
         if _sufficient_roles.intersection(project_roles):
             return PrecheckResult(passed=True, warnings=warnings)
-
         if ProjectRole.TestDesigner in project_roles:
             responsible = (spec.get("responsible") or {}).get("key")
             if responsible == context.user_key or responsible is None:

@@ -1,8 +1,8 @@
 import asyncio
 from typing import Any, ClassVar
 
-from jwt import decode
 import requests
+from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -78,8 +78,6 @@ class TestCaseSetReviewer(Agent):
             if not has_required_permissions(requierd_permissions, token_perms):
                 return PrecheckResult(passed=False, warnings=warnings)
 
-        print("here")
-
         if context.element_type == "TESTCASESET":
             test_case_set = conn.get_project_test_case_set(context.project_key, context.root_key)
         elif context.element_type == "TESTTHEME":
@@ -89,19 +87,20 @@ class TestCaseSetReviewer(Agent):
             return PrecheckResult(passed=False, warnings=warnings)
 
         project_roles = get_project_roles(conn, context.project_key)
-        _sufficient_roles = {
-            ProjectRole.TestDesigner,
-            ProjectRole.TestManager,
-        }
+        spec = test_case_set.get("spec") or {}
+        _sufficient_roles = {ProjectRole.TestManager}
 
         if check_test_case_set_is_locked(conn, context, context.root_uid, "spec"):
             return PrecheckResult(passed=False, warnings=warnings)
 
         if _sufficient_roles.intersection(project_roles):
             return PrecheckResult(passed=True, warnings=warnings)
-
+        if ProjectRole.Tester in project_roles:
+            responsible = (spec.get("responsible") or {}).get("key")
+            is_responsible = responsible == context.user_key or responsible is None
+            if is_responsible:
+                return PrecheckResult(passed=True, warnings=warnings)
         if ProjectRole.Tester in project_roles or ProjectRole.TestProgrammer in project_roles:
-            spec = test_case_set.get("spec") or {}
             is_in_review = spec.get("status", "") == SpecStatus.InReview.value
             is_current_reviewer = (spec.get("reviewer") or {}).get("key", "") == context.user_key
             if is_in_review and is_current_reviewer:
