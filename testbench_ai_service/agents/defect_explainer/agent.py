@@ -14,14 +14,19 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     get_test_case_set_as_string,
     update_description,
 )
+from testbench_ai_service.auth import AuthInfo
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext, PrecheckResult
-from testbench_ai_service.utils.agent import check_test_case_set_is_locked
+from testbench_ai_service.models.testbench import ActivityStatus, ProjectRole, VerdictStatus
+from testbench_ai_service.utils.agent import (
+    fetch_test_structure_tree,
+    is_test_case_locked_by_user,
+)
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
-from testbench_ai_service.utils.testbench import get_test_case_set_catalog
+from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
 
 
 class DefectExplainer(Agent):
@@ -36,12 +41,35 @@ class DefectExplainer(Agent):
         self,
         context: ExecutionContext,
         conn: TBConnection,
+        auth_info: AuthInfo,
     ) -> PrecheckResult[TestCaseSet]:
         """
         Fetches the TCS catalog and checks that exec is unlocked and cycle_key is set.
         """
         warnings = []
-        return PrecheckResult(passed=True, warnings=warnings)
+
+        if context.element_type not in ["TESTCASESET", "TESTTHEME"]:
+            warnings.append("The selected element must be a TestCaseSet.")
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        project_roles = get_project_roles(conn, context.project_key)
+        test_structure_tree = fetch_test_structure_tree(conn, context, context.root_uid)
+        _sufficient_roles = {ProjectRole.TestManager, ProjectRole.Tester}
+
+        if test_structure_tree.root.exec.verdict != VerdictStatus.ToVerify:
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        if test_structure_tree.root.exec.status != ActivityStatus.Performed:
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        if is_test_case_locked_by_user(test_structure_tree, context, "exec"):
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        if _sufficient_roles.intersection(project_roles):
+            return PrecheckResult(passed=True, warnings=warnings)
+
+        # TODO: Tester must be assigned the TestManager or Tester role in the project to use this agent.
+        return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(
         self,
