@@ -65,6 +65,7 @@ class PrecheckResult(BaseModel, Generic[T]):
 
     passed: bool
     warnings: list[str] = []
+    items: list[str] | None = None
 
 
 class AgentDetailsResponse(BaseModel):

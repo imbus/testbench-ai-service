@@ -1,4 +1,6 @@
 import asyncio
+import re
+from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import requests
@@ -33,7 +35,12 @@ from testbench_ai_service.utils.agent import (
 )
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.string_processor import extract_text_from_html_body
-from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
+from testbench_ai_service.utils.testbench import (
+    get_project_roles,
+    get_test_case_set_catalog,
+    post_project_cycle_structure,
+    post_project_tov_structure,
+)
 from testbench_ai_service.utils.testbench_helpers import (
     get_parameter_combinations_as_string,
 )
@@ -80,33 +87,66 @@ class TestCaseSetReviewer(Agent):
                 return PrecheckResult(passed=False, warnings=warnings)
 
         if context.element_type == "TESTCASESET":
-            test_case_set = conn.get_project_test_case_set(context.project_key, context.root_key)
+            node = SimpleNamespace(
+                base=SimpleNamespace(key=context.root_key, uniqueID=context.root_uid)
+            )
+            tc_nodes = [node]
+
         elif context.element_type == "TESTTHEME":
-            test_case_set = conn.get_project_test_theme(context.project_key, context.root_key)
+            if context.cycle_key:
+                test_case = post_project_cycle_structure(
+                    conn,
+                    context.project_key,
+                    context.cycle_key,
+                    context.root_uid,
+                    context.filtering,
+                )
+            else:
+                test_case = post_project_tov_structure(
+                    conn,
+                    context.project_key,
+                    context.cycle_key,
+                    context.root_uid,
+                    context.filtering,
+                )
+            tc_nodes = [
+                node for node in test_case.nodes if re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
+            ]
+
         else:
             warnings.append("The selected element must be a TestCaseSet.")
             return PrecheckResult(passed=False, warnings=warnings)
 
         project_roles = get_project_roles(conn, context.project_key)
-        spec = test_case_set.get("spec") or {}
         _sufficient_roles = {ProjectRole.TestManager}
+        items = []
 
-        if check_test_case_set_is_locked(conn, context, context.root_uid, "spec"):
-            warnings.append("The test case set specification is currently locked.")
-            return PrecheckResult(passed=False, warnings=warnings)
+        for node in tc_nodes:
+            test_case_set = conn.get_project_test_case_set(context.project_key, node.base.key)
+            spec = test_case_set.get("spec") or {}
 
-        if _sufficient_roles.intersection(project_roles):
-            return PrecheckResult(passed=True, warnings=warnings)
-        if ProjectRole.TestDesigner in project_roles:
-            responsible = (spec.get("responsible") or {}).get("key")
-            is_responsible = responsible == context.user_key or responsible is None
-            if is_responsible:
-                return PrecheckResult(passed=True, warnings=warnings)
-        if ProjectRole.Tester in project_roles or ProjectRole.TestProgrammer in project_roles:
-            is_in_review = spec.get("status", "") == SpecStatus.InReview.value
-            is_current_reviewer = (spec.get("reviewer") or {}).get("key", "") == context.user_key
-            if is_in_review and is_current_reviewer:
-                return PrecheckResult(passed=True, warnings=warnings)
+            if check_test_case_set_is_locked(conn, context, test_case_set.get("uniqueID"), "spec"):
+                warnings.append("The test case set specification is currently locked.")
+                continue
+
+            if _sufficient_roles.intersection(project_roles):
+                items.append(node.base.uniqueID)
+            elif ProjectRole.TestDesigner in project_roles:
+                responsible = (spec.get("responsible") or {}).get("key")
+                is_responsible = responsible == context.user_key or responsible is None
+                if is_responsible:
+                    items.append(node.base.uniqueID)
+            elif ProjectRole.Tester in project_roles or ProjectRole.TestProgrammer in project_roles:
+                is_in_review = spec.get("status", "") == SpecStatus.InReview.value
+                is_current_reviewer = (spec.get("reviewer") or {}).get(
+                    "key", ""
+                ) == context.user_key
+                if is_in_review and is_current_reviewer:
+                    items.append(node.base.uniqueID)
+
+        if items:
+            print(items)
+            return PrecheckResult(passed=True, warnings=warnings, items=items)
 
         warnings.append("Insufficient project role to perform a review.")
         return PrecheckResult(passed=False, warnings=warnings)
@@ -116,6 +156,7 @@ class TestCaseSetReviewer(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
+        precheck_results: list[str],
     ) -> None:
         """Reviews all test case sets concurrently."""
         tasks = []
@@ -133,9 +174,12 @@ class TestCaseSetReviewer(Agent):
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
         for tcs in test_case_set_catalog.values():
-            task = asyncio.create_task(self._review_test_case_set(tcs, context, conn, llm_client))
-            logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-            tasks.append(task)
+            if tcs.details.uniqueID in precheck_results:
+                task = asyncio.create_task(
+                    self._review_test_case_set(tcs, context, conn, llm_client)
+                )
+                logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
+                tasks.append(task)
 
         logger.debug("Awaiting completion of %d test case set review task(s)", len(tasks))
         await asyncio.gather(*tasks)

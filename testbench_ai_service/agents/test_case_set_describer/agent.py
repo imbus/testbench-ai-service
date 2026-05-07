@@ -102,6 +102,7 @@ class TestCaseSetDescriber(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
+        precheck_results: list[str],
     ) -> None:
         """Generates descriptions for all test case sets concurrently."""
         tasks = []

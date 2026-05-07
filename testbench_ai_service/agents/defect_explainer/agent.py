@@ -105,6 +105,7 @@ class DefectExplainer(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
+        precheck_results: list[str],
     ) -> None:
         """Generates defect explanations for all test case sets concurrently."""
         tasks = []

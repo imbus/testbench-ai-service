@@ -15,6 +15,7 @@ async def run_agent(
     context: ExecutionContext,
     conn: TBConnection,
     llm_factory: LLMFactory,
+    precheck_results: list[str],
 ):
     """
     Resolves the LLM client and delegates execution to the agent.
@@ -42,9 +43,7 @@ async def run_agent(
         logger.debug("Initialised llm_client for agent '%s': %s", agent_key, llm_client.__class__)
 
         await agent.run(
-            context=context,
-            conn=conn,
-            llm_client=llm_client,
+            context=context, conn=conn, llm_client=llm_client, precheck_results=precheck_results
         )
 
         duration = time.time() - start_time
