@@ -14,7 +14,7 @@ class PromptConfigRequest(BaseModel):
     file: Path | None = None
     name: str | None = None
     variant: str | None = None
-    placeholder_data: dict[str, str] | None = None
+    vars: dict[str, str] | None = None
 
     model_config = ConfigDict(extra="allow")
 

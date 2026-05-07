@@ -2,7 +2,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Qu
 from fastapi.responses import RedirectResponse
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.agents.routes import (
     TRIGGER_AGENT_ROUTE_KWARGS,
     trigger_agent_execution,
@@ -18,11 +17,7 @@ from testbench_ai_service.models.agent import (
 )
 from testbench_ai_service.models.prompt import PromptDetailsResponse, PromptVariantResponse
 from testbench_ai_service.utils.config import get_agent_config, get_prompt_config
-from testbench_ai_service.utils.import_utils import load_class_from_path
-from testbench_ai_service.utils.prompt_utils import (
-    get_placeholders_from_blocks,
-    get_prompt_definition,
-)
+from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 from testbench_ai_service.utils.testbench import get_project_name
 
 router = APIRouter()
@@ -99,7 +94,7 @@ async def get_prompt_details(
     conn: TBConnection = Depends(get_tb_connection),
     project_key: str | None = Query(None, description="Filter by project key"),
 ) -> PromptDetailsResponse:
-    """Returns available variants and their placeholders."""
+    """Returns available variants and their prompt variables."""
     if agent_key not in app_config.agents:
         raise HTTPException(status_code=404, detail=f"Agent '{agent_key}' not found")
 
@@ -108,16 +103,13 @@ async def get_prompt_details(
         agent_key=agent_key, config=app_config, project_name=project_name
     )
     prompt_definition = get_prompt_definition(prompt_config.file, prompt_config.name)
-    agent_class: type[Agent] = load_class_from_path(app_config.agents[agent_key].class_path)
-    generated_placeholders = agent_class.GENERATED_PLACEHOLDERS
 
     variants = [
         PromptVariantResponse(
             name=variant.name,
             description=variant.description,
             model=variant.model or prompt_definition.default_model,
-            placeholders=(all_placeholders := get_placeholders_from_blocks(variant.blocks)),
-            user_placeholders=sorted(set(all_placeholders) - generated_placeholders),
+            vars=variant.vars,
         )
         for variant in prompt_definition.variants
     ]
@@ -125,7 +117,6 @@ async def get_prompt_details(
     return PromptDetailsResponse(
         name=prompt_definition.name,
         file=prompt_config.file,
-        generated_placeholders=sorted(generated_placeholders),
         default_variant=prompt_config.variant or prompt_definition.default_variant,
         variants=variants,
     )

@@ -55,7 +55,7 @@ class PromptConfig(BaseModel):
     file: Path
     name: str
     variant: str | None = None
-    placeholder_data: dict[str, str] | None = None
+    vars: dict[str, str] | None = None
 
     model_config = ConfigDict(extra="allow")
 
@@ -64,7 +64,7 @@ class ProjectPromptConfig(BaseModel):
     file: Path | None = None
     name: str | None = None
     variant: str | None = None
-    placeholder_data: dict[str, str] | None = None
+    vars: dict[str, str] | None = None
 
 
 class AgentConfig(BaseModel):
@@ -99,7 +99,7 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         endpoint_path="/test-case-set-reviews",
         class_path="testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer",
         prompt=PromptConfig(
-            file=Path("test_case_set_reviewer.yaml"),
+            file=Path("test_case_set_reviewer/prompt.yaml"),
             name="TestCaseSetReviewer",
         ),
         name="Test Case Set Reviewer",
@@ -112,7 +112,7 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         endpoint_path="/test-case-set-descriptions",
         class_path="testbench_ai_service.agents.test_case_set_describer.agent.TestCaseSetDescriber",
         prompt=PromptConfig(
-            file=Path("test_case_set_describer.yaml"),
+            file=Path("test_case_set_describer/prompt.yaml"),
             name="TestCaseSetDescriber",
         ),
         name="Test Case Set Describer",
@@ -125,7 +125,7 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         endpoint_path="/defect-explanations",
         class_path="testbench_ai_service.agents.defect_explainer.agent.DefectExplainer",
         prompt=PromptConfig(
-            file=Path("defect_explainer.yaml"),
+            file=Path("defect_explainer/prompt.yaml"),
             name="DefectExplainer",
         ),
         name="Defect Explainer",

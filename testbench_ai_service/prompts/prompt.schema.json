@@ -10,58 +10,84 @@
       "variants"
     ],
     "properties": {
-      "name": {
-        "type": "string"
-      },
-      "description": {
-        "type": "string"
-      },
-      "default_model": {
-        "type": "string"
-      },
-      "default_variant": {
-        "type": "string"
-      },
+      "name": { "type": "string" },
+      "description": { "type": "string" },
+      "default_model": { "type": "string" },
+      "default_variant": { "type": "string" },
       "variants": {
         "type": "array",
         "items": {
           "type": "object",
-          "required": [
-            "name",
-            "blocks"
-          ],
+          "required": ["name", "blocks"],
           "properties": {
-            "name": {
-              "type": "string"
-            },
-            "description": {
-              "type": "string"
-            },
-            "model": {
-              "type": "string"
+            "name": { "type": "string" },
+            "description": { "type": "string" },
+            "model": { "type": "string" },
+            "vars": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": ["name", "value_type"],
+                "properties": {
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "value_type": {
+                    "type": "string",
+                    "enum": ["string", "text", "boolean", "number", "enum"]
+                  },
+                  "choices": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "minItems": 1,
+                    "description": "Required when value_type is 'enum'. Lists the allowed values."
+                  },
+                  "default_value": {},
+                  "required": { "type": "boolean", "default": false }
+                },
+                "if": {
+                  "properties": { "value_type": { "const": "enum" } },
+                  "required": ["value_type"]
+                },
+                "then": { "required": ["choices"] },
+                "else": {
+                  "properties": { "choices": false }
+                },
+                "additionalProperties": false
+              }
             },
             "blocks": {
               "type": "array",
               "items": {
                 "type": "object",
-                "required": [
-                  "text"
-                ],
-                "properties": {
-                  "role": {
-                    "type": "string",
-                    "enum": [
-                      "system",
-                      "user",
-                      "assistant"
-                    ],
-                    "default": "user"
+                "oneOf": [
+                  {
+                    "required": ["text"],
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": ["system", "user", "assistant"],
+                        "default": "user"
+                      },
+                      "text": { "type": "string" }
+                    },
+                    "additionalProperties": false
                   },
-                  "text": {
-                    "type": "string"
+                  {
+                    "required": ["file"],
+                    "properties": {
+                      "role": {
+                        "type": "string",
+                        "enum": ["system", "user", "assistant"],
+                        "default": "user"
+                      },
+                      "file": {
+                        "type": "string",
+                        "description": "Path to an external template file (.jinja, .j2, or .md). Relative paths are resolved from the directory of this YAML file. Absolute paths are used as-is."
+                      }
+                    },
+                    "additionalProperties": false
                   }
-                },
-                "additionalProperties": false
+                ]
               }
             }
           },
