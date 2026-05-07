@@ -1,11 +1,10 @@
 import asyncio
-from typing import Any, ClassVar
 
 import requests
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.defect_explainer.utils import (
     add_error_message,
     add_explanations_to_comment,
@@ -24,14 +23,12 @@ from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_message
 from testbench_ai_service.utils.testbench import get_test_case_set_catalog
 
 
-class DefectExplainer(Agent):
-    GENERATED_PLACEHOLDERS: ClassVar[frozenset[str]] = frozenset(
-        {
-            "failed_test_case",
-            "error_message",
-        }
-    )
+class DefectExplainerAgentData(AgentData):
+    failed_test_case: str
+    error_message: str
 
+
+class DefectExplainer(Agent):
     async def precheck(
         self,
         context: ExecutionContext,
@@ -173,9 +170,9 @@ class DefectExplainer(Agent):
             )
             raise e
 
-    def _build_placeholder_data(
+    def _build_agent_data(
         self, test_case_set: TestCaseSet, test_case: str, error: dict
-    ) -> dict[str, Any]:
+    ) -> DefectExplainerAgentData:
         return {
             "failed_test_case": get_test_case_set_as_string(test_case_set, test_case),
             "error_message": error["error"],
@@ -191,23 +188,23 @@ class DefectExplainer(Agent):
         llm_config: LLMConfig,
         queue: asyncio.Queue,
     ) -> None:
-        placeholder_data = prompt_config.placeholder_data or {}
-        built_placeholder_data = self._build_placeholder_data(
+        agent_data = self._build_agent_data(
             test_case_set=test_case_set,
             test_case=failed_test_case,
             error=details,
         )
-        placeholder_data = built_placeholder_data | placeholder_data
-        prompt_config = prompt_config.model_copy(update={"placeholder_data": placeholder_data})
         logger.debug(
-            "Built placeholder data for failed test case '%s' of test case set '%s': %s",
+            "Built agent data for failed test case '%s' of test case set '%s': %s",
             failed_test_case,
             test_case_set.details.uniqueID,
-            prompt_config.placeholder_data,
+            list(agent_data.keys()),
         )
 
         explanation_response = await self._get_ai_response(
-            llm_client=llm_client, llm_config=llm_config, prompt_config=prompt_config
+            llm_client=llm_client,
+            llm_config=llm_config,
+            prompt_config=prompt_config,
+            agent_data=agent_data,
         )
         logger.debug(
             "AI explanation response for failed test case '%s' of test case set '%s':\n\t%s",
@@ -228,9 +225,10 @@ class DefectExplainer(Agent):
         llm_client: LLMClient,
         llm_config: LLMConfig,
         prompt_config: PromptConfig,
+        agent_data: DefectExplainerAgentData | None = None,
     ) -> AgentResult:
         """Sends the prompt to the LLM and returns the defect explanation."""
-        prompt = build_prompt(prompt_config=prompt_config)
+        prompt = build_prompt(prompt_config=prompt_config, agent_data=agent_data)
 
         model = llm_config.model if llm_config.model is not None else prompt.model_name
         messages = prompt.messages

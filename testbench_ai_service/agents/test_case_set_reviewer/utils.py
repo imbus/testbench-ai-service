@@ -1,5 +1,4 @@
 from datetime import datetime
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from testbench2robotframework.json_reader import TestCaseSet
@@ -9,13 +8,6 @@ from testbench2robotframework.model import (
 )
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.test_case_set_reviewer.models import (
-    DEFAULT_ENGLISH_GLOSSARY,
-    DEFAULT_GERMAN_GLOSSARY,
-)
-from testbench_ai_service.config import (
-    PromptConfig,
-)
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
     OptionalUser,
@@ -91,25 +83,6 @@ def get_test_case_set_as_string(test_case_set: TestCaseSet) -> str:
         lines.append(line)
 
     return "\n".join(lines)
-
-
-def get_test_case_glossary(language: LanguageOption, prompt_config: PromptConfig) -> str:
-    """
-    Retrieve the glossary for a test case based on language and prompt configuration.
-
-    If the prompt configuration contains a glossary string, attempts to read the file if it exists,
-    otherwise returns the string.
-    If no glossary is provided, returns a default glossary based on the specified language.
-    """
-    glossary = getattr(prompt_config, "glossary", None)
-    if glossary is not None:
-        path = Path(glossary)
-        if path.is_file():
-            return path.read_text(encoding="utf-8")
-        return str(glossary)
-    return (
-        DEFAULT_GERMAN_GLOSSARY if language == LanguageOption.GERMAN else DEFAULT_ENGLISH_GLOSSARY
-    )
 
 
 async def get_review_comment_for_test_case_set(

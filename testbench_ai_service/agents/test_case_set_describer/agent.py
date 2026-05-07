@@ -1,11 +1,10 @@
 import asyncio
-from typing import ClassVar
 
 import requests
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.test_case_set_describer.utils import (
     get_description_for_test_case_set,
     get_test_case_set_as_string,
@@ -28,15 +27,13 @@ from testbench_ai_service.utils.testbench import get_test_case_set_catalog
 from testbench_ai_service.utils.testbench_helpers import get_parameter_combinations_as_string
 
 
-class TestCaseSetDescriber(Agent):
-    GENERATED_PLACEHOLDERS: ClassVar[frozenset[str]] = frozenset(
-        {
-            "parameter_combinations",
-            "step_sequence",
-            "test_case_set_obj",
-        }
-    )
+class TestCaseSetDescriberAgentData(AgentData):
+    step_sequence: str
+    parameter_combinations: str | None
+    test_case_set_obj: TestCaseSet
 
+
+class TestCaseSetDescriber(Agent):
     async def precheck(
         self,
         context: ExecutionContext,
@@ -129,20 +126,15 @@ class TestCaseSetDescriber(Agent):
                     test_case_set.details.uniqueID,
                 )
 
-                placeholder_data = context.prompt_config.placeholder_data or {}
-                built_placeholder_data = self._build_placeholder_data(test_case_set=test_case_set)
-                placeholder_data = built_placeholder_data | placeholder_data
-                prompt_config = context.prompt_config.model_copy(
-                    update={"placeholder_data": placeholder_data}
-                )
+                agent_data = self._build_agent_data(test_case_set=test_case_set)
                 logger.debug(
-                    "Built placeholder data for test case set '%s': %s",
+                    "Built agent data for test case set '%s': %s",
                     test_case_set.details.uniqueID,
-                    prompt_config.placeholder_data,
+                    list(agent_data.keys()),
                 )
 
                 description_response = await self._get_ai_response(
-                    llm_client, context.llm_config, prompt_config
+                    llm_client, context.llm_config, context.prompt_config, agent_data
                 )
                 logger.debug(
                     "AI description response for test case set '%s':\n\t%s",
@@ -202,7 +194,7 @@ class TestCaseSetDescriber(Agent):
             )
             raise e
 
-    def _build_placeholder_data(self, test_case_set: TestCaseSet) -> dict[str, str]:
+    def _build_agent_data(self, test_case_set: TestCaseSet) -> TestCaseSetDescriberAgentData:
         return {
             "step_sequence": get_test_case_set_as_string(test_case_set),
             "parameter_combinations": get_parameter_combinations_as_string(test_case_set),
@@ -214,9 +206,10 @@ class TestCaseSetDescriber(Agent):
         llm_client: LLMClient,
         llm_config: LLMConfig,
         prompt_config: PromptConfig,
+        agent_data: TestCaseSetDescriberAgentData | None = None,
     ) -> AgentResult:
         """Sends the prompt to the LLM and returns the generated description."""
-        prompt = build_prompt(prompt_config=prompt_config)
+        prompt = build_prompt(prompt_config=prompt_config, agent_data=agent_data)
 
         model = llm_config.model if llm_config.model is not None else prompt.model_name
         messages = prompt.messages

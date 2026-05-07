@@ -8,6 +8,7 @@ from jinja2 import (
     meta,
 )
 
+from testbench_ai_service.agents.base import AgentData
 from testbench_ai_service.config import PromptConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import (
@@ -145,7 +146,7 @@ def build_messages(blocks: list[Block]) -> list[Message]:
     return combined_messages
 
 
-def build_prompt(prompt_config: PromptConfig) -> Prompt:
+def build_prompt(prompt_config: PromptConfig, agent_data: AgentData | None = None) -> Prompt:
     """
     Builds and returns a Prompt object by loading, rendering, and preparing prompt data.
 
