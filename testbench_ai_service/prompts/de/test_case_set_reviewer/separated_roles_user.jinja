@@ -1,0 +1,30 @@
+# Zu Prüfender Testfall
+
+## Testfallsatzbeschreibung (HTML)
+{% if agent.test_case_set_description %}
+```
+{{ agent.test_case_set_description }}
+```
+{% else %}
+Keine Testfallsatzbeschreibung.
+{% endif %}
+
+## Testfallsatzname + Schritte
+```
+{{ agent.test_case }}
+```
+### Konkrete Parameterkombinationen:
+{% if agent.parameter_combinations %}
+```
+{{ agent.parameter_combinations }}
+```
+{% else %}
+Keine konkreten Parameterkombinationen
+{% endif %}
+
+# Anweisung
+Beginne mit dem Review.
+Halte dich an die Review-Kriterien.
+Halte dich strikt an das Output-Format.
+Bewerte nur.
+Mach keine Verbesserungsvorschläge.

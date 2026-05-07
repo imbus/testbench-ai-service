@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+- name: "TestCaseSetDescriber"
+  description: >
+    Erstellt eine allgemeine Beschreibung für einen TestBench-Testfallsatz.
+  default_model: "gpt-5.4"
+  default_variant: "Full Description"
+  variants:
+    - name: "Full Description"
+      description: "Erstellt eine vollständige Beschreibung mit Testziel, Prüfungen und einer Zusammenfassung je Testfall."
+      model: "gpt-5.4"
+      blocks:
+        - role: "system"
+          file: "system.jinja"
+        - role: "user"
+          file: "full_description_user.jinja" 
+    - name: "Short Description"
+      description: "Erstellt eine kompakte Beschreibung, die ausschließlich das Testziel in einem Satz beschreibt."
+      model: "gpt-5.1"
+      blocks:
+        - role: "system"
+          file: "system.jinja"
+        - role: "user"
+          file: "short_description_user.jinja"

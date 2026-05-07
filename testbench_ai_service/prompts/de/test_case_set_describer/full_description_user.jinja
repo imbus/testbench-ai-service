@@ -1,0 +1,65 @@
+<input_test_case_set_format>
+Ein Testfallsatz enthält eine abstrakte Ablaufsequenz mit Testschritten, Variablen, Werten und einem step_type. 
+Die Testfallsatz-Vorlage ist wie folgt strukturiert:
+
+```
+{Testfallsatzname}
+    {Schritt 1}    step_type:flow
+    {Schritt 2}    param_name=${parameter_value}    step_type:flow
+    {Schritt 3}    'wert'    step_type:flow
+    {Schritt 4}    param_name=${parameter_value}    step_type:check
+    ...
+```
+
+Erläuterungen:
+- param_name ist der Name eines Parameters,
+- ${param_value} ist der Platzhalter für den dazugehörigen Wert
+- Konkrete Parameterwerte werden in der Tabelle Parameterdaten aufgelöst; markiere deren Fehlen NICHT als Fehler.
+- step_type kann flow (Aktion) oder check (Validierung) sein.
+- Werte sind als Python Repräsentation formatiert: 'Wert'.
+- Hat ein Parameter mehrere Variablen, werden diese als Liste interpretiert.
+- Mit dem Wert "-" werden Nullwerte angegeben. 
+</input_test_case_set_format>
+
+<abstract_test_case_set>
+Betrachte die folgende Schrittfolge eines Testfallsatzes:
+```
+{{ agent.step_sequence }}
+```
+</abstract_test_case_set>
+
+<parameter_data>
+Zusätzlich sind die folgenden Parameterdaten in diesem Testfallsatz enthalten:
+Die Tabelle hat eine Kopfzeile, die die Parameternamen angibt.
+Jede nachfolgende Zeile stellt einen konkreten Testfall mit einer Kombination von Parameterwerten dar.
+
+```
+{{ agent.parameter_combinations }}
+```
+</parameter_data>
+
+<task>
+Erstelle eine Beschreibung dieses Testfallsatzes mit drei Teilen
+1. Testziel: Fasse das Hauptziel des abstrakten Testfallsatzes in einem Satz zusammen.
+2. Überprüfungen: Beschreibe kurz die wichtigsten Überprüfungen, die im Testfallsatz durchgeführt werden.
+3. Testfälle: Fasse jeden konkreten Testfall (Parameterkombination) kurz zusammen.
+</task>  
+
+<output_format>
+Verwende das folgende Format für die Beschreibung. 
+Es soll in Plain Text sein:
+```
+{Testziel} ("Dieser Testfallsatz prüft ...")
+
+Überprüfungen:
+{Überprüfungen}
+
+Testfälle:
+- {Testfall 1}
+- {Testfall 2}
+...
+```
+
+- Entferne Leerzeichen und Zeilenumbrüche vor dem Text
+- Ändere keine Eigennamen, Testschrittnamen, Parameternamen, Parameterwerte, Werte etc. aus dem Input.
+</output_format>

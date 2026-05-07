@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+- name: "TestCaseSetReviewer"
+  description: >
+    Bewertet Testfallsätze anhand definierter Qualitätskriterien. Unterstützt optionale Glossarintegration
+    via Template-Blöcken. Eine Variante nutzt einen einzelnen Nutzerblock (optimiert für Reasoning-Modelle);
+    die andere teilt in System- und Nutzerblock auf.
+  default_model: "gpt-5.4"
+  default_variant: "Single Block"
+  variants:
+    - name: "Single Block"
+      description: "Liefert alle Anweisungen in einer einzigen Nutzernachricht; geeignet für Reasoning-Modelle ohne System-Rollenunterstützung."
+      model: "gpt-5.4"
+      vars:
+        glossary:
+          name: "Glossar"
+          description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschritte dagegen geprüft."
+          value_type: "text"
+          required: false
+      blocks:
+        - role: "user"
+          file: "single_block.jinja"
+    - name: "Separated Roles"
+      description: "Teilt den Prompt in System- und Nutzernachricht auf; geeignet für Chat-Modelle mit System-Rollenunterstützung."
+      model: "gpt-5.2-pro"
+      vars:
+        glossary:
+          name: "Glossar"
+          description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschritte dagegen geprüft."
+          value_type: "text"
+          required: false
+      blocks:
+        - role: "system"
+          file: "separated_roles_system.jinja"
+        - role: "user"
+          file: "separated_roles_user.jinja"
