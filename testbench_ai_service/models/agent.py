@@ -67,5 +67,6 @@ class AgentDetailsResponse(BaseModel):
 
     key: str
     enabled: bool
+    name: str
     summary: str | None = None
     description: str | None = None

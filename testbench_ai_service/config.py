@@ -72,6 +72,7 @@ class AgentConfig(BaseModel):
     endpoint_path: str
     class_path: str
     prompt: PromptConfig
+    name: str
     summary: str | None = None
     description: str | None = None
 
@@ -101,6 +102,7 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
             file=Path("test_case_set_reviewer.yaml"),
             name="TestCaseSetReviewer",
         ),
+        name="Test Case Set Reviewer",
         summary="Trigger test case set reviews",
         description="""This endpoint triggers asynchronous reviews for the specified test case sets.
             The review results will be added as comments to the `reviewComment` attribute (review comments section) of corresponding test structure element specifications.""",
@@ -113,6 +115,7 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
             file=Path("test_case_set_describer.yaml"),
             name="TestCaseSetDescriber",
         ),
+        name="Test Case Set Describer",
         summary="Trigger generation of test case set descriptions",
         description="""This endpoint triggers asynchronous generation of descriptions for the specified test case sets.
             The generated descriptions will be assigned to their respective test structure element specifications.""",
@@ -125,6 +128,7 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
             file=Path("defect_explainer.yaml"),
             name="DefectExplainer",
         ),
+        name="Defect Explainer",
         summary="Trigger generation of defect explanations",
         description="""This endpoint triggers asynchronous generation of defect explanations for the specified test case sets.
             The generated explanations will be added to the comment section of the corresponding test structure element execution overview.""",
