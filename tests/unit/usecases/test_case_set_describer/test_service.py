@@ -139,7 +139,7 @@ class TestTestCaseSetDescriberRun(unittest.IsolatedAsyncioTestCase):
         mock_generate.assert_not_awaited()
 
 
-class TestBuildPlaceholderData(unittest.TestCase):
+class TestBuildAgentData(unittest.TestCase):
     def setUp(self):
         self.service = TestCaseSetDescriber()
 
@@ -156,7 +156,7 @@ class TestBuildPlaceholderData(unittest.TestCase):
                 return_value="| col | val |",
             ),
         ):
-            data = self.service._build_placeholder_data(tcs)
+            data = self.service._build_agent_data(tcs)
 
         self.assertIn("step_sequence", data)
         self.assertIn("parameter_combinations", data)

@@ -142,13 +142,12 @@ class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
         mock_review.assert_not_awaited()
 
 
-class TestBuildPlaceholderData(unittest.TestCase):
+class TestBuildAgentData(unittest.TestCase):
     def setUp(self):
         self.service = TestCaseSetReviewer()
 
     def test_contains_required_keys(self):
         tcs = _make_tcs()
-        prompt_config = PromptConfig(file="prompts/test.yaml", name="Test")
 
         with (
             patch(
@@ -159,22 +158,16 @@ class TestBuildPlaceholderData(unittest.TestCase):
                 "testbench_ai_service.agents.test_case_set_reviewer.agent.get_parameter_combinations_as_string",
                 return_value="| col | val |",
             ),
-            patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_glossary",
-                return_value="Glossary text",
-            ),
         ):
-            data = self.service._build_placeholder_data(tcs, prompt_config, LanguageOption.ENGLISH)
+            data = self.service._build_agent_data(tcs)
 
         self.assertIn("test_case", data)
         self.assertIn("parameter_combinations", data)
-        self.assertIn("glossary", data)
         self.assertIn("test_case_set_obj", data)
 
     def test_description_included_when_present(self):
         tcs = _make_tcs()
         tcs.details.spec.description = "<html><body>Description</body></html>"
-        prompt_config = PromptConfig(file="prompts/test.yaml", name="Test")
 
         with (
             patch(
@@ -186,15 +179,11 @@ class TestBuildPlaceholderData(unittest.TestCase):
                 return_value="",
             ),
             patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_glossary",
-                return_value="",
-            ),
-            patch(
                 "testbench_ai_service.agents.test_case_set_reviewer.agent.extract_text_from_html_body",
                 return_value="Plain description",
             ),
         ):
-            data = self.service._build_placeholder_data(tcs, prompt_config, LanguageOption.ENGLISH)
+            data = self.service._build_agent_data(tcs)
 
         self.assertIn("test_case_set_description", data)
         self.assertEqual(data["test_case_set_description"], "Plain description")

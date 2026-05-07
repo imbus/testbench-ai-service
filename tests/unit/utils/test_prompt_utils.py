@@ -2,7 +2,6 @@ import unittest
 from pathlib import Path
 
 from testbench_ai_service.config import PromptConfig
-from testbench_ai_service.log import logger
 from testbench_ai_service.utils.prompt_utils import build_prompt, get_prompt_definition
 
 _DATA_DIR = Path(__file__).parent / "data"
@@ -29,17 +28,20 @@ class TestBuildPrompt(unittest.TestCase):
         defaults = {
             "file": _DUMMY_PROMPT_PATH,
             "name": _PROMPT_NAME,
-            "placeholder_data": {"test_case": "Some test case."},
         }
         defaults.update(kwargs)
         return PromptConfig(**defaults)  # type: ignore[arg-type]
 
     def test_model_name_is_read_from_prompt_definition(self):
-        prompt = build_prompt(prompt_config=self._make_config())
+        prompt = build_prompt(
+            prompt_config=self._make_config(), agent_data={"test_case": "Some test case."}
+        )
         self.assertEqual(prompt.model_name, "o4-mini-2025-04-16")
 
     def test_default_variant_produces_system_and_user_messages(self):
-        prompt = build_prompt(prompt_config=self._make_config())
+        prompt = build_prompt(
+            prompt_config=self._make_config(), agent_data={"test_case": "Some test case."}
+        )
         messages = prompt.messages
         self.assertEqual(len(messages), 2)
         self.assertEqual(messages[0].role, "system")
@@ -47,15 +49,14 @@ class TestBuildPrompt(unittest.TestCase):
         self.assertIn("You will receive a blueprint", messages[0].content)
         self.assertIn("Review the following test case", messages[1].content)
 
-    def test_placeholders_are_substituted_in_messages(self):
+    def test_vars_are_substituted_in_messages(self):
         config = self._make_config(
-            placeholder_data={
+            vars={
                 "glossary": "Some glossary.",
                 "test_case_set_description": "Some description.",
-                "test_case": "Some test case.",
-            }
+            },
         )
-        prompt = build_prompt(prompt_config=config)
+        prompt = build_prompt(prompt_config=config, agent_data={"test_case": "Some test case."})
         user_content = prompt.messages[1].content
         self.assertIn("Some glossary.", user_content)
         self.assertIn("Some description.", user_content)
@@ -63,32 +64,17 @@ class TestBuildPrompt(unittest.TestCase):
 
     def test_non_default_variant_produces_single_user_message(self):
         config = self._make_config(variant="DEU")
-        prompt = build_prompt(prompt_config=config)
+        prompt = build_prompt(prompt_config=config, agent_data={"test_case": "Some test."})
         messages = prompt.messages
         self.assertEqual(len(messages), 1)
         self.assertEqual(messages[0].role, "user")
         self.assertIn("Prüfe den folgenden Testfall:", messages[0].content)
 
-    def test_placeholder_with_special_characters_is_preserved(self):
-        config = self._make_config(placeholder_data={"test_case": "${robot_variable}"})
-        prompt = build_prompt(prompt_config=config)
+    def test_vars_with_special_characters_is_preserved(self):
+        prompt = build_prompt(
+            prompt_config=self._make_config(), agent_data={"test_case": "${robot_variable}"}
+        )
         self.assertIn("${robot_variable}", prompt.messages[1].content)
-
-    def test_unnecessary_placeholder_key_logs_warning(self):
-        config = self._make_config(
-            placeholder_data={
-                "test_case": "Some test case.",
-                "unnecessary_placeholder": "Extra text.",
-            }
-        )
-        with self.assertLogs(logger, level="DEBUG") as cm:
-            build_prompt(prompt_config=config)
-
-        self.assertEqual(len(cm.output), 1)
-        self.assertIn(
-            "Provided placeholder(s) not found in template: {'unnecessary_placeholder'}",
-            cm.output[0],
-        )
 
     def test_unknown_prompt_name_raises_value_error(self):
         with self.assertRaises(ValueError):

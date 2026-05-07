@@ -56,6 +56,13 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_reviewer_class.return_value = self.mock_reviewer
 
+        # ── get_prompt_model mock (avoids prompt file I/O in tasks.py) ────────
+        self.prompt_model_patcher = patch(
+            "testbench_ai_service.tasks.get_prompt_model",
+            return_value="gpt-4o",
+        )
+        self.prompt_model_patcher.start()
+
         # ── LLM factory mock ──────────────────────────────────────────────────
         self.mock_llm_client = AsyncMock()
         self.mock_llm_factory = MagicMock()
@@ -121,6 +128,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
 
     def tearDown(self):
         self.reviewer_patcher.stop()
+        self.prompt_model_patcher.stop()
 
     # ── Tests ─────────────────────────────────────────────────────────────────
 
@@ -285,8 +293,9 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
         llm_client: LLMClient,
         llm_config: LLMConfig,
         prompt_config: PromptConfig,
+        agent_data: dict | None = None,
     ):
-        tcs_str = (prompt_config.placeholder_data or {}).get("test_case", "")
+        tcs_str = (agent_data or {}).get("test_case", "")
         for uid, s in self.tcs_strings.items():
             if tcs_str == s:
                 return self.review_responses[uid]

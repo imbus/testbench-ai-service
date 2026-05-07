@@ -138,7 +138,7 @@ class TestDefectExplainerRun(unittest.IsolatedAsyncioTestCase):
         mock_generate.assert_not_awaited()
 
 
-class TestBuildPlaceholderData(unittest.TestCase):
+class TestBuildAgentData(unittest.TestCase):
     def setUp(self):
         self.service = DefectExplainer()
 
@@ -150,7 +150,7 @@ class TestBuildPlaceholderData(unittest.TestCase):
             "testbench_ai_service.agents.defect_explainer.agent.get_test_case_set_as_string",
             return_value="test case text",
         ):
-            data = self.service._build_placeholder_data(tcs, "TC1", error)
+            data = self.service._build_agent_data(tcs, "TC1", error)
 
         self.assertIn("failed_test_case", data)
         self.assertIn("error_message", data)

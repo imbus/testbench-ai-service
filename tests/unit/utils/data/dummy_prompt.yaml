@@ -1,9 +1,19 @@
 - name: "TestCaseSetReviewer"
   description: "Dummy test prompt for unit testing."
   default_variant: "ENG"
+  default_model: "o4-mini-2025-04-16"
   variants:
     - name: "ENG"
       model: "o4-mini-2025-04-16"
+      vars:
+        glossary:
+          name: "Glossary"
+          value_type: "text"
+          required: false
+        test_case_set_description:
+          name: "Test Case Set Description"
+          value_type: "text"
+          required: false
       blocks:
         - role: "system"
           text: |
@@ -11,16 +21,16 @@
 
         - role: "user"
           text: |
-            {% if glossary is defined %}
+            {% if vars.glossary %}
             Additional Review Criterion - Glossary:
-            {{ glossary }}
+            {{ vars.glossary }}
             {% endif %}
-            {% if test_case_set_description is defined %}
+            {% if vars.test_case_set_description %}
             Additional Review Criterion - Description Appropriateness:
-            {{ test_case_set_description }}
+            {{ vars.test_case_set_description }}
             {% endif %}
             Review the following test case:
-            {{ test_case }}
+            {{ agent.test_case }}
 
     - name: "DEU"
       model: "o4-mini-2025-04-16"
@@ -28,4 +38,4 @@
         - role: "user"
           text: |
             Prüfe den folgenden Testfall:
-            {{ test_case }}
+            {{ agent.test_case }}

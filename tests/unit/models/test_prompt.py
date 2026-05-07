@@ -43,15 +43,22 @@ class TestPromptDefinition(unittest.TestCase):
         return PromptVariant(name=name, model="gpt-4o", blocks=[Block(text="Hi")])
 
     def test_valid_definition(self):
-        defn = PromptDefinition(name="my-prompt", variants=[self._make_variant()])
+        defn = PromptDefinition(
+            name="my-prompt",
+            default_model="gpt-4o",
+            default_variant="v1",
+            variants=[self._make_variant()],
+        )
         self.assertEqual(defn.name, "my-prompt")
 
     def test_empty_variants_raises_validation_error(self):
         with self.assertRaises(ValidationError):
-            PromptDefinition(name="p", variants=[])
+            PromptDefinition(name="p", default_model="gpt-4o", default_variant="v1", variants=[])
 
     def test_description_defaults_to_none(self):
-        defn = PromptDefinition(name="p", variants=[self._make_variant()])
+        defn = PromptDefinition(
+            name="p", default_model="gpt-4o", default_variant="v1", variants=[self._make_variant()]
+        )
         self.assertIsNone(defn.description)
 
 
