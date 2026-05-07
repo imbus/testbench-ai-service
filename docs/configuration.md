@@ -65,7 +65,7 @@ endpoint_path = "/test-case-set-reviews"
 class_path = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
 
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
-file = "test_case_set_reviewer.yaml"
+file = "test_case_set_reviewer/prompt.yaml"
 name = "TestCaseSetReviewer"
 
 # agent: Test Case Set Describer
@@ -77,7 +77,7 @@ summary = "Trigger generation of test case set descriptions"
 description = "Triggers asynchronous generation of descriptions for specified test case sets."
 
 [testbench-ai-service.agents.test_case_set_describer.prompt]
-file = "test_case_set_describer.yaml"
+file = "test_case_set_describer/prompt.yaml"
 name = "TestCaseSetDescriber"
 
 # agent: Defect Explainer
@@ -89,7 +89,7 @@ summary = "Trigger generation of defect explanations"
 description = "Triggers asynchronous generation of defect explanations."
 
 [testbench-ai-service.agents.defect_explainer.prompt]
-file = "defect_explainer.yaml"
+file = "defect_explainer/prompt.yaml"
 name = "DefectExplainer"
 
 # Project-specific overrides
@@ -211,21 +211,27 @@ trusted_proxies = ["10.0.0.1"]
 
 | Option | Type | Description | Default |
 |--------|------|-------------|---------|
-| `provider` | String | LLM provider to use: `"openai"`, `"azure_openai"`, or `"custom"`. | `"openai"` |
+| `provider` | String | LLM provider: `"openai"`, `"azure_openai"`, `"anthropic"`, or `"custom"`. | `"openai"` |
 | `model` | String | Override the default model (if not set, the model from the prompt variant is used). | — |
 | `azure_endpoint` | String | Azure OpenAI endpoint URL (required when `provider = "azure_openai"`). | — |
 | `api_version` | String | Azure OpenAI API version (required when `provider = "azure_openai"`). | — |
 | `class_path` | String | Full Python class path for a custom LLM client (required when `provider = "custom"`). | — |
+| `timeout` | Float | HTTP request timeout in seconds, passed through to the underlying client. | Provider default |
+| `max_retries` | Integer | Number of automatic retries on transient errors, passed through to the underlying client. | Provider default |
 
-Additional provider-specific keys can be added to this section and will be passed through to the client.
-
-**Example:**
+**OpenAI example:**
 
 ```toml
 # config.toml
 [testbench-ai-service.llm_config]
 provider = "openai"
-...
+```
+
+**Anthropic example:**
+
+```toml
+[testbench-ai-service.llm_config]
+provider = "anthropic"
 ```
 
 **Azure OpenAI example:**
@@ -235,9 +241,20 @@ provider = "openai"
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"
 api_version = "2024-10-21"
-model = "gpt-4o" # Azure deployment name
-...
+model = "gpt-4o"  # use your Azure deployment name here
 ```
+
+### Automatic provider detection
+
+The service automatically routes each request to the correct client based on the model name specified in the prompt variant, regardless of the globally configured `provider`. This lets you mix models from different providers across prompt variants without changing the global config:
+
+| Model name prefix | Routed to |
+|------------------|-----------|
+| `gpt-*` | OpenAI |
+| `claude-*` | Anthropic |
+| anything else | uses `config.provider` |
+
+For example, if `provider = "openai"` is configured globally but a prompt variant specifies `model: "claude-sonnet-4-6"`, the service automatically uses the Anthropic client for that variant. The corresponding API key (`ANTHROPIC_API_KEY`) must be set in the environment.
 
 ### Setting the API key
 
@@ -247,6 +264,7 @@ API keys are loaded from environment variables using the pattern `{PROVIDER}_API
 |----------|---------------------|
 | `openai` | `OPENAI_API_KEY` |
 | `azure_openai` | `AZURE_OPENAI_API_KEY` |
+| `anthropic` | `ANTHROPIC_API_KEY` |
 | `custom` | Not required (handled by your implementation) |
 
 **Recommended:** Create a `.env` file at the root of your installation directory:
@@ -255,6 +273,7 @@ API keys are loaded from environment variables using the pattern `{PROVIDER}_API
 # .env
 OPENAI_API_KEY=your_openai_api_key
 AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 ### Project-specific API keys
@@ -266,11 +285,33 @@ You can set a separate API key per TestBench project using the pattern `{NORMALI
 # For a project named "Car Configurator" using OpenAI:
 CAR_CONFIGURATOR_OPENAI_API_KEY=sk-project-specific-key
 
+# For a project named "Car Configurator" using Anthropic:
+CAR_CONFIGURATOR_ANTHROPIC_API_KEY=sk-ant-project-specific-key
+
 # For a project named "Car Configurator" using Azure OpenAI:
 CAR_CONFIGURATOR_AZURE_OPENAI_API_KEY=azure-project-specific-key
 ```
 
 If a project-specific key is found, the service creates a dedicated LLM client for that project. Otherwise, the global client is used.
+
+### Azure OpenAI deployment mapping
+
+In prompt variants you always use your Azure **deployment name** (as configured in the Azure portal). The service needs to know which canonical model each deployment corresponds to so it can choose the correct API call routing (chat vs. reasoning).
+
+If your deployment names don't match any known canonical model name, add a `deployment_mapping` that maps each deployment name to the canonical model it represents:
+
+```toml
+[testbench-ai-service.llm_config]
+provider = "azure_openai"
+azure_endpoint = "https://your-resource.openai.azure.com"
+api_version = "2024-10-21"
+
+[testbench-ai-service.llm_config.deployment_mapping]
+"my-gpt4-deployment" = "gpt-4.1"
+"my-gpt4-mini-deployment" = "gpt-4.1-mini"
+```
+
+When the deployment name from a prompt variant matches a key in `deployment_mapping`, the corresponding canonical model name is used for routing decisions. The deployment name itself is still what gets sent to the Azure API.
 
 ### Custom LLM provider
 
@@ -295,7 +336,7 @@ The module must be importable from the working directory where the service is st
 
 ---
 
-## agent settings
+## Agent settings
 
 **`[testbench-ai-service.agents.<agent_key>]`**
 
@@ -316,9 +357,7 @@ Each agent is configured under its own key. The three built-in Agents are `test_
 | `file` | String | Path to the prompt YAML file (relative to `prompts_dir/<language>/`). | Yes |
 | `name` | String | Name of the prompt definition within the YAML file. | Yes |
 | `variant` | String | Prompt variant to use (falls back to `default_variant` in the YAML file). | No |
-| `placeholder_data` | Table | Key-value pairs for Jinja2 placeholder rendering in prompt blocks. | No |
-
-Additional custom attributes (like `glossary`) are supported and can be utilized by the agent implementation.
+| `vars` | Table | Key-value pairs for user-provided variables, accessible as `{{ vars.<key> }}` in prompt templates. | No |
 
 For details on how prompts work, see the [Prompts](prompts.md) page.
 
@@ -334,7 +373,7 @@ summary = "Trigger test case set reviews"
 description = "This endpoint triggers asynchronous reviews for the specified test case sets."
 
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
-file = "test_case_set_reviewer.yaml"
+file = "test_case_set_reviewer/prompt.yaml"
 name = "TestCaseSetReviewer"
 ...
 ```
@@ -355,7 +394,7 @@ Any global setting can be overridden per TestBench project. The project name mus
 | `agents.<key>.prompt.file` | String | Override the prompt file. |
 | `agents.<key>.prompt.name` | String | Override the prompt definition name. |
 | `agents.<key>.prompt.variant` | String | Override the prompt variant. |
-| `agents.<key>.prompt.placeholder_data` | Table | Override placeholder values. |
+| `agents.<key>.prompt.vars` | Table | Override prompt variables. |
 
 **Example:**
 
@@ -375,9 +414,9 @@ enabled = false
 
 # Use a different prompt variant for this project
 [testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer.prompt]
-file = "CarConfigurator_reviews_prompt.yaml"
+file = "CarConfigurator_reviews_prompt/prompt.yaml"
 name = "TestCaseSetReviewer"
-variant = "simple-generic-prompt-no-glossary"
+variant = "Separated Roles"
 ```
 
 ---

@@ -14,24 +14,25 @@ TestBench manages test cases, test structures, and defect data. The AI Service s
 At its core the service:
 
 - Exposes a REST API that TestBench calls to trigger AI-driven Agents.
-- Authenticates every request against the TestBench REST API using session tokens.
+- Authenticates every request against the TestBench REST API using JWT tokens.
 - Loads configurable prompt templates (YAML) and renders them with project data.
 - Sends the rendered prompts to the configured LLM provider and writes the results back to TestBench.
 
 ## Features
 
 - **Multiple Agents**: test case set reviews, test case set description generation, and defect explanations, each configurable independently.
-- **Pluggable LLM providers**: ships with OpenAI and Azure OpenAI support; bring your own provider by implementing a custom `LLMClient`.
-- **Configurable prompts**: YAML-based prompt definitions with variants, Jinja2 placeholders, and per-project overrides.
+- **Pluggable LLM providers**: ships with OpenAI, Azure OpenAI, and Anthropic support; bring your own provider by implementing a custom `LLMClient`.
+- **Automatic provider routing**: model names starting with `gpt-*` are automatically routed to OpenAI, `claude-*` to Anthropic — without changing the global config.
+- **Configurable prompts**: YAML-based prompt definitions with variants, Jinja2 variables, and per-project overrides.
 - **Per-project configuration**: language, LLM provider, prompt variant, and enabled Agents can all be overridden per TestBench project.
-- **Session-token authentication**: every API call is validated against the TestBench server; no separate credential management required.
+- **JWT authentication**: every API call is validated against the TestBench server using a JWT token; no separate credential management required.
 - **SSL/TLS & reverse proxy support**: optional HTTPS with client certificate verification and trusted-proxy configuration.
 - **Localization**: built-in English and German translations for AI-generated output.
 - **Async processing**: Agents run as background tasks so the API responds immediately.
 
 ## Architecture
 
-Built on [FastAPI](https://fastapi.tiangolo.com/) and [Uvicorn](https://www.uvicorn.org/), the service exposes a REST API that TestBench calls to trigger Agents. For each request, it validates the session token, retrieves relevant data from TestBench, renders a [Jinja2](https://jinja.palletsprojects.com/) prompt template, and forwards it to the configured LLM. The response is written back to TestBench as an async background task.
+Built on [FastAPI](https://fastapi.tiangolo.com/) and [Uvicorn](https://www.uvicorn.org/), the service exposes a REST API that TestBench calls to trigger Agents. For each request, it validates the JWT token, retrieves relevant data from TestBench, renders a [Jinja2](https://jinja.palletsprojects.com/) prompt template, and forwards it to the configured LLM. The response is written back to TestBench as an async background task.
 
 ```
 ┌──────────────────────────────────────┐
@@ -52,21 +53,20 @@ Built on [FastAPI](https://fastapi.tiangolo.com/) and [Uvicorn](https://www.uvic
  LLM requests │          │ LLM responses
 ┌─────────────▼──────────┴─────────────┐
 │             LLM Provider             │
-├───────────────────┬──────────────────┤
-│       OpenAI /    │      Custom      │
-│    Azure OpenAI   │                  │
-└──────────┬────────┴────────┬─────────┘
-           │                 │
-     OpenAI APIs           Your LLM API
+├──────────────────────────────────────┤
+│    • OpenAI / Azure OpenAI           │
+│    • Anthropic                       │
+│    • Custom                          │
+└──────────────────────────────────────┘
 ```
 
 ## Built-in Agents
 
-| agent | Endpoint | Description |
+| Agent | Dedicated endpoint | Description |
 |----------|----------|-------------|
-| [**Test Case Set Reviewer**](agents/test-case-set-reviewer.md) | `/test-case-set-reviews` | AI-powered quality reviews of test case sets. |
-| [**Test Case Set Describer**](agents/test-case-set-describer.md) | `/test-case-set-descriptions` | Automatic generation of descriptive summaries for test case sets. |
-| [**Defect Explainer**](agents/defect-explainer.md) | `/defect-explanations` | AI-generated explanations for defects found during test execution. |
+| [**Test Case Set Reviewer**](agents/test-case-set-reviewer.md) | `POST /test-case-set-reviews` | AI-powered quality reviews of test case sets. |
+| [**Test Case Set Describer**](agents/test-case-set-describer.md) | `POST /test-case-set-descriptions` | Automatic generation of descriptive summaries for test case sets. |
+| [**Defect Explainer**](agents/defect-explainer.md) | `POST /defect-explanations` | AI-generated explanations for defects found during test execution. |
 
 ## Where to go next
 

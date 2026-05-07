@@ -13,7 +13,7 @@ This page explains how TestBench communicates with the AI Service and how to con
 
 TestBench triggers AI Agents by calling the AI Service's REST API. Unlike the Requirement Service or Defect Service, the AI Service does **not** use a proxy wrapper — TestBench connects directly via its built-in AI integration.
 
-Authentication is handled via **session tokens**: TestBench passes the current user's session token with every request, and the AI Service validates it against the TestBench REST API.
+Authentication is handled via **JWT tokens**: TestBench passes the current user's JWT token with every request, and the AI Service validates it against the TestBench REST API.
 
 ---
 
@@ -50,14 +50,14 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
          │                                                                  │
 ┌────────┴────────────────────────────────────────────────────┐             │
 │ POST /test-case-set-reviews                                 │             │
-│ Header: Authorization: <session_token>                      │             │
+│ Header: Authorization: <jwt_token>                          │             │
 └────────┬────────────────────────────────────────────────────┘             │
          │                                                                  │
          │                                                                  │
 ┌────────▼────────────────────────────────────────────────────┐             │
 │ TestBench AI Service (FastAPI)                              │             │
 │ ┌─────────────────────────────────────────────────────────┐ │ 2. Validate │
-│ │ - Extract session token from header                     │ │    token    │
+│ │ - Extract JWT token from header                         │ │    token    │
 │ │ - Call TestBench REST API to verify token               ├─┼─────────────┘
 │ └─────────────────────────────────────────────────────────┘ │
 │ ┌─────────────────────────────────────────────────────────┐ │
@@ -74,24 +74,12 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 └─────────────────┘
 ```
 
-1. The user triggers an AI agent in the TestBench UI. TestBench sends a POST request to the AI Service with the user's session token as the `Authorization` header.
+1. The user triggers an AI agent in the TestBench UI. TestBench sends a POST request to the AI Service with the user's JWT token as the `Authorization` header.
 2. The AI Service validates the token by calling the TestBench REST API.
 3. If valid, the AI Service checks that the authenticated user has the required project role.
 4. The request is accepted and processed in the background.
 
-No separate username/password configuration is needed. The AI Service inherits the user's TestBench session.
-
----
-
-## Role requirements
-
-The authenticated user must have at least one of the following TestBench roles:
-
-- **Administrator**
-- **TestManager**
-- **TestDesigner**
-
-Requests from users without sufficient permissions receive a `403 Forbidden` response.
+No separate username/password configuration is needed. The AI Service uses the JWT token issued by TestBench.
 
 ---
 
@@ -111,7 +99,7 @@ Requests from users without sufficient permissions receive a `403 Forbidden` res
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
 | `Connection refused` | Service is not running or port mismatch. | Start the service; verify `host` and `port` in config. |
-| `401 Unauthorized` | Invalid or expired session token. | Re-login to TestBench and retry. |
+| `401 Unauthorized` | Missing or invalid JWT token. | Re-login to TestBench and retry. |
 | `502 Bad Gateway` | AI Service cannot reach TestBench REST API. | Verify `tb_server_url` in `config.toml` is correct and reachable. |
 | `404 Not Found` | agent disabled for the project. | Check `enabled = true` in the agent config; check project-specific overrides. |
 | `409 Conflict` | Precheck failed (e.g., all items locked). | Unlock the test structure elements in TestBench and retry. |
