@@ -25,9 +25,16 @@ from testbench_ai_service.models.agent import (
     PrecheckResult,
 )
 from testbench_ai_service.models.testbench import PermissionWithCode, ProjectRole
-from testbench_ai_service.utils.agent import check_test_case_set_is_locked, has_required_permissions
+from testbench_ai_service.utils.agent import (
+    check_test_case_set_is_locked,
+    get_test_case_nodes,
+    has_required_permissions,
+)
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
-from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
+from testbench_ai_service.utils.testbench import (
+    get_project_roles,
+    get_test_case_set_catalog,
+)
 from testbench_ai_service.utils.testbench_helpers import get_parameter_combinations_as_string
 
 
@@ -71,30 +78,33 @@ class TestCaseSetDescriber(Agent):
                 warnings.append("Insufficient permissions in JWT token.")
                 return PrecheckResult(passed=False, warnings=warnings)
 
-        if context.element_type == "TESTCASESET":
-            test_case_set = conn.get_project_test_case_set(context.project_key, context.root_key)
-        elif context.element_type == "TESTTHEME":
-            test_case_set = conn.get_project_test_theme(context.project_key, context.root_key)
-        else:
-            warnings.append("The selected element must be a TestCaseSet.")
-            return PrecheckResult(passed=False, warnings=warnings)
+        tc_nodes = get_test_case_nodes(context, conn)
 
         project_roles = get_project_roles(conn, context.project_key)
-        spec = test_case_set.get("spec") or {}
         _sufficient_roles = {ProjectRole.TestManager}
+        items = []
 
-        if check_test_case_set_is_locked(conn, context, context.root_uid, "spec"):
-            warnings.append("The test case set specification is currently locked.")
-            return PrecheckResult(passed=False, warnings=warnings)
+        for node in tc_nodes:
+            test_case_set = conn.get_project_test_case_set(context.project_key, node.base.key)
+            spec = test_case_set.get("spec") or {}
 
-        if _sufficient_roles.intersection(project_roles):
-            return PrecheckResult(passed=True, warnings=warnings)
-        if ProjectRole.TestDesigner in project_roles:
-            responsible = (spec.get("responsible") or {}).get("key")
-            if responsible == context.user_key or responsible is None:
-                return PrecheckResult(passed=True, warnings=warnings)
+            if check_test_case_set_is_locked(conn, context, test_case_set.get("uniqueID"), "spec"):
+                warnings.append(
+                    f"The test case set specification is currently locked (uid='{node.base.uniqueID}')."
+                )
+                continue
 
-        warnings.append("Insufficient project role to generate a description.")
+            if _sufficient_roles.intersection(project_roles):
+                items.append(node.base.uniqueID)
+            elif ProjectRole.TestDesigner in project_roles:
+                responsible = (spec.get("responsible") or {}).get("key")
+                if responsible == context.user_key or responsible is None:
+                    items.append(node.base.uniqueID)
+
+        if items:
+            return PrecheckResult(passed=True, warnings=warnings, items=items)
+
+        warnings.append("Insufficient project role to perform a review.")
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(
@@ -105,6 +115,8 @@ class TestCaseSetDescriber(Agent):
         precheck_results: list[str],
     ) -> None:
         """Generates descriptions for all test case sets concurrently."""
+        print(precheck_results)
+
         tasks = []
         test_case_set_catalog = {}
         try:
@@ -120,11 +132,12 @@ class TestCaseSetDescriber(Agent):
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
         for tcs in test_case_set_catalog.values():
-            task = asyncio.create_task(
-                self._generate_test_case_set_description(tcs, context, conn, llm_client)
-            )
-            logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-            tasks.append(task)
+            if tcs.details.uniqueID in precheck_results:
+                task = asyncio.create_task(
+                    self._generate_test_case_set_description(tcs, context, conn, llm_client)
+                )
+                logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
+                tasks.append(task)
 
         logger.debug("Awaiting completion of %d description generation task(s)", len(tasks))
         await asyncio.gather(*tasks)

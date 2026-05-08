@@ -29,11 +29,15 @@ from testbench_ai_service.models.testbench import (
 )
 from testbench_ai_service.utils.agent import (
     fetch_test_structure_tree,
+    get_test_case_nodes,
     has_required_permissions,
     is_test_case_locked_by_user,
 )
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
-from testbench_ai_service.utils.testbench import get_project_roles, get_test_case_set_catalog
+from testbench_ai_service.utils.testbench import (
+    get_project_roles,
+    get_test_case_set_catalog,
+)
 
 
 class DefectExplainer(Agent):
@@ -74,30 +78,40 @@ class DefectExplainer(Agent):
                 warnings.append("Insufficient permissions in JWT token.")
                 return PrecheckResult(passed=False, warnings=warnings)
 
-        if context.element_type not in ["TESTCASESET", "TESTTHEME"]:
-            warnings.append("The selected element must be a TestCaseSet.")
-            return PrecheckResult(passed=False, warnings=warnings)
+        tc_nodes = get_test_case_nodes(context, conn)
 
         project_roles = get_project_roles(conn, context.project_key)
-        test_structure_tree = fetch_test_structure_tree(conn, context, context.root_uid)
         _sufficient_roles = {ProjectRole.TestManager, ProjectRole.Tester}
+        items = []
 
-        if test_structure_tree.root.exec.verdict != VerdictStatus.ToVerify:
-            warnings.append("The test case verdict must be 'To Verify'.")
-            return PrecheckResult(passed=False, warnings=warnings)
+        for node in tc_nodes:
+            test_structure_tree = fetch_test_structure_tree(conn, context, node.base.uniqueID)
 
-        if test_structure_tree.root.exec.status != ActivityStatus.Performed:
-            warnings.append("The test case execution status must be 'Performed'.")
-            return PrecheckResult(passed=False, warnings=warnings)
+            if test_structure_tree.root.exec.verdict != VerdictStatus.ToVerify:
+                warnings.append(
+                    f"The test case verdict must be 'To Verify' (uid='{node.base.uniqueID}')."
+                )
+                continue
 
-        if is_test_case_locked_by_user(test_structure_tree, context, "exec"):
-            warnings.append("The test case execution is currently locked.")
-            return PrecheckResult(passed=False, warnings=warnings)
+            if test_structure_tree.root.exec.status != ActivityStatus.Performed:
+                warnings.append(
+                    f"The test case execution status must be 'Performed' (uid='{node.base.uniqueID}')."
+                )
+                continue
 
-        if _sufficient_roles.intersection(project_roles):
-            return PrecheckResult(passed=True, warnings=warnings)
+            if is_test_case_locked_by_user(test_structure_tree, context, "exec"):
+                warnings.append(
+                    f"The test case execution is currently locked (uid='{node.base.uniqueID}')."
+                )
+                continue
 
-        warnings.append("Insufficient project role to explain defects.")
+            if _sufficient_roles.intersection(project_roles):
+                items.append(node.base.uniqueID)
+
+        if items:
+            return PrecheckResult(passed=True, warnings=warnings, items=items)
+
+        warnings.append("Insufficient project role to perform a review.")
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(
@@ -110,6 +124,7 @@ class DefectExplainer(Agent):
         """Generates defect explanations for all test case sets concurrently."""
         tasks = []
         test_case_set_catalog = {}
+        print(precheck_results)
 
         try:
             test_case_set_catalog = get_test_case_set_catalog(
@@ -125,11 +140,12 @@ class DefectExplainer(Agent):
             handle_requests_http_error(e)
 
         for tcs in test_case_set_catalog.values():
-            task = asyncio.create_task(
-                self._generate_defect_explanations(tcs, context, conn, llm_client)
-            )
-            logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-            tasks.append(task)
+            if tcs.details.uniqueID in precheck_results:
+                task = asyncio.create_task(
+                    self._generate_defect_explanations(tcs, context, conn, llm_client)
+                )
+                logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
+                tasks.append(task)
 
         logger.debug("Awaiting completion of %d defect explanation generation task(s)", len(tasks))
         await asyncio.gather(*tasks)

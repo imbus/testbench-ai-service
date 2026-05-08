@@ -31,6 +31,7 @@ from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import PermissionWithCode, ProjectRole, SpecStatus
 from testbench_ai_service.utils.agent import (
     check_test_case_set_is_locked,
+    get_test_case_nodes,
     has_required_permissions,
 )
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
@@ -38,8 +39,6 @@ from testbench_ai_service.utils.string_processor import extract_text_from_html_b
 from testbench_ai_service.utils.testbench import (
     get_project_roles,
     get_test_case_set_catalog,
-    post_project_cycle_structure,
-    post_project_tov_structure,
 )
 from testbench_ai_service.utils.testbench_helpers import (
     get_parameter_combinations_as_string,
@@ -86,36 +85,7 @@ class TestCaseSetReviewer(Agent):
                 warnings.append("Insufficient permissions in JWT token.")
                 return PrecheckResult(passed=False, warnings=warnings)
 
-        if context.element_type == "TESTCASESET":
-            node = SimpleNamespace(
-                base=SimpleNamespace(key=context.root_key, uniqueID=context.root_uid)
-            )
-            tc_nodes = [node]
-
-        elif context.element_type == "TESTTHEME":
-            if context.cycle_key:
-                test_case = post_project_cycle_structure(
-                    conn,
-                    context.project_key,
-                    context.cycle_key,
-                    context.root_uid,
-                    context.filtering,
-                )
-            else:
-                test_case = post_project_tov_structure(
-                    conn,
-                    context.project_key,
-                    context.cycle_key,
-                    context.root_uid,
-                    context.filtering,
-                )
-            tc_nodes = [
-                node for node in test_case.nodes if re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
-            ]
-
-        else:
-            warnings.append("The selected element must be a TestCaseSet.")
-            return PrecheckResult(passed=False, warnings=warnings)
+        tc_nodes = get_test_case_nodes(context, conn)
 
         project_roles = get_project_roles(conn, context.project_key)
         _sufficient_roles = {ProjectRole.TestManager}
@@ -126,7 +96,9 @@ class TestCaseSetReviewer(Agent):
             spec = test_case_set.get("spec") or {}
 
             if check_test_case_set_is_locked(conn, context, test_case_set.get("uniqueID"), "spec"):
-                warnings.append("The test case set specification is currently locked.")
+                warnings.append(
+                    f"The test case set specification is currently locked (uid='{node.base.uniqueID}')."
+                )
                 continue
 
             if _sufficient_roles.intersection(project_roles):
@@ -145,7 +117,6 @@ class TestCaseSetReviewer(Agent):
                     items.append(node.base.uniqueID)
 
         if items:
-            print(items)
             return PrecheckResult(passed=True, warnings=warnings, items=items)
 
         warnings.append("Insufficient project role to perform a review.")
@@ -159,6 +130,8 @@ class TestCaseSetReviewer(Agent):
         precheck_results: list[str],
     ) -> None:
         """Reviews all test case sets concurrently."""
+        print(precheck_results)
+
         tasks = []
         test_case_set_catalog = {}
         try:

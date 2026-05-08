@@ -1,3 +1,6 @@
+import re
+from types import SimpleNamespace
+
 import requests
 from fastapi import HTTPException, status
 from jwt import DecodeError, decode
@@ -22,6 +25,8 @@ from testbench_ai_service.utils.config import (
 from testbench_ai_service.utils.testbench import (
     get_project_name,
     get_test_structure_tree,
+    post_project_cycle_structure,
+    post_project_tov_structure,
 )
 
 
@@ -208,3 +213,36 @@ def fetch_test_structure_tree(conn, context, uniqueID):
         ) from e
 
     return test_structure_tree
+
+
+def get_test_case_nodes(context, conn):
+    if context.element_type == "TESTCASESET":
+        node = SimpleNamespace(
+            base=SimpleNamespace(key=context.root_key, uniqueID=context.root_uid)
+        )
+        tc_nodes = [node]
+
+    elif context.element_type == "TESTTHEME":
+        if context.cycle_key:
+            test_case = post_project_cycle_structure(
+                conn,
+                context.project_key,
+                context.cycle_key,
+                context.root_uid,
+                context.filtering,
+            )
+        else:
+            test_case = post_project_tov_structure(
+                conn,
+                context.project_key,
+                context.cycle_key,
+                context.root_uid,
+                context.filtering,
+            )
+        tc_nodes = [
+            node for node in test_case.nodes if re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
+        ]
+
+    else:
+        tc_nodes = []
+    return tc_nodes
