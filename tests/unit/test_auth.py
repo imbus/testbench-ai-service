@@ -56,7 +56,11 @@ class TestGetAuthInfo(unittest.TestCase):
         """Invoke ``get_auth_info`` directly (bypassing FastAPI DI)."""
         config = config or _make_app_config()
         request = _make_request(config)
-        return get_auth_info(request, session_token=session_token, jwt_token=jwt_token)
+        gen = get_auth_info(request, session_token=session_token, jwt_token=jwt_token)
+        try:
+            return next(gen)
+        finally:
+            gen.close()
 
     # --- missing / empty token ---
 
@@ -72,7 +76,7 @@ class TestGetAuthInfo(unittest.TestCase):
 
     # --- session token path ---
 
-    @patch("testbench_ai_service.auth._validate_token", return_value="user-key-1")
+    @patch("testbench_ai_service.auth._validate_token", return_value=("user-key-1", MagicMock()))
     def test_session_token_returns_session_auth_type(self, mock_validate):
         result = self._call(session_token=_SESSION_TOKEN)
 
@@ -91,7 +95,7 @@ class TestGetAuthInfo(unittest.TestCase):
 
     # --- JWT token path ---
 
-    @patch("testbench_ai_service.auth._validate_token", return_value="jwt-user-key")
+    @patch("testbench_ai_service.auth._validate_token", return_value=("jwt-user-key", MagicMock()))
     def test_jwt_token_returns_jwt_auth_type(self, mock_validate):
         result = self._call(jwt_token=_VALID_JWT)
 
@@ -110,7 +114,7 @@ class TestGetAuthInfo(unittest.TestCase):
 
     # --- _jwt preferred over _session when both present ---
 
-    @patch("testbench_ai_service.auth._validate_token", return_value="u")
+    @patch("testbench_ai_service.auth._validate_token", return_value=("u", MagicMock()))
     def test_jwt_takes_precedence_over_session_token(self, mock_validate):
         result = self._call(session_token=_SESSION_TOKEN, jwt_token=_VALID_JWT)
         self.assertEqual(result.auth_type, AuthType.JWT_TOKEN)
@@ -126,9 +130,9 @@ class TestValidateToken(unittest.TestCase):
     @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
     def test_valid_token_returns_user_key(self, mock_get_user_key, mock_conn_cls):
-        result = _validate_token("https://tb/api/", "some-token")
+        user_key, conn = _validate_token("https://tb/api/", "some-token", True)
 
-        self.assertEqual(result, "uk1")
+        self.assertEqual(user_key, "uk1")
         mock_conn_cls.assert_called_once()
         mock_get_user_key.assert_called_once()
 
@@ -139,7 +143,7 @@ class TestValidateToken(unittest.TestCase):
     )
     def test_http_error_raises_401(self, mock_get_user_key, mock_conn_cls):
         with self.assertRaises(HTTPException) as ctx:
-            _validate_token("https://tb/api/", "bad-token")
+            _validate_token("https://tb/api/", "bad-token", True)
         self.assertEqual(ctx.exception.status_code, 401)
 
     @patch("testbench_ai_service.auth.TBConnection")
@@ -149,18 +153,60 @@ class TestValidateToken(unittest.TestCase):
     )
     def test_connection_error_raises_502(self, mock_get_user_key, mock_conn_cls):
         with self.assertRaises(HTTPException) as ctx:
-            _validate_token("https://tb/api/", "any-token")
+            _validate_token("https://tb/api/", "any-token", True)
         self.assertEqual(ctx.exception.status_code, 502)
 
     @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
-    def test_connection_is_always_closed(self, mock_get_user_key, mock_conn_cls):
+    def test_connection_NOT_closed_on_success(self, mock_get_user_key, mock_conn_cls):
         mock_conn = MagicMock()
         mock_conn_cls.return_value = mock_conn
 
-        _validate_token("https://tb/api/", "tok")
+        _validate_token("https://tb/api/", "tok", True)
+
+        mock_conn.close.assert_not_called()
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch(
+        "testbench_ai_service.auth.get_user_key",
+        side_effect=requests.exceptions.HTTPError("Unauthorized"),
+    )
+    def test_connection_closed_on_http_error(self, mock_get_user_key, mock_conn_cls):
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+
+        with self.assertRaises(HTTPException):
+            _validate_token("https://tb/api/", "bad-token", True)
 
         mock_conn.close.assert_called_once()
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch(
+        "testbench_ai_service.auth.get_user_key",
+        side_effect=requests.exceptions.ConnectionError("timeout"),
+    )
+    def test_connection_closed_on_connection_error(self, mock_get_user_key, mock_conn_cls):
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+
+        with self.assertRaises(HTTPException):
+            _validate_token("https://tb/api/", "any-token", True)
+
+        mock_conn.close.assert_called_once()
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
+    def test_verify_bool_passed_to_tbconnection(self, mock_get_user_key, mock_conn_cls):
+        _validate_token("https://tb/api/", "tok", False)
+        mock_conn_cls.assert_called_once_with("https://tb/api/", verify=False, sessionToken="tok")
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
+    def test_verify_ca_bundle_path_passed_to_tbconnection(self, mock_get_user_key, mock_conn_cls):
+        _validate_token("https://tb/api/", "tok", "/path/to/ca.pem")
+        mock_conn_cls.assert_called_once_with(
+            "https://tb/api/", verify="/path/to/ca.pem", sessionToken="tok"
+        )
 
 
 if __name__ == "__main__":

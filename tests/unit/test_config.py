@@ -166,6 +166,14 @@ class TestAppConfigDefaults(unittest.TestCase):
         self.assertIsNone(config.ssl_key)
         self.assertIsNone(config.ssl_ca_cert)
 
+    def test_tb_ssl_verify_defaults_to_true(self):
+        config = _make_app_config()
+        self.assertTrue(config.tb_ssl_verify)
+
+    def test_tb_ssl_ca_bundle_defaults_to_none(self):
+        config = _make_app_config()
+        self.assertIsNone(config.tb_ssl_ca_bundle)
+
     def test_trusted_proxies_defaults_to_none(self):
         config = _make_app_config()
         self.assertIsNone(config.trusted_proxies)
@@ -207,6 +215,22 @@ class TestAppConfigSSLValidator(unittest.TestCase):
             self.assertRaises(ValidationError),
         ):
             AppConfig(ssl_cert="/non/existent/cert.pem")
+
+    def test_nonexistent_tb_ssl_ca_bundle_raises(self):
+        with (
+            patch("testbench_ai_service.config.validate_tb_server_url"),
+            patch("testbench_ai_service.config.AppConfig.validate_prompt_paths", return_value=None),
+            patch(
+                "testbench_ai_service.config.AppConfig.validate_prompts_dir_exists",
+                return_value=PROMPTS_DIR,
+            ),
+            self.assertRaises(ValidationError),
+        ):
+            AppConfig(tb_ssl_ca_bundle="/non/existent/ca-bundle.pem")
+
+    def test_tb_ssl_verify_false_accepted(self):
+        config = _make_app_config(tb_ssl_verify=False)
+        self.assertFalse(config.tb_ssl_verify)
 
 
 class TestAppConfigTbServerUrlValidator(unittest.TestCase):

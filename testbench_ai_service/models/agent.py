@@ -92,8 +92,8 @@ class PrecheckResult(BaseModel, Generic[T]):
     """Outcome of the precheck phase, including items ready for execution."""
 
     passed: bool
-    items: list[T] = []
     warnings: list[str] = []
+    items: list[str] | None = None
 
 
 class AgentDetailsResponse(BaseModel):

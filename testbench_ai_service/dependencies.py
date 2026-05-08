@@ -1,13 +1,9 @@
-from collections.abc import Generator
-
-import requests
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Request
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.auth import AuthInfo, get_auth_info
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.factory import LLMFactory
-from testbench_ai_service.log import logger
 
 
 def get_app_config(request: Request) -> AppConfig:
@@ -16,24 +12,14 @@ def get_app_config(request: Request) -> AppConfig:
 
 
 def get_tb_connection(
-    config: AppConfig = Depends(get_app_config),
     auth_info: AuthInfo = Depends(get_auth_info),
-) -> Generator[TBConnection, None, None]:
-    """Yield an authenticated TestBench connection for the duration of a request."""
-    server_url = config.tb_server_url
-    try:
-        conn = TBConnection(server_url=server_url, verify=False, sessionToken=auth_info.token)
-    except requests.exceptions.RequestException as e:
-        logger.error("Could not connect to TestBench server: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not connect to TestBench server: {e!s}",
-        ) from e
+) -> TBConnection:
+    """Return the authenticated TestBench connection for the current request.
 
-    try:
-        yield conn
-    finally:
-        conn.close()
+    The connection's lifecycle is managed by :func:`get_auth_info`, which opens
+    it during token validation and closes it after the request completes.
+    """
+    return auth_info.conn
 
 
 def get_llm_factory(request: Request) -> LLMFactory:

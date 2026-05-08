@@ -109,7 +109,7 @@ class TestLLMFactoryCreateClient(unittest.TestCase):
         }
 
         factory = LLMFactory()
-        client = factory._create_client(config, api_key="azure-key")
+        client = factory._create_client(LLMProvider.AZURE_OPENAI, config, api_key="azure-key")
 
         self.assertIs(client, mock_azure_client_class.return_value)
         mock_azure_client_class.assert_called_once_with(
@@ -128,7 +128,62 @@ class TestLLMFactoryCreateClient(unittest.TestCase):
         factory = LLMFactory()
 
         with self.assertRaises(ValueError):
-            factory._create_client(config, api_key="azure-key")
+            factory._create_client(LLMProvider.AZURE_OPENAI, config, api_key="azure-key")
+
+
+class TestLLMFactoryResolveProvider(unittest.TestCase):
+    """Tests for ``LLMFactory._resolve_provider``."""
+
+    def _make_config(self, provider: LLMProvider):
+        config = MagicMock()
+        config.provider = provider
+        return config
+
+    def test_gpt_model_with_openai_config_returns_openai(self):
+        factory = LLMFactory()
+        config = self._make_config(LLMProvider.OPENAI)
+        self.assertEqual(factory._resolve_provider(config, "gpt-4o"), LLMProvider.OPENAI)
+
+    def test_gpt_model_with_azure_config_returns_azure(self):
+        factory = LLMFactory()
+        config = self._make_config(LLMProvider.AZURE_OPENAI)
+        self.assertEqual(factory._resolve_provider(config, "gpt-4o"), LLMProvider.AZURE_OPENAI)
+
+    def test_o_series_model_with_openai_config_returns_openai(self):
+        factory = LLMFactory()
+        config = self._make_config(LLMProvider.OPENAI)
+        for model in ("o1", "o3", "o4-mini", "o1-preview", "o3-deep-research"):
+            with self.subTest(model=model):
+                self.assertEqual(factory._resolve_provider(config, model), LLMProvider.OPENAI)
+
+    def test_o_series_model_with_azure_config_returns_azure(self):
+        factory = LLMFactory()
+        config = self._make_config(LLMProvider.AZURE_OPENAI)
+        for model in ("o1", "o4-mini"):
+            with self.subTest(model=model):
+                self.assertEqual(factory._resolve_provider(config, model), LLMProvider.AZURE_OPENAI)
+
+    def test_claude_model_returns_anthropic(self):
+        factory = LLMFactory()
+        config = self._make_config(LLMProvider.OPENAI)
+        self.assertEqual(
+            factory._resolve_provider(config, "claude-3-sonnet"), LLMProvider.ANTHROPIC
+        )
+
+    def test_none_model_returns_config_provider(self):
+        factory = LLMFactory()
+        config = self._make_config(LLMProvider.ANTHROPIC)
+        self.assertEqual(factory._resolve_provider(config, None), LLMProvider.ANTHROPIC)
+
+    def test_openai_model_with_non_openai_config_falls_back_to_openai(self):
+        factory = LLMFactory()
+        config = self._make_config(LLMProvider.ANTHROPIC)
+        self.assertEqual(factory._resolve_provider(config, "gpt-4o"), LLMProvider.OPENAI)
+
+    def test_o_series_false_positive_not_matched(self):
+        factory = LLMFactory()
+        self.assertFalse(factory._is_openai_model("ollama-llama3"))
+        self.assertFalse(factory._is_openai_model("openhermes"))
 
 
 if __name__ == "__main__":

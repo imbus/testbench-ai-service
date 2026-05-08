@@ -1,3 +1,5 @@
+import re
+
 import requests
 from fastapi import HTTPException, status
 from jwt import DecodeError, decode
@@ -7,10 +9,13 @@ from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.agent import ExecutionContext, TriggerAgentRequest
+from testbench_ai_service.models.agent import ElementType, ExecutionContext, TriggerAgentRequest
 from testbench_ai_service.models.testbench import (
+    PermissionWithCode,
+    TestCaseSetNode,
     TestStructureItemExecution,
     TestStructureItemSpecification,
+    TestStructureTree,
 )
 from testbench_ai_service.utils.config import (
     get_language_from_config,
@@ -20,6 +25,8 @@ from testbench_ai_service.utils.config import (
 from testbench_ai_service.utils.testbench import (
     get_project_name,
     get_test_structure_tree,
+    post_project_cycle_structure,
+    post_project_tov_structure,
 )
 
 
@@ -149,6 +156,33 @@ def check_test_case_set_is_locked(
     Returns True if the given test structure element tab is locked by a *different* user.
     Returns False if it is free or locked by the current user.
     """
+    test_structure_tree = fetch_test_structure_tree(conn, context, uniqueID)
+
+    return is_test_case_locked_by_user(test_structure_tree, context, tab)
+
+
+def is_test_case_locked_by_user(
+    test_structure_tree: TestStructureTree, context: ExecutionContext, tab: str
+):
+    tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(  # type: ignore[assignment]
+        test_structure_tree.root, tab, None
+    )
+    if tab_object is not None and tab_object.locker is not None:
+        return tab_object.locker.key != context.user_key
+    return False
+
+
+def has_required_permissions(
+    required_permissions: set[PermissionWithCode],
+    token_perms: list[int],
+) -> bool:
+    token_perm_set = set(token_perms)
+    return all(perm.value in token_perm_set for perm in required_permissions)
+
+
+def fetch_test_structure_tree(
+    conn: TBConnection, context: ExecutionContext, uniqueID: str
+) -> TestStructureTree:
     try:
         test_structure_tree = get_test_structure_tree(
             conn=conn,
@@ -167,9 +201,54 @@ def check_test_case_set_is_locked(
             detail=f"Could not connect to TestBench server: {e!s}",
         ) from e
 
-    tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(  # type: ignore[assignment]
-        test_structure_tree.root, tab, None
-    )
-    if tab_object is not None and tab_object.locker is not None:
-        return tab_object.locker.key != context.user_key
-    return False
+    return test_structure_tree
+
+
+def get_test_case_nodes(context: ExecutionContext, conn: TBConnection):
+    if context.element_type == ElementType.TESTCASESET:
+        data = conn.get_project_test_case_set(context.project_key, context.root_key)
+        exec_data = data.get("exec")
+        node = TestCaseSetNode(
+            base={
+                "key": context.root_key,
+                "numbering": "",
+                "parentKey": "",
+                "name": "",
+                "uniqueID": data["uniqueID"],
+                "matchesFilter": True,
+            },
+            exec={
+                "key": exec_data["key"],
+                "status": exec_data["status"],
+                "execStatus": exec_data["execStatus"],
+                "verdict": exec_data["verdict"],
+            }
+            if exec_data
+            else None,
+        )
+        tc_nodes = [node]
+
+    elif context.element_type == ElementType.TESTTHEME:
+        if context.cycle_key:
+            test_case = post_project_cycle_structure(
+                conn,
+                context.project_key,
+                context.cycle_key,
+                context.root_uid,
+                context.filtering,
+            )
+        else:
+            test_case = post_project_tov_structure(
+                conn,
+                context.project_key,
+                context.cycle_key,
+                context.root_uid,
+                context.filtering,
+            )
+        tc_nodes = [
+            node for node in test_case.nodes if re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
+        ]
+
+    else:
+        tc_nodes = []
+    return tc_nodes

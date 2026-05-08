@@ -84,10 +84,6 @@ class TestPrecheckResult(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertIn("No test cases found", result.warnings)
 
-    def test_items_list_is_preserved(self):
-        result = PrecheckResult(passed=True, items=["item1", "item2"])
-        self.assertEqual(result.items, ["item1", "item2"])
-
 
 if __name__ == "__main__":
     unittest.main()

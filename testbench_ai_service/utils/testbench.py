@@ -181,10 +181,10 @@ def get_own_project_memberships(conn: TBConnection) -> list[ProjectMember]:
     return TypeAdapter(list[ProjectMember]).validate_python(project_memberships)
 
 
-def get_project_roles(conn: TBConnection, project: str) -> list[ProjectRole]:
+def get_project_roles(conn: TBConnection, project_key: str) -> list[ProjectRole]:
     project_memberships = get_own_project_memberships(conn)
     membership = next(
-        (membership for membership in project_memberships if membership.projectKey == project),
+        (membership for membership in project_memberships if membership.projectKey == project_key),
         None,
     )
     return membership.roles if membership else []

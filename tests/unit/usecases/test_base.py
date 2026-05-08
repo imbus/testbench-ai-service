@@ -9,9 +9,9 @@ class _ConcreteAgent(Agent):
     """Minimal concrete implementation for testing."""
 
     async def precheck(self, context, conn):
-        return MagicMock(passed=True, items=[], warnings=[])
+        return MagicMock(passed=True, warnings=[])
 
-    async def run(self, context, conn, llm_client, items):
+    async def run(self, context, conn, llm_client):
         pass
 
 

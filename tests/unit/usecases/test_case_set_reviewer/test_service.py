@@ -120,12 +120,11 @@ class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
         context = _make_context()
         conn = MagicMock()
         llm_client = MagicMock()
-        items = [_make_tcs("TCS1"), _make_tcs("TCS2")]
 
         with patch.object(
             self.service, "_review_test_case_set", new_callable=AsyncMock
         ) as mock_review:
-            await self.service.run(context, conn, llm_client, items)
+            await self.service.run(context, conn, llm_client)
 
         self.assertEqual(mock_review.await_count, 2)
 
@@ -137,7 +136,7 @@ class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             self.service, "_review_test_case_set", new_callable=AsyncMock
         ) as mock_review:
-            await self.service.run(context, conn, llm_client, [])
+            await self.service.run(context, conn, llm_client)
 
         mock_review.assert_not_awaited()
 

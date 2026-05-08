@@ -116,12 +116,11 @@ class TestDefectExplainerRun(unittest.IsolatedAsyncioTestCase):
         context = _make_context()
         conn = MagicMock()
         llm_client = MagicMock()
-        items = [_make_tcs("TCS1"), _make_tcs("TCS2")]
 
         with patch.object(
             self.service, "_generate_defect_explanations", new_callable=AsyncMock
         ) as mock_generate:
-            await self.service.run(context, conn, llm_client, items)
+            await self.service.run(context, conn, llm_client)
 
         self.assertEqual(mock_generate.await_count, 2)
 

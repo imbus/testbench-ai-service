@@ -1,6 +1,7 @@
 import asyncio
 
 import requests
+from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -13,14 +14,29 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     get_test_case_set_as_string,
     update_description,
 )
+from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext, PrecheckResult
-from testbench_ai_service.utils.agent import check_test_case_set_is_locked
+from testbench_ai_service.models.testbench import (
+    ActivityStatus,
+    PermissionWithCode,
+    ProjectRole,
+    VerdictStatus,
+)
+from testbench_ai_service.utils.agent import (
+    fetch_test_structure_tree,
+    get_test_case_nodes,
+    has_required_permissions,
+    is_test_case_locked_by_user,
+)
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
-from testbench_ai_service.utils.testbench import get_test_case_set_catalog
+from testbench_ai_service.utils.testbench import (
+    get_project_roles,
+    get_test_case_set_catalog,
+)
 
 
 class DefectExplainerAgentData(AgentData):
@@ -33,20 +49,81 @@ class DefectExplainer(Agent):
         self,
         context: ExecutionContext,
         conn: TBConnection,
+        auth_info: AuthInfo,
     ) -> PrecheckResult[TestCaseSet]:
         """
         Fetches the TCS catalog and checks that exec is unlocked and cycle_key is set.
         """
         warnings = []
-        items: list[TestCaseSet] = []
+        requierd_permissions = {
+            PermissionWithCode.AccessSecuredData,
+            PermissionWithCode.ReadOwnUserDetails,
+            PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadCycleReport,
+            PermissionWithCode.ReadReportingJobDetails,
+            PermissionWithCode.DownloadReportFile,
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ModifySpecifications,
+            PermissionWithCode.ReadTestThemeDetails,
+        }
 
-        if context.cycle_key is None:
-            return PrecheckResult(
-                passed=False,
-                warnings=["Defect explanations require a cycle_key to be set."],
-            )
+        if auth_info.auth_type == AuthType.JWT_TOKEN:
+            token_info = decode(auth_info.token, options={"verify_signature": False})
+            token_perms = token_info.get("perms", [])
+            if not has_required_permissions(requierd_permissions, token_perms):
+                warnings.append("Insufficient permissions in JWT token.")
+                return PrecheckResult(passed=False, warnings=warnings)
 
+        tc_nodes = get_test_case_nodes(context, conn)
+
+        project_roles = get_project_roles(conn, context.project_key)
+        _sufficient_roles = {ProjectRole.TestManager, ProjectRole.Tester}
+        items = []
+
+        for node in tc_nodes:
+            test_structure_tree = node
+            test_structure_tree = fetch_test_structure_tree(conn, context, node.base.uniqueID)
+
+            if test_structure_tree.root.exec.verdict != VerdictStatus.ToVerify:
+                warnings.append(
+                    f"The test case verdict must be 'To Verify' (uid='{node.base.uniqueID}')."
+                )
+                continue
+
+            if test_structure_tree.root.exec.status != ActivityStatus.Performed:
+                warnings.append(
+                    f"The test case execution status must be 'Performed' (uid='{node.base.uniqueID}')."
+                )
+                continue
+
+            if is_test_case_locked_by_user(test_structure_tree, context, "exec"):
+                warnings.append(
+                    f"The test case execution is currently locked (uid='{node.base.uniqueID}')."
+                )
+                continue
+
+            if _sufficient_roles.intersection(project_roles):
+                items.append(node.base.uniqueID)
+            else:
+                warnings.append("Insufficient project role to perform the DefectExplainer.")
+
+        if items:
+            return PrecheckResult(passed=True, warnings=warnings, items=items)
+
+        return PrecheckResult(passed=False, warnings=warnings)
+
+    async def run(
+        self,
+        context: ExecutionContext,
+        conn: TBConnection,
+        llm_client: LLMClient,
+        precheck_results: list[str],
+    ) -> None:
+        """Generates defect explanations for all test case sets concurrently."""
+        tasks = []
         test_case_set_catalog = {}
+
         try:
             test_case_set_catalog = get_test_case_set_catalog(
                 conn=conn,
@@ -60,36 +137,13 @@ class DefectExplainer(Agent):
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
 
-        for tcs_uid, tcs in test_case_set_catalog.items():
-            if not check_test_case_set_is_locked(conn, context, tcs.details.uniqueID, "exec"):
-                items.append(tcs)
-            else:
-                warning = f"The Test Structure Element with UID '{tcs.details.uniqueID}' could not be locked."
-                warnings.append(warning)
-                logger.debug("Precheck failed for '%s': %s", tcs_uid, warning)
-
-        logger.debug(
-            "Precheck completed: %d/%d test case sets are ready for defect explanation generation",
-            len(items),
-            len(test_case_set_catalog),
-        )
-        return PrecheckResult(passed=bool(items), items=items, warnings=warnings)
-
-    async def run(
-        self,
-        context: ExecutionContext,
-        conn: TBConnection,
-        llm_client: LLMClient,
-        items: list[TestCaseSet],
-    ) -> None:
-        """Generates defect explanations for all test case sets concurrently."""
-        tasks = []
-        for tcs in items:
-            task = asyncio.create_task(
-                self._generate_defect_explanations(tcs, context, conn, llm_client)
-            )
-            logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-            tasks.append(task)
+        for tcs in test_case_set_catalog.values():
+            if tcs.details.uniqueID in precheck_results:
+                task = asyncio.create_task(
+                    self._generate_defect_explanations(tcs, context, conn, llm_client)
+                )
+                logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
+                tasks.append(task)
 
         logger.debug("Awaiting completion of %d defect explanation generation task(s)", len(tasks))
         await asyncio.gather(*tasks)

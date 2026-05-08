@@ -143,13 +143,23 @@ async def trigger_agent_execution(
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
     agent = load_agent(agent_config)
 
-    precheck_result = await agent.precheck(context, conn)
+    precheck_result = await agent.precheck(context, conn, auth_info)
     logger.debug("Precheck result for agent '%s': %s", agent_key, precheck_result)
 
     if not precheck_result.passed:
-        logger.debug("Conflict: The precheck failed for agent '%s'.", agent_key)
+        logger.debug(
+            "Conflict: The precheck failed for agent '%s'.",
+            agent_key,
+        )
+        warnings_text = "; ".join(precheck_result.warnings)
+        detail = (
+            f"Conflict: The precheck failed. {warnings_text}"
+            if warnings_text
+            else "Conflict: The precheck failed."
+        )
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="Conflict: The precheck failed."
+            status_code=status.HTTP_409_CONFLICT,
+            detail=detail,
         )
 
     background_tasks.add_task(
@@ -159,7 +169,7 @@ async def trigger_agent_execution(
         context=context,
         conn=conn,
         llm_factory=llm_factory,
-        items=precheck_result.items,
+        precheck_results=precheck_result.items,
     )
     logger.debug("Scheduled background task for agent '%s'", agent_key)
 

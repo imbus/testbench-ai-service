@@ -1,6 +1,8 @@
 import asyncio
+from typing import ClassVar
 
 import requests
+from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -12,6 +14,7 @@ from testbench_ai_service.agents.test_case_set_reviewer.utils import (
     patch_review_result_for_test_structure_element,
     patch_review_started_for_test_structure_element,
 )
+from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
@@ -21,10 +24,19 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
-from testbench_ai_service.utils.agent import check_test_case_set_is_locked
+from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.testbench import PermissionWithCode, ProjectRole, SpecStatus
+from testbench_ai_service.utils.agent import (
+    check_test_case_set_is_locked,
+    get_test_case_nodes,
+    has_required_permissions,
+)
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.string_processor import extract_text_from_html_body
-from testbench_ai_service.utils.testbench import get_test_case_set_catalog
+from testbench_ai_service.utils.testbench import (
+    get_project_roles,
+    get_test_case_set_catalog,
+)
 from testbench_ai_service.utils.testbench_helpers import (
     get_parameter_combinations_as_string,
 )
@@ -38,18 +50,94 @@ class TestCaseSetReviewerAgentData(AgentData, total=False):
 
 
 class TestCaseSetReviewer(Agent):
-    async def precheck(
+    GENERATED_PLACEHOLDERS: ClassVar[frozenset[str]] = frozenset(
+        {
+            "parameter_combinations",
+            "test_case",
+            "test_case_set_description",
+            "test_case_set_obj",
+        }
+    )
+
+    async def precheck(  # noqa: C901
         self,
         context: ExecutionContext,
         conn: TBConnection,
+        auth_info: AuthInfo,
     ) -> PrecheckResult[TestCaseSet]:
         """
         Fetches the test case set catalog and checks that each spec tab is unlocked.
         """
         warnings = []
-        items: list[TestCaseSet] = []
+        requierd_permissions = {
+            PermissionWithCode.AccessSecuredData,
+            PermissionWithCode.ReadOwnUserDetails,
+            PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadCycleReport,
+            PermissionWithCode.ReadReportingJobDetails,
+            PermissionWithCode.DownloadReportFile,
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ModifySpecifications,
+            PermissionWithCode.ReadTestThemeDetails,
+        }
 
+        if auth_info.auth_type == AuthType.JWT_TOKEN:
+            token_info = decode(auth_info.token, options={"verify_signature": False})
+            token_perms = token_info.get("perms", [])
+            if not has_required_permissions(requierd_permissions, token_perms):
+                warnings.append("Insufficient permissions in JWT token.")
+                return PrecheckResult(passed=False, warnings=warnings)
+
+        tc_nodes = get_test_case_nodes(context, conn)
+
+        project_roles = get_project_roles(conn, context.project_key)
+        _sufficient_roles = {ProjectRole.TestManager}
+        items = []
+
+        for node in tc_nodes:
+            test_case_set = conn.get_project_test_case_set(context.project_key, node.base.key)
+            spec = test_case_set.get("spec") or {}
+
+            if check_test_case_set_is_locked(conn, context, test_case_set.get("uniqueID"), "spec"):
+                warnings.append(
+                    f"The test case set specification is currently locked (uid='{node.base.uniqueID}')."
+                )
+                continue
+
+            if _sufficient_roles.intersection(project_roles):
+                items.append(node.base.uniqueID)
+            elif ProjectRole.TestDesigner in project_roles:
+                responsible = (spec.get("responsible") or {}).get("key")
+                is_responsible = responsible == context.user_key or responsible is None
+                if is_responsible:
+                    items.append(node.base.uniqueID)
+            elif ProjectRole.Tester in project_roles or ProjectRole.TestProgrammer in project_roles:
+                is_in_review = spec.get("status", "") == SpecStatus.InReview.value
+                is_current_reviewer = (spec.get("reviewer") or {}).get(
+                    "key", ""
+                ) == context.user_key
+                if is_in_review and is_current_reviewer:
+                    items.append(node.base.uniqueID)
+            else:
+                warnings.append("Insufficient project role to perform a review.")
+
+        if items:
+            return PrecheckResult(passed=True, warnings=warnings, items=items)
+
+        return PrecheckResult(passed=False, warnings=warnings)
+
+    async def run(
+        self,
+        context: ExecutionContext,
+        conn: TBConnection,
+        llm_client: LLMClient,
+        precheck_results: list[str],
+    ) -> None:
+        """Reviews all test case sets concurrently."""
+        tasks = []
         test_case_set_catalog = {}
+
         try:
             test_case_set_catalog = get_test_case_set_catalog(
                 conn=conn,
@@ -62,35 +150,13 @@ class TestCaseSetReviewer(Agent):
             logger.debug("Retrieved test case sets: %s", list(test_case_set_catalog.keys()))
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
-
-        for tcs_uid, tcs in test_case_set_catalog.items():
-            if not check_test_case_set_is_locked(conn, context, tcs.details.uniqueID, "spec"):
-                items.append(tcs)
-            else:
-                warning = f"The Test Structure Element with UID '{tcs.details.uniqueID}' could not be locked."
-                warnings.append(warning)
-                logger.debug("Precheck failed for '%s': %s", tcs_uid, warning)
-
-        logger.debug(
-            "Precheck completed: %d/%d test case sets are ready for review.",
-            len(items),
-            len(test_case_set_catalog),
-        )
-        return PrecheckResult(passed=bool(items), items=items, warnings=warnings)
-
-    async def run(
-        self,
-        context: ExecutionContext,
-        conn: TBConnection,
-        llm_client: LLMClient,
-        items: list[TestCaseSet],
-    ) -> None:
-        """Reviews all test case sets concurrently."""
-        tasks = []
-        for tcs in items:
-            task = asyncio.create_task(self._review_test_case_set(tcs, context, conn, llm_client))
-            logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-            tasks.append(task)
+        for tcs in test_case_set_catalog.values():
+            if tcs.details.uniqueID in precheck_results:
+                task = asyncio.create_task(
+                    self._review_test_case_set(tcs, context, conn, llm_client)
+                )
+                logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
+                tasks.append(task)
 
         logger.debug("Awaiting completion of %d test case set review task(s)", len(tasks))
         await asyncio.gather(*tasks)
