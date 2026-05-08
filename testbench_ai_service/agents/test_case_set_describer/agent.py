@@ -115,10 +115,9 @@ class TestCaseSetDescriber(Agent):
         precheck_results: list[str],
     ) -> None:
         """Generates descriptions for all test case sets concurrently."""
-        print(precheck_results)
-
         tasks = []
         test_case_set_catalog = {}
+
         try:
             test_case_set_catalog = get_test_case_set_catalog(
                 conn=conn,

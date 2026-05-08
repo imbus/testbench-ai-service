@@ -124,7 +124,6 @@ class DefectExplainer(Agent):
         """Generates defect explanations for all test case sets concurrently."""
         tasks = []
         test_case_set_catalog = {}
-        print(precheck_results)
 
         try:
             test_case_set_catalog = get_test_case_set_catalog(
