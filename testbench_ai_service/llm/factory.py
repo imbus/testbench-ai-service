@@ -71,16 +71,24 @@ class LLMFactory:
         for client in all_clients:
             await client.close()
 
+    def _is_openai_model(self, model_name: str) -> bool:
+        """
+        Return True for OpenAI model names: gpt-* prefix or o-series (o1, o3, o4-mini, …).
+        """
+        return model_name.startswith("gpt-") or bool(re.match(r"^o\d+", model_name))
+
     def _resolve_provider(self, config: LLMConfig, prompt_model: str | None) -> LLMProvider:
         """
         Determine the LLM provider from the model name, falling back to `config.provider`.
 
-        Model-name prefix takes precedence so that a prompt variant using a Claude
-        model is always routed to the Anthropic client, even if the global config
-        specifies a different provider.
+        When the model is an OpenAI model (gpt-* or o-series), the configured provider is
+        preserved if it is OPENAI or AZURE_OPENAI, so Azure deployments are routed correctly.
+        For Claude models the provider is always ANTHROPIC regardless of config.
         """
         if prompt_model is not None:
-            if prompt_model.startswith("gpt-"):
+            if self._is_openai_model(prompt_model):
+                if config.provider in (LLMProvider.AZURE_OPENAI):
+                    return config.provider
                 return LLMProvider.OPENAI
             if prompt_model.startswith("claude-"):
                 return LLMProvider.ANTHROPIC
