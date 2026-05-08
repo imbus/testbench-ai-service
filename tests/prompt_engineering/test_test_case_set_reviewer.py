@@ -55,15 +55,13 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case": test_case,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -90,15 +88,13 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case": test_case,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -120,15 +116,13 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case": test_case,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -149,15 +143,13 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case": test_case,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -185,10 +177,6 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case_set_description": test_case_set_description,
-                "test_case": test_case,
-            },
             block_tags={
                 "include_description": True,
             },
@@ -198,6 +186,10 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "test_case_set_description": test_case_set_description,
+                "test_case": test_case,
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -225,10 +217,7 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "glossary": self.glossary,
-                "test_case": test_case,
-            },
+            vars={"glossary": self.glossary},
             block_tags={
                 "include_glossary": True,
             },
@@ -238,6 +227,7 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -289,15 +279,13 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case": test_case,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -324,15 +312,13 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case": test_case,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -354,15 +340,13 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case": test_case,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -383,15 +367,13 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case": test_case,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)
@@ -421,10 +403,6 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "test_case_set_description": test_case_set_description,
-                "test_case": test_case,
-            },
             block_tags={
                 "include_description": True,
             },
@@ -434,6 +412,10 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "test_case_set_description": test_case_set_description,
+                "test_case": test_case,
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -461,10 +443,7 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "glossary": self.glossary,
-                "test_case": test_case,
-            },
+            vars={"glossary": self.glossary},
             block_tags={
                 "include_glossary": True,
             },
@@ -474,6 +453,7 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={"test_case": test_case},
         )
 
         self.assertIsInstance(response.result, str)

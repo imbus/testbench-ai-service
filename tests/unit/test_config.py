@@ -91,7 +91,7 @@ class TestPromptConfig(unittest.TestCase):
     def test_optional_fields_default_to_none(self):
         cfg = PromptConfig(file="prompts/test.yaml", name="Test")
         self.assertIsNone(cfg.variant)
-        self.assertIsNone(cfg.placeholder_data)
+        self.assertIsNone(cfg.vars)
 
     def test_extra_fields_allowed(self):
         cfg = PromptConfig(file="prompts/test.yaml", name="Test", glossary="/path/glossary.txt")
@@ -104,7 +104,7 @@ class TestProjectPromptConfig(unittest.TestCase):
         self.assertIsNone(cfg.file)
         self.assertIsNone(cfg.name)
         self.assertIsNone(cfg.variant)
-        self.assertIsNone(cfg.placeholder_data)
+        self.assertIsNone(cfg.vars)
 
 
 class TestAgentConfig(unittest.TestCase):

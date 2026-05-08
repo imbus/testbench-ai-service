@@ -40,16 +40,16 @@ class TestDefectExplanationsPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "failed_test_case": failed_test_case,
-                "error_message": "Element with identifier 'Verdict Badge' not found on the page",
-            },
         )
 
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "failed_test_case": failed_test_case,
+                "error_message": "Element with identifier 'Verdict Badge' not found on the page",
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -72,16 +72,16 @@ class TestDefectExplanationsPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "failed_test_case": failed_test_case,
-                "error_message": "Expected: 'https://carconfig.example.com/report/123', but was: 'https://carconfig.example.com/dashboard'",
-            },
         )
 
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "failed_test_case": failed_test_case,
+                "error_message": "Expected: 'https://carconfig.example.com/report/123'",
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -105,16 +105,16 @@ class TestDefectExplanationsPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "failed_test_case": failed_test_case,
-                "error_message": "Timeout after 30000 ms while waiting for browser context",
-            },
         )
 
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "failed_test_case": failed_test_case,
+                "error_message": "Timeout after 30000 ms while waiting for browser context",
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -152,16 +152,16 @@ class TestDefectExplanationsPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "failed_test_case": failed_test_case,
-                "error_message": "Element mit der Bezeichnung 'Verdict Badge' wurde auf der Seite nicht gefunden",
-            },
         )
 
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "failed_test_case": failed_test_case,
+                "error_message": "Element mit der Bezeichnung 'Verdict Badge' wurde auf der Seite nicht gefunden",
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -184,16 +184,16 @@ class TestDefectExplanationsPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "failed_test_case": failed_test_case,
-                "error_message": "Erwartet: 'https://carconfig.example.com/report/123', aber war: 'https://carconfig.example.com/dashboard'",
-            },
         )
 
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "failed_test_case": failed_test_case,
+                "error_message": "Erwartet: 'https://carconfig.example.com/report/123'",
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -217,16 +217,16 @@ class TestDefectExplanationsPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "failed_test_case": failed_test_case,
-                "error_message": "Zeitüberschreitung nach 30000 ms beim Warten auf Browser-Kontext",
-            },
         )
 
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "failed_test_case": failed_test_case,
+                "error_message": "Zeitüberschreitung nach 30000 ms beim Warten auf Browser-Kontext",
+            },
         )
 
         self.assertIsInstance(response.result, str)

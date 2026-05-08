@@ -5,7 +5,7 @@ title: Prompts
 
 # Prompts
 
-Prompts are the instructions sent to the LLM. The TestBench AI Service uses a structured YAML format with support for multiple prompt definitions, variants, and Jinja2 placeholder rendering.
+Prompts are the instructions sent to the LLM. The TestBench AI Service uses a structured YAML format with support for multiple prompt definitions, variants, and Jinja2 variable rendering.
 
 ---
 
@@ -19,7 +19,7 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 │  │  ┌──────────────────────────┐  │ │
 │  │  │  Variant (by name)       │  │ │
 │  │  │  - model: "gpt-4.1"      │  │ │
-│  │  │  - blocks:               │  │ │
+│  │  │  - messages:             │  │ │
 │  │  │    - role: "user"        │  │ │
 │  │  │      text: "..."         │  │ │
 │  │  └──────────────────────────┘  │ │
@@ -34,9 +34,9 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 1. The service loads the YAML file specified in the agent's `prompt.file` config.
 2. It finds the **prompt definition** matching `prompt.name`.
 3. It selects the **variant** matching `prompt.variant` (or the `default_variant`).
-4. Each block's `text` is rendered with Jinja2, substituting placeholders with data from `placeholder_data` and automatically built context.
-5. Blocks with the same `role` are merged into a single message.
-6. The resulting messages and the variant's `model` are sent to the LLM.
+4. Each message is rendered with Jinja2. Content is either an inline `text` string or loaded from an external `file`. Template variables are resolved from two namespaces: `{{ agent.<key> }}` for agent-generated data and `{{ vars.<key> }}` for user-provided values.
+5. Messages with the same `role` are merged into a single message.
+6. The resulting messages and the variant's `model` (or the definition's `default_model`) are sent to the LLM.
 
 ---
 
@@ -47,13 +47,19 @@ Prompt files are organized by language under the `prompts_dir` directory:
 ```
 prompts/
 ├── en/
-│   ├── test_case_set_reviewer.yaml
-│   ├── test_case_set_describer.yaml
-│   └── defect_explainer.yaml
+│   ├── test_case_set_reviewer/
+│   │   ├── prompt.yaml
+│   │   └── *.jinja           # external template files referenced by prompt.yaml
+│   ├── test_case_set_describer/
+│   │   ├── prompt.yaml
+│   │   └── *.jinja
+│   └── defect_explainer/
+│       ├── prompt.yaml
+│       └── *.jinja
 └── de/
-    ├── test_case_set_reviewer.yaml
-    ├── test_case_set_describer.yaml
-    └── defect_explainer.yaml
+    ├── test_case_set_reviewer/
+    ├── test_case_set_describer/
+    └── defect_explainer/
 ```
 
 The service resolves prompt files relative to `prompts_dir/<language>/`. So a config of:
@@ -65,10 +71,10 @@ language = "en"
 prompts_dir = "prompts"
 
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
-file = "test_case_set_reviewer.yaml"
+file = "test_case_set_reviewer/prompt.yaml"
 ```
 
-will load `prompts/en/test_case_set_reviewer.yaml`.
+will load `prompts/en/test_case_set_reviewer/prompt.yaml`.
 
 ---
 
@@ -79,33 +85,50 @@ Each prompt YAML file is a list of prompt definitions:
 ```yaml
 - name: "TestCaseSetReviewer"
   description: "Reviews test case sets from TestBench."
-  default_variant: "interaction-based-tests-detailed-prompt"
+  default_model: "gpt-4.1"          # fallback model for variants that don't specify one
+  default_variant: "detailed-prompt"
   variants:
-    - name: "interaction-based-tests-detailed-prompt"
-      model: "gpt-4.1"
-      blocks:
+    - name: "detailed-prompt"
+      model: "gpt-4.1"               # optional — overrides default_model for this variant
+      vars:
+        glossary:                    # declare a user-provided variable
+          name: "Glossary"
+          description: "Optional glossary of project-specific terms."
+          value_type: "text"
+          required: false
+      messages:
+        - role: "system"
+          text: |                   # inline Jinja2 template
+            You are a test analyst.
         - role: "user"
-          text: |
-            You are a test analyst. Review the following test case:
-            {{ test_case }}
-            Parameter combinations:
-            {{ parameter_combinations }}
+          file: "review_user.jinja" # OR reference an external template file
 
-    - name: "simple-generic-prompt"
+    - name: "quick-review"
       model: "gpt-4.1-mini"
-      blocks:
+      messages:
         - role: "user"
           text: |
-            Review this test case set briefly:
-            {{ test_case }}
+            Review this test case:
+            {{ agent.test_case }}
+            {% if vars.glossary %}
+            Use this glossary:
+            {{ vars.glossary }}
+            {% endif %}
 ```
+
+:::note
+Each block must have **either** `text` (inline template) **or** `file` (path to an external template file such as `.jinja`, `.j2`, or `.md`) — not both. External `file` paths are resolved relative to the directory of the prompt YAML file.
+:::
 
 ### Schema reference
 
-| Field | Type | Description | Required | 
+#### Prompt definition fields
+
+| Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `name` | String | Unique identifier for the prompt definition. | Yes |
-| `description` | String | Human-readable description. | Yes |
+| `description` | String | Human-readable description. | No |
+| `default_model` | String | Fallback LLM model for variants that don't declare their own. | Yes |
 | `default_variant` | String | Name of the default variant to use when none is specified. | Yes |
 | `variants` | List | At least one variant is required. | Yes |
 
@@ -114,55 +137,90 @@ Each prompt YAML file is a list of prompt definitions:
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `name` | String | Unique variant identifier. | Yes |
-| `model` | String | LLM model to use (e.g., `"gpt-4.1"`, `"o3"`). | Yes |
-| `blocks` | List | Ordered list of content blocks. | Yes |
+| `description` | String | Human-readable description. | No |
+| `model` | String | LLM model to use (e.g., `"gpt-4.1"`, `"o3"`). Falls back to `default_model` if not set. | No |
+| `vars` | Object | Declared user-provided variables for this variant (see [Variable declarations](#variable-declarations)). | No |
+| `messages` | List | Ordered list of message blocks. | Yes |
 
-#### Block fields
+#### Message fields
+
+Exactly one of `text` or `file` must be provided per message.
 
 | Field | Type | Description | Default |
 |-------|------|-------------|---------|
 | `role` | String | Message role: `"system"`, `"user"`, or `"assistant"`. | `"user"` |
-| `text` | String | The prompt text. Supports Jinja2 template syntax. | — |
+| `text` | String | Inline Jinja2 template string. | — |
+| `file` | String | Path to an external template file (`.jinja`, `.j2`, or `.md`). Relative paths are resolved from the directory of the prompt YAML file. | — |
+
+#### Variable declarations
+
+The `vars` object on a variant declares the user-provided variables that the prompt expects. These are shown in the API and used for validation. Each key maps to a variable definition:
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `name` | String | Human-readable label. | Yes |
+| `description` | String | Explains the purpose of the variable. | No |
+| `value_type` | String | One of `"string"`, `"text"`, `"boolean"`, `"number"`, `"enum"`. | Yes |
+| `choices` | List | Allowed values (required when `value_type` is `"enum"`). | Conditional |
+| `default_value` | Any | Default value if the variable is not supplied. | No |
+| `required` | Boolean | Whether the variable must be provided. | No (default `false`) |
 
 A JSON Schema for validation is available at `prompts/prompt.schema.json`.
 
 ---
 
-## Jinja2 placeholders
+## Jinja2 variables
 
-Block text supports [Jinja2](https://jinja.palletsprojects.com/) template syntax. Placeholders are rendered at runtime with data from two sources:
+Message templates (both inline `text` and external `file`) support [Jinja2](https://jinja.palletsprojects.com/) template syntax. Two separate variable namespaces are available at render time:
 
-1. **Automatically built data**: the agent service populates placeholders like `test_case_set`, `parameter_combinations`, `description`, etc.
-2. **`placeholder_data`**: custom key-value pairs from the config or the API request.
+| Namespace | Source | Example |
+|-----------|--------|---------|
+| `agent.<key>` | Data generated by the agent (e.g. test case data fetched from TestBench). | `{{ agent.test_case }}` |
+| `vars.<key>` | User-provided values from the prompt config or API request. | `{{ vars.glossary }}` |
 
-Values from `placeholder_data` take precedence over automatically built data.
+See each agent's documentation for the full list of available `agent.*` variables. User-provided variables are declared in the variant's `vars` section.
 
 **Example:**
 
-Prompt block:
+Prompt message (inline `text`):
 
 ```yaml
 - role: "user"
   text: |
     Review this test case:
-    {{ test_case }}
-    {% if glossary %}
+    {{ agent.test_case }}
+    {% if vars.glossary %}
     Use this glossary as reference:
-    {{ glossary }}
+    {{ vars.glossary }}
     {% endif %}
 ```
 
-Configuration:
+Or using an external template `file` (content of `review_user.jinja`):
+
+```jinja
+Review this test case:
+{{ agent.test_case }}
+{% if vars.glossary %}
+Use this glossary as reference:
+{{ vars.glossary }}
+{% endif %}
+```
+
+Configuration (supplying user-provided variables):
 
 ```toml
 # config.toml
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
-file = "test_case_set_reviewer.yaml"
+file = "test_case_set_reviewer/prompt.yaml"
 name = "TestCaseSetReviewer"
 
-[testbench-ai-service.agents.test_case_set_reviewer.prompt.placeholder_data]
+[testbench-ai-service.agents.test_case_set_reviewer.prompt.vars]
 glossary = "Domain: automotive\nABS = Anti-lock Braking System"
 ```
+
+:::tip
+Variables can also be supplied per-request via the `prompt_config.vars` field in the API body, which overrides config-level values.
+:::
 
 ---
 
@@ -179,21 +237,24 @@ Add a new entry to the `variants` list in the YAML file:
 ```yaml
 - name: "TestCaseSetReviewer"
   description: "Reviews test case sets."
+  default_model: "gpt-4.1"
   default_variant: "detailed-prompt"
   variants:
     - name: "detailed-prompt"
       model: "gpt-4.1"
-      blocks:
-        - role: "user"
+      messages:
+        - role: "system"
           text: |
-            # Detailed review instructions...
+            You are a test analyst.
+        - role: "user"
+          file: "detailed_prompt_user.jinja"  # external template file
 
     - name: "quick-review"
       model: "gpt-4.1-mini"
-      blocks:
+      messages:
         - role: "user"
           text: |
-            # Quick review instructions...
+            Review this test case: {{ agent.test_case }}
 ```
 
 ### Creating a new prompt file
@@ -215,7 +276,7 @@ name = "MyCustomReviews"
 The service exposes a read-only endpoint to inspect the configured prompt and its variants:
 
 ```
-GET /agents/{agent_key}/prompt?project=<project_name>
+GET /agents/{agent_key}/prompt?project_key=<project_key>
 ```
 
-This returns the prompt definition including all variants and their placeholders, useful for debugging and integration.
+This returns the prompt definition including all variants and their variables, useful for debugging and integration.

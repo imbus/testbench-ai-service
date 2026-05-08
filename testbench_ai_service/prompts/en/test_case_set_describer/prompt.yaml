@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+- name: "TestCaseSetDescriber"
+  description: >
+    Generates a general description for a TestBench test case set.
+  default_model: "gpt-5.4"
+  default_variant: "Full Description"
+  variants:
+    - name: "Full Description"
+      description: "Generates a complete description with test objective, verifications, and a summary of each test case."
+      model: "gpt-5.4"
+      messages:
+        - role: "system"
+          file: "system.jinja"
+        - role: "user"
+          file: "full_description_user.jinja"
+    - name: "Short Description"
+      description: "Generates a concise one-sentence description stating the test objective only."
+      model: "gpt-5.1"
+      messages:
+        - role: "system"
+          file: "system.jinja"
+        - role: "user"
+          file: "short_description_user.jinja"

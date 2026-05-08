@@ -48,16 +48,16 @@ class TestTestCaseSetDescriberPromptingEnglish(unittest.IsolatedAsyncioTestCase)
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "step_sequence": step_sequence,
-                "parameter_combinations": parameter_combinations,
-            },
         )
 
         response = await self.describer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "step_sequence": step_sequence,
+                "parameter_combinations": parameter_combinations,
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -86,16 +86,16 @@ class TestTestCaseSetDescriberPromptingEnglish(unittest.IsolatedAsyncioTestCase)
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "step_sequence": step_sequence,
-                "parameter_combinations": parameter_combinations,
-            },
         )
 
         response = await self.describer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "step_sequence": step_sequence,
+                "parameter_combinations": parameter_combinations,
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -140,16 +140,16 @@ class TestTestCaseSetDescriberPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "step_sequence": step_sequence,
-                "parameter_combinations": parameter_combinations,
-            },
         )
 
         response = await self.describer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "step_sequence": step_sequence,
+                "parameter_combinations": parameter_combinations,
+            },
         )
 
         self.assertIsInstance(response.result, str)
@@ -178,16 +178,16 @@ class TestTestCaseSetDescriberPromptingGerman(unittest.IsolatedAsyncioTestCase):
             file=self.prompt_file,
             name=self.prompt_name,
             variant=self.prompt_variant,
-            placeholder_data={
-                "step_sequence": step_sequence,
-                "parameter_combinations": parameter_combinations,
-            },
         )
 
         response = await self.describer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
+            agent_data={
+                "step_sequence": step_sequence,
+                "parameter_combinations": parameter_combinations,
+            },
         )
 
         self.assertIsInstance(response.result, str)

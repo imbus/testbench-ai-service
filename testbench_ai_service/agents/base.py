@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import TypedDict
 
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -7,9 +7,11 @@ from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
 
 
-class Agent(ABC):
-    GENERATED_PLACEHOLDERS: ClassVar[frozenset[str]] = frozenset()
+class AgentData(TypedDict, total=False):
+    """Agent-generated variables available as ``{{ agent.<key> }}`` in templates."""
 
+
+class Agent(ABC):
     @abstractmethod
     async def precheck(
         self,

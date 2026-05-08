@@ -2,7 +2,6 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Path, Qu
 from fastapi.responses import RedirectResponse
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.agents.routes import (
     TRIGGER_AGENT_ROUTE_KWARGS,
     trigger_agent_execution,
@@ -18,11 +17,7 @@ from testbench_ai_service.models.agent import (
 )
 from testbench_ai_service.models.prompt import PromptDetailsResponse, PromptVariantResponse
 from testbench_ai_service.utils.config import get_agent_config, get_prompt_config
-from testbench_ai_service.utils.import_utils import load_class_from_path
-from testbench_ai_service.utils.prompt_utils import (
-    get_placeholders_from_blocks,
-    get_prompt_definition,
-)
+from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 from testbench_ai_service.utils.testbench import get_project_name
 
 router = APIRouter()
@@ -51,19 +46,21 @@ async def redirect_to_docs(request: Request):
 async def get_agents(
     app_config: AppConfig = Depends(get_app_config),
     conn: TBConnection = Depends(get_tb_connection),
-    enabled: bool | None = Query(None, description="Filter by enabled status"),
+    keys: list[str] | None = Query(None, description="Filter by agent keys"),
     project_key: str | None = Query(None, description="Filter by project key"),
+    enabled: bool | None = Query(None, description="Filter by enabled status"),
 ) -> list[AgentDetailsResponse]:
     project_name = _resolve_project_name(conn, project_key)
-    agents = [
-        AgentDetailsResponse(
-            key=agent_key, **get_agent_config(agent_key, app_config, project_name).model_dump()
-        )
-        for agent_key in app_config.agents
-    ]
 
-    if enabled is not None:
-        agents = [a for a in agents if a.enabled == enabled]
+    agents = []
+    agent_keys = keys if keys is not None else app_config.agents.keys()
+    for key in agent_keys:
+        if key not in app_config.agents:
+            continue
+        config = get_agent_config(key, app_config, project_name)
+        if enabled is not None and config.enabled != enabled:
+            continue
+        agents.append(AgentDetailsResponse(key=key, **config.model_dump()))
 
     return agents
 
@@ -99,7 +96,7 @@ async def get_prompt_details(
     conn: TBConnection = Depends(get_tb_connection),
     project_key: str | None = Query(None, description="Filter by project key"),
 ) -> PromptDetailsResponse:
-    """Returns available variants and their placeholders."""
+    """Returns available variants and their prompt variables."""
     if agent_key not in app_config.agents:
         raise HTTPException(status_code=404, detail=f"Agent '{agent_key}' not found")
 
@@ -108,16 +105,13 @@ async def get_prompt_details(
         agent_key=agent_key, config=app_config, project_name=project_name
     )
     prompt_definition = get_prompt_definition(prompt_config.file, prompt_config.name)
-    agent_class: type[Agent] = load_class_from_path(app_config.agents[agent_key].class_path)
-    generated_placeholders = agent_class.GENERATED_PLACEHOLDERS
 
     variants = [
         PromptVariantResponse(
             name=variant.name,
             description=variant.description,
             model=variant.model or prompt_definition.default_model,
-            placeholders=(all_placeholders := get_placeholders_from_blocks(variant.blocks)),
-            user_placeholders=sorted(set(all_placeholders) - generated_placeholders),
+            vars=variant.vars,
         )
         for variant in prompt_definition.variants
     ]
@@ -125,7 +119,6 @@ async def get_prompt_details(
     return PromptDetailsResponse(
         name=prompt_definition.name,
         file=prompt_config.file,
-        generated_placeholders=sorted(generated_placeholders),
         default_variant=prompt_config.variant or prompt_definition.default_variant,
         variants=variants,
     )

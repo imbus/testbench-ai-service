@@ -9,7 +9,7 @@ from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.agent import ExecutionContext, TriggerAgentRequest
+from testbench_ai_service.models.agent import ElementType, ExecutionContext, TriggerAgentRequest
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     TestCaseSetNode,
@@ -117,33 +117,6 @@ def build_execution_context(
         logger.info("Resource not found in TestBench Server: %s", e)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
-    language, llm_config, prompt_config = _build_agent_execution_configs(
-        agent_key, trigger_request, app_config, project_name
-    )
-
-    return ExecutionContext(
-        user_key=auth_info.user_key,
-        project_name=project_name,
-        project_key=project_key,
-        tov_key=tov_key,
-        cycle_key=cycle_key,
-        root_uid=trigger_request.root_uid,
-        root_key=trigger_request.tree_root_key,
-        element_type=trigger_request.element_type,
-        tree_type=trigger_request.tree_type,
-        filtering=trigger_request.filtering,
-        language=language,
-        llm_config=llm_config,
-        prompt_config=prompt_config,
-    )
-
-
-def _build_agent_execution_configs(
-    agent_key: str,
-    trigger_request: TriggerAgentRequest,
-    app_config: AppConfig,
-    project_name: str,
-) -> tuple:
     language = trigger_request.language or get_language_from_config(app_config, project_name)
 
     llm_config = get_llm_config(
@@ -159,7 +132,21 @@ def _build_agent_execution_configs(
         language=language,
     )
 
-    return language, llm_config, prompt_config
+    return ExecutionContext(
+        user_key=auth_info.user_key,
+        project_name=project_name,
+        project_key=project_key,
+        tov_key=tov_key,
+        cycle_key=cycle_key,
+        root_uid=trigger_request.root_uid,
+        root_key=trigger_request.root_key,
+        element_type=trigger_request.element_type,
+        tree_type=trigger_request.tree_type,
+        filtering=trigger_request.filtering,
+        language=language,
+        llm_config=llm_config,
+        prompt_config=prompt_config,
+    )
 
 
 def check_test_case_set_is_locked(
@@ -218,7 +205,7 @@ def fetch_test_structure_tree(
 
 
 def get_test_case_nodes(context: ExecutionContext, conn: TBConnection):
-    if context.element_type == "TESTCASESET":
+    if context.element_type == ElementType.TESTCASESET:
         data = conn.get_project_test_case_set(context.project_key, context.root_key)
         exec_data = data.get("exec")
         node = TestCaseSetNode(
@@ -241,7 +228,7 @@ def get_test_case_nodes(context: ExecutionContext, conn: TBConnection):
         )
         tc_nodes = [node]
 
-    elif context.element_type == "TESTTHEME":
+    elif context.element_type == ElementType.TESTTHEME:
         if context.cycle_key:
             test_case = post_project_cycle_structure(
                 conn,

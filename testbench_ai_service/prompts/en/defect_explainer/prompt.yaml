@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+- name: "DefectExplainer"
+  description: >
+    Generates an explanation for a failed Robot Framework test run.
+  default_model: "gpt-5.4"
+  default_variant: "Single Block"
+  variants:
+    - name: "Single Block"
+      description: "Delivers all instructions in a single user message; best suited for reasoning models that don't support a system role."
+      model: "gpt-5.4"
+      vars:
+        validate_output:
+          name: "Validate Output"
+          description: "If enabled, the model will first output a management summary and then validate that the output contains only the summary."
+          value_type: "boolean"
+          required: false
+      messages:
+        - role: "user"
+          file: "single_block.jinja"
+    - name: "Separated Roles"
+      description: "Splits the prompt into system and user message blocks; best suited for chat models that support a system role."
+      model: "gpt-5.2-pro"
+      vars:
+        validate_output:
+          name: "Validate Output"
+          description: "If enabled, the model will first output a management summary and then validate that the output contains only the summary."
+          value_type: "boolean"
+          required: false
+      messages:
+        - role: "system"
+          file: "separated_roles_system.jinja"
+        - role: "user"
+          file: "separated_roles_user.jinja"

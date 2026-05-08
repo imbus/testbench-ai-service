@@ -1,7 +1,9 @@
+import json
+from enum import Enum
 from pathlib import Path
 from typing import Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
@@ -14,9 +16,28 @@ class PromptConfigRequest(BaseModel):
     file: Path | None = None
     name: str | None = None
     variant: str | None = None
-    placeholder_data: dict[str, str] | None = None
+    vars: dict[str, str] | None = None
 
     model_config = ConfigDict(extra="allow")
+
+
+class ElementType(str, Enum):
+    BASELINE = "BASELINE"
+    CONDITION = "CONDITION"
+    DATATYPE = "DATATYPE"
+    INTERACTION = "INTERACTION"
+    REQUIREMENT = "REQUIREMENT"
+    ROOT = "ROOT"
+    SUBDIVISION = "SUBDIVISION"
+    TESTCASESET = "TESTCASESET"
+    TESTTHEME = "TESTTHEME"
+
+
+class TreeType(str, Enum):
+    TESTTHEMES = "TESTTHEMES"
+    TESTELEMENTS = "TESTELEMENTS"
+    REQUIREMENTS = "REQUIREMENTS"
+    DEFECTMANAGEMENT = "DEFECTMANAGEMENT"
 
 
 class TriggerAgentRequest(BaseModel):
@@ -24,13 +45,20 @@ class TriggerAgentRequest(BaseModel):
     tov_key: str
     cycle_key: str | None = None
     root_uid: str | None = None
-    tree_root_key: str
-    element_type: str
-    tree_type: str
+    root_key: str | None = None
+    element_type: ElementType | None = None
+    tree_type: TreeType | None = None
     filtering: FilteringOptions | None = None
     language: LanguageOption | None = None
     prompt_config: PromptConfigRequest | None = None
     llm_config: LLMConfig | None = None
+
+    @field_validator("filtering", mode="before")
+    @classmethod
+    def parse_filtering_string(cls, v: str | FilteringOptions | None) -> FilteringOptions | None:
+        if isinstance(v, str):
+            return FilteringOptions.model_validate(json.loads(v))
+        return v
 
 
 class TriggerAgentResponse(BaseModel):
@@ -48,8 +76,8 @@ class ExecutionContext(BaseModel):
     cycle_key: str | None = None
     root_uid: str | None = None
     root_key: str | None = None
-    element_type: str | None = None
-    tree_type: str | None = None
+    element_type: ElementType | None = None
+    tree_type: TreeType | None = None
     filtering: FilteringOptions | None = None
     language: LanguageOption
     llm_config: LLMConfig
@@ -73,5 +101,6 @@ class AgentDetailsResponse(BaseModel):
 
     key: str
     enabled: bool
+    name: str
     summary: str | None = None
     description: str | None = None

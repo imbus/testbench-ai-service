@@ -1,6 +1,4 @@
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from testbench2robotframework.model import (
@@ -8,19 +6,13 @@ from testbench2robotframework.model import (
     KeywordType,
 )
 
-from testbench_ai_service.agents.test_case_set_reviewer.models import (
-    DEFAULT_ENGLISH_GLOSSARY,
-    DEFAULT_GERMAN_GLOSSARY,
-)
 from testbench_ai_service.agents.test_case_set_reviewer.utils import (
     get_review_comment_for_test_case_set,
-    get_test_case_glossary,
     get_test_case_set_as_string,
     patch_previous_review_comment_for_test_structure_element,
     patch_review_result_for_test_structure_element,
     patch_review_started_for_test_structure_element,
 )
-from testbench_ai_service.config import PromptConfig
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import SpecificationDetailsForUpdate
 from testbench_ai_service.utils.testbench_helpers import get_interaction_calls_for_test_case
@@ -134,38 +126,6 @@ class TestGetTestCaseSetAsString(unittest.TestCase):
         result = get_test_case_set_as_string(tcs)
         self.assertIn("First Case Step", result)
         self.assertNotIn("Second Case Step", result)
-
-
-class TestGetTestCaseGlossary(unittest.TestCase):
-    """Tests for ``get_test_case_glossary``."""
-
-    def _make_prompt_config(self, **extra):
-        return PromptConfig(file="prompts/test.yaml", name="Test", **extra)
-
-    def test_returns_german_glossary_for_german_language(self):
-        result = get_test_case_glossary(LanguageOption.GERMAN, self._make_prompt_config())
-        self.assertEqual(result, DEFAULT_GERMAN_GLOSSARY)
-
-    def test_returns_english_glossary_for_english_language(self):
-        result = get_test_case_glossary(LanguageOption.ENGLISH, self._make_prompt_config())
-        self.assertEqual(result, DEFAULT_ENGLISH_GLOSSARY)
-
-    def test_glossary_path_in_prompt_config_read_from_file(self):
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
-            f.write("Custom glossary content")
-            tmp_path = f.name
-
-        try:
-            cfg = self._make_prompt_config(glossary=tmp_path)
-            result = get_test_case_glossary(LanguageOption.GERMAN, cfg)
-            self.assertEqual(result, "Custom glossary content")
-        finally:
-            Path(tmp_path).unlink(missing_ok=True)
-
-    def test_glossary_string_in_prompt_config_returned_directly(self):
-        cfg = self._make_prompt_config(glossary="Inline glossary text")
-        result = get_test_case_glossary(LanguageOption.GERMAN, cfg)
-        self.assertEqual(result, "Inline glossary text")
 
 
 class TestGetReviewCommentForTestCaseSet(unittest.IsolatedAsyncioTestCase):

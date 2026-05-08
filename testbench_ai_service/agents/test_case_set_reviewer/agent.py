@@ -1,15 +1,14 @@
 import asyncio
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import requests
 from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.test_case_set_reviewer.utils import (
     get_review_comment_for_test_case_set,
-    get_test_case_glossary,
     get_test_case_set_as_string,
     patch_previous_review_comment_for_test_structure_element,
     patch_review_result_for_test_structure_element,
@@ -41,6 +40,13 @@ from testbench_ai_service.utils.testbench import (
 from testbench_ai_service.utils.testbench_helpers import (
     get_parameter_combinations_as_string,
 )
+
+
+class TestCaseSetReviewerAgentData(AgentData, total=False):
+    test_case: str
+    parameter_combinations: str | None
+    test_case_set_description: str | None
+    test_case_set_obj: TestCaseSet
 
 
 class TestCaseSetReviewer(Agent):
@@ -188,24 +194,15 @@ class TestCaseSetReviewer(Agent):
                     test_case_set.details.uniqueID,
                 )
 
-                placeholder_data = context.prompt_config.placeholder_data or {}
-                built_placeholder_data = self._build_placeholder_data(
-                    test_case_set=test_case_set,
-                    prompt_config=context.prompt_config,
-                    language=context.language,
-                )
-                placeholder_data = built_placeholder_data | placeholder_data
-                prompt_config = context.prompt_config.model_copy(
-                    update={"placeholder_data": placeholder_data}
-                )
+                agent_data = self._build_agent_data(test_case_set=test_case_set)
                 logger.debug(
-                    "Built placeholder data for test case set '%s': %s",
+                    "Built agent data for test case set '%s': %s",
                     test_case_set.details.uniqueID,
-                    prompt_config.placeholder_data,
+                    list(agent_data.keys()),
                 )
 
                 review_response = await self._get_ai_response(
-                    llm_client, context.llm_config, prompt_config
+                    llm_client, context.llm_config, context.prompt_config, agent_data
                 )
                 logger.debug(
                     "AI review response for test case set '%s':\n\t%s",
@@ -264,35 +261,33 @@ class TestCaseSetReviewer(Agent):
             )
             raise e
 
-    def _build_placeholder_data(
+    def _build_agent_data(
         self,
         test_case_set: TestCaseSet,
-        prompt_config: PromptConfig,
-        language: LanguageOption,
-    ) -> dict[str, Any]:
-        """Builds the prompt placeholder dict for a single test case set."""
-        placeholder_data = {
+    ) -> TestCaseSetReviewerAgentData:
+        """Builds the agent-data dict (``agent.*`` namespace) for a single test case set."""
+        data: TestCaseSetReviewerAgentData = {
             "test_case": get_test_case_set_as_string(test_case_set),
             "parameter_combinations": get_parameter_combinations_as_string(test_case_set),
-            "glossary": get_test_case_glossary(language, prompt_config),
             "test_case_set_obj": test_case_set,
         }
 
         if test_case_set.details.spec.description:
-            placeholder_data["test_case_set_description"] = extract_text_from_html_body(
+            data["test_case_set_description"] = extract_text_from_html_body(
                 test_case_set.details.spec.description
             )
 
-        return placeholder_data
+        return data
 
     async def _get_ai_response(
         self,
         llm_client: LLMClient,
         llm_config: LLMConfig,
         prompt_config: PromptConfig,
+        agent_data: TestCaseSetReviewerAgentData | None = None,
     ) -> AgentResult:
         """Sends the prompt to the LLM and returns the review result."""
-        prompt = build_prompt(prompt_config)
+        prompt = build_prompt(prompt_config, agent_data=agent_data)
 
         model = llm_config.model if llm_config.model is not None else prompt.model_name
         messages = prompt.messages

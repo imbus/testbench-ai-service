@@ -55,7 +55,7 @@ class PromptConfig(BaseModel):
     file: Path
     name: str
     variant: str | None = None
-    placeholder_data: dict[str, str] | None = None
+    vars: dict[str, str] | None = None
 
     model_config = ConfigDict(extra="allow")
 
@@ -64,7 +64,7 @@ class ProjectPromptConfig(BaseModel):
     file: Path | None = None
     name: str | None = None
     variant: str | None = None
-    placeholder_data: dict[str, str] | None = None
+    vars: dict[str, str] | None = None
 
 
 class AgentConfig(BaseModel):
@@ -72,6 +72,7 @@ class AgentConfig(BaseModel):
     endpoint_path: str
     class_path: str
     prompt: PromptConfig
+    name: str
     summary: str | None = None
     description: str | None = None
 
@@ -98,9 +99,10 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         endpoint_path="/test-case-set-reviews",
         class_path="testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer",
         prompt=PromptConfig(
-            file=Path("test_case_set_reviewer.yaml"),
+            file=Path("test_case_set_reviewer/prompt.yaml"),
             name="TestCaseSetReviewer",
         ),
+        name="Test Case Set Reviewer",
         summary="Trigger test case set reviews",
         description="""This endpoint triggers asynchronous reviews for the specified test case sets.
             The review results will be added as comments to the `reviewComment` attribute (review comments section) of corresponding test structure element specifications.""",
@@ -110,9 +112,10 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         endpoint_path="/test-case-set-descriptions",
         class_path="testbench_ai_service.agents.test_case_set_describer.agent.TestCaseSetDescriber",
         prompt=PromptConfig(
-            file=Path("test_case_set_describer.yaml"),
+            file=Path("test_case_set_describer/prompt.yaml"),
             name="TestCaseSetDescriber",
         ),
+        name="Test Case Set Describer",
         summary="Trigger generation of test case set descriptions",
         description="""This endpoint triggers asynchronous generation of descriptions for the specified test case sets.
             The generated descriptions will be assigned to their respective test structure element specifications.""",
@@ -122,9 +125,10 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         endpoint_path="/defect-explanations",
         class_path="testbench_ai_service.agents.defect_explainer.agent.DefectExplainer",
         prompt=PromptConfig(
-            file=Path("defect_explainer.yaml"),
+            file=Path("defect_explainer/prompt.yaml"),
             name="DefectExplainer",
         ),
+        name="Defect Explainer",
         summary="Trigger generation of defect explanations",
         description="""This endpoint triggers asynchronous generation of defect explanations for the specified test case sets.
             The generated explanations will be added to the comment section of the corresponding test structure element execution overview.""",

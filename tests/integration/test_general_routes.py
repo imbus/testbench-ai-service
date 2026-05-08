@@ -53,13 +53,13 @@ class TestGetPromptDetails:
         assert "name" in body
         assert "default_variant" in body
 
-    def test_returns_variants_with_placeholders(self, client):
+    def test_returns_variants_with_vars(self, client):
         response = client.get("/agents/test_case_set_reviewer/prompt")
 
         assert response.status_code == status.HTTP_200_OK
         for variant in response.json()["variants"]:
             assert "name" in variant
-            assert "placeholders" in variant
+            assert "vars" in variant
 
     def test_unknown_agent_returns_404(self, client):
         response = client.get("/agents/does_not_exist/prompt")

@@ -9,9 +9,10 @@ A proxy service that integrates external LLM providers with [imbus TestBench](ht
 ## Features
 
 - **Multiple Agents:** test case set reviews, description generation, and defect explanations
-- **Pluggable LLM providers:** ships with OpenAI and Azure OpenAI support; implement a custom `LLMClient` to bring your own
-- **Configurable prompts:** YAML-based templates with Jinja2 placeholders and per-project overrides
-- **Session-token auth:** every request is validated against the TestBench REST API; no separate credential management
+- **Pluggable LLM providers:** ships with OpenAI, Azure OpenAI, and Anthropic support; implement a custom `LLMClient` to bring your own
+- **Automatic provider routing:** model names starting with `gpt-*` are sent to OpenAI, `claude-*` to Anthropic — regardless of the global provider setting
+- **Configurable prompts:** YAML-based templates with Jinja2 variables and per-project overrides
+- **JWT authentication:** every request is validated against the TestBench REST API using a JWT token; no separate credential management
 - **Async processing:** Agents run as background tasks so the API responds immediately
 - **Swagger UI:** interactive API docs at `/docs`
 - **SSL/TLS & reverse proxy support:** optional HTTPS with mTLS and trusted-proxy headers
@@ -37,6 +38,9 @@ OPENAI_API_KEY=your_openai_api_key
 
 # For Azure OpenAI
 AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+
+# For Anthropic
+ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 **2. Initialize configuration**
@@ -52,7 +56,7 @@ Open `config.toml` and point `tb_server_url` at your TestBench REST API:
 tb_server_url = "https://localhost:9443/api/"
 
 [testbench-ai-service.llm_config]
-# openai (default) or azure_openai
+# openai (default), azure_openai, anthropic, or custom
 provider = "openai"
 ```
 

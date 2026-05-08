@@ -33,7 +33,10 @@ def _ignore_non_prompt_files(prompts_dir: str, contents: list[str]) -> set[str]:
         item
         for item in contents
         if not Path(prompts_dir, item).is_dir()
-        and not any(item.endswith(ext) for ext in (".yaml", ".json"))
+        and not any(
+            item.endswith(ext)
+            for ext in (".yaml", ".jinja", "jinja2", ".j2", ".md", ".txt", ".json")
+        )
     }
 
 

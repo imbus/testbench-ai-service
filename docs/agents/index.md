@@ -5,7 +5,7 @@ title: Agents
 
 # Agents
 
-A **agent** is a self-contained AI-driven workflow that the service exposes as an HTTP endpoint. Each agent follows the same lifecycle:
+An **agent** is a self-contained AI-driven workflow that the service exposes as an HTTP endpoint. Each agent follows the same lifecycle:
 
 1. **Trigger**: TestBench sends a POST request with project, test-object-version, and (optionally) cycle information.
 2. **Precheck**: The service validates prerequisites (e.g., that test structure elements are not locked by another user) and collects the items to process.
@@ -15,17 +15,36 @@ A **agent** is a self-contained AI-driven workflow that the service exposes as a
 
 ## Built-in Agents
 
-| agent | Endpoint | Description |
+| Agent key | Dedicated endpoint | Description |
 |----------|----------|-------------|
-| [**Test Case Set Reviewer**](test-case-set-reviewer.md) | `/test-case-set-reviews` | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification. |
-| [**Test Case Set Describer**](test-case-set-describer.md) | `/test-case-set-descriptions` | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
-| [**Defect Explainer**](defect-explainer.md) | `/defect-explanations` | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview. |
+| [`test_case_set_reviewer`](test-case-set-reviewer.md) | `POST /test-case-set-reviews` | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification. |
+| [`test_case_set_describer`](test-case-set-describer.md) | `POST /test-case-set-descriptions` | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
+| [`defect_explainer`](defect-explainer.md) | `POST /defect-explanations` | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview. |
+
+---
+
+## Generic agent endpoints
+
+In addition to the dedicated trigger endpoints above, the service exposes a set of generic endpoints that work with any agent by key:
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/agents` | List all configured agents (supports filtering by key, project, enabled status). |
+| `GET` | `/agents/{agent_key}` | Get details for a specific agent. |
+| `GET` | `/agents/{agent_key}/prompt` | Inspect the configured prompt and its variants. |
+| `POST` | `/agents/{agent_key}/trigger` | Trigger any agent by key (same request body as dedicated endpoints). |
+
+For example, to trigger the Test Case Set Reviewer via the generic endpoint:
+
+```
+POST /agents/test_case_set_reviewer/trigger
+```
 
 ---
 
 ## Common request format
 
-All agent endpoints accept the same request body:
+All agent trigger endpoints accept the same request body:
 
 ```json
 {
@@ -33,13 +52,16 @@ All agent endpoints accept the same request body:
   "tov_key": "TOV-456",
   "cycle_key": "CYC-789",
   "root_uid": "UID-000",
+  "root_key": "ROOT-001",
+  "element_type": "TESTCASESET",
+  "tree_type": "TESTTHEMES",
   "language": "en",
   "prompt_config": {
-    "file": "custom_prompt.yaml",
+    "file": "custom_prompt/prompt.yaml",
     "name": "PromptName",
     "variant": "variant-name",
-    "placeholder_data": {
-      "glossary": "path/to/glossary.txt"
+    "vars": {
+      "glossary": "Domain: automotive\nABS = Anti-lock Braking System"
     }
   },
   "llm_config": {
@@ -54,7 +76,11 @@ All agent endpoints accept the same request body:
 | `project_key` | String | TestBench project key. | Yes |
 | `tov_key` | String | Test-object-version key. | Yes |
 | `cycle_key` | String | Test cycle key (required for defect explanations). | No |
-| `root_uid` | String | Root UID to limit scope to a subtree. | No |
+| `root_uid` | String | Unique ID of the element in TestBench on which the agent was triggered. Limits processing to the subtree rooted at this element. | No |
+| `root_key` | String | Key of the element in TestBench on which the agent was triggered. Alternative to `root_uid` for subtree scoping. | No |
+| `element_type` | String | Type of the element the agent was triggered on (e.g. `"TESTCASESET"`, `"TESTTHEME"`, `"ROOT"`). Provided by the TestBench plugin as part of the execution context. | No |
+| `tree_type` | String | Tree the element belongs to in TestBench (e.g. `"TESTTHEMES"`, `"TESTELEMENTS"`, `"REQUIREMENTS"`). Provided by the TestBench plugin as part of the execution context. | No |
+| `filtering` | Object | Active UI filter state from TestBench at the time of triggering: `appliedFilters` (list of named filters), `excludedTestThemes` (UIDs of collapsed/excluded themes), and `labelFilter` (active label filter string). | No |
 | `language` | String | Override language (`"en"` or `"de"`). | No |
 | `prompt_config` | Object | Override prompt configuration for this request. | No |
 | `llm_config` | Object | Override LLM configuration for this request. | No |
@@ -74,7 +100,7 @@ On success, `202 Accepted`:
 
 | Status | Meaning |
 |--------|---------|
-| `401` | Missing or invalid session token. |
+| `401` | Missing or invalid JWT token. |
 | `403` | Insufficient permissions (requires Administrator, TestManager, or TestDesigner role). |
 | `404` | Project not found, or agent is disabled for the project. |
 | `409` | Precheck failed. No items passed validation. |
@@ -83,7 +109,7 @@ On success, `202 Accepted`:
 
 ## Authorization
 
-All agent endpoints require a valid **TestBench session token** passed as the `Authorization` header. The token is validated by calling the TestBench REST API. The user must have at least one of the following roles:
+All agent endpoints require a valid **JWT token** passed as the `Authorization` header. The token is validated by calling the TestBench REST API. The user must have at least one of the following roles:
 
 - Administrator
 - TestManager
@@ -93,4 +119,4 @@ All agent endpoints require a valid **TestBench session token** passed as the `A
 
 ## Configuring Agents
 
-Each agent can be enabled/disabled, assigned a different prompt, or overridden per project in `config.toml`. See the [Configuration](../configuration.md#use-case-settings) page for details.
+Each agent can be enabled/disabled, assigned a different prompt, or overridden per project in `config.toml`. See the [Configuration](../configuration.md#agent-settings) page for details.

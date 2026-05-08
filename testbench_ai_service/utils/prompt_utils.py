@@ -1,18 +1,19 @@
 from pathlib import Path
+from typing import Any
 
 import yaml
 from jinja2 import (
     Environment,
     TemplateSyntaxError,
     UndefinedError,
-    meta,
 )
 
+from testbench_ai_service.agents.base import AgentData
 from testbench_ai_service.config import PromptConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import (
-    Block,
     Message,
+    MessageTemplate,
     Prompt,
     PromptDefinition,
     PromptVariant,
@@ -75,102 +76,84 @@ def get_prompt_variant(
     raise ValueError(f"Variant '{target_variant}' not found in prompt '{prompt_definition.name}'.")
 
 
-def get_rendered_blocks(blocks: list[Block], placeholder_data: dict[str, str]) -> list[Block]:
-    """Renders the given blocks with placeholder data using the Jinja2 template engine.
+def build_messages(
+    templates: list[MessageTemplate],
+    agent_data: AgentData,
+    prompt_vars: dict[str, Any],
+    base_path: Path,
+) -> list[Message]:
+    """Renders message templates into a list of ``Message`` objects.
+
+    Each template is rendered with Jinja2 using two namespaces:
+    ``{{ agent.<key> }}`` for agent-generated data and ``{{ vars.<key> }}``
+    for user-provided values. Each template produces exactly one ``Message``.
 
     Args:
-        blocks: List of Block objects to render
-        placeholder_data: Dictionary of placeholder key-value pairs
+        templates: Ordered list of ``MessageTemplate`` objects to render.
+        agent_data: Agent-generated variable values (``agent.*`` namespace).
+        prompt_vars: User-provided variable values (``vars.*`` namespace).
+        base_path: Directory used to resolve relative ``file`` paths in templates.
 
     Returns:
-        List of Block objects with rendered text
+        List of ``Message`` objects ready to be sent to an LLM.
     """
-
-    rendered_blocks = []
-    template_placeholders = set()
-
     env = Environment(trim_blocks=True, lstrip_blocks=True)
+    messages: list[Message] = []
 
-    for block in blocks:
+    for msg_template in templates:
         try:
-            # Parse template to find variables
-            ast = env.parse(block.text)
-            block_vars = meta.find_undeclared_variables(ast)
-            template_placeholders.update(block_vars)
-
-            # Render template
-            template = env.from_string(block.text)
-            new_text = template.render(**placeholder_data)
-
+            content = msg_template.get_content(base_path)
+            text = env.from_string(content).render(agent=agent_data, vars=prompt_vars).strip()
         except UndefinedError as e:
-            new_text = block.text
-            logger.error(f"Missing placeholder in block: {e}")
+            text = (msg_template.text or "").strip()
+            logger.error(f"Missing variable in message template: {e}")
         except TemplateSyntaxError as e:
-            new_text = block.text
-            logger.error(f"Invalid Jinja2 syntax in block: {e}")
+            text = (msg_template.text or "").strip()
+            logger.error(f"Invalid Jinja2 syntax in message template: {e}")
+        except FileNotFoundError as e:
+            text = (msg_template.text or "").strip()
+            logger.error(f"Template file not found: {e}")
         except Exception as e:
-            new_text = block.text
-            logger.warning(f"Unexpected error rendering block: {e}")
+            text = (msg_template.text or "").strip()
+            logger.warning(f"Unexpected error rendering message template: {e}")
 
-        rendered_blocks.append(block.model_copy(update={"text": new_text}))
+        messages.append(Message(role=msg_template.role, content=text))
 
-    # Check for unused placeholders
-    extra = set(placeholder_data.keys()) - template_placeholders
-    if extra:
-        logger.debug(f"Provided placeholder(s) not found in template: {extra}")
-
-    return rendered_blocks
+    return messages
 
 
-def build_messages(blocks: list[Block]) -> list[Message]:
-    """Builds a list of Message objects from the given blocks."""
-    combined_messages: list[Message] = []
-    current_role = None
-    buffer: list[str] = []
-
-    def flush():
-        if buffer:
-            combined_messages.append(Message(role=current_role, content="\n\n".join(buffer)))
-
-    for block in blocks:
-        text = block.text.strip()
-        if block.role == current_role:
-            buffer.append(text)
-        else:
-            flush()
-            current_role = block.role
-            buffer = [text]
-
-    flush()
-    return combined_messages
-
-
-def build_prompt(prompt_config: PromptConfig) -> Prompt:
+def build_prompt(prompt_config: PromptConfig, agent_data: AgentData | None = None) -> Prompt:
     """
     Builds and returns a Prompt object by loading, rendering, and preparing prompt data.
 
-    This function handles the entire prompt preparation workflow:
-    1. Loads the prompt definition from the specified file
-    2. Retrieves the appropriate variant
-    3. Renders blocks with placeholder data
-    4. Builds messages from rendered blocks
+    Template variables are split into two Jinja2 namespaces:
+    - ``{{ agent.<key> }}``: agent-generated values from ``agent_data``
+    - ``{{ vars.<key> }}``: user-provided values from ``prompt_config.vars``
+
+    Missing ``vars`` keys are filled from ``PromptVariableDefinition.default_value``
+    declared in the variant before rendering.
 
     Args:
-        prompt_config: Configuration containing file path, name, variant, and placeholder data for the prompt.
+        prompt_config: Configuration containing file path, name, variant, and user vars.
+        agent_data: Agent-generated variable values (``agent.*`` namespace).
 
     Returns:
         Prompt: A fully initialized Prompt object ready for use with an LLM.
 
     Raises:
-        FileNotFoundError: If the prompt file doesn't exist.
+        FileNotFoundError: If the prompt file or a referenced template file doesn't exist.
         ValueError: If prompt name or variant is not found.
     """
     prompt_definition = get_prompt_definition(prompt_config.file, prompt_config.name)
     prompt_variant = get_prompt_variant(prompt_definition, prompt_config.variant)
+    base_path = Path(prompt_config.file).parent
 
-    placeholder_data = prompt_config.placeholder_data or {}
-    rendered_blocks = get_rendered_blocks(prompt_variant.blocks, placeholder_data)
-    messages = build_messages(rendered_blocks)
+    messages = build_messages(
+        templates=prompt_variant.messages,
+        agent_data=agent_data or {},
+        prompt_vars=prompt_config.vars or {},
+        base_path=base_path,
+    )
 
     return Prompt(model_name=get_prompt_model(prompt_config), messages=messages)
 
@@ -184,24 +167,6 @@ def get_prompt_model(prompt_config: PromptConfig) -> str:
 def pretty_messages(messages: list[Message]) -> str:
     pretty = []
     for msg in messages:
-        # Add a tab before each line in content
         indented_content = "\n".join(f"\t{line}" for line in msg.content.splitlines())
         pretty.append(f"Role: {msg.role}\nContent:\n{indented_content}\n")
     return "\n---\n".join(pretty)
-
-
-def get_placeholders_from_blocks(blocks: list[Block]) -> list[str]:
-    """
-    Extract all placeholder variable names from the given blocks.
-
-    Returns a sorted list of unique placeholder names.
-    """
-    placeholders: set[str] = set()
-    env = Environment()
-    for block in blocks:
-        try:
-            ast = env.parse(block.text)
-            placeholders.update(meta.find_undeclared_variables(ast))
-        except TemplateSyntaxError:
-            pass
-    return sorted(placeholders)

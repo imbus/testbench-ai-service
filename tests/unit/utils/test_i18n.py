@@ -61,7 +61,7 @@ class TestGetTranslation(unittest.TestCase):
         self.assertEqual(result, "nonexistent_key")
 
     def test_missing_kwargs_returns_template_string(self):
-        """If the template has placeholders but none are supplied, the raw template is returned."""
+        """If the template has variables but none are supplied, the raw template is returned."""
         result = get_translation("greeting", LanguageOption.ENGLISH)
         self.assertIn("{name}", result)  # Unformatted template returned unchanged
 
