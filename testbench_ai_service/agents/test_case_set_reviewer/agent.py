@@ -113,11 +113,12 @@ class TestCaseSetReviewer(Agent):
                 ) == context.user_key
                 if is_in_review and is_current_reviewer:
                     items.append(node.base.uniqueID)
+            else:
+                warnings.append("Insufficient project role to perform a review.")
 
         if items:
             return PrecheckResult(passed=True, warnings=warnings, items=items)
 
-        warnings.append("Insufficient project role to perform a review.")
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(

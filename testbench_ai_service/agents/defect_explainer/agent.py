@@ -85,6 +85,7 @@ class DefectExplainer(Agent):
         items = []
 
         for node in tc_nodes:
+            test_structure_tree = node
             test_structure_tree = fetch_test_structure_tree(conn, context, node.base.uniqueID)
 
             if test_structure_tree.root.exec.verdict != VerdictStatus.ToVerify:
@@ -107,11 +108,12 @@ class DefectExplainer(Agent):
 
             if _sufficient_roles.intersection(project_roles):
                 items.append(node.base.uniqueID)
+            else:
+                warnings.append("Insufficient project role to perform the DefectExplainer.")
 
         if items:
             return PrecheckResult(passed=True, warnings=warnings, items=items)
 
-        warnings.append("Insufficient project role to perform a review.")
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(

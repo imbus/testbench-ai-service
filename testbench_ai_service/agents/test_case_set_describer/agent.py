@@ -100,11 +100,14 @@ class TestCaseSetDescriber(Agent):
                 responsible = (spec.get("responsible") or {}).get("key")
                 if responsible == context.user_key or responsible is None:
                     items.append(node.base.uniqueID)
+            else:
+                warnings.append(
+                    "Insufficient permissions to generate a description for the test case sets."
+                )
 
         if items:
             return PrecheckResult(passed=True, warnings=warnings, items=items)
 
-        warnings.append("Insufficient project role to perform a review.")
         return PrecheckResult(passed=False, warnings=warnings)
 
     async def run(

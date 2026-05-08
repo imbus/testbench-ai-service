@@ -1,5 +1,4 @@
 import re
-from types import SimpleNamespace
 
 import requests
 from fastapi import HTTPException, status
@@ -13,6 +12,7 @@ from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext, TriggerAgentRequest
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
+    TestCaseSetNode,
     TestStructureItemExecution,
     TestStructureItemSpecification,
     TestStructureTree,
@@ -193,7 +193,9 @@ def has_required_permissions(
     return all(perm.value in token_perm_set for perm in required_permissions)
 
 
-def fetch_test_structure_tree(conn, context, uniqueID):
+def fetch_test_structure_tree(
+    conn: TBConnection, context: ExecutionContext, uniqueID: str
+) -> TestStructureTree:
     try:
         test_structure_tree = get_test_structure_tree(
             conn=conn,
@@ -215,10 +217,27 @@ def fetch_test_structure_tree(conn, context, uniqueID):
     return test_structure_tree
 
 
-def get_test_case_nodes(context, conn):
+def get_test_case_nodes(context: ExecutionContext, conn: TBConnection):
     if context.element_type == "TESTCASESET":
-        node = SimpleNamespace(
-            base=SimpleNamespace(key=context.root_key, uniqueID=context.root_uid)
+        data = conn.get_project_test_case_set(context.project_key, context.root_key)
+        exec_data = data.get("exec")
+        node = TestCaseSetNode(
+            base={
+                "key": context.root_key,
+                "numbering": "",
+                "parentKey": "",
+                "name": "",
+                "uniqueID": data["uniqueID"],
+                "matchesFilter": True,
+            },
+            exec={
+                "key": exec_data["key"],
+                "status": exec_data["status"],
+                "execStatus": exec_data["execStatus"],
+                "verdict": exec_data["verdict"],
+            }
+            if exec_data
+            else None,
         )
         tc_nodes = [node]
 
