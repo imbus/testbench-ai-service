@@ -1,6 +1,4 @@
 import asyncio
-import re
-from types import SimpleNamespace
 from typing import Any, ClassVar
 
 import requests
@@ -55,7 +53,7 @@ class TestCaseSetReviewer(Agent):
         }
     )
 
-    async def precheck(
+    async def precheck(  # noqa: C901
         self,
         context: ExecutionContext,
         conn: TBConnection,
