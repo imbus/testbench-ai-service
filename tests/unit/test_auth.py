@@ -158,7 +158,7 @@ class TestValidateToken(unittest.TestCase):
 
     @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
-    def test_connection_NOT_closed_on_success(self, mock_get_user_key, mock_conn_cls):
+    def test_connection_not_closed_on_success(self, mock_get_user_key, mock_conn_cls):
         mock_conn = MagicMock()
         mock_conn_cls.return_value = mock_conn
 

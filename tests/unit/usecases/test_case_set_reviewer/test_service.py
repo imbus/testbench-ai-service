@@ -4,10 +4,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import requests
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
+from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.testbench import ProjectRole
 
 
 def _make_context(**overrides):
@@ -26,6 +28,17 @@ def _make_context(**overrides):
     return ExecutionContext(**defaults)
 
 
+def _make_auth_info(auth_type=AuthType.SESSION_TOKEN, token="tok", user_key="U1"):
+    return AuthInfo(auth_type=auth_type, token=token, user_key=user_key)
+
+
+def _make_node(uid="TCS-1", key="K1"):
+    node = MagicMock()
+    node.base.uniqueID = uid
+    node.base.key = key
+    return node
+
+
 def _make_tcs(uid="TCS1", key="K1", spec_key="SK1"):
     tcs = MagicMock()
     tcs.details.uniqueID = uid
@@ -35,88 +48,85 @@ def _make_tcs(uid="TCS1", key="K1", spec_key="SK1"):
     return tcs
 
 
+_AGENT_MODULE = "testbench_ai_service.agents.test_case_set_reviewer.agent"
+_SUFFICIENT_ROLES = [ProjectRole.TestManager]
+
+
 class TestTestCaseSetReviewerPrecheck(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.service = TestCaseSetReviewer()
+        self.auth_info = _make_auth_info()
 
     async def test_returns_passed_true_for_unlocked_tcs(self):
         context = _make_context()
         conn = MagicMock()
-        tcs = _make_tcs()
+        conn.get_project_test_case_set.return_value = {"uniqueID": "TCS-1", "spec": {}}
+        node = _make_node("TCS-1", "K1")
 
         with (
-            patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_set_catalog",
-                return_value={"TCS1": tcs},
-            ),
-            patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.check_test_case_set_is_locked",
-                return_value=False,
-            ),
+            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
+            patch(f"{_AGENT_MODULE}.check_test_case_set_is_locked", return_value=False),
+            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
         ):
-            result = await self.service.precheck(context, conn)
+            result = await self.service.precheck(context, conn, self.auth_info)
 
         self.assertTrue(result.passed)
-        self.assertIn(tcs, result.items)
+        self.assertIn("TCS-1", result.items)
         self.assertEqual(result.warnings, [])
 
     async def test_locked_tcs_adds_warning_and_is_excluded(self):
         context = _make_context()
         conn = MagicMock()
-        tcs = _make_tcs()
+        conn.get_project_test_case_set.return_value = {"uniqueID": "TCS-1", "spec": {}}
+        node = _make_node("TCS-1", "K1")
 
         with (
-            patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_set_catalog",
-                return_value={"TCS1": tcs},
-            ),
-            patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.check_test_case_set_is_locked",
-                return_value=True,
-            ),
+            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
+            patch(f"{_AGENT_MODULE}.check_test_case_set_is_locked", return_value=True),
+            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
         ):
-            result = await self.service.precheck(context, conn)
+            result = await self.service.precheck(context, conn, self.auth_info)
 
         self.assertFalse(result.passed)
-        self.assertEqual(result.items, [])
+        self.assertFalse(result.items)
         self.assertEqual(len(result.warnings), 1)
 
-    async def test_http_error_is_handled(self):
+    async def test_empty_nodes_returns_passed_false(self):
         context = _make_context()
         conn = MagicMock()
 
-        with (
-            patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_set_catalog",
-                side_effect=requests.exceptions.HTTPError("404"),
-            ),
-            patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.handle_requests_http_error"
-            ) as mock_handler,
-        ):
-            await self.service.precheck(context, conn)
-
-        mock_handler.assert_called_once()
-
-    async def test_empty_catalog_returns_passed_false(self):
-        context = _make_context()
-        conn = MagicMock()
-
-        with patch(
-            "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_set_catalog",
-            return_value={},
-        ):
-            result = await self.service.precheck(context, conn)
+        with patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[]):
+            result = await self.service.precheck(context, conn, self.auth_info)
 
         self.assertFalse(result.passed)
-        self.assertEqual(result.items, [])
+        self.assertIsNone(result.items)
 
 
 class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.service = TestCaseSetReviewer()
 
-    async def test_run_invokes_review_for_all_items(self):
+    async def test_run_invokes_review_for_matched_items(self):
+        context = _make_context()
+        conn = MagicMock()
+        llm_client = MagicMock()
+        tcs1 = _make_tcs(uid="TCS1")
+        tcs2 = _make_tcs(uid="TCS2")
+
+        with (
+            patch(
+                f"{_AGENT_MODULE}.get_test_case_set_catalog",
+                return_value={"TCS1": tcs1, "TCS2": tcs2},
+            ),
+            patch.object(
+                self.service, "_review_test_case_set", new_callable=AsyncMock
+            ) as mock_review,
+        ):
+            await self.service.run(context, conn, llm_client, ["TCS1", "TCS2"])
+
+        self.assertEqual(mock_review.await_count, 2)
+
+    async def test_run_with_none_items_is_noop(self):
         context = _make_context()
         conn = MagicMock()
         llm_client = MagicMock()
@@ -124,9 +134,9 @@ class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             self.service, "_review_test_case_set", new_callable=AsyncMock
         ) as mock_review:
-            await self.service.run(context, conn, llm_client)
+            await self.service.run(context, conn, llm_client, None)
 
-        self.assertEqual(mock_review.await_count, 2)
+        mock_review.assert_not_awaited()
 
     async def test_run_with_empty_items_is_noop(self):
         context = _make_context()
@@ -136,9 +146,25 @@ class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             self.service, "_review_test_case_set", new_callable=AsyncMock
         ) as mock_review:
-            await self.service.run(context, conn, llm_client)
+            await self.service.run(context, conn, llm_client, [])
 
         mock_review.assert_not_awaited()
+
+    async def test_http_error_from_catalog_is_handled(self):
+        context = _make_context()
+        conn = MagicMock()
+        llm_client = MagicMock()
+
+        with (
+            patch(
+                f"{_AGENT_MODULE}.get_test_case_set_catalog",
+                side_effect=requests.exceptions.HTTPError("404"),
+            ),
+            patch(f"{_AGENT_MODULE}.handle_requests_http_error") as mock_handler,
+        ):
+            await self.service.run(context, conn, llm_client, ["TCS1"])
+
+        mock_handler.assert_called_once()
 
 
 class TestBuildAgentData(unittest.TestCase):

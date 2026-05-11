@@ -145,12 +145,11 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                 context=self.context,
                 conn=self.mock_tb_connection,
                 llm_factory=self.mock_llm_factory,
-                items=self.items,
+                precheck_results=[tcs.details.uniqueID for tcs in self.test_case_sets],
             )
 
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")
         for tcs in self.test_case_sets:
-            # Assert "review started" PATCH
             review_started_msg = "KI Review gestartet ..."
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
             expected_started_html = (
@@ -202,7 +201,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                     context=self.context,
                     conn=self.mock_tb_connection,
                     llm_factory=self.mock_llm_factory,
-                    items=self.items,
+                    precheck_results=[tcs.details.uniqueID for tcs in self.test_case_sets],
                 )
 
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")
@@ -244,7 +243,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                     context=self.context,
                     conn=self.mock_tb_connection,
                     llm_factory=self.mock_llm_factory,
-                    items=self.items,
+                    precheck_results=[tcs.details.uniqueID for tcs in self.test_case_sets],
                 )
 
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")

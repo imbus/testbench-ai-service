@@ -24,6 +24,7 @@ from testbench_ai_service.models.testbench import (
     ActivityStatus,
     PermissionWithCode,
     ProjectRole,
+    TestCaseNode,
     VerdictStatus,
 )
 from testbench_ai_service.utils.agent import (
@@ -85,13 +86,20 @@ class DefectExplainer(Agent):
             test_structure_tree = node
             test_structure_tree = fetch_test_structure_tree(conn, context, node.base.uniqueID)
 
-            if test_structure_tree.root.exec.verdict != VerdictStatus.ToVerify:
+            root = test_structure_tree.root
+            if not isinstance(root, TestCaseNode) or root.exec is None:
+                warnings.append(
+                    f"The test case has no execution data (uid='{node.base.uniqueID}')."
+                )
+                continue
+
+            if root.exec.verdict != VerdictStatus.ToVerify:
                 warnings.append(
                     f"The test case verdict must be 'To Verify' (uid='{node.base.uniqueID}')."
                 )
                 continue
 
-            if test_structure_tree.root.exec.status != ActivityStatus.Performed:
+            if root.exec.status != ActivityStatus.Performed:
                 warnings.append(
                     f"The test case execution status must be 'Performed' (uid='{node.base.uniqueID}')."
                 )
@@ -118,9 +126,12 @@ class DefectExplainer(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        precheck_results: list[str],
+        precheck_results: list[str] | None,
     ) -> None:
         """Generates defect explanations for all test case sets concurrently."""
+        if not precheck_results:
+            return
+
         tasks = []
         test_case_set_catalog = {}
 

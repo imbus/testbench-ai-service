@@ -158,7 +158,7 @@ def check_test_case_set_is_locked(
     """
     test_structure_tree = fetch_test_structure_tree(conn, context, uniqueID)
 
-    return is_test_case_locked_by_user(test_structure_tree, context, tab)
+    return bool(is_test_case_locked_by_user(test_structure_tree, context, tab))
 
 
 def is_test_case_locked_by_user(
@@ -241,12 +241,14 @@ def get_test_case_nodes(context: ExecutionContext, conn: TBConnection):
             test_case = post_project_tov_structure(
                 conn,
                 context.project_key,
-                context.cycle_key,
+                context.tov_key,
                 context.root_uid,
                 context.filtering,
             )
         tc_nodes = [
-            node for node in test_case.nodes if re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
+            node
+            for node in test_case.nodes
+            if isinstance(node, TestCaseSetNode) and re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
         ]
 
     else:

@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from anthropic import DEFAULT_MAX_RETRIES, NOT_GIVEN, AsyncAnthropic, NotGiven
+from anthropic.types import MessageParam
 from httpx import Timeout
 
 from testbench_ai_service.llm.base import LLMClient
@@ -62,7 +63,7 @@ class AnthropicClient(LLMClient):
     ) -> str:
         system_prompt = next((msg.content for msg in messages if msg.role == "system"), NOT_GIVEN)
 
-        anthropic_messages = [
+        anthropic_messages: list[MessageParam] = [
             {"role": msg.role, "content": msg.content} for msg in messages if msg.role != "system"
         ]
 
@@ -90,7 +91,11 @@ class AnthropicClient(LLMClient):
         return await self._query_fallback_model(model, anthropic_messages, system_prompt, **kwargs)
 
     async def _query_chat_model(
-        self, model: str, input_messages: list[dict], system_prompt: str | NotGiven, **kwargs: Any
+        self,
+        model: str,
+        input_messages: list[MessageParam],
+        system_prompt: str | NotGiven,
+        **kwargs: Any,
     ) -> str:
         return await self._create_response(
             model=model,
@@ -103,7 +108,7 @@ class AnthropicClient(LLMClient):
     async def _query_budget_thinking_model(
         self,
         model: str,
-        input_messages: list[dict],
+        input_messages: list[MessageParam],
         system_prompt: str | NotGiven,
         reasoning_effort: str,
         **kwargs: Any,
@@ -129,7 +134,7 @@ class AnthropicClient(LLMClient):
     async def _query_adaptive_thinking_model(
         self,
         model: str,
-        input_messages: list[dict],
+        input_messages: list[MessageParam],
         system_prompt: str | NotGiven,
         reasoning_effort: str,
         **kwargs: Any,
@@ -153,7 +158,7 @@ class AnthropicClient(LLMClient):
     async def _query_fallback_model(
         self,
         model: str,
-        input_messages: list[dict],
+        input_messages: list[MessageParam],
         system_prompt: str | NotGiven,
         **kwargs: Any,
     ) -> str:
@@ -170,7 +175,9 @@ class AnthropicClient(LLMClient):
         except Exception as e:
             raise RuntimeError(f"Fallback request failed for model '{model}': {e}") from e
 
-    async def _create_response(self, model: str, messages: list[dict], **kwargs: Any) -> str:
+    async def _create_response(
+        self, model: str, messages: list[MessageParam], **kwargs: Any
+    ) -> str:
         if "max_tokens" not in kwargs and "thinking" not in kwargs:
             kwargs["max_tokens"] = 4096
 
@@ -182,7 +189,7 @@ class AnthropicClient(LLMClient):
 
         for block in response.content:
             if block.type == "text":
-                return block.text
+                return str(block.text)
 
         raise RuntimeError(f"Model '{model}' returned an empty or non-text response.")
 

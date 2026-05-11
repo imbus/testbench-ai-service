@@ -3,6 +3,7 @@ from typing import TypedDict
 
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
+from testbench_ai_service.auth import AuthInfo
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
 
@@ -17,6 +18,7 @@ class Agent(ABC):
         self,
         context: ExecutionContext,
         conn: TBConnection,
+        auth_info: AuthInfo,
     ) -> PrecheckResult:
         """
         Validates prerequisites and collects the items ready for processing.
@@ -44,7 +46,7 @@ class Agent(ABC):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        precheck_results: list[str],
+        precheck_results: list[str] | None,
     ) -> None:
         """
         Executes the agent for all items that passed ``precheck()``.

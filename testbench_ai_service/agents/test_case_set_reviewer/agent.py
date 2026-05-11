@@ -24,7 +24,6 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
-from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import PermissionWithCode, ProjectRole, SpecStatus
 from testbench_ai_service.utils.agent import (
     check_test_case_set_is_locked,
@@ -132,9 +131,11 @@ class TestCaseSetReviewer(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        precheck_results: list[str],
+        precheck_results: list[str] | None,
     ) -> None:
         """Reviews all test case sets concurrently."""
+        if not precheck_results:
+            return
         tasks = []
         test_case_set_catalog = {}
 

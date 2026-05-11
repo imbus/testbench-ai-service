@@ -15,7 +15,7 @@ async def run_agent(
     context: ExecutionContext,
     conn: TBConnection,
     llm_factory: LLMFactory,
-    precheck_results: list[str],
+    precheck_results: list[str] | None,
 ):
     """
     Resolves the LLM client and delegates execution to the agent.

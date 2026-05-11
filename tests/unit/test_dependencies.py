@@ -1,9 +1,5 @@
-import contextlib
 import unittest
-from unittest.mock import MagicMock, patch
-
-import requests
-from fastapi import HTTPException
+from unittest.mock import MagicMock
 
 from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
