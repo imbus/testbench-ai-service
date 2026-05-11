@@ -6,8 +6,8 @@
     "description_result_heading": "KI Beschreibung",
     "explainer_result_heading": "KI-Erklärung",
     "disclaimer": "Von KI generierte Antworten können ungenau sein.",
-    "review_failed": "KI Review ist fehlgeschalgen",
+    "review_failed": "KI Review ist fehlgeschlagen",
     "error_message": "Bitte kontaktieren Sie den Systemadministrator für weitere Details.",
-    "description_failed": "KI Testfall Beschreibung ist fehlgeschalgen",
+    "description_failed": "KI Testfall Beschreibung ist fehlgeschlagen",
     "defect_explainer_failed": "Beim Erstellen der KI-Fehlerbeschreibung ist ein Fehler aufgetreten"
 }
