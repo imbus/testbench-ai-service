@@ -55,7 +55,7 @@ class TestCaseSetDescriber(Agent):
         Fetches the test case set catalog and checks that each spec tab is unlocked.
         """
         warnings = []
-        requierd_permissions = {
+        required_permissions = {
             PermissionWithCode.AccessSecuredData,
             PermissionWithCode.ReadOwnUserDetails,
             PermissionWithCode.ReadProjectDetails,
@@ -72,7 +72,7 @@ class TestCaseSetDescriber(Agent):
         if auth_info.auth_type == AuthType.JWT_TOKEN:
             token_info = decode(auth_info.token, options={"verify_signature": False})
             token_perms = token_info.get("perms", [])
-            if not has_required_permissions(requierd_permissions, token_perms):
+            if not has_required_permissions(required_permissions, token_perms):
                 warnings.append(
                     get_translation(
                         "shared.precheck.insufficient_jwt_permissions", context.language
