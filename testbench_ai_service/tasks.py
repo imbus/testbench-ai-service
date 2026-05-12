@@ -15,7 +15,7 @@ async def run_agent(
     context: ExecutionContext,
     conn: TBConnection,
     llm_factory: LLMFactory,
-    precheck_results: list[str] | None,
+    item_ids: list[str] | None,
 ):
     """
     Resolves the LLM client and delegates execution to the agent.
@@ -26,7 +26,7 @@ async def run_agent(
         context:   Fully-resolved execution context (includes llm_config).
         conn:      TestBench connection.
         llm_factory: Factory used to obtain the LLM client for this project.
-        items:     Validated items returned by ``precheck()``.
+        item_ids:  Validated item IDs returned by ``precheck()``.
     """
     start_time = time.time()
     logger.info(
@@ -42,9 +42,7 @@ async def run_agent(
         )
         logger.debug("Initialised llm_client for agent '%s': %s", agent_key, llm_client.__class__)
 
-        await agent.run(
-            context=context, conn=conn, llm_client=llm_client, precheck_results=precheck_results
-        )
+        await agent.run(context=context, conn=conn, llm_client=llm_client, item_ids=item_ids)
 
         duration = time.time() - start_time
         logger.info(

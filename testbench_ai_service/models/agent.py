@@ -1,15 +1,12 @@
 import json
 from enum import Enum
 from pathlib import Path
-from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import FilteringOptions
-
-T = TypeVar("T")
 
 
 class PromptConfigRequest(BaseModel):
@@ -88,8 +85,9 @@ class AgentResult(BaseModel):
     result: str
 
 
-class PrecheckResult(BaseModel, Generic[T]):
-    """Outcome of the precheck phase, including items ready for execution."""
+class PrecheckResult(BaseModel):
+    """Outcome of the precheck phase, including the overall pass/fail status,
+    any warnings, and the validated item IDs."""
 
     passed: bool
     warnings: list[str] = []

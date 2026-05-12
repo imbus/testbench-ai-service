@@ -52,7 +52,7 @@ class DefectExplainer(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         auth_info: AuthInfo,
-    ) -> PrecheckResult[TestCaseSet]:
+    ) -> PrecheckResult:
         """
         Fetches the TCS catalog and checks that exec is unlocked and cycle_key is set.
         """
@@ -149,10 +149,10 @@ class DefectExplainer(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        precheck_results: list[str] | None,
+        item_ids: list[str] | None,
     ) -> None:
         """Generates defect explanations for all test case sets concurrently."""
-        if not precheck_results:
+        if not item_ids:
             return
 
         tasks = []
@@ -172,7 +172,7 @@ class DefectExplainer(Agent):
             handle_requests_http_error(e)
 
         for tcs in test_case_set_catalog.values():
-            if tcs.details.uniqueID in precheck_results:
+            if tcs.details.uniqueID in item_ids:
                 task = asyncio.create_task(
                     self._generate_defect_explanations(tcs, context, conn, llm_client)
                 )

@@ -37,7 +37,7 @@ class Agent(ABC):
             conn:    TestBench connection for retrieving data.
 
         Returns:
-            PrecheckResult containing the passed status, validated items, and warnings.
+            PrecheckResult containing the passed status, validated item IDs, and warnings.
         """
 
     @abstractmethod
@@ -46,7 +46,7 @@ class Agent(ABC):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        precheck_results: list[str] | None,
+        item_ids: list[str] | None,
     ) -> None:
         """
         Executes the agent for all items that passed ``precheck()``.
@@ -59,5 +59,5 @@ class Agent(ABC):
             context:    Fully-resolved execution context.
             conn:       TestBench connection for retrieving and updating data.
             llm_client: Initialised LLM client ready to accept queries.
-            items:      The validated items returned by ``precheck()``.
+            item_ids:   The validated item IDs returned by ``precheck()``.
         """
