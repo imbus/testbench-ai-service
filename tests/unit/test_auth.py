@@ -130,7 +130,7 @@ class TestValidateToken(unittest.TestCase):
     @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
     def test_valid_token_returns_user_key(self, mock_get_user_key, mock_conn_cls):
-        user_key, conn = _validate_token("https://tb/api/", "some-token", True)
+        user_key, _ = _validate_token("https://tb/api/", "some-token", True)
 
         self.assertEqual(user_key, "uk1")
         mock_conn_cls.assert_called_once()

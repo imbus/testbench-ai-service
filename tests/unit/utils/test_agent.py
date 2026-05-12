@@ -63,6 +63,9 @@ def base_request():
     req.tov_key = "TOV1"
     req.cycle_key = "CYCLE1"
     req.root_uid = "ROOT1"
+    req.root_key = None
+    req.element_type = None
+    req.tree_type = None
     req.language = None
     req.llm_config = None
     req.prompt_config = None

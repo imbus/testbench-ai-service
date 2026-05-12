@@ -18,6 +18,7 @@ from testbench_ai_service.models.testbench import (
     TestCaseNode,
     VerdictStatus,
 )
+from testbench_ai_service.utils.i18n import load_translations
 
 
 def _make_context(**overrides):
@@ -100,6 +101,7 @@ _SUFFICIENT_ROLES = [ProjectRole.Tester]
 
 class TestDefectExplainerPrecheck(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        load_translations()
         self.service = DefectExplainer()
         self.auth_info = _make_auth_info()
 

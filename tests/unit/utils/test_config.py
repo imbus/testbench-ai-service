@@ -363,11 +363,6 @@ class TestMergeModelDicts(unittest.TestCase):
                 override={"b": _SimpleModel(id=2, name="y")},
             )
 
-    def test_empty_default_with_new_key_raises_type_error(self):
-        """When default is empty, BaseModel is used as fallback and raises TypeError."""
-        with self.assertRaises(TypeError):
-            merge_model_dicts({}, {"x": {}})
-
 
 class TestMergePromptConfigs(unittest.TestCase):
     """merge_prompt_configs replaces all fields with the override model's values."""

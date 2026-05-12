@@ -145,7 +145,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                 context=self.context,
                 conn=self.mock_tb_connection,
                 llm_factory=self.mock_llm_factory,
-                precheck_results=[tcs.details.uniqueID for tcs in self.test_case_sets],
+                item_ids=[tcs.details.uniqueID for tcs in self.test_case_sets],
             )
 
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")
@@ -167,8 +167,10 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
 
             # Assert "review result" PATCH
             heading = "KI Review"
-            notes = self.review_responses[tcs.details.uniqueID].result or "Keine Review Anmerkungen"
-            disclaimer = get_translation("disclaimer", self.context.language)
+            notes = self.review_responses[tcs.details.uniqueID].result or get_translation(
+                "test_case_set_reviewer.run.no_notes", self.context.language
+            )
+            disclaimer = get_translation("shared.run.disclaimer", self.context.language)
             notes_html = notes.replace("\n", "<br/>")
             expected_result_html = (
                 f"<html><body><b>{heading} - {current_time}</b><br/>{notes_html}"
@@ -201,13 +203,15 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                     context=self.context,
                     conn=self.mock_tb_connection,
                     llm_factory=self.mock_llm_factory,
-                    precheck_results=[tcs.details.uniqueID for tcs in self.test_case_sets],
+                    item_ids=[tcs.details.uniqueID for tcs in self.test_case_sets],
                 )
 
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")
         for tcs in self.test_case_sets:
-            review_failed = get_translation("review_failed", self.context.language)
-            error_message = get_translation("error_message", self.context.language)
+            review_failed = get_translation(
+                "test_case_set_reviewer.run.failed", self.context.language
+            )
+            error_message = get_translation("shared.run.error_message", self.context.language)
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
             failed_payload = SpecificationDetailsForUpdate(
                 locker=OptionalUser(optional=None),
@@ -243,13 +247,15 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                     context=self.context,
                     conn=self.mock_tb_connection,
                     llm_factory=self.mock_llm_factory,
-                    precheck_results=[tcs.details.uniqueID for tcs in self.test_case_sets],
+                    item_ids=[tcs.details.uniqueID for tcs in self.test_case_sets],
                 )
 
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")
         for tcs in self.test_case_sets:
-            review_failed = get_translation("review_failed", self.context.language)
-            error_message = get_translation("error_message", self.context.language)
+            review_failed = get_translation(
+                "test_case_set_reviewer.run.failed", self.context.language
+            )
+            error_message = get_translation("shared.run.error_message", self.context.language)
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
             failed_payload = SpecificationDetailsForUpdate(
                 locker=OptionalUser(optional=None),

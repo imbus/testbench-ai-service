@@ -118,6 +118,7 @@ class TestAgentConfig(unittest.TestCase):
             endpoint_path="/test",
             class_path="testbench_ai_service.agents.base.Agent",
             prompt=PromptConfig(file="prompts/test.yaml", name="Test"),
+            name="Test Agent",
         )
         self.assertTrue(cfg.enabled)
         self.assertEqual(cfg.endpoint_path, "/test")

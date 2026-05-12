@@ -76,7 +76,7 @@ class TestPrecheckResult(unittest.TestCase):
     def test_passed_result_has_empty_defaults(self):
         result = PrecheckResult(passed=True)
         self.assertTrue(result.passed)
-        self.assertEqual(result.items, [])
+        self.assertIsNone(result.items)
         self.assertEqual(result.warnings, [])
 
     def test_failed_result_can_carry_warnings(self):

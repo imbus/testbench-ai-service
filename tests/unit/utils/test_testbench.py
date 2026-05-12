@@ -7,13 +7,13 @@ from testbench_ai_service.utils.testbench import get_project_name, get_user_key
 class TestGetUserKey(unittest.TestCase):
     """Tests for ``get_user_key``."""
 
-    def test_returns_user_key_from_session_response(self):
+    def test_returns_user_key_from_own_user_data_response(self):
         conn = MagicMock()
         conn.server_url = "https://tb/api/"
-        conn.session.get.return_value.json.return_value = {"userKey": "u42"}
+        conn.session.get.return_value.json.return_value = {"key": "u42"}
         result = get_user_key(conn)
         self.assertEqual(result, "u42")
-        conn.session.get.assert_called_once_with("https://tb/api/2/login/session")
+        conn.session.get.assert_called_once_with("https://tb/api/2/users/self")
 
 
 class TestGetProjectName(unittest.TestCase):

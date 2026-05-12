@@ -31,7 +31,12 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app_config = AppConfig(tb_server_url="https://localhost:9443/api/")
-        cls.app = create_app(cls.app_config)
+        with patch("testbench_ai_service.main.LLMFactory") as mock_factory_cls:
+            mock_factory = MagicMock()
+            mock_factory.init_clients = MagicMock()
+            mock_factory.close_clients = AsyncMock()
+            mock_factory_cls.return_value = mock_factory
+            cls.app = create_app(cls.app_config)
         cls.client = TestClient(cls.app)
         cls.client.__enter__()
 

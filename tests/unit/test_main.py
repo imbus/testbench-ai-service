@@ -109,17 +109,16 @@ class TestInitRouters(unittest.TestCase):
 
 
 class TestLifespan(unittest.IsolatedAsyncioTestCase):
-    async def test_lifespan_inits_and_closes_services(self):
-        """lifespan context manager calls init_services on enter and close_services on exit."""
+    async def test_lifespan_closes_services(self):
+        """lifespan context manager calls close_services on exit."""
         app = MagicMock()
         app.state.config.llm_config = MagicMock()
 
-        with (
-            patch("testbench_ai_service.main.init_services") as mock_init,
-            patch("testbench_ai_service.main.close_services", new_callable=AsyncMock) as mock_close,
-        ):
+        with patch(
+            "testbench_ai_service.main.close_services", new_callable=AsyncMock
+        ) as mock_close:
             async with lifespan(app):
-                mock_init.assert_called_once_with(app)
+                pass
 
         mock_close.assert_awaited_once_with(app)
 
