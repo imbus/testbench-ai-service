@@ -29,6 +29,7 @@ from testbench_ai_service.utils.agent import (
     get_test_case_nodes,
     has_required_permissions,
 )
+from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.testbench import (
     get_project_roles,
@@ -72,7 +73,11 @@ class TestCaseSetDescriber(Agent):
             token_info = decode(auth_info.token, options={"verify_signature": False})
             token_perms = token_info.get("perms", [])
             if not has_required_permissions(requierd_permissions, token_perms):
-                warnings.append("Insufficient permissions in JWT token.")
+                warnings.append(
+                    get_translation(
+                        "shared.precheck.insufficient_jwt_permissions", context.language
+                    )
+                )
                 return PrecheckResult(passed=False, warnings=warnings)
 
         tc_nodes = get_test_case_nodes(context, conn)
@@ -87,7 +92,9 @@ class TestCaseSetDescriber(Agent):
 
             if check_test_case_set_is_locked(conn, context, test_case_set.get("uniqueID"), "spec"):
                 warnings.append(
-                    f"The test case set specification is currently locked (uid='{node.base.uniqueID}')."
+                    get_translation(
+                        "shared.precheck.spec_locked", context.language, uid=node.base.uniqueID
+                    )
                 )
                 continue
 
@@ -99,7 +106,10 @@ class TestCaseSetDescriber(Agent):
                     items.append(node.base.uniqueID)
             else:
                 warnings.append(
-                    "Insufficient permissions to generate a description for the test case sets."
+                    get_translation(
+                        "test_case_set_describer.precheck.insufficient_permissions",
+                        context.language,
+                    )
                 )
 
         if items:

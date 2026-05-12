@@ -102,7 +102,7 @@ async def patch_review_started_for_test_structure_element(
     user_key: str,
 ):
     current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
-    review_started_message = get_translation("review_started_message", language)
+    review_started_message = get_translation("test_case_set_reviewer.run.started", language)
     review_comment_html = f"<html><body>{current_time} - {review_started_message}<br/><br/>{previous_review_comment}</body></html>"
 
     spec_update = SpecificationDetailsForUpdate(
@@ -123,10 +123,10 @@ async def patch_review_result_for_test_structure_element(
     user_key: str,
 ):
     current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
-    heading = get_translation("review_result_heading", language)
-    ai_disclaimer = get_translation("disclaimer", language)
+    heading = get_translation("test_case_set_reviewer.run.result_heading", language)
+    ai_disclaimer = get_translation("shared.run.disclaimer", language)
     if not review_notes:
-        review_notes = get_translation("review_result_no_notes", language)
+        review_notes = get_translation("test_case_set_reviewer.run.no_notes", language)
     review_notes = review_notes.replace("\n", "<br/>")
     review_comment_html = (
         f"<html><body><b>{heading} - {current_time}</b><br/>{review_notes}"
@@ -151,8 +151,8 @@ async def patch_previous_review_comment_for_test_structure_element(
     user_key: str,
 ):
     current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
-    failed = get_translation("review_failed", language)
-    error_message = get_translation("error_message", language)
+    failed = get_translation("test_case_set_reviewer.run.failed", language)
+    error_message = get_translation("shared.run.error_message", language)
     review_comment_html = f"<html><body><b>{failed} - {current_time}</b><br/>{error_message}<br/><br/>{previous_review_comment}</body></html>"
 
     spec_update = SpecificationDetailsForUpdate(

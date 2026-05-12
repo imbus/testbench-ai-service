@@ -33,6 +33,7 @@ from testbench_ai_service.utils.agent import (
     has_required_permissions,
     is_test_case_locked_by_user,
 )
+from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.testbench import (
     get_project_roles,
@@ -73,7 +74,11 @@ class DefectExplainer(Agent):
             token_info = decode(auth_info.token, options={"verify_signature": False})
             token_perms = token_info.get("perms", [])
             if not has_required_permissions(requierd_permissions, token_perms):
-                warnings.append("Insufficient permissions in JWT token.")
+                warnings.append(
+                    get_translation(
+                        "shared.precheck.insufficient_jwt_permissions", context.language
+                    )
+                )
                 return PrecheckResult(passed=False, warnings=warnings)
 
         tc_nodes = get_test_case_nodes(context, conn)
@@ -89,32 +94,50 @@ class DefectExplainer(Agent):
             root = test_structure_tree.root
             if not isinstance(root, TestCaseNode) or root.exec is None:
                 warnings.append(
-                    f"The test case has no execution data (uid='{node.base.uniqueID}')."
+                    get_translation(
+                        "defect_explainer.precheck.no_execution_data",
+                        context.language,
+                        uid=node.base.uniqueID,
+                    )
                 )
                 continue
 
             if root.exec.verdict != VerdictStatus.ToVerify:
                 warnings.append(
-                    f"The test case verdict must be 'To Verify' (uid='{node.base.uniqueID}')."
+                    get_translation(
+                        "defect_explainer.precheck.verdict_not_to_verify",
+                        context.language,
+                        uid=node.base.uniqueID,
+                    )
                 )
                 continue
 
             if root.exec.status != ActivityStatus.Performed:
                 warnings.append(
-                    f"The test case execution status must be 'Performed' (uid='{node.base.uniqueID}')."
+                    get_translation(
+                        "defect_explainer.precheck.execution_not_performed",
+                        context.language,
+                        uid=node.base.uniqueID,
+                    )
                 )
                 continue
 
             if is_test_case_locked_by_user(test_structure_tree, context, "exec"):
                 warnings.append(
-                    f"The test case execution is currently locked (uid='{node.base.uniqueID}')."
+                    get_translation(
+                        "defect_explainer.precheck.execution_locked",
+                        context.language,
+                        uid=node.base.uniqueID,
+                    )
                 )
                 continue
 
             if _sufficient_roles.intersection(project_roles):
                 items.append(node.base.uniqueID)
             else:
-                warnings.append("Insufficient project role to perform the DefectExplainer.")
+                warnings.append(
+                    get_translation("defect_explainer.precheck.insufficient_role", context.language)
+                )
 
         if items:
             return PrecheckResult(passed=True, warnings=warnings, items=items)

@@ -17,6 +17,7 @@ from testbench_ai_service.models.testbench import GlobalHumanRole, ProjectRole
 from testbench_ai_service.tasks import run_agent
 from testbench_ai_service.utils.agent import build_execution_context
 from testbench_ai_service.utils.config import agent_enabled, get_agent_config
+from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.testbench import has_any_required_role
 
@@ -137,7 +138,11 @@ async def trigger_agent_execution(
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"You need at least one of the following roles to proceed: {', '.join([role.value for role in required_roles])}",
+            detail=get_translation(
+                "routes.error.insufficient_global_role",
+                context.language,
+                roles=", ".join(role.value for role in required_roles),
+            ),
         )
 
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
@@ -147,15 +152,11 @@ async def trigger_agent_execution(
     logger.debug("Precheck result for agent '%s': %s", agent_key, precheck_result)
 
     if not precheck_result.passed:
-        logger.debug(
-            "Conflict: The precheck failed for agent '%s'.",
-            agent_key,
-        )
+        logger.debug("Conflict: The precheck failed for agent '%s'.", agent_key)
+        precheck_failed_msg = get_translation("routes.error.precheck_failed", context.language)
         warnings_text = "; ".join(precheck_result.warnings)
         detail = (
-            f"Conflict: The precheck failed. {warnings_text}"
-            if warnings_text
-            else "Conflict: The precheck failed."
+            f"{precheck_failed_msg} {warnings_text}" if warnings_text else f"{precheck_failed_msg}"
         )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

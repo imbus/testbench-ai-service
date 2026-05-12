@@ -129,7 +129,7 @@ async def patch_description_generation_started_for_test_structure_element(
 ):
     current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
     description_generation_started_message = get_translation(
-        "description_generation_started_message", language
+        "test_case_set_describer.run.started", language
     )
     description_html = f"<html><body>{current_time} - {description_generation_started_message}<br/><br/>{previous_description}</body></html>"
 
@@ -151,8 +151,8 @@ async def patch_generated_description_for_test_structure_element(
     user_key: str,
 ):
     current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
-    heading = get_translation("description_result_heading", language)
-    ai_disclaimer = get_translation("disclaimer", language)
+    heading = get_translation("test_case_set_describer.run.result_heading", language)
+    ai_disclaimer = get_translation("shared.run.disclaimer", language)
     description = description.replace("\n", "<br/>")
     if previous_description.replace("\n", "").strip():
         description_html = (
@@ -181,8 +181,8 @@ async def patch_previous_description_for_test_structure_element(
     user_key: str,
 ):
     current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
-    failed = get_translation("description_failed", language)
-    error_message = get_translation("error_message", language)
+    failed = get_translation("test_case_set_describer.run.failed", language)
+    error_message = get_translation("shared.run.error_message", language)
     description_html = f"<html><body>{previous_description}<br/><br/><b>{failed} - {current_time}</b><br/>{error_message}</body></html>"
 
     spec_update = SpecificationDetailsForUpdate(

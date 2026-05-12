@@ -261,7 +261,9 @@ def add_explanations_to_comment(comment: str, errors: dict, language: LanguageOp
         >>> add_explanation_to_comment(comment, errors)
         '<td>iTB-TC-001<pre>Error: Value mismatch<br><b>AI-explainer:</b><br>This happens when X is not equal to Y.</pre></td>'
     """
-    explainer_result_heading_message = get_translation("explainer_result_heading", language)
+    explainer_result_heading_message = get_translation(
+        "defect_explainer.run.result_heading", language
+    )
     updated_html = comment
     for details in errors:
         try:
@@ -316,14 +318,14 @@ def add_explanations_to_comment(comment: str, errors: dict, language: LanguageOp
 
 
 def add_disclaimer(comment: str, language: LanguageOption) -> str:
-    ai_disclaimer = get_translation("disclaimer", language)
+    ai_disclaimer = get_translation("shared.run.disclaimer", language)
     disclaimer = f"<div style='padding: 5px;'><div style='border-top: 1px solid black; width: 50%; font-size: 10px;'>{ai_disclaimer}</div></div>"
     return comment.replace("</table>", "</table>" + disclaimer, 1)
 
 
 def add_error_message(comment: str, language: LanguageOption) -> str:
-    error_message = get_translation("error_message", language)
-    failed = get_translation("defect_explainer_failed", language)
+    error_message = get_translation("shared.run.error_message", language)
+    failed = get_translation("defect_explainer.run.failed", language)
     error_message = f"<div><b>{failed}:</b><br/>{error_message}</div>"
     return comment.replace("</table>", "</table>" + error_message, 1)
 
