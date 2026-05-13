@@ -1,8 +1,7 @@
 ---
-sidebar_position: 7
+sidebar_position: 8
 title: CLI Commands
 ---
-
 # CLI Commands
 
 The executable is `testbench-ai-service`. All commands support `--help` for detailed usage.
@@ -15,12 +14,12 @@ testbench-ai-service [COMMAND] [OPTIONS]
 
 ## Commands overview
 
-| Command | Description |
-|---------|-------------|
-| [`init`](#init) | Generate a default configuration file and prompt files. |
-| [`start`](#start) | Start the TestBench AI Service. |
-| `--version`, `-v` | Print the installed version. |
-| `--help` | Show top-level help. |
+| Command               | Description                                             |
+| --------------------- | ------------------------------------------------------- |
+| [`init`](#init)        | Generate a default configuration file and prompt files. |
+| [`start`](#start)      | Start the TestBench AI Service.                         |
+| `--version`, `-v` | Print the installed version.                            |
+| `--help`            | Show top-level help.                                    |
 
 ---
 
@@ -33,16 +32,17 @@ testbench-ai-service init [OPTIONS]
 ```
 
 **What it does**
+
 1. Copies built-in prompt YAML files to the specified prompts directory (default: `./prompts`).
 2. Generates a `config.toml` with default settings, including the `prompts_dir` path.
 
 ### Options
 
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--path PATH` | Path to the configuration file to generate. | `config.toml` |
-| `--force`, `-f` | Overwrite the configuration file and prompts directory if they exist. | — |
-| `--prompts-dir PATH` | Copy default prompt files to PATH and set `prompts_dir` in the config.<br/>Pass an empty string to skip. | `prompts` |
+| Option                 | Description                                                                                                    | Default         |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | --------------- |
+| `--path PATH`        | Path to the configuration file to generate.                                                                    | `config.toml` |
+| `--force`, `-f`    | Overwrite the configuration file and prompts directory if they exist.                                          | —              |
+| `--prompts-dir PATH` | Copy default prompt files to PATH and set `prompts_dir` in the config.``Pass an empty string to skip. | `prompts`     |
 
 ### Examples
 
@@ -72,13 +72,13 @@ testbench-ai-service start [OPTIONS]
 
 ### Options
 
-| Option | Description | Default |
-|--------|-------------|--------|
-| `--config PATH` | Path to the app configuration file. | `config.toml` |
-| `--host HOST` | Host to bind to. | `127.0.0.1` |
-| `--port PORT` | Port to listen on. | `8010` |
-| `--dev` | Run in development mode (debug logging + auto-reload). | — |
-| `--tb-server-url URL` | Base URL of the TestBench REST API Server. | from config |
+| Option                  | Description                                            | Default         |
+| ----------------------- | ------------------------------------------------------ | --------------- |
+| `--config PATH`       | Path to the app configuration file.                    | `config.toml` |
+| `--host HOST`         | Host to bind to.                                       | `127.0.0.1`   |
+| `--port PORT`         | Port to listen on.                                     | `8010`        |
+| `--dev`               | Run in development mode (debug logging + auto-reload). | —              |
+| `--tb-server-url URL` | Base URL of the TestBench REST API Server.             | from config     |
 
 Command-line arguments take **precedence** over configuration file settings.
 

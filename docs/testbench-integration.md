@@ -1,8 +1,7 @@
 ---
-sidebar_position: 6
+sidebar_position: 7
 title: TestBench Integration
 ---
-
 # TestBench Integration
 
 This page explains how TestBench communicates with the AI Service and how to configure the connection.
@@ -96,14 +95,14 @@ No separate username/password configuration is needed. The AI Service uses the J
 
 ## Troubleshooting
 
-| Symptom | Likely Cause | Fix |
-|---------|-------------|-----|
-| `Connection refused` | Service is not running or port mismatch. | Start the service; verify `host` and `port` in config. |
-| `401 Unauthorized` | Missing or invalid JWT token. | Re-login to TestBench and retry. |
-| `502 Bad Gateway` | AI Service cannot reach TestBench REST API. | Verify `tb_server_url` in `config.toml` is correct and reachable. |
-| `404 Not Found` | agent disabled for the project. | Check `enabled = true` in the agent config; check project-specific overrides. |
-| `409 Conflict` | Precheck failed (e.g., all items locked). | Unlock the test structure elements in TestBench and retry. |
-| LLM errors in logs | Missing or invalid API key. | Verify your provider key is set in `.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
+| Symptom                | Likely Cause                                | Fix                                                                                                                      |
+| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `Connection refused` | Service is not running or port mismatch.    | Start the service; verify `host` and `port` in config.                                                               |
+| `401 Unauthorized`   | Missing or invalid JWT token.               | Re-login to TestBench and retry.                                                                                         |
+| `502 Bad Gateway`    | AI Service cannot reach TestBench REST API. | Verify `tb_server_url` in `config.toml` is correct and reachable.                                                    |
+| `404 Not Found`      | agent disabled for the project.             | Check `enabled = true` in the agent config; check project-specific overrides.                                          |
+| `409 Conflict`       | Precheck failed (e.g., all items locked).   | Unlock the test structure elements in TestBench and retry.                                                               |
+| LLM errors in logs     | Missing or invalid API key.                 | Verify your provider key is set in `.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
 
 ---
 

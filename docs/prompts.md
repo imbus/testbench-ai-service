@@ -1,8 +1,7 @@
 ---
-sidebar_position: 5
+sidebar_position: 6
 title: Prompts
 ---
-
 # Prompts
 
 Prompts are the instructions sent to the LLM. The TestBench AI Service uses a structured YAML format with support for multiple prompt definitions, variants, and Jinja2 variable rendering.
@@ -124,46 +123,46 @@ Each block must have **either** `text` (inline template) **or** `file` (path to 
 
 #### Prompt definition fields
 
-| Field | Type | Description | Required |
-|-------|------|-------------|----------|
-| `name` | String | Unique identifier for the prompt definition. | Yes |
-| `description` | String | Human-readable description. | No |
-| `default_model` | String | Fallback LLM model for variants that don't declare their own. | Yes |
-| `default_variant` | String | Name of the default variant to use when none is specified. | Yes |
-| `variants` | List | At least one variant is required. | Yes |
+| Field               | Type   | Description                                                   | Required |
+| ------------------- | ------ | ------------------------------------------------------------- | -------- |
+| `name`            | String | Unique identifier for the prompt definition.                  | Yes      |
+| `description`     | String | Human-readable description.                                   | No       |
+| `default_model`   | String | Fallback LLM model for variants that don't declare their own. | Yes      |
+| `default_variant` | String | Name of the default variant to use when none is specified.    | Yes      |
+| `variants`        | List   | At least one variant is required.                             | Yes      |
 
 #### Variant fields
 
-| Field | Type | Description | Required |
-|-------|------|-------------|----------|
-| `name` | String | Unique variant identifier. | Yes |
-| `description` | String | Human-readable description. | No |
-| `model` | String | LLM model to use (e.g., `"gpt-4.1"`, `"o3"`). Falls back to `default_model` if not set. | No |
-| `vars` | Object | Declared user-provided variables for this variant (see [Variable declarations](#variable-declarations)). | No |
-| `messages` | List | Ordered list of message blocks. | Yes |
+| Field           | Type   | Description                                                                                          | Required |
+| --------------- | ------ | ---------------------------------------------------------------------------------------------------- | -------- |
+| `name`        | String | Unique variant identifier.                                                                           | Yes      |
+| `description` | String | Human-readable description.                                                                          | No       |
+| `model`       | String | LLM model to use (e.g.,`"gpt-4.1"`, `"o3"`). Falls back to `default_model` if not set.         | No       |
+| `vars`        | Object | Declared user-provided variables for this variant (see[Variable declarations](#variable-declarations)). | No       |
+| `messages`    | List   | Ordered list of message blocks.                                                                      | Yes      |
 
 #### Message fields
 
 Exactly one of `text` or `file` must be provided per message.
 
-| Field | Type | Description | Default |
-|-------|------|-------------|---------|
-| `role` | String | Message role: `"system"`, `"user"`, or `"assistant"`. | `"user"` |
-| `text` | String | Inline Jinja2 template string. | — |
-| `file` | String | Path to an external template file (`.jinja`, `.j2`, or `.md`). Relative paths are resolved from the directory of the prompt YAML file. | — |
+| Field    | Type   | Description                                                                                                                                  | Default    |
+| -------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `role` | String | Message role:`"system"`, `"user"`, or `"assistant"`.                                                                                   | `"user"` |
+| `text` | String | Inline Jinja2 template string.                                                                                                               | —         |
+| `file` | String | Path to an external template file (`.jinja`, `.j2`, or `.md`). Relative paths are resolved from the directory of the prompt YAML file. | —         |
 
 #### Variable declarations
 
 The `vars` object on a variant declares the user-provided variables that the prompt expects. These are shown in the API and used for validation. Each key maps to a variable definition:
 
-| Field | Type | Description | Required |
-|-------|------|-------------|----------|
-| `name` | String | Human-readable label. | Yes |
-| `description` | String | Explains the purpose of the variable. | No |
-| `value_type` | String | One of `"string"`, `"text"`, `"boolean"`, `"number"`, `"enum"`. | Yes |
-| `choices` | List | Allowed values (required when `value_type` is `"enum"`). | Conditional |
-| `default_value` | Any | Default value if the variable is not supplied. | No |
-| `required` | Boolean | Whether the variable must be provided. | No (default `false`) |
+| Field             | Type    | Description                                                               | Required               |
+| ----------------- | ------- | ------------------------------------------------------------------------- | ---------------------- |
+| `name`          | String  | Human-readable label.                                                     | Yes                    |
+| `description`   | String  | Explains the purpose of the variable.                                     | No                     |
+| `value_type`    | String  | One of `"string"`, `"text"`, `"boolean"`, `"number"`, `"enum"`. | Yes                    |
+| `choices`       | List    | Allowed values (required when `value_type` is `"enum"`).              | Conditional            |
+| `default_value` | Any     | Default value if the variable is not supplied.                            | No                     |
+| `required`      | Boolean | Whether the variable must be provided.                                    | No (default `false`) |
 
 A JSON Schema for validation is available at `prompts/prompt.schema.json`.
 
@@ -173,10 +172,10 @@ A JSON Schema for validation is available at `prompts/prompt.schema.json`.
 
 Message templates (both inline `text` and external `file`) support [Jinja2](https://jinja.palletsprojects.com/) template syntax. Two separate variable namespaces are available at render time:
 
-| Namespace | Source | Example |
-|-----------|--------|---------|
+| Namespace       | Source                                                                    | Example                   |
+| --------------- | ------------------------------------------------------------------------- | ------------------------- |
 | `agent.<key>` | Data generated by the agent (e.g. test case data fetched from TestBench). | `{{ agent.test_case }}` |
-| `vars.<key>` | User-provided values from the prompt config or API request. | `{{ vars.glossary }}` |
+| `vars.<key>`  | User-provided values from the prompt config or API request.               | `{{ vars.glossary }}`   |
 
 See each agent's documentation for the full list of available `agent.*` variables. User-provided variables are declared in the variant's `vars` section.
 
