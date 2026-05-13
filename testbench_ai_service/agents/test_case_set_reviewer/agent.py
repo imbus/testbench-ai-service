@@ -73,6 +73,7 @@ class TestCaseSetReviewer(Agent):
             PermissionWithCode.AccessSecuredData,
             PermissionWithCode.ReadOwnUserDetails,
             PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadTovReport,
             PermissionWithCode.ReadCycleReport,
             PermissionWithCode.ReadReportingJobDetails,
             PermissionWithCode.DownloadReportFile,
@@ -80,6 +81,7 @@ class TestCaseSetReviewer(Agent):
             PermissionWithCode.ReadTestCaseSetDetails,
             PermissionWithCode.ModifySpecifications,
             PermissionWithCode.ReadTestThemeDetails,
+            PermissionWithCode.ModifySpecManagementInfo,
         }
 
         if auth_info.auth_type == AuthType.JWT_TOKEN:

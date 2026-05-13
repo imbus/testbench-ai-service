@@ -59,6 +59,7 @@ class TestCaseSetDescriber(Agent):
             PermissionWithCode.AccessSecuredData,
             PermissionWithCode.ReadOwnUserDetails,
             PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadTovReport,
             PermissionWithCode.ReadCycleReport,
             PermissionWithCode.ReadReportingJobDetails,
             PermissionWithCode.DownloadReportFile,

@@ -69,6 +69,7 @@ class DefectExplainer(Agent):
             PermissionWithCode.ModifySpecifications,
             PermissionWithCode.ReadTestThemeDetails,
             PermissionWithCode.ImportExecutionResults,
+            PermissionWithCode.ModifySpecManagementInfo,
         }
 
         if auth_info.auth_type == AuthType.JWT_TOKEN:
