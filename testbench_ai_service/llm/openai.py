@@ -55,6 +55,7 @@ REASONING_MODELS: frozenset[str] = frozenset(
         "gpt-5.3-codex",
         "gpt-5.4",
         "gpt-5.4-pro",
+        "gpt-5.4-mini",
         # o-Serie (dedicated reasoning, deep research)
         "o1",
         "o1-mini",
@@ -196,6 +197,9 @@ class AzureOpenAIClient(OpenAIClient):
         canonical_model = self.deployment_mapping.get(model, model)
 
         input_messages = cast(ResponseInputParam, [message.model_dump() for message in messages])
+
+        # Remove internal config keys that must not be forwarded to the API.
+        kwargs.pop("deployment_mapping", None)
 
         # 2. Route the logic based on the CANONICAL model string...
         if canonical_model in CHAT_MODELS:
