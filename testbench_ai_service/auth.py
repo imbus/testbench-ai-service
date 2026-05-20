@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 
 import requests
-from fastapi import Depends, HTTPException, Request, Security, status
+from fastapi import HTTPException, Request, Security, status
 from fastapi.security import APIKeyHeader
 from jwt import DecodeError, decode
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -25,7 +25,7 @@ class AuthInfo:
     auth_type: AuthType
     token: str
     user_key: str
-    conn: TBConnection | None = field(default=None, hash=False, compare=False)
+    conn: TBConnection = field(hash=False, compare=False)
 
 
 _session_token_scheme = APIKeyHeader(
@@ -93,7 +93,7 @@ def _validate_token(server_url: str, token: str, verify: bool | str) -> tuple[st
         ) from e
 
 
-def get_auth_info(
+def validate_auth_token(
     request: Request,
     session_token: str = Security(_session_token_scheme),
     jwt_token: str = Security(_jwt_token_scheme),
@@ -110,9 +110,8 @@ def get_auth_info(
     whether the request succeeded or failed.
 
     FastAPI caches this dependency's result for the entire request scope, so
-    every other dependency that declares ``Depends(get_auth_info)`` — including
-    the router-level ``validate_auth_token`` wrapper — receives the same
-    ``AuthInfo`` object with no additional TestBench round-trips.
+    every other dependency that declares ``Depends(validate_auth_token)`` receives the
+    same ``AuthInfo`` object with no additional TestBench round-trips.
 
     Raises:
         HTTPException 401: Token is missing or rejected.
@@ -134,9 +133,7 @@ def get_auth_info(
     try:
         yield AuthInfo(auth_type=auth_type, token=token, user_key=user_key, conn=conn)
     finally:
+        # NOTE: Starlette runs BackgroundTasks inside Response.__call__ before returning
+        # control to the routing stack, so the connection is still open for the full
+        # duration of any background task scheduled during this request.
         conn.close()
-
-
-def validate_auth_token(auth_info: AuthInfo = Depends(get_auth_info)) -> AuthInfo:
-    """Router-level authentication enforcement dependency."""
-    return auth_info

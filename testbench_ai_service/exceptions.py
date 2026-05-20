@@ -20,6 +20,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
 
 
 def handle_requests_http_error(e: requests.exceptions.HTTPError):
+    """Parse a ``requests.HTTPError``, log it, and re-raise as :class:`fastapi.HTTPException`."""
     status_code = e.response.status_code if e.response is not None else None
     message = str(e)
     if e.response is not None:
@@ -32,7 +33,6 @@ def handle_requests_http_error(e: requests.exceptions.HTTPError):
             response_text = e.response.text.strip()
             if response_text:
                 message = response_text
-
     if status_code == status.HTTP_404_NOT_FOUND:
         logger.info(f"Resource not found in TestBench Server: {message}")
     elif status_code and 400 <= status_code < 500:  # noqa: PLR2004

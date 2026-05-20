@@ -6,7 +6,7 @@ from testbench_ai_service.agents.routes import (
     TRIGGER_AGENT_ROUTE_KWARGS,
     trigger_agent_execution,
 )
-from testbench_ai_service.auth import AuthInfo, get_auth_info, validate_auth_token
+from testbench_ai_service.auth import AuthInfo, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
 from testbench_ai_service.llm.factory import LLMFactory
@@ -138,7 +138,7 @@ async def trigger_agent(
     conn: TBConnection = Depends(get_tb_connection),
     llm_factory: LLMFactory = Depends(get_llm_factory),
     app_config: AppConfig = Depends(get_app_config),
-    auth_info: AuthInfo = Depends(get_auth_info),
+    auth_info: AuthInfo = Depends(validate_auth_token),
 ) -> TriggerAgentResponse:
     return await trigger_agent_execution(
         agent_key=agent_key,

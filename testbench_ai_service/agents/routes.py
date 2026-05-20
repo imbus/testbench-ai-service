@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
-from testbench_ai_service.auth import AuthInfo, get_auth_info, validate_auth_token
+from testbench_ai_service.auth import AuthInfo, validate_auth_token
 from testbench_ai_service.config import AgentConfig, AppConfig
 from testbench_ai_service.dependencies import (
     get_app_config,
@@ -195,7 +195,7 @@ def create_agent_router(agent_key: str, config: AgentConfig) -> APIRouter:
         conn: TBConnection = Depends(get_tb_connection),
         llm_factory: LLMFactory = Depends(get_llm_factory),
         app_config: AppConfig = Depends(get_app_config),
-        auth_info: AuthInfo = Depends(get_auth_info),
+        auth_info: AuthInfo = Depends(validate_auth_token),
     ) -> TriggerAgentResponse:
         return await trigger_agent_execution(
             agent_key=agent_key,
