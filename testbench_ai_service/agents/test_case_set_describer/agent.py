@@ -1,13 +1,11 @@
 import asyncio
 
 import requests
-from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.test_case_set_describer.utils import (
-    get_description_for_test_case_set,
     get_test_case_set_as_string,
     patch_description_generation_started_for_test_structure_element,
     patch_generated_description_for_test_structure_element,
@@ -23,12 +21,15 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
-from testbench_ai_service.models.testbench import PermissionWithCode, ProjectRole
+from testbench_ai_service.models.testbench import (
+    PermissionWithCode,
+    ProjectRole,
+)
 from testbench_ai_service.utils.agent import (
-    check_test_case_set_is_locked,
-    get_test_case_nodes,
+    get_test_case_set_nodes,
     has_required_permissions,
 )
+from testbench_ai_service.utils.html_utils import strip_html_body_tags
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.testbench import (
@@ -45,6 +46,27 @@ class TestCaseSetDescriberAgentData(AgentData):
 
 
 class TestCaseSetDescriber(Agent):
+    REQUIRED_PERMISSIONS: frozenset[PermissionWithCode] = frozenset(
+        {
+            PermissionWithCode.ReadOwnUserDetails,
+            PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadTovReport,
+            PermissionWithCode.ReadCycleReport,
+            PermissionWithCode.ReadReportingJobDetails,
+            PermissionWithCode.DownloadReportFile,
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ModifySpecifications,
+            PermissionWithCode.ModifySpecManagementInfo,
+        }
+    )
+    ALLOWED_ROLES: frozenset[ProjectRole] = frozenset(
+        {
+            ProjectRole.TestManager,
+            ProjectRole.TestDesigner,
+        }
+    )
+
     async def precheck(
         self,
         context: ExecutionContext,
@@ -52,66 +74,44 @@ class TestCaseSetDescriber(Agent):
         auth_info: AuthInfo,
     ) -> PrecheckResult:
         """
-        Fetches the test case set catalog and checks that each spec tab is unlocked.
+        Precheck to determine which test case sets the agent should describe, based on the user's permissions and roles.
         """
         warnings = []
-        required_permissions = {
-            PermissionWithCode.AccessSecuredData,
-            PermissionWithCode.ReadOwnUserDetails,
-            PermissionWithCode.ReadProjectDetails,
-            PermissionWithCode.ReadTovReport,
-            PermissionWithCode.ReadCycleReport,
-            PermissionWithCode.ReadReportingJobDetails,
-            PermissionWithCode.DownloadReportFile,
-            PermissionWithCode.ReadTestCaseSetDetails,
-            PermissionWithCode.ReadTestThemeTree,
-            PermissionWithCode.ModifySpecifications,
-            PermissionWithCode.ModifySpecManagementInfo,
-            PermissionWithCode.ReadTestThemeDetails,
-        }
 
-        if auth_info.auth_type == AuthType.JWT_TOKEN:
-            token_info = decode(auth_info.token, options={"verify_signature": False})
-            token_perms = token_info.get("perms", [])
-            if not has_required_permissions(required_permissions, token_perms):
-                warnings.append(
-                    get_translation(
-                        "shared.precheck.insufficient_jwt_permissions", context.language
-                    )
-                )
-                return PrecheckResult(passed=False, warnings=warnings)
+        if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
+            auth_info.token, self.REQUIRED_PERMISSIONS
+        ):
+            msg = get_translation(
+                "test_case_set_describer.precheck.insufficient_permissions", context.language
+            )
+            warnings.append(msg)
+            return PrecheckResult(passed=False, warnings=warnings)
 
-        tc_nodes = get_test_case_nodes(context, conn)
+        project_roles = set(get_project_roles(conn, context.project_key))
+        if project_roles.isdisjoint(self.ALLOWED_ROLES):
+            msg = get_translation(
+                "test_case_set_describer.precheck.insufficient_role", context.language
+            )
+            warnings.append(msg)
+            return PrecheckResult(passed=False, warnings=warnings)
 
-        project_roles = get_project_roles(conn, context.project_key)
-        _sufficient_roles = {ProjectRole.TestManager}
+        tcs_nodes = get_test_case_set_nodes(conn, context)
+
         items = []
-
-        for node in tc_nodes:
-            test_case_set = conn.get_project_test_case_set(context.project_key, node.base.key)
-            spec = test_case_set.get("spec") or {}
-
-            if check_test_case_set_is_locked(conn, context, test_case_set.get("uniqueID"), "spec"):
-                warnings.append(
-                    get_translation(
-                        "shared.precheck.spec_locked", context.language, uid=node.base.uniqueID
-                    )
+        for node in tcs_nodes:
+            locked_by_other_user = (
+                node.spec is not None
+                and node.spec.locker is not None
+                and node.spec.locker.key != context.user_key
+            )
+            if locked_by_other_user:
+                msg = get_translation(
+                    "shared.precheck.spec_locked", context.language, uid=node.base.uniqueID
                 )
+                warnings.append(msg)
                 continue
 
-            if _sufficient_roles.intersection(project_roles):
-                items.append(node.base.uniqueID)
-            elif ProjectRole.TestDesigner in project_roles:
-                responsible = (spec.get("responsible") or {}).get("key")
-                if responsible == context.user_key or responsible is None:
-                    items.append(node.base.uniqueID)
-            else:
-                warnings.append(
-                    get_translation(
-                        "test_case_set_describer.precheck.insufficient_permissions",
-                        context.language,
-                    )
-                )
+            items.append(node.base.uniqueID)
 
         if items:
             return PrecheckResult(passed=True, warnings=warnings, items=items)
@@ -123,15 +123,13 @@ class TestCaseSetDescriber(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        item_ids: list[str] | None,
+        item_ids: list[str],
     ) -> None:
         """Generates descriptions for all test case sets concurrently."""
         if not item_ids:
             return
 
-        tasks = []
         test_case_set_catalog = {}
-
         try:
             test_case_set_catalog = get_test_case_set_catalog(
                 conn=conn,
@@ -144,6 +142,8 @@ class TestCaseSetDescriber(Agent):
             logger.debug("Retrieved test case sets: %s", list(test_case_set_catalog.keys()))
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
+
+        tasks = []
         for tcs in test_case_set_catalog.values():
             if tcs.details.uniqueID in item_ids:
                 task = asyncio.create_task(
@@ -164,12 +164,7 @@ class TestCaseSetDescriber(Agent):
     ) -> None:
         """Generates a description for a single test case set."""
         try:
-            tcs_key = test_case_set.details.key
-            tcs_spec_key = test_case_set.details.spec.key
-
-            previous_description = await get_description_for_test_case_set(
-                conn=conn, project_key=context.project_key, test_case_set_key=tcs_key
-            )
+            previous_description = strip_html_body_tags(test_case_set.details.spec.description)
             try:
                 logger.debug(
                     "Sending PATCH request to mark description generation started for test case set '%s'",
@@ -178,7 +173,7 @@ class TestCaseSetDescriber(Agent):
                 await patch_description_generation_started_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=tcs_spec_key,
+                    spec_key=test_case_set.details.spec.key,
                     previous_description=previous_description,
                     language=context.language,
                     user_key=context.user_key,
@@ -211,7 +206,7 @@ class TestCaseSetDescriber(Agent):
                 await patch_generated_description_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=tcs_spec_key,
+                    spec_key=test_case_set.details.spec.key,
                     description=description_response.result,
                     previous_description=previous_description,
                     language=context.language,
@@ -235,7 +230,7 @@ class TestCaseSetDescriber(Agent):
                 await patch_previous_description_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=tcs_spec_key,
+                    spec_key=test_case_set.details.spec.key,
                     previous_description=previous_description,
                     language=context.language,
                     user_key=context.user_key,

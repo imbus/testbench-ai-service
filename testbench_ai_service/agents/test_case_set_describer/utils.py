@@ -13,12 +13,17 @@ from testbench_ai_service.models.testbench import (
     OptionalUser,
     RichTextInfo,
     SpecificationDetailsForUpdate,
-    TestCaseSetDetails,
 )
 from testbench_ai_service.utils.i18n import get_translation
-from testbench_ai_service.utils.string_processor import strip_html_body_tags
 from testbench_ai_service.utils.testbench import patch_test_structure_element_spec
 from testbench_ai_service.utils.testbench_helpers import get_interaction_calls_for_test_case
+
+_TZ = ZoneInfo("Europe/Berlin")
+_DATETIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def _current_time() -> str:
+    return datetime.now(_TZ).strftime(_DATETIME_FORMAT)
 
 
 def get_test_case_set_as_string(test_case_set: TestCaseSet) -> str:  # noqa: C901, PLR0912
@@ -111,14 +116,6 @@ def get_test_case_set_as_string(test_case_set: TestCaseSet) -> str:  # noqa: C90
     return "\n".join(lines)
 
 
-async def get_description_for_test_case_set(
-    conn: TBConnection, project_key: str, test_case_set_key: str
-):
-    tcs_data = conn.get_project_test_case_set(project_key, test_case_set_key)
-    tcs = TestCaseSetDetails.model_validate(tcs_data)
-    return strip_html_body_tags(tcs.spec.description)
-
-
 async def patch_description_generation_started_for_test_structure_element(
     conn: TBConnection,
     project_key: str,
@@ -127,7 +124,7 @@ async def patch_description_generation_started_for_test_structure_element(
     language: LanguageOption,
     user_key: str,
 ):
-    current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
+    current_time = _current_time()
     description_generation_started_message = get_translation(
         "test_case_set_describer.run.started", language
     )
@@ -150,7 +147,7 @@ async def patch_generated_description_for_test_structure_element(
     language: LanguageOption,
     user_key: str,
 ):
-    current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
+    current_time = _current_time()
     heading = get_translation("test_case_set_describer.run.result_heading", language)
     ai_disclaimer = get_translation("shared.run.disclaimer", language)
     description = description.replace("\n", "<br/>")
@@ -169,7 +166,7 @@ async def patch_generated_description_for_test_structure_element(
         reviewer=OptionalUser(optional=user_key),
         description=RichTextInfo(html=description_html, images=[]),
     )
-    await patch_test_structure_element_spec(conn, project_key, spec_key, spec_update)
+    return await patch_test_structure_element_spec(conn, project_key, spec_key, spec_update)
 
 
 async def patch_previous_description_for_test_structure_element(
@@ -180,10 +177,10 @@ async def patch_previous_description_for_test_structure_element(
     language: LanguageOption,
     user_key: str,
 ):
-    current_time = f"{datetime.now(ZoneInfo('Europe/Berlin')).strftime('%Y-%m-%d %H:%M:%S')}"
-    failed = get_translation("test_case_set_describer.run.failed", language)
+    current_time = _current_time()
+    heading = get_translation("test_case_set_describer.run.failed_heading", language)
     error_message = get_translation("shared.run.error_message", language)
-    description_html = f"<html><body>{previous_description}<br/><br/><b>{failed} - {current_time}</b><br/>{error_message}</body></html>"
+    description_html = f"<html><body>{previous_description}<br/><br/><b>{heading} - {current_time}</b><br/>{error_message}</body></html>"
 
     spec_update = SpecificationDetailsForUpdate(
         reviewer=OptionalUser(optional=user_key),
