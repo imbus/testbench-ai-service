@@ -44,7 +44,7 @@ def build_unlocked_structure_tree(tab: str) -> TestStructureTree:
         locker=None,
         status=ActivityStatus.Performed,
         execStatus=ExecStatus.NotBlocked,
-        verdict=VerdictStatus.Pass,
+        verdict=VerdictStatus.ToVerify,
     )
     node = TestCaseSetNode(
         base=TestStructureItemBaseInformation(
@@ -60,7 +60,110 @@ def build_unlocked_structure_tree(tab: str) -> TestStructureTree:
         exec=exec_ if tab == "exec" else None,
         elementType=TestStructureElementType.TestCaseSetNode,
     )
-    return TestStructureTree(root=node, nodes=[])
+    return TestStructureTree(root=node, nodes=[node])
+
+
+def build_two_node_structure_tree(tab: str, locker_key: str = "99") -> TestStructureTree:
+    """Return a tree with two nodes: first locked by another user, second unlocked."""
+    locker = UserReference(key=locker_key, name="Someone Else")
+    locked_spec = TestStructureItemSpecification(
+        key="17", locker=locker, status=SpecStatus.InReview
+    )
+    locked_exec = TestStructureItemExecution(
+        key="32",
+        locker=locker,
+        status=ActivityStatus.Performed,
+        execStatus=ExecStatus.NotBlocked,
+        verdict=VerdictStatus.ToVerify,
+    )
+    unlocked_spec = TestStructureItemSpecification(
+        key="18", locker=None, status=SpecStatus.InProgress
+    )
+    unlocked_exec = TestStructureItemExecution(
+        key="33",
+        locker=None,
+        status=ActivityStatus.Performed,
+        execStatus=ExecStatus.NotBlocked,
+        verdict=VerdictStatus.ToVerify,
+    )
+    locked_node = TestCaseSetNode(
+        base=TestStructureItemBaseInformation(
+            key="9",
+            numbering="1.1",
+            parentKey="1",
+            name="Calculate final price",
+            uniqueID="iTB-TC-66",
+            matchesFilter=True,
+        ),
+        spec=locked_spec if tab == "spec" else None,
+        aut=TestStructureAutomation(key="16", locker=None, status=AutStatus.NotPlanned),
+        exec=locked_exec if tab == "exec" else None,
+        elementType=TestStructureElementType.TestCaseSetNode,
+    )
+    unlocked_node = TestCaseSetNode(
+        base=TestStructureItemBaseInformation(
+            key="10",
+            numbering="1.2",
+            parentKey="1",
+            name="Apply discount",
+            uniqueID="iTB-TC-67",
+            matchesFilter=True,
+        ),
+        spec=unlocked_spec if tab == "spec" else None,
+        aut=TestStructureAutomation(key="20", locker=None, status=AutStatus.NotPlanned),
+        exec=unlocked_exec if tab == "exec" else None,
+        elementType=TestStructureElementType.TestCaseSetNode,
+    )
+    return TestStructureTree(root=locked_node, nodes=[locked_node, unlocked_node])
+
+
+def build_multi_unlocked_structure_tree(tab: str) -> TestStructureTree:
+    """Return a tree with two unlocked nodes (iTB-TC-66 and iTB-TC-67)."""
+    spec1 = TestStructureItemSpecification(key="17", locker=None, status=SpecStatus.InProgress)
+    exec1 = TestStructureItemExecution(
+        key="32",
+        locker=None,
+        status=ActivityStatus.Performed,
+        execStatus=ExecStatus.NotBlocked,
+        verdict=VerdictStatus.ToVerify,
+    )
+    spec2 = TestStructureItemSpecification(key="18", locker=None, status=SpecStatus.InProgress)
+    exec2 = TestStructureItemExecution(
+        key="33",
+        locker=None,
+        status=ActivityStatus.Performed,
+        execStatus=ExecStatus.NotBlocked,
+        verdict=VerdictStatus.ToVerify,
+    )
+    node1 = TestCaseSetNode(
+        base=TestStructureItemBaseInformation(
+            key="9",
+            numbering="1.1",
+            parentKey="1",
+            name="Calculate final price",
+            uniqueID="iTB-TC-66",
+            matchesFilter=True,
+        ),
+        spec=spec1 if tab == "spec" else None,
+        aut=TestStructureAutomation(key="16", locker=None, status=AutStatus.NotPlanned),
+        exec=exec1 if tab == "exec" else None,
+        elementType=TestStructureElementType.TestCaseSetNode,
+    )
+    node2 = TestCaseSetNode(
+        base=TestStructureItemBaseInformation(
+            key="10",
+            numbering="1.2",
+            parentKey="1",
+            name="Apply discount",
+            uniqueID="iTB-TC-67",
+            matchesFilter=True,
+        ),
+        spec=spec2 if tab == "spec" else None,
+        aut=TestStructureAutomation(key="20", locker=None, status=AutStatus.NotPlanned),
+        exec=exec2 if tab == "exec" else None,
+        elementType=TestStructureElementType.TestCaseSetNode,
+    )
+    return TestStructureTree(root=node1, nodes=[node1, node2])
 
 
 def build_locked_structure_tree(tab: str, locker_key: str = "99") -> TestStructureTree:
@@ -88,7 +191,7 @@ def build_locked_structure_tree(tab: str, locker_key: str = "99") -> TestStructu
         exec=exec_ if tab == "exec" else None,
         elementType=TestStructureElementType.TestCaseSetNode,
     )
-    return TestStructureTree(root=node, nodes=[])
+    return TestStructureTree(root=node, nodes=[node])
 
 
 def build_tcs_catalog(

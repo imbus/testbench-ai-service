@@ -1,6 +1,6 @@
 from fastapi import status
 
-from testbench_ai_service.auth import get_auth_info
+from testbench_ai_service.auth import validate_auth_token
 
 
 class TestRootRoute:
@@ -36,7 +36,7 @@ class TestGetAgents:
         assert all(not uc["enabled"] for uc in response.json())
 
     def test_requires_auth_token(self, app, client):
-        app.dependency_overrides.pop(get_auth_info, None)
+        app.dependency_overrides.pop(validate_auth_token, None)
         response = client.get("/agents")
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
@@ -67,7 +67,7 @@ class TestGetPromptDetails:
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
     def test_requires_auth_token(self, app, client):
-        app.dependency_overrides.pop(get_auth_info, None)
+        app.dependency_overrides.pop(validate_auth_token, None)
         response = client.get("/agents/test_case_set_reviewer/prompt")
 
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
