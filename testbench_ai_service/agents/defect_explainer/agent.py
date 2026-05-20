@@ -1,7 +1,6 @@
 import asyncio
 
 import requests
-from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -24,14 +23,11 @@ from testbench_ai_service.models.testbench import (
     ActivityStatus,
     PermissionWithCode,
     ProjectRole,
-    TestCaseNode,
     VerdictStatus,
 )
 from testbench_ai_service.utils.agent import (
-    fetch_test_structure_tree,
-    get_test_case_nodes,
+    get_test_case_set_nodes,
     has_required_permissions,
-    is_test_case_locked_by_user,
 )
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
@@ -47,6 +43,27 @@ class DefectExplainerAgentData(AgentData):
 
 
 class DefectExplainer(Agent):
+    REQUIRED_PERMISSIONS: frozenset[PermissionWithCode] = frozenset(
+        {
+            PermissionWithCode.ReadOwnUserDetails,
+            PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadTovReport,
+            PermissionWithCode.ReadCycleReport,
+            PermissionWithCode.ReadReportingJobDetails,
+            PermissionWithCode.DownloadReportFile,
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ImportExecutionResults,
+            PermissionWithCode.ReadExecutionImportingJobDetails,
+        }
+    )
+    ALLOWED_ROLES: frozenset[ProjectRole] = frozenset(
+        {
+            ProjectRole.TestManager,
+            ProjectRole.Tester,
+        }
+    )
+
     async def precheck(
         self,
         context: ExecutionContext,
@@ -54,92 +71,69 @@ class DefectExplainer(Agent):
         auth_info: AuthInfo,
     ) -> PrecheckResult:
         """
-        Fetches the TCS catalog and checks that exec is unlocked and cycle_key is set.
+        Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
         warnings = []
-        required_permissions = {
-            PermissionWithCode.AccessSecuredData,
-            PermissionWithCode.ReadOwnUserDetails,
-            PermissionWithCode.ReadProjectDetails,
-            PermissionWithCode.ReadCycleReport,
-            PermissionWithCode.ReadReportingJobDetails,
-            PermissionWithCode.DownloadReportFile,
-            PermissionWithCode.ReadTestThemeTree,
-            PermissionWithCode.ReadTestCaseSetDetails,
-            PermissionWithCode.ModifySpecifications,
-            PermissionWithCode.ReadTestThemeDetails,
-            PermissionWithCode.ImportExecutionResults,
-            PermissionWithCode.ModifySpecManagementInfo,
-        }
 
-        if auth_info.auth_type == AuthType.JWT_TOKEN:
-            token_info = decode(auth_info.token, options={"verify_signature": False})
-            token_perms = token_info.get("perms", [])
-            if not has_required_permissions(required_permissions, token_perms):
-                warnings.append(
-                    get_translation(
-                        "shared.precheck.insufficient_jwt_permissions", context.language
-                    )
-                )
-                return PrecheckResult(passed=False, warnings=warnings)
+        if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
+            auth_info.token, self.REQUIRED_PERMISSIONS
+        ):
+            msg = get_translation(
+                "defect_explainer.precheck.insufficient_permissions", context.language
+            )
+            warnings.append(msg)
+            return PrecheckResult(passed=False, warnings=warnings)
 
-        tc_nodes = get_test_case_nodes(context, conn)
+        project_roles = set(get_project_roles(conn, context.project_key))
+        if project_roles.isdisjoint(self.ALLOWED_ROLES):
+            msg = get_translation("defect_explainer.precheck.insufficient_role", context.language)
+            warnings.append(msg)
+            return PrecheckResult(passed=False, warnings=warnings)
 
-        project_roles = get_project_roles(conn, context.project_key)
-        _sufficient_roles = {ProjectRole.TestManager, ProjectRole.Tester}
+        tcs_nodes = get_test_case_set_nodes(conn, context)
+
         items = []
-
-        for node in tc_nodes:
-            test_structure_tree = node
-            test_structure_tree = fetch_test_structure_tree(conn, context, node.base.uniqueID)
-
-            root = test_structure_tree.root
-            if not isinstance(root, TestCaseNode) or root.exec is None:
-                warnings.append(
-                    get_translation(
-                        "defect_explainer.precheck.no_execution_data",
-                        context.language,
-                        uid=node.base.uniqueID,
-                    )
+        for node in tcs_nodes:
+            if node.exec is None:
+                msg = get_translation(
+                    "defect_explainer.precheck.no_execution_data",
+                    context.language,
+                    uid=node.base.uniqueID,
                 )
+                warnings.append(msg)
                 continue
 
-            if root.exec.verdict != VerdictStatus.ToVerify:
-                warnings.append(
-                    get_translation(
-                        "defect_explainer.precheck.verdict_not_to_verify",
-                        context.language,
-                        uid=node.base.uniqueID,
-                    )
+            if node.exec.verdict != VerdictStatus.ToVerify:
+                msg = get_translation(
+                    "defect_explainer.precheck.verdict_not_to_verify",
+                    context.language,
+                    uid=node.base.uniqueID,
                 )
+                warnings.append(msg)
                 continue
 
-            if root.exec.status != ActivityStatus.Performed:
-                warnings.append(
-                    get_translation(
-                        "defect_explainer.precheck.execution_not_performed",
-                        context.language,
-                        uid=node.base.uniqueID,
-                    )
+            if node.exec.status != ActivityStatus.Performed:
+                msg = get_translation(
+                    "defect_explainer.precheck.execution_not_performed",
+                    context.language,
+                    uid=node.base.uniqueID,
                 )
+                warnings.append(msg)
                 continue
 
-            if is_test_case_locked_by_user(test_structure_tree, context, "exec"):
-                warnings.append(
-                    get_translation(
-                        "defect_explainer.precheck.execution_locked",
-                        context.language,
-                        uid=node.base.uniqueID,
-                    )
+            locked_by_other_user = (
+                node.exec.locker is not None and node.exec.locker.key != context.user_key
+            )
+            if locked_by_other_user:
+                msg = get_translation(
+                    "defect_explainer.precheck.execution_locked",
+                    context.language,
+                    uid=node.base.uniqueID,
                 )
+                warnings.append(msg)
                 continue
 
-            if _sufficient_roles.intersection(project_roles):
-                items.append(node.base.uniqueID)
-            else:
-                warnings.append(
-                    get_translation("defect_explainer.precheck.insufficient_role", context.language)
-                )
+            items.append(node.base.uniqueID)
 
         if items:
             return PrecheckResult(passed=True, warnings=warnings, items=items)
@@ -151,15 +145,13 @@ class DefectExplainer(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        item_ids: list[str] | None,
+        item_ids: list[str],
     ) -> None:
         """Generates defect explanations for all test case sets concurrently."""
         if not item_ids:
             return
 
-        tasks = []
         test_case_set_catalog = {}
-
         try:
             test_case_set_catalog = get_test_case_set_catalog(
                 conn=conn,
@@ -173,6 +165,7 @@ class DefectExplainer(Agent):
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
 
+        tasks = []
         for tcs in test_case_set_catalog.values():
             if tcs.details.uniqueID in item_ids:
                 task = asyncio.create_task(
@@ -193,21 +186,24 @@ class DefectExplainer(Agent):
     ) -> None:
         """Generates explanations for all failed test cases in a single test case set."""
         try:
-            results: list = []
-
             failed_test_cases = get_error_message(test_case_set.details.exec.comments)
             logger.debug(
                 "Extracted error messages of the failed test cases for test case set '%s'",
                 test_case_set.details.uniqueID,
             )
 
+            if not failed_test_cases:
+                logger.debug(
+                    "No failed test cases found for test case set '%s', skipping",
+                    test_case_set.details.uniqueID,
+                )
+                return
+
             logger.debug(
                 "Start generating a defect explanation for every failed test case of test case set '%s': %s",
                 test_case_set.details.uniqueID,
                 list(failed_test_cases.keys()),
             )
-            results = []
-            queue: asyncio.Queue = asyncio.Queue()
 
             tasks = []
             for failed_test_case, details in failed_test_cases.items():
@@ -219,7 +215,6 @@ class DefectExplainer(Agent):
                         failed_test_case,
                         llm_client,
                         context.llm_config,
-                        queue,
                     )
                 )
                 logger.debug(
@@ -233,25 +228,21 @@ class DefectExplainer(Agent):
                 "Awaiting completion of explanation generation for all failed test cases of test case set '%s'",
                 test_case_set.details.uniqueID,
             )
-            await asyncio.gather(*tasks)
-
-            while not queue.empty():
-                results.append(await queue.get())
+            results = list(await asyncio.gather(*tasks))
 
             if results:
                 comment = clean_up_comment(test_case_set.details.exec.comments)
-                updated_comment = add_explanations_to_comment(comment, results, context.language)  # type: ignore[arg-type]
+                updated_comment = add_explanations_to_comment(comment, results, context.language)
                 logger.debug(
                     "Built updated comment with defect explanations for test case set '%s'",
                     test_case_set.details.uniqueID,
                 )
-
-                update_description(updated_comment, test_case_set, conn, context)
+                await update_description(updated_comment, test_case_set, conn, context)
 
         except Exception as e:
             comment = clean_up_comment(test_case_set.details.exec.comments)
             comment = add_error_message(comment, context.language)
-            update_description(comment, test_case_set, conn, context)
+            await update_description(comment, test_case_set, conn, context)
             logger.error(
                 "generate_defect_explanations_task failed | test_case_set='%s' | data=%s | error=%r",
                 test_case_set.details.uniqueID,
@@ -276,8 +267,7 @@ class DefectExplainer(Agent):
         failed_test_case: str,
         llm_client: LLMClient,
         llm_config: LLMConfig,
-        queue: asyncio.Queue,
-    ) -> None:
+    ) -> dict:
         agent_data = self._build_agent_data(
             test_case_set=test_case_set,
             test_case=failed_test_case,
@@ -303,12 +293,11 @@ class DefectExplainer(Agent):
             explanation_response.result,
         )
 
-        result = {
+        return {
             "failed_test_case": failed_test_case,
             "error": details["error"],
             "explanation": explanation_response.result,
         }
-        await queue.put(result)
 
     async def _get_ai_response(
         self,

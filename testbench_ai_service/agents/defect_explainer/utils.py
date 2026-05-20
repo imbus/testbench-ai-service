@@ -1,11 +1,13 @@
+import asyncio
 import json
 import re
 import tempfile
 import zipfile
+from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
 
-from testbench2robotframework.json_reader import TestCaseSet
+from testbench2robotframework.json_reader import TestCaseSet, TestCaseSetDetails
 from testbench2robotframework.model import KeywordType, TestCaseDetails
 from testbench_cli_reporter.actions import ImportJSONExecutionResults
 from testbench_cli_reporter.config_model import ImportJsonParameters
@@ -21,15 +23,23 @@ from testbench_ai_service.agents.defect_explainer.model import (
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
 from testbench_ai_service.models.language import LanguageOption
-from testbench_ai_service.models.testbench import (
-    TestCaseSetDetails,
-)
 from testbench_ai_service.utils.i18n import get_translation
 
 
-def update_description(
+async def update_description(
     updated_comment: str, test_case_set: TestCaseSet, conn: TBConnection, context: ExecutionContext
 ):
+    """Write an updated HTML comment back to TestBench for a test case set.
+
+    Creates a temporary ZIP archive containing the serialized protocol and test
+    case set data, then imports it into TestBench via :func:`import_data`.
+
+    Args:
+        updated_comment: The new HTML comment string to embed in the import payload.
+        test_case_set: The test case set whose execution results are being updated.
+        conn: The active TestBench connection.
+        context: Execution context containing project, TOV, and cycle keys.
+    """
     with tempfile.TemporaryDirectory() as tmpdir:
         zip_path = Path(tmpdir) / "report.zip"
 
@@ -39,7 +49,7 @@ def update_description(
             test_case_set.details.uniqueID,
         )
 
-        import_data(conn, context, zip_path)
+        await import_data(conn, context, zip_path)
         logger.debug(
             "Imported the results into TestBench for test case set '%s'",
             test_case_set.details.uniqueID,
@@ -51,24 +61,31 @@ def clean_up_comment(comment: str) -> str:
     return re.sub(pattern, "/table>", comment)
 
 
-def import_data(conn: TBConnection, context: ExecutionContext, path: Path):
-    """
-    Imports test case execution results from a JSON file into TestBench.
+async def import_data(conn: TBConnection, context: ExecutionContext, path: Path):
+    """Trigger a JSON execution results import job in TestBench.
 
     Args:
-        conn (TBConnection): The active TestBench connection object.
-        context (ExecutionContext): Execution context containing project and cycle keys.
-        path (Path): The file path of the JSON file or ZIP archive to import.
+        conn: The active TestBench connection.
+        context: Execution context containing the project and cycle keys.
+        path: Path to the ZIP archive to import.
+
+    Raises:
+        RuntimeError: If the import job could not be triggered (e.g. the upload
+            returned no server-side filename).
     """
     connection = ConnectionLog()
     connection.add_connection(conn)
 
     parameters = ImportJsonParameters(
         inputPath=path, projectKey=context.project_key, cycleKey=context.cycle_key
-    )
+    )  # add importConfig ?
     importer = ImportJSONExecutionResults(parameters=parameters)
 
-    importer.trigger(connection.active_connection)
+    triggered = await asyncio.to_thread(importer.trigger, connection.active_connection)
+    if not triggered:
+        raise RuntimeError(
+            f"Failed to trigger importing of execution results for test case set in cycle '{context.cycle_key}'."
+        )
 
 
 def create_import_zip(updated_comment: str, test_case_set_details: TestCaseSetDetails, path: Path):
@@ -102,9 +119,7 @@ def create_import_zip(updated_comment: str, test_case_set_details: TestCaseSetDe
         zipf.writestr(
             "protocol.json", json.dumps([item.model_dump() for item in [protocol]], indent=4)
         )
-        zipf.writestr(
-            f"{tcs.uniqueID}.json", json.dumps(tcs.model_dump(), default=custom_serializer)
-        )
+        zipf.writestr(f"{tcs.uniqueID}.json", json.dumps(asdict(tcs), default=custom_serializer))
 
 
 def custom_serializer(obj):
@@ -227,39 +242,34 @@ def build_update_test_case_set(
     return updated_test_case_set_details
 
 
-def add_explanations_to_comment(comment: str, errors: dict, language: LanguageOption) -> str:
-    """
-    Inserts AI-generated explanations into an HTML comment containing test case results.
+def add_explanations_to_comment(comment: str, errors: list[dict], language: LanguageOption) -> str:
+    """Insert AI-generated defect explanations into an HTML test execution comment.
 
-    The function searches the given `comment` (HTML string) for each error entry
-    in the `errors` dictionary. For each error:
-
-        - It locates the corresponding `<pre>...</pre>` block containing the error message.
-        - If a previous explanation (`<br><b>AI-explainer:</b><br>`) already exists,
-        it replaces the old explanation with the new one from `errors['explanation']`.
-        - Otherwise, it appends a new explanation right after the error message.
+    For each entry in ``errors``, the function locates the matching ``<pre>`` block
+    in the HTML by test case ID and error message. If a previous AI explanation
+    (``<div class='ai'>``) already exists in that block, it is replaced; otherwise
+    a new one is appended.
 
     Args:
-        comment (str): The original HTML comment string containing test case results.
-        errors (dict): A mapping of error IDs to their details. Each entry should contain:
-            {
-                "error": str,         # The error message as it appears in the HTML
-                "explanation": str    # The AI-generated explanation to insert
-            }
+        comment: The original HTML comment string from the test case set execution.
+        errors: List of result dicts, one per failed test case. Each dict must contain:
+            - ``"failed_test_case"`` - the test case unique ID as it appears in the HTML.
+            - ``"error"`` - the raw error message string used to locate the ``<pre>`` block.
+            - ``"explanation"`` - the AI-generated explanation to insert.
+        language: The language used for the explanation heading label.
 
     Returns:
-        str: The updated HTML comment with explanations inserted or replaced.
+        The updated HTML string with explanations inserted or replaced.
 
     Example:
-        >>> comment = "<td>iTB-TC-001<pre>Error: Value mismatch</pre></td>"
-        >>> errors = {
-        ...     "iTB-TC-001": {
+        >>> errors = [
+        ...     {
+        ...         "failed_test_case": "iTB-TC-001",
         ...         "error": "Error: Value mismatch",
-        ...         "explanation": "This happens when X is not equal to Y."
+        ...         "explanation": "This happens when X is not equal to Y.",
         ...     }
-        ... }
-        >>> add_explanation_to_comment(comment, errors)
-        '<td>iTB-TC-001<pre>Error: Value mismatch<br><b>AI-explainer:</b><br>This happens when X is not equal to Y.</pre></td>'
+        ... ]
+        >>> add_explanations_to_comment(comment, errors, LanguageOption.ENGLISH)
     """
     explainer_result_heading_message = get_translation(
         "defect_explainer.run.result_heading", language
@@ -325,8 +335,8 @@ def add_disclaimer(comment: str, language: LanguageOption) -> str:
 
 def add_error_message(comment: str, language: LanguageOption) -> str:
     error_message = get_translation("shared.run.error_message", language)
-    failed = get_translation("defect_explainer.run.failed", language)
-    error_message = f"<div><b>{failed}:</b><br/>{error_message}</div>"
+    failed_heading = get_translation("defect_explainer.run.failed_heading", language)
+    error_message = f"<div><b>{failed_heading}:</b><br/>{error_message}</div>"
     return comment.replace("</table>", "</table>" + error_message, 1)
 
 
