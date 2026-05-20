@@ -1,10 +1,11 @@
 import dataclasses
 import datetime
+import logging
 import tempfile
-import unittest
 import zipfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
@@ -16,7 +17,6 @@ from testbench_ai_service.config import (
     PromptConfig,
 )
 from testbench_ai_service.llm.base import LLMClient
-from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.testbench import (
     OptionalUser,
@@ -25,15 +25,16 @@ from testbench_ai_service.models.testbench import (
 )
 from testbench_ai_service.tasks import run_agent
 from testbench_ai_service.utils.config import get_llm_config
+from testbench_ai_service.utils.html_utils import strip_html_body_tags
 from testbench_ai_service.utils.i18n import get_translation, load_translations
-from testbench_ai_service.utils.string_processor import strip_html_body_tags
 from tests.unit.helpers.data import get_test_data_path
 
 
-class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
+class TestRunAgentReviewTask:
     """run_agent runs the full review pipeline and writes back results via PATCH."""
 
-    def setUp(self):
+    @pytest.fixture(autouse=True)
+    def setup(self):
         # ── TB connection mock ────────────────────────────────────────────────
         self.mock_tb_connection = MagicMock()
         self.mock_tb_connection.server_url = "https://localhost:9443/api/"
@@ -46,22 +47,22 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
         )
 
         # ── Reviewer mock ─────────────────────────────────────────────────────
-        self.reviewer_patcher = patch(
+        reviewer_patcher = patch(
             "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
         )
-        self.mock_reviewer_class = self.reviewer_patcher.start()
+        self.mock_reviewer_class = reviewer_patcher.start()
         self.mock_reviewer = TestCaseSetReviewer()
         self.mock_reviewer._get_ai_response = AsyncMock(
             side_effect=self._reviewer_get_ai_response_side_effect
         )
         self.mock_reviewer_class.return_value = self.mock_reviewer
 
-        # ── get_prompt_model mock (avoids prompt file I/O in tasks.py) ────────
-        self.prompt_model_patcher = patch(
+        # ── get_prompt_model mock ─────────────────────────────────────────────
+        prompt_model_patcher = patch(
             "testbench_ai_service.tasks.get_prompt_model",
             return_value="gpt-4o",
         )
-        self.prompt_model_patcher.start()
+        prompt_model_patcher.start()
 
         # ── LLM factory mock ──────────────────────────────────────────────────
         self.mock_llm_client = AsyncMock()
@@ -70,7 +71,8 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
 
         # ── Config ────────────────────────────────────────────────────────────
         self.prompt_config = DEFAULT_AGENTS["test_case_set_reviewer"].prompt
-        self.app_config = AppConfig(tb_server_url=self.mock_tb_connection.server_url)
+        with patch("testbench_ai_service.config.validate_tb_server_url"):
+            self.app_config = AppConfig(tb_server_url=self.mock_tb_connection.server_url)
         self.app_config.agents["test_case_set_reviewer"].prompt = self.prompt_config
 
         # ── Test identifiers ──────────────────────────────────────────────────
@@ -106,7 +108,6 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
 
         self.items = self.test_case_sets
 
-        # Pre-compute expected string representations for AI response routing
         self.tcs_strings = {
             tcs.details.uniqueID: get_test_case_set_as_string(
                 self.tcs_catalog[tcs.details.uniqueID]
@@ -126,9 +127,10 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
 
         load_translations()
 
-    def tearDown(self):
-        self.reviewer_patcher.stop()
-        self.prompt_model_patcher.stop()
+        yield
+
+        reviewer_patcher.stop()
+        prompt_model_patcher.stop()
 
     # ── Tests ─────────────────────────────────────────────────────────────────
 
@@ -150,7 +152,9 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
 
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")
         for tcs in self.test_case_sets:
-            review_started_msg = "KI Review gestartet ..."
+            review_started_msg = get_translation(
+                "test_case_set_reviewer.run.started", self.context.language
+            )
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
             expected_started_html = (
                 f"<html><body>{current_time} - {review_started_msg}"
@@ -165,8 +169,9 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                 f"{self.patch_url_prefix}{tcs.details.spec.key}", json=started_payload
             )
 
-            # Assert "review result" PATCH
-            heading = "KI Review"
+            heading = get_translation(
+                "test_case_set_reviewer.run.result_heading", self.context.language
+            )
             notes = self.review_responses[tcs.details.uniqueID].result or get_translation(
                 "test_case_set_reviewer.run.no_notes", self.context.language
             )
@@ -187,7 +192,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                 f"{self.patch_url_prefix}{tcs.details.spec.key}", json=result_payload
             )
 
-    async def test_patch_failure_is_logged_as_error(self):
+    async def test_patch_failure_is_logged_as_error(self, caplog):
         """When a PATCH call raises, run_agent logs the error and continues."""
         self.mock_tb_connection.session.patch.side_effect = Exception("patch error")
 
@@ -196,7 +201,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
             "testbench_ai_service.agents.test_case_set_reviewer.utils.datetime"
         ) as mock_datetime:
             mock_datetime.now.return_value = fake_now
-            with self.assertLogs(logger, level="ERROR"):
+            with caplog.at_level(logging.ERROR, logger="testbench_ai_service"):
                 await run_agent(
                     agent_key="test_case_set_reviewer",
                     agent=self.mock_reviewer,
@@ -206,10 +211,12 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                     item_ids=[tcs.details.uniqueID for tcs in self.test_case_sets],
                 )
 
+        assert any(r.levelno >= logging.ERROR for r in caplog.records)
+
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")
         for tcs in self.test_case_sets:
-            review_failed = get_translation(
-                "test_case_set_reviewer.run.failed", self.context.language
+            heading = get_translation(
+                "test_case_set_reviewer.run.failed_heading", self.context.language
             )
             error_message = get_translation("shared.run.error_message", self.context.language)
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
@@ -218,7 +225,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                 reviewer=OptionalUser(optional=self.user_key),
                 reviewComment=RichTextInfo(
                     html=(
-                        f"<html><body><b>{review_failed} - {current_time}</b>"
+                        f"<html><body><b>{heading} - {current_time}</b>"
                         f"<br/>{error_message}<br/><br/>{previous_comment}</body></html>"
                     ),
                     images=[],
@@ -228,10 +235,9 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                 f"{self.patch_url_prefix}{tcs.details.spec.key}", json=failed_payload
             )
 
-        # Restore for tearDown
         self.mock_tb_connection.session.patch.side_effect = None
 
-    async def test_reviewer_failure_is_logged_as_error(self):
+    async def test_reviewer_failure_is_logged_as_error(self, caplog):
         """When the AI reviewer raises, run_agent logs the error and patches failure."""
         self.mock_reviewer._get_ai_response = AsyncMock(side_effect=Exception("service error"))
 
@@ -240,7 +246,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
             "testbench_ai_service.agents.test_case_set_reviewer.utils.datetime"
         ) as mock_datetime:
             mock_datetime.now.return_value = fake_now
-            with self.assertLogs(logger, level="ERROR"):
+            with caplog.at_level(logging.ERROR, logger="testbench_ai_service"):
                 await run_agent(
                     agent_key="test_case_set_reviewer",
                     agent=self.mock_reviewer,
@@ -250,10 +256,12 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                     item_ids=[tcs.details.uniqueID for tcs in self.test_case_sets],
                 )
 
+        assert any(r.levelno >= logging.ERROR for r in caplog.records)
+
         current_time = fake_now.strftime("%Y-%m-%d %H:%M:%S")
         for tcs in self.test_case_sets:
-            review_failed = get_translation(
-                "test_case_set_reviewer.run.failed", self.context.language
+            heading = get_translation(
+                "test_case_set_reviewer.run.failed_heading", self.context.language
             )
             error_message = get_translation("shared.run.error_message", self.context.language)
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
@@ -262,7 +270,7 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
                 reviewer=OptionalUser(optional=self.user_key),
                 reviewComment=RichTextInfo(
                     html=(
-                        f"<html><body><b>{review_failed} - {current_time}</b>"
+                        f"<html><body><b>{heading} - {current_time}</b>"
                         f"<br/>{error_message}<br/><br/>{previous_comment}</body></html>"
                     ),
                     images=[],
@@ -305,7 +313,3 @@ class TestRunAgentReviewTask(unittest.IsolatedAsyncioTestCase):
             if tcs_str == s:
                 return self.review_responses[uid]
         return None
-
-
-if __name__ == "__main__":
-    unittest.main()

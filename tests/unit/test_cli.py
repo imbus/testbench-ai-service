@@ -1,6 +1,7 @@
 import argparse
-import unittest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from testbench_ai_service import __version__
 from testbench_ai_service.cli import (
@@ -13,7 +14,7 @@ from testbench_ai_service.cli import (
 )
 
 
-class TestPrintCliBanner(unittest.TestCase):
+class TestPrintCliBanner:
     def test_prints_without_error(self):
         with patch("builtins.print") as mock_print:
             print_cli_banner()
@@ -24,22 +25,11 @@ class TestPrintCliBanner(unittest.TestCase):
             print_cli_banner()
 
         output = mock_print.call_args[0][0]
-        self.assertIn(__version__, output)
+        assert __version__ in output
 
 
-class TestMainParserSetup(unittest.TestCase):
+class TestMainParserSetup:
     """main() builds an ArgumentParser with 'init' and 'start' sub-commands."""
-
-    def _parse(self, args):
-        """Import main and exercise the parser via parse_known_args."""
-        with (
-            patch("testbench_ai_service.cli.init_action") as mock_init,
-            patch("testbench_ai_service.cli.start_action"),
-        ):
-            with patch("sys.argv", ["testbench-ai-service", *args]):
-                # main() calls args.func(args) — mock the func attribute so we can inspect it
-                main()
-            return mock_init
 
     def test_no_args_prints_help(self):
         with (
@@ -52,13 +42,13 @@ class TestMainParserSetup(unittest.TestCase):
     def test_version_flag(self):
         with (
             patch("sys.argv", ["testbench-ai-service", "--version"]),
-            self.assertRaises(SystemExit) as ctx,
+            pytest.raises(SystemExit) as exc_info,
         ):
             main()
-        self.assertEqual(ctx.exception.code, 0)
+        assert exc_info.value.code == 0
 
 
-class TestRegisterInitCommand(unittest.TestCase):
+class TestRegisterInitCommand:
     def _make_subparsers(self):
         parser = argparse.ArgumentParser()
         return parser, parser.add_subparsers(dest="command")
@@ -67,24 +57,24 @@ class TestRegisterInitCommand(unittest.TestCase):
         _, subparsers = self._make_subparsers()
         register_init_command(subparsers)
         args = subparsers.choices["init"].parse_args([])
-        self.assertEqual(args.path, "config.toml")
-        self.assertFalse(args.force)
-        self.assertEqual(args.prompts_dir, "prompts")
+        assert args.path == "config.toml"
+        assert not args.force
+        assert args.prompts_dir == "prompts"
 
     def test_init_command_accepts_path_flag(self):
         _, subparsers = self._make_subparsers()
         register_init_command(subparsers)
         args = subparsers.choices["init"].parse_args(["--path", "custom.toml"])
-        self.assertEqual(args.path, "custom.toml")
+        assert args.path == "custom.toml"
 
     def test_init_command_accepts_force_flag(self):
         _, subparsers = self._make_subparsers()
         register_init_command(subparsers)
         args = subparsers.choices["init"].parse_args(["--force"])
-        self.assertTrue(args.force)
+        assert args.force
 
 
-class TestRegisterStartCommand(unittest.TestCase):
+class TestRegisterStartCommand:
     def _make_subparsers(self):
         parser = argparse.ArgumentParser()
         return parser, parser.add_subparsers(dest="command")
@@ -92,16 +82,16 @@ class TestRegisterStartCommand(unittest.TestCase):
     def test_start_command_registered(self):
         _, subparsers = self._make_subparsers()
         register_start_command(subparsers)
-        self.assertIn("start", subparsers.choices)
+        assert "start" in subparsers.choices
 
     def test_start_command_accepts_config_flag(self):
         _, subparsers = self._make_subparsers()
         register_start_command(subparsers)
         args = subparsers.choices["start"].parse_args(["--config", "prod.toml"])
-        self.assertEqual(args.config, "prod.toml")
+        assert args.config == "prod.toml"
 
 
-class TestInitAction(unittest.TestCase):
+class TestInitAction:
     def test_delegates_to_create_default_config_file(self):
         mock_args = MagicMock()
         mock_args.path = "my.toml"
@@ -114,7 +104,7 @@ class TestInitAction(unittest.TestCase):
         mock_create.assert_called_once_with("my.toml", force=True, prompts_dir="prompts")
 
 
-class TestStartAction(unittest.TestCase):
+class TestStartAction:
     def _make_args(self, **overrides):
         defaults = {
             "config": "config.toml",
@@ -126,12 +116,15 @@ class TestStartAction(unittest.TestCase):
         defaults.update(overrides)
         return argparse.Namespace(**defaults)
 
-    def test_loads_config_and_runs_uvicorn(self):
+    def _mock_config(self):
         mock_config = MagicMock()
         mock_config.ssl_ca_cert = None
         mock_config.trusted_proxies = None
         mock_config.debug = False
+        return mock_config
 
+    def test_loads_config_and_runs_uvicorn(self):
+        mock_config = self._mock_config()
         with (
             patch("testbench_ai_service.cli.load_config_from_file", return_value=mock_config),
             patch("testbench_ai_service.cli.uvicorn.run") as mock_run,
@@ -145,11 +138,7 @@ class TestStartAction(unittest.TestCase):
         mock_run.assert_called_once()
 
     def test_applies_host_port_overrides(self):
-        mock_config = MagicMock()
-        mock_config.ssl_ca_cert = None
-        mock_config.trusted_proxies = None
-        mock_config.debug = False
-
+        mock_config = self._mock_config()
         with (
             patch("testbench_ai_service.cli.load_config_from_file", return_value=mock_config),
             patch("testbench_ai_service.cli.uvicorn.run"),
@@ -160,15 +149,11 @@ class TestStartAction(unittest.TestCase):
         ):
             start_action(self._make_args(host="0.0.0.0", port=9000))
 
-        self.assertEqual(mock_config.host, "0.0.0.0")
-        self.assertEqual(mock_config.port, 9000)
+        assert mock_config.host == "0.0.0.0"
+        assert mock_config.port == 9000
 
     def test_dev_mode_sets_debug(self):
-        mock_config = MagicMock()
-        mock_config.ssl_ca_cert = None
-        mock_config.trusted_proxies = None
-        mock_config.debug = False
-
+        mock_config = self._mock_config()
         with (
             patch("testbench_ai_service.cli.load_config_from_file", return_value=mock_config),
             patch("testbench_ai_service.cli.uvicorn.run"),
@@ -179,8 +164,4 @@ class TestStartAction(unittest.TestCase):
         ):
             start_action(self._make_args(dev=True))
 
-        self.assertTrue(mock_config.debug)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert mock_config.debug

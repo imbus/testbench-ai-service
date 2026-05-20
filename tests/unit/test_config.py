@@ -1,7 +1,7 @@
-import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from pydantic import ValidationError
 
 from testbench_ai_service.config import (
@@ -21,7 +21,6 @@ from testbench_ai_service.models.language import LanguageOption
 
 
 def _make_app_config(**kwargs):
-    """Build an AppConfig with all validators that require I/O patched out."""
     with (
         patch("testbench_ai_service.config.validate_tb_server_url"),
         patch("testbench_ai_service.config.AppConfig.validate_prompt_paths", return_value=None),
@@ -33,22 +32,21 @@ def _make_app_config(**kwargs):
         return AppConfig(**kwargs)
 
 
-class TestLLMConfig(unittest.TestCase):
+class TestLLMConfig:
     def test_defaults_to_openai_provider(self):
         cfg = LLMConfig()
-        self.assertEqual(cfg.provider, LLMProvider.OPENAI)
+        assert cfg.provider == LLMProvider.OPENAI
 
     def test_model_can_be_set(self):
         cfg = LLMConfig(model="gpt-4o")
-        self.assertEqual(cfg.model, "gpt-4o")
+        assert cfg.model == "gpt-4o"
 
     def test_extra_fields_allowed(self):
-        """LLMConfig has extra='allow' so arbitrary kwargs should not raise."""
         cfg = LLMConfig(temperature=0.7)
-        self.assertEqual(cfg.temperature, 0.7)
+        assert cfg.temperature == 0.7
 
     def test_custom_provider_requires_class_path(self):
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             LLMConfig(provider=LLMProvider.CUSTOM, class_path=None)
 
     def test_custom_provider_with_valid_class_path_succeeds(self):
@@ -56,14 +54,14 @@ class TestLLMConfig(unittest.TestCase):
             provider=LLMProvider.CUSTOM,
             class_path="testbench_ai_service.llm.openai.OpenAIClient",
         )
-        self.assertEqual(cfg.provider, LLMProvider.CUSTOM)
+        assert cfg.provider == LLMProvider.CUSTOM
 
     def test_azure_openai_provider_requires_endpoint(self):
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             LLMConfig(provider=LLMProvider.AZURE_OPENAI, api_version="2024-10-21")
 
     def test_azure_openai_provider_requires_api_version(self):
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             LLMConfig(
                 provider=LLMProvider.AZURE_OPENAI,
                 azure_endpoint="https://example.openai.azure.com",
@@ -75,42 +73,42 @@ class TestLLMConfig(unittest.TestCase):
             azure_endpoint="https://example.openai.azure.com",
             api_version="2024-10-21",
         )
-        self.assertEqual(cfg.provider, LLMProvider.AZURE_OPENAI)
+        assert cfg.provider == LLMProvider.AZURE_OPENAI
 
 
-class TestPromptConfig(unittest.TestCase):
+class TestPromptConfig:
     def test_requires_file_field(self):
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             PromptConfig(name="MyPrompt")
 
     def test_minimal_valid_prompt_config(self):
         cfg = PromptConfig(file="prompts/test.yaml", name="MyPrompt")
-        self.assertEqual(cfg.name, "MyPrompt")
-        self.assertEqual(cfg.file, Path("prompts/test.yaml"))
+        assert cfg.name == "MyPrompt"
+        assert cfg.file == Path("prompts/test.yaml")
 
     def test_optional_fields_default_to_none(self):
         cfg = PromptConfig(file="prompts/test.yaml", name="Test")
-        self.assertIsNone(cfg.variant)
-        self.assertIsNone(cfg.vars)
+        assert cfg.variant is None
+        assert cfg.vars is None
 
     def test_extra_fields_allowed(self):
         cfg = PromptConfig(file="prompts/test.yaml", name="Test", glossary="/path/glossary.txt")
-        self.assertEqual(cfg.glossary, "/path/glossary.txt")
+        assert cfg.glossary == "/path/glossary.txt"
 
 
-class TestProjectPromptConfig(unittest.TestCase):
+class TestProjectPromptConfig:
     def test_all_fields_optional(self):
         cfg = ProjectPromptConfig()
-        self.assertIsNone(cfg.file)
-        self.assertIsNone(cfg.name)
-        self.assertIsNone(cfg.variant)
-        self.assertIsNone(cfg.vars)
+        assert cfg.file is None
+        assert cfg.name is None
+        assert cfg.variant is None
+        assert cfg.vars is None
 
 
-class TestAgentConfig(unittest.TestCase):
+class TestAgentConfig:
     def test_required_fields(self):
-        with self.assertRaises(ValidationError):
-            AgentConfig()  # All required fields missing
+        with pytest.raises(ValidationError):
+            AgentConfig()
 
     def test_valid_use_case_config(self):
         cfg = AgentConfig(
@@ -120,91 +118,86 @@ class TestAgentConfig(unittest.TestCase):
             prompt=PromptConfig(file="prompts/test.yaml", name="Test"),
             name="Test Agent",
         )
-        self.assertTrue(cfg.enabled)
-        self.assertEqual(cfg.endpoint_path, "/test")
+        assert cfg.enabled
+        assert cfg.endpoint_path == "/test"
 
 
-class TestProjectAgentConfig(unittest.TestCase):
+class TestProjectAgentConfig:
     def test_all_fields_optional(self):
         cfg = ProjectAgentConfig()
-        self.assertIsNone(cfg.enabled)
-        self.assertIsNone(cfg.prompt)
+        assert cfg.enabled is None
+        assert cfg.prompt is None
 
     def test_can_override_enabled(self):
         cfg = ProjectAgentConfig(enabled=False)
-        self.assertFalse(cfg.enabled)
+        assert not cfg.enabled
 
 
-class TestProjectConfig(unittest.TestCase):
+class TestProjectConfig:
     def test_defaults_are_none(self):
         cfg = ProjectConfig()
-        self.assertIsNone(cfg.language)
-        self.assertIsNone(cfg.llm_config)
-        self.assertIsNone(cfg.agents)
+        assert cfg.language is None
+        assert cfg.llm_config is None
+        assert cfg.agents is None
 
     def test_can_set_language(self):
         cfg = ProjectConfig(language=LanguageOption.ENGLISH)
-        self.assertEqual(cfg.language, LanguageOption.ENGLISH)
+        assert cfg.language == LanguageOption.ENGLISH
 
 
-class TestAppConfigDefaults(unittest.TestCase):
+class TestAppConfigDefaults:
+    @pytest.fixture(autouse=True)
+    def config(self):
+        self._config = _make_app_config()
+
     def test_default_host_and_port(self):
-        config = _make_app_config()
-        self.assertEqual(config.host, DEFAULT_HOST)
-        self.assertEqual(config.port, DEFAULT_PORT)
+        assert self._config.host == DEFAULT_HOST
+        assert self._config.port == DEFAULT_PORT
 
     def test_default_language_is_german(self):
-        config = _make_app_config()
-        self.assertEqual(config.language, LanguageOption.GERMAN)
+        assert self._config.language == LanguageOption.GERMAN
 
     def test_debug_defaults_to_false(self):
-        config = _make_app_config()
-        self.assertFalse(config.debug)
+        assert not self._config.debug
 
     def test_ssl_fields_default_to_none(self):
-        config = _make_app_config()
-        self.assertIsNone(config.ssl_cert)
-        self.assertIsNone(config.ssl_key)
-        self.assertIsNone(config.ssl_ca_cert)
+        assert self._config.ssl_cert is None
+        assert self._config.ssl_key is None
+        assert self._config.ssl_ca_cert is None
 
     def test_tb_ssl_verify_defaults_to_true(self):
-        config = _make_app_config()
-        self.assertTrue(config.tb_ssl_verify)
+        assert self._config.tb_ssl_verify
 
     def test_tb_ssl_ca_bundle_defaults_to_none(self):
-        config = _make_app_config()
-        self.assertIsNone(config.tb_ssl_ca_bundle)
+        assert self._config.tb_ssl_ca_bundle is None
 
     def test_trusted_proxies_defaults_to_none(self):
-        config = _make_app_config()
-        self.assertIsNone(config.trusted_proxies)
+        assert self._config.trusted_proxies is None
 
     def test_default_agents_loaded(self):
-        config = _make_app_config()
-        self.assertIn("test_case_set_reviewer", config.agents)
-        self.assertIn("test_case_set_describer", config.agents)
-        self.assertIn("defect_explainer", config.agents)
+        assert "test_case_set_reviewer" in self._config.agents
+        assert "test_case_set_describer" in self._config.agents
+        assert "defect_explainer" in self._config.agents
 
     def test_projects_defaults_to_empty_dict(self):
-        config = _make_app_config()
-        self.assertEqual(config.projects, {})
+        assert self._config.projects == {}
 
 
-class TestAppConfigTrustedProxiesValidator(unittest.TestCase):
+class TestAppConfigTrustedProxiesValidator:
     def test_string_split_by_comma(self):
         config = _make_app_config(trusted_proxies="10.0.0.1,10.0.0.2")
-        self.assertEqual(config.trusted_proxies, ["10.0.0.1", "10.0.0.2"])
+        assert config.trusted_proxies == ["10.0.0.1", "10.0.0.2"]
 
     def test_list_accepted_as_is(self):
         config = _make_app_config(trusted_proxies=["192.168.1.1"])
-        self.assertEqual(config.trusted_proxies, ["192.168.1.1"])
+        assert config.trusted_proxies == ["192.168.1.1"]
 
     def test_empty_string_becomes_none(self):
         config = _make_app_config(trusted_proxies="")
-        self.assertIsNone(config.trusted_proxies)
+        assert config.trusted_proxies is None
 
 
-class TestAppConfigSSLValidator(unittest.TestCase):
+class TestAppConfigSSLValidator:
     def test_nonexistent_ssl_cert_raises(self):
         with (
             patch("testbench_ai_service.config.validate_tb_server_url"),
@@ -213,7 +206,7 @@ class TestAppConfigSSLValidator(unittest.TestCase):
                 "testbench_ai_service.config.AppConfig.validate_prompts_dir_exists",
                 return_value=PROMPTS_DIR,
             ),
-            self.assertRaises(ValidationError),
+            pytest.raises(ValidationError),
         ):
             AppConfig(ssl_cert="/non/existent/cert.pem")
 
@@ -225,16 +218,16 @@ class TestAppConfigSSLValidator(unittest.TestCase):
                 "testbench_ai_service.config.AppConfig.validate_prompts_dir_exists",
                 return_value=PROMPTS_DIR,
             ),
-            self.assertRaises(ValidationError),
+            pytest.raises(ValidationError),
         ):
             AppConfig(tb_ssl_ca_bundle="/non/existent/ca-bundle.pem")
 
     def test_tb_ssl_verify_false_accepted(self):
         config = _make_app_config(tb_ssl_verify=False)
-        self.assertFalse(config.tb_ssl_verify)
+        assert config.tb_ssl_verify is False
 
 
-class TestAppConfigTbServerUrlValidator(unittest.TestCase):
+class TestAppConfigTbServerUrlValidator:
     def test_valid_url_calls_validator(self):
         with (
             patch("testbench_ai_service.config.validate_tb_server_url") as mock_validate,
@@ -246,7 +239,3 @@ class TestAppConfigTbServerUrlValidator(unittest.TestCase):
         ):
             AppConfig(tb_server_url="https://mytb.example.com/api/")
         mock_validate.assert_called_once_with("https://mytb.example.com/api/")
-
-
-if __name__ == "__main__":
-    unittest.main()

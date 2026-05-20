@@ -1,5 +1,3 @@
-import unittest
-
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import (
@@ -25,65 +23,61 @@ def _make_execution_context(**overrides):
     return ExecutionContext(**defaults)
 
 
-class TestTriggerAgentRequest(unittest.TestCase):
+class TestTriggerAgentRequest:
     """Tests for ``TriggerAgentRequest``."""
 
     def test_minimal_valid_request(self):
         req = TriggerAgentRequest(project_key="P", tov_key="T", cycle_key="C")
-        self.assertEqual(req.project_key, "P")
-        self.assertIsNone(req.language)
-        self.assertIsNone(req.root_uid)
+        assert req.project_key == "P"
+        assert req.language is None
+        assert req.root_uid is None
 
     def test_language_field_accepts_language_option(self):
         req = TriggerAgentRequest(project_key="P", tov_key="T", language=LanguageOption.GERMAN)
-        self.assertEqual(req.language, LanguageOption.GERMAN)
+        assert req.language == LanguageOption.GERMAN
 
     def test_language_field_accepts_string_code(self):
         req = TriggerAgentRequest(project_key="P", tov_key="T", language="de")
-        self.assertEqual(req.language, LanguageOption.GERMAN)
+        assert req.language == LanguageOption.GERMAN
 
 
-class TestTriggerAgentResponse(unittest.TestCase):
+class TestTriggerAgentResponse:
     """Tests for ``TriggerAgentResponse``."""
 
     def test_accepted_response(self):
         resp = TriggerAgentResponse(status="accepted", warnings=[])
-        self.assertEqual(resp.status, "accepted")
-        self.assertEqual(resp.warnings, [])
+        assert resp.status == "accepted"
+        assert resp.warnings == []
 
     def test_warnings_defaults_to_none(self):
         resp = TriggerAgentResponse(status="accepted")
-        self.assertIsNone(resp.warnings)
+        assert resp.warnings is None
 
 
-class TestExecutionContext(unittest.TestCase):
+class TestExecutionContext:
     """Tests for ``ExecutionContext``."""
 
     def test_creates_with_all_required_fields(self):
         ctx = _make_execution_context()
-        self.assertEqual(ctx.user_key, "u1")
-        self.assertEqual(ctx.language, LanguageOption.ENGLISH)
+        assert ctx.user_key == "u1"
+        assert ctx.language == LanguageOption.ENGLISH
 
     def test_cycle_key_and_root_uid_defaults_to_none(self):
         ctx = _make_execution_context()
-        self.assertIsNone(ctx.cycle_key)
-        self.assertIsNone(ctx.root_uid)
+        assert ctx.cycle_key is None
+        assert ctx.root_uid is None
 
 
-class TestPrecheckResult(unittest.TestCase):
+class TestPrecheckResult:
     """Tests for ``PrecheckResult``."""
 
     def test_passed_result_has_empty_defaults(self):
         result = PrecheckResult(passed=True)
-        self.assertTrue(result.passed)
-        self.assertIsNone(result.items)
-        self.assertEqual(result.warnings, [])
+        assert result.passed
+        assert result.items == []
+        assert result.warnings == []
 
     def test_failed_result_can_carry_warnings(self):
         result = PrecheckResult(passed=False, warnings=["No test cases found"])
-        self.assertFalse(result.passed)
-        self.assertIn("No test cases found", result.warnings)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert not (result.passed)
+        assert "No test cases found" in result.warnings

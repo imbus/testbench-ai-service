@@ -1,4 +1,3 @@
-import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
@@ -25,7 +24,7 @@ def _make_app_config():
         return AppConfig()
 
 
-class TestCreateApp(unittest.TestCase):
+class TestCreateApp:
     def _create_app_with_mock_config(self):
         config = _make_app_config()
         with (
@@ -41,15 +40,15 @@ class TestCreateApp(unittest.TestCase):
 
     def test_returns_fastapi_instance(self):
         app, _ = self._create_app_with_mock_config()
-        self.assertIsInstance(app, FastAPI)
+        assert isinstance(app, FastAPI)
 
     def test_app_title_is_set(self):
         app, _ = self._create_app_with_mock_config()
-        self.assertEqual(app.title, "TestBench AI Service")
+        assert app.title == "TestBench AI Service"
 
     def test_app_version_matches_package(self):
         app, _ = self._create_app_with_mock_config()
-        self.assertEqual(app.version, __version__)
+        assert app.version == __version__
 
     def test_config_stored_in_app_state(self):
         config = _make_app_config()
@@ -63,10 +62,10 @@ class TestCreateApp(unittest.TestCase):
             mock_factory_cls.return_value = mock_factory
             app = create_app(config)
 
-        self.assertIs(app.state.config, config)
+        assert app.state.config is config
 
 
-class TestInitServices(unittest.TestCase):
+class TestInitServices:
     def test_creates_llm_factory_in_app_state(self):
         app = MagicMock()
         app.state.config.llm_config = MagicMock()
@@ -76,11 +75,11 @@ class TestInitServices(unittest.TestCase):
             mock_factory_cls.return_value = mock_factory
             init_services(app)
 
-        self.assertIs(app.state.llm_factory, mock_factory)
+        assert app.state.llm_factory is mock_factory
         mock_factory.init_clients.assert_called_once()
 
 
-class TestCloseServices(unittest.IsolatedAsyncioTestCase):
+class TestCloseServices:
     async def test_closes_all_llm_clients(self):
         app = MagicMock()
         app.state.llm_factory.close_clients = AsyncMock()
@@ -90,7 +89,7 @@ class TestCloseServices(unittest.IsolatedAsyncioTestCase):
         app.state.llm_factory.close_clients.assert_awaited_once()
 
 
-class TestInitRouters(unittest.TestCase):
+class TestInitRouters:
     def test_includes_main_router(self):
         app = MagicMock()
         with patch("testbench_ai_service.main.get_agent_routers", return_value=[]):
@@ -105,10 +104,10 @@ class TestInitRouters(unittest.TestCase):
         with patch("testbench_ai_service.main.get_agent_routers", return_value=[mock_agent_router]):
             init_routers(app)
 
-        self.assertGreaterEqual(app.include_router.call_count, 2)
+        assert app.include_router.call_count >= 2
 
 
-class TestLifespan(unittest.IsolatedAsyncioTestCase):
+class TestLifespan:
     async def test_lifespan_closes_services(self):
         """lifespan context manager calls close_services on exit."""
         app = MagicMock()
@@ -121,7 +120,3 @@ class TestLifespan(unittest.IsolatedAsyncioTestCase):
                 pass
 
         mock_close.assert_awaited_once_with(app)
-
-
-if __name__ == "__main__":
-    unittest.main()

@@ -1,129 +1,112 @@
-import unittest
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from testbench_ai_service.auth import AuthInfo, AuthType, get_auth_info
+from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.main import create_app
 
 
 def _make_auth_info() -> AuthInfo:
-    return AuthInfo(auth_type=AuthType.SESSION_TOKEN, token="valid-token", user_key="user1")
+    return AuthInfo(
+        auth_type=AuthType.SESSION_TOKEN,
+        token="valid-token",
+        user_key="user1",
+        conn=MagicMock(),
+    )
+
+
+def _make_app_config():
+    with patch("testbench_ai_service.config.validate_tb_server_url"):
+        return AppConfig(tb_server_url="https://localhost:9443/api/")
 
 
 def _make_test_client():
-    """Spin up a TestClient with a real AppConfig and patched auth."""
-    app_config = AppConfig(tb_server_url="https://localhost:9443/api/")
-    app = create_app(app_config)
-    client = TestClient(app, follow_redirects=False)
-    client.__enter__()
-
-    app.dependency_overrides[get_auth_info] = _make_auth_info
-    app.dependency_overrides[get_app_config] = lambda: app_config
-
-    return client, app, app_config
-
-
-@patch("testbench_ai_service.main.LLMFactory")
-class TestRootRedirect(unittest.TestCase):
-    def test_root_redirects_to_docs(self, mock_factory_cls):
+    app_config = _make_app_config()
+    with patch("testbench_ai_service.main.LLMFactory") as mock_factory_cls:
         mock_factory = MagicMock()
         mock_factory.init_clients = MagicMock()
         mock_factory.close_clients = MagicMock()
         mock_factory_cls.return_value = mock_factory
+        app = create_app(app_config)
 
+    client = TestClient(app, follow_redirects=False)
+    client.__enter__()
+    app.dependency_overrides[validate_auth_token] = _make_auth_info
+    app.dependency_overrides[get_app_config] = lambda: app_config
+    return client, app, app_config
+
+
+def _make_unauthenticated_client():
+    """Returns a test client with no auth override (real auth validation runs)."""
+    app_config = _make_app_config()
+    with patch("testbench_ai_service.main.LLMFactory") as mock_factory_cls:
+        mock_factory = MagicMock()
+        mock_factory.init_clients = MagicMock()
+        mock_factory.close_clients = MagicMock()
+        mock_factory_cls.return_value = mock_factory
+        app = create_app(app_config)
+    client = TestClient(app, follow_redirects=False)
+    client.__enter__()
+    return client
+
+
+class TestRootRedirect:
+    def test_root_redirects_to_docs(self):
         client, _, _ = _make_test_client()
         response = client.get("/")
-
-        # 307 redirect toward /docs
-        self.assertIn(response.status_code, (301, 302, 307, 308))
-        self.assertIn("docs", response.headers.get("location", ""))
+        assert response.status_code in (301, 302, 307, 308)
+        assert "docs" in response.headers.get("location", "")
 
 
-@patch("testbench_ai_service.main.LLMFactory")
-class TestGetAgents(unittest.TestCase):
-    def setUp(self):
-        self.mock_factory = MagicMock()
-        self.mock_factory.init_clients = MagicMock()
-        self.mock_factory.close_clients = MagicMock()
-
-    def _client(self, mock_factory_cls):
-        mock_factory_cls.return_value = self.mock_factory
-        return _make_test_client()
-
-    def test_returns_all_agents_by_default(self, mock_factory_cls):
-        client, _, _ = self._client(mock_factory_cls)
+class TestGetAgents:
+    def test_returns_all_agents_by_default(self):
+        client, _, _ = _make_test_client()
         response = client.get("/agents")
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertIsInstance(data, list)
+        assert isinstance(data, list)
         keys = [item["key"] for item in data]
-        self.assertIn("test_case_set_reviewer", keys)
-        self.assertIn("test_case_set_describer", keys)
-        self.assertIn("defect_explainer", keys)
+        assert "test_case_set_reviewer" in keys
+        assert "test_case_set_describer" in keys
+        assert "defect_explainer" in keys
 
-    def test_filter_by_enabled_true(self, mock_factory_cls):
-        client, _, _ = self._client(mock_factory_cls)
+    def test_filter_by_enabled_true(self):
+        client, _, _ = _make_test_client()
         response = client.get("/agents?enabled=true")
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         for item in response.json():
-            self.assertTrue(item["enabled"])
+            assert item["enabled"]
 
-    def test_filter_by_enabled_false_returns_empty(self, mock_factory_cls):
-        """All default agents are enabled, so filtering by enabled=false yields empty list."""
-        client, _, _ = self._client(mock_factory_cls)
+    def test_filter_by_enabled_false_returns_empty(self):
+        client, _, _ = _make_test_client()
         response = client.get("/agents?enabled=false")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), [])
+        assert response.status_code == 200
+        assert response.json() == []
 
-    def test_requires_auth_token(self, mock_factory_cls):
-        """Without a session token the endpoint must return 401."""
-        mock_factory_cls.return_value = self.mock_factory
-        app_config = AppConfig(tb_server_url="https://localhost:9443/api/")
-        app = create_app(app_config)
-        client = TestClient(app, follow_redirects=False)
-        client.__enter__()
-        # No dependency override — real auth will reject the empty token
+    def test_requires_auth_token(self):
+        client = _make_unauthenticated_client()
         response = client.get("/agents")
-        self.assertIn(response.status_code, (401, 403))
+        assert response.status_code in (401, 403)
 
 
-@patch("testbench_ai_service.main.LLMFactory")
-class TestGetPromptDetails(unittest.TestCase):
-    def setUp(self):
-        self.mock_factory = MagicMock()
-        self.mock_factory.init_clients = MagicMock()
-        self.mock_factory.close_clients = MagicMock()
-
-    def _client(self, mock_factory_cls):
-        mock_factory_cls.return_value = self.mock_factory
-        return _make_test_client()
-
-    def test_returns_prompt_details_for_known_agent(self, mock_factory_cls):
-        client, _, _ = self._client(mock_factory_cls)
+class TestGetPromptDetails:
+    def test_returns_prompt_details_for_known_agent(self):
+        client, _, _ = _make_test_client()
         response = client.get("/agents/test_case_set_reviewer/prompt")
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         data = response.json()
-        self.assertIn("name", data)
-        self.assertIn("variants", data)
-        self.assertIsInstance(data["variants"], list)
+        assert "name" in data
+        assert "variants" in data
+        assert isinstance(data["variants"], list)
 
-    def test_returns_404_for_unknown_agent(self, mock_factory_cls):
-        client, _, _ = self._client(mock_factory_cls)
+    def test_returns_404_for_unknown_agent(self):
+        client, _, _ = _make_test_client()
         response = client.get("/agents/nonexistent_agent/prompt")
-        self.assertEqual(response.status_code, 404)
+        assert response.status_code == 404
 
-    def test_requires_auth_for_prompt_details(self, mock_factory_cls):
-        mock_factory_cls.return_value = self.mock_factory
-        app_config = AppConfig(tb_server_url="https://localhost:9443/api/")
-        app = create_app(app_config)
-        client = TestClient(app, follow_redirects=False)
-        client.__enter__()
+    def test_requires_auth_for_prompt_details(self):
+        client = _make_unauthenticated_client()
         response = client.get("/agents/test_case_set_reviewer/prompt")
-        self.assertIn(response.status_code, (401, 403))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert response.status_code in (401, 403)

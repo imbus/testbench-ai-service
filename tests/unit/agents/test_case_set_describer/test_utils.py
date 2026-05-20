@@ -1,10 +1,8 @@
-import unittest
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
 from testbench_ai_service.agents.test_case_set_describer.utils import (
-    get_description_for_test_case_set,
     patch_description_generation_started_for_test_structure_element,
     patch_generated_description_for_test_structure_element,
     patch_previous_description_for_test_structure_element,
@@ -31,83 +29,44 @@ class _DummyTestCaseSet:
         self.test_cases = test_cases
 
 
-class TestGetParameterCombinationsAsString(unittest.TestCase):
+class TestGetParameterCombinationsAsString:
     """Tests for ``get_parameter_combinations_as_string``."""
 
     def test_single_test_case_single_param_produces_correct_headers_and_row(self):
         tc = _DummyTestCase("TC1", [_DummyParameter("ParamA", "ValueA")])
         result = get_parameter_combinations_as_string(_DummyTestCaseSet({"tc1": tc}))
-        self.assertIn("| uniqueID | ParamA |", result)
-        self.assertIn("| TC1 | ValueA |", result)
+        assert "| uniqueID | ParamA |" in result
+        assert "| TC1 | ValueA |" in result
 
     def test_multiple_test_cases_multiple_params(self):
         tc1 = _DummyTestCase("TC1", [_DummyParameter("A", "1"), _DummyParameter("B", "2")])
         tc2 = _DummyTestCase("TC2", [_DummyParameter("A", "3"), _DummyParameter("B", "4")])
         result = get_parameter_combinations_as_string(_DummyTestCaseSet({"tc1": tc1, "tc2": tc2}))
-        self.assertIn("| uniqueID | A | B |", result)
-        self.assertIn("| TC1 | 1 | 2 |", result)
-        self.assertIn("| TC2 | 3 | 4 |", result)
+        assert "| uniqueID | A | B |" in result
+        assert "| TC1 | 1 | 2 |" in result
+        assert "| TC2 | 3 | 4 |" in result
 
     def test_missing_param_in_some_test_cases_produces_empty_cell(self):
         tc1 = _DummyTestCase("TC1", [_DummyParameter("A", "1")])
         tc2 = _DummyTestCase("TC2", [_DummyParameter("B", "2")])
         result = get_parameter_combinations_as_string(_DummyTestCaseSet({"tc1": tc1, "tc2": tc2}))
-        self.assertIn("| uniqueID | A | B |", result)
-        self.assertIn("| TC1 | 1 |  |", result)
-        self.assertIn("| TC2 |  | 2 |", result)
+        assert "| uniqueID | A | B |" in result
+        assert "| TC1 | 1 |  |" in result
+        assert "| TC2 |  | 2 |" in result
 
     def test_no_test_cases_returns_header_and_separator_only(self):
         result = get_parameter_combinations_as_string(_DummyTestCaseSet({}))
-        self.assertTrue(result.startswith("| uniqueID |"))
-        self.assertEqual(len(result.strip().splitlines()), 2)  # header + separator
+        assert result.startswith("| uniqueID |")
+        assert len(result.strip().splitlines()) == 2  # header + separator
 
     def test_empty_parameters_produces_id_only_columns(self):
         tc = _DummyTestCase("TC1", [])
         result = get_parameter_combinations_as_string(_DummyTestCaseSet({"tc1": tc}))
-        self.assertIn("| uniqueID |", result)
-        self.assertIn("| TC1 |", result)
+        assert "| uniqueID |" in result
+        assert "| TC1 |" in result
 
 
-class TestGetDescriptionForTestCaseSet(unittest.IsolatedAsyncioTestCase):
-    """Tests for ``get_description_for_test_case_set``."""
-
-    @patch(
-        "testbench_ai_service.agents.test_case_set_describer.utils.strip_html_body_tags",
-        return_value="Clean description",
-    )
-    @patch("testbench_ai_service.agents.test_case_set_describer.utils.TestCaseSetDetails")
-    async def test_strips_html_from_spec_description(self, mock_tcs_class, mock_strip):
-        mock_conn = MagicMock()
-        mock_conn.get_project_test_case_set.return_value = {"some": "data"}
-        mock_instance = MagicMock()
-        mock_instance.spec.description = "<body>Hello</body>"
-        mock_tcs_class.model_validate.return_value = mock_instance
-
-        result = await get_description_for_test_case_set(mock_conn, "PROJ1", "TCS1")
-
-        mock_tcs_class.model_validate.assert_called_once_with({"some": "data"})
-        mock_strip.assert_called_once_with("<body>Hello</body>")
-        self.assertEqual(result, "Clean description")
-
-    @patch(
-        "testbench_ai_service.agents.test_case_set_describer.utils.strip_html_body_tags",
-        return_value="Stripped text",
-    )
-    @patch("testbench_ai_service.agents.test_case_set_describer.utils.TestCaseSetDetails")
-    async def test_empty_description_delegates_to_strip(self, mock_tcs_class, mock_strip):
-        mock_conn = MagicMock()
-        mock_conn.get_project_test_case_set = AsyncMock(return_value={})
-        mock_instance = MagicMock()
-        mock_instance.spec.description = ""
-        mock_tcs_class.model_validate.return_value = mock_instance
-
-        result = await get_description_for_test_case_set(mock_conn, "P", "T")
-
-        mock_strip.assert_called_once_with("")
-        self.assertEqual(result, "Stripped text")
-
-
-class TestPatchDescriptionGenerationStarted(unittest.IsolatedAsyncioTestCase):
+class TestPatchDescriptionGenerationStarted:
     """Tests for ``patch_description_generation_started_for_test_structure_element``."""
 
     @patch(
@@ -140,15 +99,15 @@ class TestPatchDescriptionGenerationStarted(unittest.IsolatedAsyncioTestCase):
             "<br/><br/><p>Old description</p></body></html>"
         )
         called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
-        self.assertIsInstance(called_spec, SpecificationDetailsForUpdate)
-        self.assertEqual(called_spec.description.html, expected_html)
-        self.assertEqual(called_spec.reviewer.optional, "user123")
-        self.assertEqual(called_spec.locker.optional, "user123")
-        self.assertEqual(called_spec.description.images, [])
-        self.assertEqual(result, "patched_result")
+        assert isinstance(called_spec, SpecificationDetailsForUpdate)
+        assert called_spec.description.html == expected_html
+        assert called_spec.reviewer.optional == "user123"
+        assert called_spec.locker.optional == "user123"
+        assert called_spec.description.images == []
+        assert result == "patched_result"
 
 
-class TestPatchGeneratedDescription(unittest.IsolatedAsyncioTestCase):
+class TestPatchGeneratedDescription:
     """Tests for ``patch_generated_description_for_test_structure_element``."""
 
     @patch(
@@ -182,10 +141,10 @@ class TestPatchGeneratedDescription(unittest.IsolatedAsyncioTestCase):
             "Result Heading</div></div></body></html>"
         )
         called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
-        self.assertEqual(called_spec.description.html, expected_html)
-        self.assertEqual(called_spec.description.images, [])
-        self.assertEqual(called_spec.reviewer.optional, "user123")
-        self.assertIsNone(called_spec.locker.optional)
+        assert called_spec.description.html == expected_html
+        assert called_spec.description.images == []
+        assert called_spec.reviewer.optional == "user123"
+        assert called_spec.locker.optional is None
 
     @patch(
         "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
@@ -216,10 +175,10 @@ class TestPatchGeneratedDescription(unittest.IsolatedAsyncioTestCase):
             "<html><body><b>Result Heading - 2025-09-16 12:34:56</b><br/>"
             "Line1<br/>Line2</body></html>"
         )
-        self.assertEqual(called_spec.description.html, expected_html)
+        assert called_spec.description.html == expected_html
 
 
-class TestPatchPreviousDescription(unittest.IsolatedAsyncioTestCase):
+class TestPatchPreviousDescription:
     """Tests for ``patch_previous_description_for_test_structure_element``."""
 
     @patch(
@@ -239,14 +198,10 @@ class TestPatchPreviousDescription(unittest.IsolatedAsyncioTestCase):
             "user123",
         )
 
-        self.assertEqual(result, "patched_result")
+        assert result == "patched_result"
         called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
-        self.assertIsInstance(called_spec, SpecificationDetailsForUpdate)
-        self.assertIn("<p>Old description</p>", called_spec.description.html)
-        self.assertEqual(called_spec.description.images, [])
-        self.assertEqual(called_spec.reviewer.optional, "user123")
-        self.assertIsNone(called_spec.locker.optional)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert isinstance(called_spec, SpecificationDetailsForUpdate)
+        assert "<p>Old description</p>" in called_spec.description.html
+        assert called_spec.description.images == []
+        assert called_spec.reviewer.optional == "user123"
+        assert called_spec.locker.optional is None

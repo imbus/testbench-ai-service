@@ -73,6 +73,7 @@ dev = [
   "flit>=3.12.0",
   "wheel>=0.46.3",
   "pytest>=9.0.2",
+  "pytest-asyncio>=1.3.0",
   "pytest-mock>=3.15.1",
 ]
 
@@ -106,8 +107,6 @@ ignore = [
   "N999",    # Invalid module name: 'Browser'
   "PLR0913", # too many arguments
   "T201",    # Print statements,
-  "PT009",   # pytest-style assertion; using unittest currently
-  "PT027",   # pytest-style raises assertion; using unittest currently
 ]
 select = [
   "E",
@@ -137,6 +136,9 @@ select = [
   "RUF",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**/*.py" = ["PLR2004"]
+
 [tool.mypy]
 python_version = "3.10"
 plugins = ["pydantic.mypy"]
@@ -159,4 +161,8 @@ disallow_untyped_defs = false
 disable_error_code = ["annotation-unchecked"]
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+  "prompt_engineering: Tests requiring real LLM API keys (expensive, excluded from CI)",
+]

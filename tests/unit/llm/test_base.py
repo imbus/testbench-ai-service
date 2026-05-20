@@ -1,36 +1,37 @@
-import unittest
 from abc import ABC
+
+import pytest
 
 from testbench_ai_service.llm.base import LLMClient, LLMProvider
 
 
-class TestLLMProvider(unittest.TestCase):
+class TestLLMProvider:
     """Tests for the ``LLMProvider`` enum."""
 
     def test_openai_value(self):
-        self.assertEqual(LLMProvider.OPENAI.value, "openai")
+        assert LLMProvider.OPENAI.value == "openai"
 
     def test_custom_value(self):
-        self.assertEqual(LLMProvider.CUSTOM.value, "custom")
+        assert LLMProvider.CUSTOM.value == "custom"
 
     def test_azure_openai_value(self):
-        self.assertEqual(LLMProvider.AZURE_OPENAI.value, "azure_openai")
+        assert LLMProvider.AZURE_OPENAI.value == "azure_openai"
 
     def test_str_returns_value(self):
-        self.assertEqual(str(LLMProvider.OPENAI), "openai")
+        assert str(LLMProvider.OPENAI) == "openai"
 
     def test_is_string_subclass(self):
-        self.assertIsInstance(LLMProvider.OPENAI, str)
+        assert isinstance(LLMProvider.OPENAI, str)
 
 
-class TestLLMClient(unittest.TestCase):
+class TestLLMClient:
     """Tests for the ``LLMClient`` abstract base class."""
 
     def test_is_abstract(self):
-        self.assertTrue(issubclass(LLMClient, ABC))
+        assert issubclass(LLMClient, ABC)
 
     def test_cannot_instantiate_directly(self):
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             LLMClient()  # type: ignore[abstract]
 
     def test_concrete_subclass_must_implement_all_abstract_methods(self):
@@ -42,9 +43,5 @@ class TestLLMClient(unittest.TestCase):
 
             # Missing query_llm and close
 
-        with self.assertRaises(TypeError):
+        with pytest.raises(TypeError):
             _Partial()
-
-
-if __name__ == "__main__":
-    unittest.main()

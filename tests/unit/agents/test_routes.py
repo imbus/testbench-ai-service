@@ -1,14 +1,14 @@
 import json as _json
 import tempfile
-import unittest
 import zipfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
-from testbench_ai_service.auth import AuthInfo, AuthType, get_auth_info
+from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig, ProjectAgentConfig, ProjectConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
 from testbench_ai_service.main import create_app
@@ -21,43 +21,54 @@ from testbench_ai_service.models.testbench import ProjectMember, ProjectRole
 from tests.unit.helpers.data import get_test_data_path
 
 
-class TestTriggerTestCaseSetReviews(unittest.TestCase):
-    """HTTP-level tests for POST /test-case-set-reviews.
+def _make_auth_info():
+    return AuthInfo(
+        auth_type=AuthType.SESSION_TOKEN, token="test-token", user_key="1", conn=MagicMock()
+    )
 
-    Uses FastAPI TestClient with dependency overrides to exercise the router
-    without a live TestBench or LLM connection.
-    """
 
-    @classmethod
-    def setUpClass(cls):
-        cls.app_config = AppConfig(tb_server_url="https://localhost:9443/api/")
+def _make_app_config():
+    with patch("testbench_ai_service.config.validate_tb_server_url"):
+        return AppConfig(tb_server_url="https://localhost:9443/api/")
+
+
+class TestTriggerTestCaseSetReviews:
+    mock_tb_connection: MagicMock
+    """HTTP-level tests for POST /test-case-set-reviews."""
+
+    @pytest.fixture(autouse=True, scope="class")
+    def class_setup(self, request):
+        app_config = _make_app_config()
         with patch("testbench_ai_service.main.LLMFactory") as mock_factory_cls:
             mock_factory = MagicMock()
             mock_factory.init_clients = MagicMock()
             mock_factory.close_clients = AsyncMock()
             mock_factory_cls.return_value = mock_factory
-            cls.app = create_app(cls.app_config)
-        cls.client = TestClient(cls.app)
-        cls.client.__enter__()
+            app = create_app(app_config)
+        client = TestClient(app)
+        client.__enter__()
 
-        cls.mock_validate_token = MagicMock()
-        cls.mock_tb_connection = MagicMock()
-        cls.mock_tb_connection.server_url = cls.app_config.tb_server_url
-        cls.mock_llm_factory = MagicMock()
+        mock_tb_connection = MagicMock()
+        mock_tb_connection.server_url = app_config.tb_server_url
+        mock_llm_factory = MagicMock()
 
-        cls.app.dependency_overrides[get_auth_info] = lambda: AuthInfo(
-            auth_type=AuthType.SESSION_TOKEN, token="test-token", user_key="1"
-        )
-        cls.app.dependency_overrides[get_tb_connection] = lambda: cls.mock_tb_connection
-        cls.app.dependency_overrides[get_llm_factory] = lambda: cls.mock_llm_factory
+        app.dependency_overrides[validate_auth_token] = _make_auth_info
+        app.dependency_overrides[get_tb_connection] = lambda: mock_tb_connection
+        app.dependency_overrides[get_llm_factory] = lambda: mock_llm_factory
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.app.dependency_overrides.clear()
-        cls.client.__exit__(None, None, None)
+        request.cls.app_config = app_config
+        request.cls.app = app
+        request.cls.client = client
+        request.cls.mock_tb_connection = mock_tb_connection
+        request.cls.mock_llm_factory = mock_llm_factory
 
-    def setUp(self):
-        # Configure TB connection side effects
+        yield
+
+        app.dependency_overrides.clear()
+        client.__exit__(None, None, None)
+
+    @pytest.fixture(autouse=True)
+    def method_setup(self):
         self.mock_tb_connection.session.get.side_effect = self._tb_session_get_side_effect
         self.mock_tb_connection.session.post.side_effect = self._tb_session_post_side_effect
         self.mock_tb_connection.get_project_key_new_play.side_effect = (
@@ -76,17 +87,15 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
 
         self.mock_tb_connection.get_project.return_value = {"name": self.project_name}
 
-        # Patch the reviewer so no real AI calls are made
-        self.reviewer_patcher = patch(
+        reviewer_patcher = patch(
             "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
         )
-        self.mock_reviewer_class = self.reviewer_patcher.start()
+        self.mock_reviewer_class = reviewer_patcher.start()
         self.mock_reviewer = AsyncMock()
         self.mock_reviewer.precheck.return_value = PrecheckResult(passed=True)
         self.mock_reviewer_class.__name__ = "TestCaseSetReviewer"
         self.mock_reviewer_class.return_value = self.mock_reviewer
 
-        # Default valid request payload
         self.valid_request = TriggerAgentRequest(
             project_key=self.project_key,
             tov_key=self.tov_key,
@@ -98,7 +107,6 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         self.global_roles: list = []
         self.project_roles: list = [ProjectRole.TestDesigner]
 
-        # Preload test case sets
         with tempfile.TemporaryDirectory() as report_dir:
             report_zip = zipfile.ZipFile(get_test_data_path("cycle_report.zip"))
             report_zip.extractall(report_dir)
@@ -106,8 +114,9 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
             tcs_catalog = reader.get_test_case_set_catalog()
             self.test_case_sets = list(tcs_catalog.values())
 
-    def tearDown(self):
-        self.reviewer_patcher.stop()
+        yield
+
+        reviewer_patcher.stop()
 
     # ── Happy path ────────────────────────────────────────────────────────────
 
@@ -116,44 +125,42 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         with patch("fastapi.BackgroundTasks.add_task") as mock_add_task:
             response = self.client.post("/test-case-set-reviews", json=payload)
 
-        self.assertEqual(response.status_code, 202)
-        self.assertEqual(response.json(), {"status": "accepted", "warnings": []})
+        assert response.status_code == 202
+        assert response.json() == {"status": "accepted", "warnings": []}
         mock_add_task.assert_called_once()
         call_kwargs = mock_add_task.call_args.kwargs
-        self.assertIs(call_kwargs["agent"], self.mock_reviewer)
-        self.assertIs(call_kwargs["conn"], self.mock_tb_connection)
-        self.assertIs(call_kwargs["llm_factory"], self.mock_llm_factory)
-        self.assertIsInstance(call_kwargs["context"], ExecutionContext)
+        assert call_kwargs["agent"] is self.mock_reviewer
+        assert call_kwargs["conn"] is self.mock_tb_connection
+        assert call_kwargs["llm_factory"] is self.mock_llm_factory
+        assert isinstance(call_kwargs["context"], ExecutionContext)
 
     # ── Payload validation ────────────────────────────────────────────────────
 
     def test_empty_payload_returns_422(self):
-        self.assertEqual(self.client.post("/test-case-set-reviews", json={}).status_code, 422)
+        assert self.client.post("/test-case-set-reviews", json={}).status_code == 422
 
     def test_missing_required_field_returns_422(self):
         payload = {"tov_key": "V1.0", "root_uid": "UID"}
-        self.assertEqual(self.client.post("/test-case-set-reviews", json=payload).status_code, 422)
+        assert self.client.post("/test-case-set-reviews", json=payload).status_code == 422
 
     def test_wrong_field_type_returns_422(self):
         payload = {"project_key": True, "tov_key": "V1.0", "root_uid": "UID"}
-        self.assertEqual(self.client.post("/test-case-set-reviews", json=payload).status_code, 422)
+        assert self.client.post("/test-case-set-reviews", json=payload).status_code == 422
 
     # ── Authentication ────────────────────────────────────────────────────────
 
     def test_missing_auth_token_returns_401(self):
-        self.app.dependency_overrides.pop(get_auth_info, None)
+        self.app.dependency_overrides.pop(validate_auth_token, None)
         try:
             response = self.client.post(
                 "/test-case-set-reviews", json={"project_key": "P", "tov_key": "T", "root_uid": "R"}
             )
-            self.assertEqual(response.status_code, 401)
+            assert response.status_code == 401
         finally:
-            self.app.dependency_overrides[get_auth_info] = lambda: AuthInfo(
-                auth_type=AuthType.SESSION_TOKEN, token="test-token", user_key="1"
-            )
+            self.app.dependency_overrides[validate_auth_token] = _make_auth_info
 
     def test_invalid_auth_token_returns_401(self):
-        self.app.dependency_overrides.pop(get_auth_info, None)
+        self.app.dependency_overrides.pop(validate_auth_token, None)
         try:
             with patch("testbench_ai_service.auth._validate_token") as mock_validate:
                 mock_validate.side_effect = HTTPException(
@@ -164,11 +171,9 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
                     json={"project_key": "P", "tov_key": "T", "root_uid": "R"},
                     headers={"Authorization": "INVALID"},
                 )
-            self.assertEqual(response.status_code, 401)
+            assert response.status_code == 401
         finally:
-            self.app.dependency_overrides[get_auth_info] = lambda: AuthInfo(
-                auth_type=AuthType.SESSION_TOKEN, token="test-token", user_key="1"
-            )
+            self.app.dependency_overrides[validate_auth_token] = _make_auth_info
 
     # ── Feature flags ─────────────────────────────────────────────────────────
 
@@ -180,9 +185,9 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
             response = self.client.post(
                 "/test-case-set-reviews", json=self.valid_request.model_dump()
             )
-            self.assertEqual(response.status_code, 404)
+            assert response.status_code == 404
         finally:
-            self.app.dependency_overrides.pop(get_app_config)
+            self.app.dependency_overrides.pop(get_app_config, None)
 
     def test_per_project_disabled_feature_returns_404(self):
         config = self.app_config.model_copy(deep=True)
@@ -194,38 +199,40 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
             response = self.client.post(
                 "/test-case-set-reviews", json=self.valid_request.model_dump()
             )
-            self.assertEqual(response.status_code, 404)
+            assert response.status_code == 404
         finally:
             self.app.dependency_overrides.pop(get_app_config, None)
 
     # ── Authorisation ─────────────────────────────────────────────────────────
 
-    def test_user_without_required_role_returns_403(self):
+    def test_insufficient_role_fails_precheck_and_returns_409(self):
         self.project_roles = []
+        self.mock_reviewer.precheck = AsyncMock(
+            return_value=PrecheckResult(passed=False, warnings=["Insufficient role"])
+        )
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
-        self.assertEqual(response.status_code, 403)
+        assert response.status_code == 409  # precheck failed → 409 Conflict
 
-    def test_user_with_read_only_role_returns_403(self):
+    def test_read_only_role_fails_precheck_and_returns_409(self):
         self.project_roles = [ProjectRole.ReadOnlyDesigner]
+        self.mock_reviewer.precheck = AsyncMock(
+            return_value=PrecheckResult(passed=False, warnings=["Insufficient role"])
+        )
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
-        self.assertEqual(response.status_code, 403)
+        assert response.status_code == 409  # precheck failed → 409 Conflict
 
     def test_precheck_lock_lookup_http_403_returns_403(self):
-        """When precheck raises an HTTPException 403 (e.g. from a TB lock-check call),
-        the endpoint must propagate it as 403."""
         self.mock_reviewer.precheck = AsyncMock(
             side_effect=HTTPException(status_code=403, detail="Forbidden")
         )
-
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
-
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json(), {"detail": "Forbidden"})
+        assert response.status_code == 403
+        assert response.json() == {"detail": "Forbidden"}
 
     # ── Side-effect helpers ───────────────────────────────────────────────────
 
     def _tb_session_get_side_effect(self, url: str):
-        base = self.mock_tb_connection.server_url  # type: ignore[attr-defined]
+        base = self.mock_tb_connection.server_url
         if url == f"{base}2/login/session":
             r = MagicMock()
             r.json.return_value = {"userKey": self.user_key}
@@ -267,7 +274,7 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
         return None
 
     def _tb_session_post_side_effect(self, url: str, json: dict):
-        base = self.mock_tb_connection.server_url  # type: ignore[attr-defined]
+        base = self.mock_tb_connection.server_url
         structure_url = f"{base}2/projects/{self.project_key}/cycles/{self.cycle_key}/structure"
         if url == structure_url and json["treeRootUID"] == self.valid_request.root_uid:
             with (
@@ -279,7 +286,3 @@ class TestTriggerTestCaseSetReviews(unittest.TestCase):
             r.json.return_value = structure
             return r
         return None
-
-
-if __name__ == "__main__":
-    unittest.main()

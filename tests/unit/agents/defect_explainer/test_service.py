@@ -1,6 +1,6 @@
-import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 import requests
 
 from testbench_ai_service.agents.defect_explainer.agent import DefectExplainer
@@ -13,9 +13,10 @@ from testbench_ai_service.models.testbench import (
     ActivityStatus,
     ExecStatus,
     ProjectRole,
-    TestCaseBaseInformation,
-    TestCaseExecution,
-    TestCaseNode,
+    TestCaseSetNode,
+    TestStructureItemBaseInformation,
+    TestStructureItemExecution,
+    UserReference,
     VerdictStatus,
 )
 from testbench_ai_service.utils.i18n import load_translations
@@ -38,33 +39,31 @@ def _make_context(**overrides):
 
 
 def _make_auth_info(auth_type=AuthType.SESSION_TOKEN, token="tok", user_key="U1"):
-    return AuthInfo(auth_type=auth_type, token=token, user_key=user_key)
+    return AuthInfo(auth_type=auth_type, token=token, user_key=user_key, conn=MagicMock())
 
 
-def _make_tc_node(uid="iTB-TC-1"):
-    node = MagicMock()
-    node.base.uniqueID = uid
-    return node
-
-
-def _make_tree(
+def _make_tc_node(
     uid="iTB-TC-1",
     verdict=VerdictStatus.ToVerify,
     status=ActivityStatus.Performed,
     exec_is_none=False,
+    locker_key=None,
 ):
+    locker = UserReference(key=locker_key, name="locker") if locker_key else None
     exec_ = (
         None
         if exec_is_none
-        else TestCaseExecution(
+        else TestStructureItemExecution(
             key="E1",
             status=status,
             execStatus=ExecStatus.NotBlocked,
             verdict=verdict,
+            locker=locker,
         )
     )
-    root = TestCaseNode(
-        base=TestCaseBaseInformation(
+    return TestCaseSetNode(
+        base=TestStructureItemBaseInformation(
+            key="K1",
             numbering="1",
             parentKey="P1",
             name="TC 1",
@@ -73,16 +72,6 @@ def _make_tree(
         ),
         exec=exec_,
     )
-    tree = MagicMock()
-    tree.root = root
-    return tree
-
-
-def _make_tree_with_non_tc_root():
-    """Return a mock tree whose root is not a TestCaseNode."""
-    tree = MagicMock()
-    tree.root = None
-    return tree
 
 
 def _make_tcs(uid="TCS1", key="K1", spec_key="SK1", exec_key="EK1"):
@@ -99,8 +88,9 @@ _AGENT_MODULE = "testbench_ai_service.agents.defect_explainer.agent"
 _SUFFICIENT_ROLES = [ProjectRole.Tester]
 
 
-class TestDefectExplainerPrecheck(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+class TestDefectExplainerPrecheck:
+    @pytest.fixture(autouse=True)
+    def setup(self):
         load_translations()
         self.service = DefectExplainer()
         self.auth_info = _make_auth_info()
@@ -109,119 +99,94 @@ class TestDefectExplainerPrecheck(unittest.IsolatedAsyncioTestCase):
         context = _make_context()
         conn = MagicMock()
 
-        with patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[]):
+        with (
+            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[]),
+        ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertFalse(result.passed)
-        self.assertIsNone(result.items)
+        assert not result.passed
+        assert result.items == []
 
     async def test_valid_node_passes_and_uid_is_included(self):
         context = _make_context()
         conn = MagicMock()
         node = _make_tc_node("iTB-TC-1")
-        tree = _make_tree("iTB-TC-1")
 
         with (
-            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.fetch_test_structure_tree", return_value=tree),
-            patch(f"{_AGENT_MODULE}.is_test_case_locked_by_user", return_value=False),
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
             patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
         ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertTrue(result.passed)
-        self.assertIn("iTB-TC-1", result.items)
-
-    async def test_root_is_not_test_case_node_adds_warning_and_excludes(self):
-        context = _make_context()
-        conn = MagicMock()
-        node = _make_tc_node("iTB-TC-1")
-        tree = _make_tree_with_non_tc_root()
-
-        with (
-            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.fetch_test_structure_tree", return_value=tree),
-            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
-        ):
-            result = await self.service.precheck(context, conn, self.auth_info)
-
-        self.assertFalse(result.passed)
-        self.assertEqual(len(result.warnings), 1)
-        self.assertIn("no execution data", result.warnings[0])
+        assert result.passed
+        assert "iTB-TC-1" in result.items
 
     async def test_root_exec_is_none_adds_warning_and_excludes(self):
         context = _make_context()
         conn = MagicMock()
-        node = _make_tc_node("iTB-TC-1")
-        tree = _make_tree("iTB-TC-1", exec_is_none=True)
+        node = _make_tc_node("iTB-TC-1", exec_is_none=True)
 
         with (
-            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.fetch_test_structure_tree", return_value=tree),
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
             patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
         ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertFalse(result.passed)
-        self.assertEqual(len(result.warnings), 1)
-        self.assertIn("no execution data", result.warnings[0])
+        assert not result.passed
+        assert len(result.warnings) == 1
+        assert "no execution data" in result.warnings[0]
 
     async def test_verdict_not_to_verify_adds_warning_and_excludes(self):
         context = _make_context()
         conn = MagicMock()
-        node = _make_tc_node("iTB-TC-1")
-        tree = _make_tree("iTB-TC-1", verdict=VerdictStatus.Fail)
+        node = _make_tc_node("iTB-TC-1", verdict=VerdictStatus.Fail)
 
         with (
-            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.fetch_test_structure_tree", return_value=tree),
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
             patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
         ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertFalse(result.passed)
-        self.assertEqual(len(result.warnings), 1)
-        self.assertIn("To Verify", result.warnings[0])
+        assert not result.passed
+        assert len(result.warnings) == 1
+        assert "To Verify" in result.warnings[0]
 
     async def test_status_not_performed_adds_warning_and_excludes(self):
         context = _make_context()
         conn = MagicMock()
-        node = _make_tc_node("iTB-TC-1")
-        tree = _make_tree("iTB-TC-1", status=ActivityStatus.Running)
+        node = _make_tc_node("iTB-TC-1", status=ActivityStatus.Running)
 
         with (
-            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.fetch_test_structure_tree", return_value=tree),
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
             patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
         ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertFalse(result.passed)
-        self.assertEqual(len(result.warnings), 1)
-        self.assertIn("Performed", result.warnings[0])
+        assert not result.passed
+        assert len(result.warnings) == 1
+        assert "Performed" in result.warnings[0]
 
     async def test_locked_node_adds_warning_and_is_excluded(self):
-        context = _make_context()
+        context = _make_context(user_key="U1")
         conn = MagicMock()
-        node = _make_tc_node("iTB-TC-1")
-        tree = _make_tree("iTB-TC-1")
+        node = _make_tc_node("iTB-TC-1", locker_key="OTHER_USER")
 
         with (
-            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.fetch_test_structure_tree", return_value=tree),
-            patch(f"{_AGENT_MODULE}.is_test_case_locked_by_user", return_value=True),
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
             patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
         ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertFalse(result.passed)
-        self.assertFalse(result.items)
-        self.assertEqual(len(result.warnings), 1)
-        self.assertIn("locked", result.warnings[0])
+        assert not result.passed
+        assert not result.items
+        assert len(result.warnings) == 1
+        assert "locked" in result.warnings[0]
 
 
-class TestDefectExplainerRun(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+class TestDefectExplainerRun:
+    @pytest.fixture(autouse=True)
+    def setup(self):
         self.service = DefectExplainer()
 
     async def test_run_invokes_generate_for_matched_items(self):
@@ -242,7 +207,7 @@ class TestDefectExplainerRun(unittest.IsolatedAsyncioTestCase):
         ):
             await self.service.run(context, conn, llm_client, ["TCS1", "TCS2"])
 
-        self.assertEqual(mock_generate.await_count, 2)
+        assert mock_generate.await_count == 2
 
     async def test_run_with_none_items_is_noop(self):
         context = _make_context()
@@ -285,8 +250,9 @@ class TestDefectExplainerRun(unittest.IsolatedAsyncioTestCase):
         mock_handler.assert_called_once()
 
 
-class TestBuildAgentData(unittest.TestCase):
-    def setUp(self):
+class TestBuildAgentData:
+    @pytest.fixture(autouse=True)
+    def setup(self):
         self.service = DefectExplainer()
 
     def test_contains_failed_test_case_and_error_message(self):
@@ -299,13 +265,14 @@ class TestBuildAgentData(unittest.TestCase):
         ):
             data = self.service._build_agent_data(tcs, "TC1", error)
 
-        self.assertIn("failed_test_case", data)
-        self.assertIn("error_message", data)
-        self.assertEqual(data["error_message"], "NullPointerException at line 42")
+        assert "failed_test_case" in data
+        assert "error_message" in data
+        assert data["error_message"] == "NullPointerException at line 42"
 
 
-class TestGetAiResponse(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+class TestGetAiResponse:
+    @pytest.fixture(autouse=True)
+    def setup(self):
         self.service = DefectExplainer()
 
     async def test_wraps_llm_output_in_use_case_result(self):
@@ -322,8 +289,8 @@ class TestGetAiResponse(unittest.IsolatedAsyncioTestCase):
 
             result = await self.service._get_ai_response(llm_client, llm_config, prompt_config)
 
-        self.assertIsInstance(result, AgentResult)
-        self.assertEqual(result.result, "The defect is caused by X")
+        assert isinstance(result, AgentResult)
+        assert result.result == "The defect is caused by X"
 
     async def test_falls_back_to_prompt_model_when_config_model_is_none(self):
         llm_client = MagicMock()
@@ -341,8 +308,4 @@ class TestGetAiResponse(unittest.IsolatedAsyncioTestCase):
 
         call_kwargs = llm_client.query_llm.call_args
         used_model = call_kwargs.kwargs.get("model") or call_kwargs.args[0]
-        self.assertEqual(used_model, "o1-from-prompt")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert used_model == "o1-from-prompt"

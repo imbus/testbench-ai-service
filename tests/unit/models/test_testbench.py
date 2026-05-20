@@ -1,5 +1,3 @@
-import unittest
-
 from testbench_ai_service.models.testbench import (
     ActivityStatus,
     ExecStatus,
@@ -13,61 +11,61 @@ from testbench_ai_service.models.testbench import (
 )
 
 
-class TestPriorityEnum(unittest.TestCase):
+class TestPriorityEnum:
     def test_all_expected_members_exist(self):
         for expected in ("Undefined", "Low", "Middle", "High"):
-            self.assertIn(expected, [p.value for p in Priority])
+            assert expected in [p.value for p in Priority]
 
 
-class TestSpecStatusEnum(unittest.TestCase):
+class TestSpecStatusEnum:
     def test_all_expected_members_exist(self):
         for expected in ("NotPlanned", "Planned", "InProgress", "InReview", "Released"):
-            self.assertIn(expected, [s.value for s in SpecStatus])
+            assert expected in [s.value for s in SpecStatus]
 
 
-class TestActivityStatusEnum(unittest.TestCase):
+class TestActivityStatusEnum:
     def test_assigned_and_canceled_exist(self):
-        self.assertIn("Assigned", [s.value for s in ActivityStatus])
-        self.assertIn("Canceled", [s.value for s in ActivityStatus])
+        assert "Assigned" in [s.value for s in ActivityStatus]
+        assert "Canceled" in [s.value for s in ActivityStatus]
 
 
-class TestExecStatusEnum(unittest.TestCase):
+class TestExecStatusEnum:
     def test_blocked_and_not_blocked(self):
-        self.assertIn("Blocked", [s.value for s in ExecStatus])
-        self.assertIn("NotBlocked", [s.value for s in ExecStatus])
+        assert "Blocked" in [s.value for s in ExecStatus]
+        assert "NotBlocked" in [s.value for s in ExecStatus]
 
 
-class TestVerdictStatusEnum(unittest.TestCase):
+class TestVerdictStatusEnum:
     def test_pass_fail_undefined_exist(self):
         values = [s.value for s in VerdictStatus]
         for expected in ("Pass", "Fail", "Undefined"):
-            self.assertIn(expected, values)
+            assert expected in values
 
 
-class TestOptionalUser(unittest.TestCase):
+class TestOptionalUser:
     def test_defaults_to_none(self):
         user = OptionalUser()
-        self.assertIsNone(user.optional)
+        assert user.optional is None
 
     def test_accepts_string_value(self):
         user = OptionalUser(optional="user42")
-        self.assertEqual(user.optional, "user42")
+        assert user.optional == "user42"
 
 
-class TestSpecificationDetailsForUpdate(unittest.TestCase):
+class TestSpecificationDetailsForUpdate:
     def test_all_fields_are_optional(self):
         """Model should be constructible with no arguments."""
         spec = SpecificationDetailsForUpdate()
-        self.assertIsNone(spec.responsible)
-        self.assertIsNone(spec.reviewer)
-        self.assertIsNone(spec.locker)
+        assert spec.responsible is None
+        assert spec.reviewer is None
+        assert spec.locker is None
 
     def test_reviewer_can_be_set(self):
         spec = SpecificationDetailsForUpdate(reviewer=OptionalUser(optional="alice"))
-        self.assertEqual(spec.reviewer.optional, "alice")
+        assert spec.reviewer.optional == "alice"
 
 
-class TestProjectMember(unittest.TestCase):
+class TestProjectMember:
     def test_valid_member(self):
         member = ProjectMember(
             userKey="u1",
@@ -77,7 +75,7 @@ class TestProjectMember(unittest.TestCase):
             projectName="My Project",
             roles=[ProjectRole.TestDesigner],
         )
-        self.assertIn(ProjectRole.TestDesigner, member.roles)
+        assert ProjectRole.TestDesigner in member.roles
 
     def test_empty_roles_allowed(self):
         member = ProjectMember(
@@ -88,8 +86,4 @@ class TestProjectMember(unittest.TestCase):
             projectName="P2",
             roles=[],
         )
-        self.assertEqual(member.roles, [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert member.roles == []

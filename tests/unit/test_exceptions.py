@@ -1,14 +1,14 @@
 import json
-import unittest
 from unittest.mock import MagicMock
 
+import pytest
 import requests
 from fastapi import HTTPException
 
 from testbench_ai_service.exceptions import handle_requests_http_error, http_exception_handler
 
 
-class TestHttpExceptionHandler(unittest.IsolatedAsyncioTestCase):
+class TestHttpExceptionHandler:
     """Tests for ``http_exception_handler``."""
 
     async def test_body_allowed_status_returns_json_detail(self):
@@ -17,20 +17,19 @@ class TestHttpExceptionHandler(unittest.IsolatedAsyncioTestCase):
         response = await http_exception_handler(request, exc)
 
         body = json.loads(response.body)
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(body["detail"], "Unprocessable")
+        assert response.status_code == 422
+        assert body["detail"] == "Unprocessable"
 
     async def test_body_not_allowed_status_returns_empty_response(self):
         """Status 204 No Content must not carry a body."""
         request = MagicMock()
         exc = HTTPException(status_code=204, detail="No Content")
         response = await http_exception_handler(request, exc)
-        self.assertEqual(response.status_code, 204)
-        # Response body should be absent / empty
-        self.assertFalse(getattr(response, "body", b""))
+        assert response.status_code == 204
+        assert not getattr(response, "body", b"")
 
 
-class TestHandleRequestsHttpError(unittest.TestCase):
+class TestHandleRequestsHttpError:
     """Tests for ``handle_requests_http_error``."""
 
     def _make_error(self, status_code=None, message="Error"):
@@ -42,26 +41,26 @@ class TestHandleRequestsHttpError(unittest.TestCase):
         return requests.exceptions.HTTPError("error", response=mock_response)
 
     def test_404_raises_http_exception_with_404(self):
-        with self.assertRaises(HTTPException) as ctx:
+        with pytest.raises(HTTPException) as exc_info:
             handle_requests_http_error(self._make_error(404, "Not found"))
-        self.assertEqual(ctx.exception.status_code, 404)
-        self.assertEqual(ctx.exception.detail, "Not found")
+        assert exc_info.value.status_code == 404
+        assert exc_info.value.detail == "Not found"
 
     def test_400_raises_http_exception_with_400(self):
-        with self.assertRaises(HTTPException) as ctx:
+        with pytest.raises(HTTPException) as exc_info:
             handle_requests_http_error(self._make_error(400, "Bad request"))
-        self.assertEqual(ctx.exception.status_code, 400)
+        assert exc_info.value.status_code == 400
 
     def test_500_raises_http_exception_with_500(self):
-        with self.assertRaises(HTTPException) as ctx:
+        with pytest.raises(HTTPException) as exc_info:
             handle_requests_http_error(self._make_error(500, "Server error"))
-        self.assertEqual(ctx.exception.status_code, 500)
+        assert exc_info.value.status_code == 500
 
     def test_none_response_raises_500(self):
         """When the error has no response, status should default to 500."""
-        with self.assertRaises(HTTPException) as ctx:
+        with pytest.raises(HTTPException) as exc_info:
             handle_requests_http_error(self._make_error(status_code=None))
-        self.assertEqual(ctx.exception.status_code, 500)
+        assert exc_info.value.status_code == 500
 
     def test_non_json_response_falls_back_to_response_text(self):
         mock_response = MagicMock()
@@ -70,12 +69,8 @@ class TestHandleRequestsHttpError(unittest.TestCase):
         mock_response.text = "Forbidden"
 
         error = requests.exceptions.HTTPError("error", response=mock_response)
-        with self.assertRaises(HTTPException) as ctx:
+        with pytest.raises(HTTPException) as exc_info:
             handle_requests_http_error(error)
 
-        self.assertEqual(ctx.exception.status_code, 403)
-        self.assertEqual(ctx.exception.detail, "Forbidden")
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.detail == "Forbidden"

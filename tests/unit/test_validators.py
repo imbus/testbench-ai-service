@@ -1,8 +1,8 @@
 import tempfile
-import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
 import requests
 import yaml
 from pydantic import BaseModel, ValidationError
@@ -22,66 +22,58 @@ class _DummyModel(BaseModel):
     age: int
 
 
-class TestRaiseFieldValidationError(unittest.TestCase):
-    """raise_field_validation_error wraps a ValueError in a pydantic ValidationError."""
-
+class TestRaiseFieldValidationError:
     def test_produces_a_validation_error_for_the_named_field(self):
         model = _DummyModel(name="Alice", age=30)
         cause = ValueError("invalid value")
 
-        with self.assertRaises(ValidationError) as ctx:
+        with pytest.raises(ValidationError) as exc_info:
             raise_field_validation_error(model, "age", cause, error_type="value_error")
 
-        errors = ctx.exception.errors()
-        self.assertEqual(len(errors), 1)
+        errors = exc_info.value.errors()
+        assert len(errors) == 1
         err = errors[0]
-        self.assertEqual(err["type"], "value_error")
-        self.assertEqual(err["loc"], ("age",))
-        self.assertEqual(err["input"], 30)
-        self.assertIs(err["ctx"]["error"], cause)
-        self.assertIs(ctx.exception.__cause__, cause)
+        assert err["type"] == "value_error"
+        assert err["loc"] == ("age",)
+        assert err["input"] == 30
+        assert err["ctx"]["error"] is cause
+        assert exc_info.value.__cause__ is cause
 
     def test_defaults_to_value_error_type(self):
         model = _DummyModel(name="Bob", age=25)
         cause = ValueError("oops")
 
-        with self.assertRaises(ValidationError) as ctx:
+        with pytest.raises(ValidationError) as exc_info:
             raise_field_validation_error(model, "name", cause)
 
-        err = ctx.exception.errors()[0]
-        self.assertEqual(err["type"], "value_error")
-        self.assertEqual(err["loc"], ("name",))
-        self.assertIs(err["ctx"]["error"], cause)
+        err = exc_info.value.errors()[0]
+        assert err["type"] == "value_error"
+        assert err["loc"] == ("name",)
+        assert err["ctx"]["error"] is cause
 
 
-class TestValidateCustomClassPath(unittest.TestCase):
-    """validate_custom_class_path ensures the path is importable and the class exists."""
-
+class TestValidateCustomClassPath:
     def test_empty_string_raises(self):
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError, match="'class_path' must be set"):
             validate_custom_class_path("")
-        self.assertIn("'class_path' must be set", str(ctx.exception))
 
     def test_path_without_dot_raises(self):
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError, match="'class_path' must be a valid import path"):
             validate_custom_class_path("InvalidClassPath")
-        self.assertIn("'class_path' must be a valid import path", str(ctx.exception))
 
     @patch("testbench_ai_service.validators.importlib.import_module")
     def test_missing_module_raises(self, mock_import):
         mock_import.side_effect = ImportError("No module named foo")
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError, match=r"cannot import 'Baz' from 'foo\.bar'"):
             validate_custom_class_path("foo.bar.Baz")
-        self.assertIn("cannot import 'Baz' from 'foo.bar'", str(ctx.exception))
 
     @patch("testbench_ai_service.validators.importlib.import_module")
     def test_class_not_in_module_raises(self, mock_import):
         mock_module = MagicMock()
         del mock_module.MissingClass
         mock_import.return_value = mock_module
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError, match=r"cannot import 'MissingClass' from 'some\.module'"):
             validate_custom_class_path("some.module.MissingClass")
-        self.assertIn("cannot import 'MissingClass' from 'some.module'", str(ctx.exception))
 
     @patch("testbench_ai_service.validators.importlib.import_module")
     def test_valid_path_returns_the_path_string(self, mock_import):
@@ -93,51 +85,46 @@ class TestValidateCustomClassPath(unittest.TestCase):
         mock_import.return_value = mock_module
 
         result = validate_custom_class_path("some.module.ExistingClass")
-        self.assertEqual(result, "some.module.ExistingClass")
+        assert result == "some.module.ExistingClass"
 
 
-class TestValidateFile(unittest.TestCase):
-    """validate_file rejects non-existent, non-file, and empty paths."""
-
+class TestValidateFile:
     def test_non_existent_path_raises(self):
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError, match="File not found"):
             validate_file(Path("/non/existent/file.txt"))
-        self.assertIn("File not found", str(ctx.exception))
 
     def test_directory_path_raises(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            with self.assertRaises(ValueError) as ctx:
-                validate_file(Path(tmpdir))
-            self.assertIn("Path is not a file", str(ctx.exception))
+        with (
+            tempfile.TemporaryDirectory() as tmpdir,
+            pytest.raises(ValueError, match="Path is not a file"),
+        ):
+            validate_file(Path(tmpdir))
 
     def test_empty_file_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = Path(tmpdir) / "empty.txt"
             file_path.write_text("")
-            with self.assertRaises(ValueError) as ctx:
+            with pytest.raises(ValueError, match="File is empty"):
                 validate_file(file_path)
-            self.assertIn("File is empty", str(ctx.exception))
 
     def test_valid_file_returns_path_object(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = Path(tmpdir) / "valid.txt"
             file_path.write_text("Hello, world!")
             result = validate_file(file_path)
-            self.assertIsInstance(result, Path)
-            self.assertTrue(result.samefile(file_path))
+            assert isinstance(result, Path)
+            assert result.samefile(file_path)
 
     def test_string_path_is_accepted(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             file_path = Path(tmpdir) / "string_path.txt"
             file_path.write_text("Some data")
             result = validate_file(str(file_path))
-            self.assertIsInstance(result, Path)
-            self.assertTrue(result.samefile(file_path))
+            assert isinstance(result, Path)
+            assert result.samefile(file_path)
 
 
-class TestValidateYamlToSchema(unittest.TestCase):
-    """validate_yaml_to_schema parses YAML and validates it against the prompt schema."""
-
+class TestValidateYamlToSchema:
     def _write_yaml(self, tmpdir: str, name: str, data) -> Path:
         path = Path(tmpdir) / name
         path.write_text(yaml.safe_dump(data))
@@ -162,27 +149,23 @@ class TestValidateYamlToSchema(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self._write_yaml(tmpdir, "valid.yaml", valid_data)
             result = validate_yaml_to_schema(path)
-            self.assertTrue(result.samefile(path))
+            assert result.samefile(path)
 
     def test_malformed_yaml_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "bad.yaml"
             path.write_text("name: Alice\nage: [30")
-            with self.assertRaises(ValueError) as ctx:
+            with pytest.raises(ValueError, match="YAML parsing error"):
                 validate_yaml_to_schema(path)
-            self.assertIn("YAML parsing error", str(ctx.exception))
 
     def test_yaml_failing_schema_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self._write_yaml(tmpdir, "invalid.yaml", {"name": "Alice"})
-            with self.assertRaises(ValueError) as ctx:
+            with pytest.raises(ValueError, match="Schema validation error"):
                 validate_yaml_to_schema(path)
-            self.assertIn("Schema validation error", str(ctx.exception))
 
 
-class TestValidateValueInYaml(unittest.TestCase):
-    """validate_value_in_yaml checks that a list-of-dicts YAML contains a key=value entry."""
-
+class TestValidateValueInYaml:
     def _write_yaml(self, tmpdir: str, data) -> Path:
         path = Path(tmpdir) / "test.yaml"
         path.write_text(yaml.safe_dump(data))
@@ -198,22 +181,18 @@ class TestValidateValueInYaml(unittest.TestCase):
     def test_non_list_yaml_raises(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self._write_yaml(tmpdir, {"name": "Alice"})
-            with self.assertRaises(ValueError) as ctx:
+            with pytest.raises(ValueError, match="Expected a list of mappings"):
                 validate_value_in_yaml(path, "name", "Alice")
-            self.assertIn("Expected a list of mappings", str(ctx.exception))
 
     def test_missing_value_raises(self):
         data = [{"name": "Alice"}, {"name": "Bob"}]
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self._write_yaml(tmpdir, data)
-            with self.assertRaises(ValueError) as ctx:
+            with pytest.raises(ValueError, match="No entry with 'name: Charlie' found"):
                 validate_value_in_yaml(path, "name", "Charlie")
-            self.assertIn("No entry with 'name: Charlie' found", str(ctx.exception))
 
 
-class TestValidateTbServerUrl(unittest.TestCase):
-    """validate_tb_server_url reachability checks via HTTP GET."""
-
+class TestValidateTbServerUrl:
     @patch("testbench_ai_service.validators.requests.get")
     def test_accessible_server_passes(self, mock_get):
         mock_response = Mock()
@@ -234,18 +213,12 @@ class TestValidateTbServerUrl(unittest.TestCase):
         mock_response.raise_for_status.side_effect = requests.HTTPError("404 Client Error")
         mock_get.return_value = mock_response
 
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError, match="Unable to connect to the server"):
             validate_tb_server_url("https://testserver.example.com")
-        self.assertIn("Unable to connect to the server", str(ctx.exception))
 
     @patch("testbench_ai_service.validators.requests.get")
     def test_connection_error_raises(self, mock_get):
         mock_get.side_effect = requests.ConnectionError("Failed to connect")
 
-        with self.assertRaises(ValueError) as ctx:
+        with pytest.raises(ValueError, match="Unable to connect to the server"):
             validate_tb_server_url("https://testserver.example.com")
-        self.assertIn("Unable to connect to the server", str(ctx.exception))
-
-
-if __name__ == "__main__":
-    unittest.main()

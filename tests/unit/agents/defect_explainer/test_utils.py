@@ -1,17 +1,5 @@
-"""
-- add_explanations_to_comment   (adds/overrides AI explanation in HTML comment)
-- get_error_message             (parses FAIL entries from an HTML execution table)
-- build_update_test_case_set    (constructs the update payload from TCS details)
-- build_protocol_json           (builds the protocol import model)
-- import_data                   (triggers a JSON execution-result import)
-- create_import_zip             (creates a ZIP archive ready for import)
-- custom_serializer             (JSON serializer helper for Enum values)
-- get_test_case_set_as_string   (formats a test case set as a readable string)
-"""
-
 import json
 import tempfile
-import unittest
 import zipfile
 from dataclasses import dataclass
 from enum import Enum
@@ -19,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
 from testbench2robotframework.model import KeywordType
 
 from testbench_ai_service.agents.defect_explainer.model import (
@@ -55,13 +44,12 @@ from testbench_ai_service.models.testbench import (
 
 @dataclass
 class _DummyTCS:
-    """Minimal stand-in for ``TestCaseSetDetails`` that supports ``model_dump()``."""
+    """Stand-in for ``TestCaseSetDetails`` used in zip-creation tests.
 
-    def __init__(self, uid: str = "TCS123") -> None:
-        self.uniqueID = uid
+    Must be a dataclass so that ``dataclasses.asdict()`` can serialise it.
+    """
 
-    def model_dump(self) -> dict[str, str]:
-        return {"uniqueID": self.uniqueID}
+    uniqueID: str = "TCS123"
 
 
 def _make_tcs_details(key="key", test_cases=None):
@@ -127,7 +115,7 @@ def _make_tcs_ns(set_name, test_sequence, test_case_key="tc1"):
     )
 
 
-class TestAddExplanationsToComment(unittest.TestCase):
+class TestAddExplanationsToComment:
     """Tests for ``add_explanations_to_comment``."""
 
     _FAIL_COMMENT = (
@@ -155,8 +143,8 @@ class TestAddExplanationsToComment(unittest.TestCase):
             errors=self._ERRORS,
             language=LanguageOption.GERMAN,
         )
-        self.assertIn("KI-Erklärung", result)
-        self.assertIn("something went wrong", result)
+        assert "KI-Erklärung" in result
+        assert "something went wrong" in result
 
     @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
     def test_overrides_existing_explanation(self, mock_get_translation):
@@ -176,8 +164,8 @@ class TestAddExplanationsToComment(unittest.TestCase):
             errors=self._ERRORS,
             language=LanguageOption.GERMAN,
         )
-        self.assertIn("something went wrong", result)
-        self.assertNotIn("nothing went wrong", result)
+        assert "something went wrong" in result
+        assert "nothing went wrong" not in result
 
     @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
     def test_empty_comment_returns_empty_string(self, mock_get_translation):
@@ -186,10 +174,10 @@ class TestAddExplanationsToComment(unittest.TestCase):
         result = add_explanations_to_comment(
             comment="", errors=self._ERRORS, language=LanguageOption.GERMAN
         )
-        self.assertEqual(result, "")
+        assert result == ""
 
 
-class TestGetErrorMessage(unittest.TestCase):
+class TestGetErrorMessage:
     """Tests for ``get_error_message``."""
 
     _PREFIX = (
@@ -209,10 +197,10 @@ class TestGetErrorMessage(unittest.TestCase):
 
     def test_no_table_returns_empty_dict(self):
         comment = "<pre>Start Time: 07:44:13.781 End Time: 07:44:19.889 </pre>"
-        self.assertDictEqual(get_error_message(comment), {})
+        assert get_error_message(comment) == {}
 
     def test_empty_comment_returns_empty_dict(self):
-        self.assertDictEqual(get_error_message(""), {})
+        assert get_error_message("") == {}
 
     def test_single_fail_row(self):
         comment = (
@@ -223,7 +211,7 @@ class TestGetErrorMessage(unittest.TestCase):
         expected = {
             "iTB-TC-20021-PC-30037": {"status": "FAIL", "error": "Example Domain != AKShgdl"}
         }
-        self.assertDictEqual(get_error_message(comment), expected)
+        assert get_error_message(comment) == expected
 
     def test_multiple_fail_rows(self):
         comment = (
@@ -236,13 +224,13 @@ class TestGetErrorMessage(unittest.TestCase):
             "UID-1": {"status": "FAIL", "error": "Error 1"},
             "UID-2": {"status": "FAIL", "error": "Error 2"},
         }
-        self.assertDictEqual(get_error_message(comment), expected)
+        assert get_error_message(comment) == expected
 
     def test_pass_rows_are_ignored(self):
         comment = (
             self._PREFIX + self._row("UID-1", "PASS") + self._row("UID-2", "PASS") + self._SUFFIX
         )
-        self.assertDictEqual(get_error_message(comment), {})
+        assert get_error_message(comment) == {}
 
     def test_mixed_pass_and_fail_rows(self):
         comment = (
@@ -252,20 +240,20 @@ class TestGetErrorMessage(unittest.TestCase):
             + self._SUFFIX
         )
         expected = {"UID-FAIL": {"status": "FAIL", "error": "Bad assertion"}}
-        self.assertDictEqual(get_error_message(comment), expected)
+        assert get_error_message(comment) == expected
 
 
-class TestBuildUpdateTestCaseSet(unittest.TestCase):
+class TestBuildUpdateTestCaseSet:
     """Tests for ``build_update_test_case_set``."""
 
     def test_sets_updated_exec_comments(self):
         comment = "updated comment"
         details = _make_tcs_details()
         result = build_update_test_case_set(updated_comment=comment, test_case_set_details=details)
-        self.assertEqual(result.exec.comments, comment)
+        assert result.exec.comments == comment
 
 
-class TestBuildProtocolJson(unittest.TestCase):
+class TestBuildProtocolJson:
     """Tests for ``build_protocol_json``."""
 
     def test_no_test_cases_produces_empty_list(self):
@@ -278,7 +266,7 @@ class TestBuildProtocolJson(unittest.TestCase):
             comments=Comments(html=comment),
             testCases=[],
         )
-        self.assertEqual(build_protocol_json(comment, details), expected)
+        assert build_protocol_json(comment, details) == expected
 
     def test_with_test_cases_maps_execution_keys_and_results(self):
         tc1 = TestCaseSummary(
@@ -309,29 +297,26 @@ class TestBuildProtocolJson(unittest.TestCase):
         )
         details = _make_tcs_details(test_cases=[tc1, tc2])
         result = build_protocol_json("comment", details)
-        self.assertEqual(len(result.testCases), 2)
-        self.assertEqual(
-            result.testCases[0],
-            TestCase(
-                testCaseExecutionKey="ek1",
-                durationMillis=0,
-                uniqueID="iTB-TC-001-PC-001",
-                result=Result(
-                    status=ActivityStatus.Assigned,
-                    execStatus=ExecStatus.Blocked,
-                    verdict=VerdictStatus.Fail,
-                ),
+        assert len(result.testCases) == 2
+        assert result.testCases[0] == TestCase(
+            testCaseExecutionKey="ek1",
+            durationMillis=0,
+            uniqueID="iTB-TC-001-PC-001",
+            result=Result(
+                status=ActivityStatus.Assigned,
+                execStatus=ExecStatus.Blocked,
+                verdict=VerdictStatus.Fail,
             ),
         )
 
 
-class TestImportData(unittest.TestCase):
+class TestImportData:
     """Tests for ``import_data``."""
 
     @patch("testbench_ai_service.agents.defect_explainer.utils.ImportJSONExecutionResults")
     @patch("testbench_ai_service.agents.defect_explainer.utils.ImportJsonParameters")
     @patch("testbench_ai_service.agents.defect_explainer.utils.ConnectionLog")
-    def test_calls_trigger_with_active_connection(
+    async def test_calls_trigger_with_active_connection(
         self, mock_connection_log, mock_import_params, mock_import_results
     ):
         mock_conn = MagicMock()
@@ -344,8 +329,9 @@ class TestImportData(unittest.TestCase):
         mock_import_params.return_value = mock_params_instance
         mock_importer_instance = MagicMock()
         mock_import_results.return_value = mock_importer_instance
+        mock_importer_instance.trigger.return_value = True
 
-        import_data(mock_conn, mock_task_data, mock_path)
+        await import_data(mock_conn, mock_task_data, mock_path)
 
         mock_connection_log.assert_called_once()
         mock_connection_instance.add_connection.assert_called_once_with(mock_conn)
@@ -360,16 +346,17 @@ class TestImportData(unittest.TestCase):
     @patch("testbench_ai_service.agents.defect_explainer.utils.ImportJSONExecutionResults")
     @patch("testbench_ai_service.agents.defect_explainer.utils.ImportJsonParameters")
     @patch("testbench_ai_service.agents.defect_explainer.utils.ConnectionLog")
-    def test_trigger_is_called_exactly_once(
+    async def test_trigger_is_called_exactly_once(
         self, mock_connection_log, mock_import_params, mock_import_results
     ):
         mock_importer_instance = MagicMock()
         mock_import_results.return_value = mock_importer_instance
-        import_data(MagicMock(), MagicMock(project_key="X", cycle_key="Y"), Path("x.zip"))
+        mock_importer_instance.trigger.return_value = True
+        await import_data(MagicMock(), MagicMock(project_key="X", cycle_key="Y"), Path("x.zip"))
         mock_importer_instance.trigger.assert_called_once()
 
 
-class TestCreateImportZip(unittest.TestCase):
+class TestCreateImportZip:
     """Tests for ``create_import_zip``."""
 
     @patch(
@@ -392,15 +379,15 @@ class TestCreateImportZip(unittest.TestCase):
             zip_path = Path(tmpdir) / "output.zip"
             create_import_zip("<new comment>", MagicMock(), zip_path)
 
-            self.assertTrue(zip_path.exists())
+            assert zip_path.exists()
             with zipfile.ZipFile(zip_path, "r") as zf:
                 names = zf.namelist()
-                self.assertIn("protocol.json", names)
-                self.assertIn("TCS123.json", names)
+                assert "protocol.json" in names
+                assert "TCS123.json" in names
                 protocol_content = json.loads(zf.read("protocol.json").decode())
-                self.assertEqual(protocol_content[0]["protocol"], "data")
+                assert protocol_content[0]["protocol"] == "data"
                 tcs_content = json.loads(zf.read("TCS123.json").decode())
-                self.assertEqual(tcs_content, {"uniqueID": "TCS123"})
+                assert tcs_content == {"uniqueID": "TCS123"}
 
     @patch(
         "testbench_ai_service.agents.defect_explainer.utils.build_update_test_case_set",
@@ -419,11 +406,11 @@ class TestCreateImportZip(unittest.TestCase):
             create_import_zip("c2", MagicMock(), zip_path)
 
             with zipfile.ZipFile(zip_path, "r") as zf:
-                self.assertIn("protocol.json", zf.namelist())
-                self.assertIn("TCSX.json", zf.namelist())
+                assert "protocol.json" in zf.namelist()
+                assert "TCSX.json" in zf.namelist()
 
 
-class TestCustomSerializer(unittest.TestCase):
+class TestCustomSerializer:
     """Tests for ``custom_serializer``."""
 
     class _Status(Enum):
@@ -431,43 +418,43 @@ class TestCustomSerializer(unittest.TestCase):
         FAIL = "FAIL"
 
     def test_returns_enum_value(self):
-        self.assertEqual(custom_serializer(self._Status.PASS), "PASS")
-        self.assertEqual(custom_serializer(self._Status.FAIL), "FAIL")
+        assert custom_serializer(self._Status.PASS) == "PASS"
+        assert custom_serializer(self._Status.FAIL) == "FAIL"
 
     def test_raises_type_error_for_string(self):
-        with self.assertRaises(TypeError) as ctx:
+        with pytest.raises(TypeError) as exc_info:
             custom_serializer("not an enum")
-        self.assertIn("str", str(ctx.exception))
+        assert "str" in str(exc_info.value)
 
     def test_raises_type_error_for_number(self):
-        with self.assertRaises(TypeError) as ctx:
+        with pytest.raises(TypeError) as exc_info:
             custom_serializer(42)
-        self.assertIn("int", str(ctx.exception))
+        assert "int" in str(exc_info.value)
 
 
-class TestGetTestCaseSetAsString(unittest.TestCase):
+class TestGetTestCaseSetAsString:
     """Tests for ``get_test_case_set_as_string``."""
 
     def test_empty_test_sequence_returns_set_name_only(self):
         tcs = _make_tcs_ns("EmptySet", [])
-        self.assertEqual(get_test_case_set_as_string(tcs, "tc1"), "EmptySet")
+        assert get_test_case_set_as_string(tcs, "tc1") == "EmptySet"
 
     def test_single_keyword_without_params(self):
         kw = _make_keyword_call("Login Step", numbering="1", verdict="Pass")
         tcs = _make_tcs_ns("LoginSet", [kw])
         lines = get_test_case_set_as_string(tcs, "tc1").splitlines()
-        self.assertEqual(lines[0], "LoginSet")
-        self.assertIn("Login Step", lines[1])
-        self.assertIn("►[Pass]", lines[1])
-        self.assertNotIn("=", lines[1])
+        assert lines[0] == "LoginSet"
+        assert "Login Step" in lines[1]
+        assert "►[Pass]" in lines[1]
+        assert "=" not in lines[1]
 
     def test_keyword_params_are_rendered(self):
         params = [_make_param("Username", "admin"), _make_param("*Password", "secret")]
         kw = _make_keyword_call("Login Step", verdict="Pass", params=params)
         tcs = _make_tcs_ns("LoginSet", [kw])
         result = get_test_case_set_as_string(tcs, "tc1")
-        self.assertIn("Username=admin", result)
-        self.assertIn("Password=secret", result)  # leading '*' is stripped
+        assert "Username=admin" in result
+        assert "Password=secret" in result  # leading '*' is stripped
 
     def test_compound_step_shows_children_on_fail(self):
         parent = _make_keyword_call(
@@ -476,8 +463,8 @@ class TestGetTestCaseSetAsString(unittest.TestCase):
         child = _make_keyword_call("Child Step", numbering="1.1", verdict="Fail", parent_id="1")
         tcs = _make_tcs_ns("TestSet", [parent, child])
         result = get_test_case_set_as_string(tcs, "tc1")
-        self.assertIn("Compound Step", result)
-        self.assertIn("Child Step", result)
+        assert "Compound Step" in result
+        assert "Child Step" in result
 
     def test_nested_children_hidden_when_parent_passes(self):
         parent = _make_keyword_call(
@@ -486,9 +473,5 @@ class TestGetTestCaseSetAsString(unittest.TestCase):
         child = _make_keyword_call("Child Step", numbering="1.1", verdict="Pass", parent_id="1")
         tcs = _make_tcs_ns("TestSet", [parent, child])
         result = get_test_case_set_as_string(tcs, "tc1")
-        self.assertIn("Passing Compound", result)
-        self.assertNotIn("Child Step", result)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "Passing Compound" in result
+        assert "Child Step" not in result

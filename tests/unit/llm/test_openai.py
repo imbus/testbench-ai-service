@@ -1,4 +1,3 @@
-import unittest
 from unittest.mock import AsyncMock, patch
 
 from testbench_ai_service.llm.openai import (
@@ -10,30 +9,30 @@ from testbench_ai_service.llm.openai import (
 from testbench_ai_service.models.prompt import Message
 
 
-class TestModelSets(unittest.TestCase):
+class TestModelSets:
     """Sanity checks for the declared model sets."""
 
     def test_chat_models_is_non_empty_frozenset(self):
-        self.assertIsInstance(CHAT_MODELS, frozenset)
-        self.assertTrue(len(CHAT_MODELS) > 0)
+        assert isinstance(CHAT_MODELS, frozenset)
+        assert len(CHAT_MODELS) > 0
 
     def test_reasoning_models_is_non_empty_frozenset(self):
-        self.assertIsInstance(REASONING_MODELS, frozenset)
-        self.assertTrue(len(REASONING_MODELS) > 0)
+        assert isinstance(REASONING_MODELS, frozenset)
+        assert len(REASONING_MODELS) > 0
 
     def test_sets_are_disjoint(self):
         """No model should appear in both CHAT_MODELS and REASONING_MODELS."""
         overlap = CHAT_MODELS & REASONING_MODELS
-        self.assertEqual(overlap, frozenset(), f"Overlapping models: {overlap}")
+        assert overlap == frozenset(), f"Overlapping models: {overlap}"
 
     def test_known_chat_model_is_in_chat_models(self):
-        self.assertIn("gpt-4o", CHAT_MODELS)
+        assert "gpt-4o" in CHAT_MODELS
 
     def test_known_reasoning_model_is_in_reasoning_models(self):
-        self.assertIn("o1", REASONING_MODELS)
+        assert "o1" in REASONING_MODELS
 
 
-class TestOpenAIClientQueryLlm(unittest.IsolatedAsyncioTestCase):
+class TestOpenAIClientQueryLlm:
     """Tests for ``OpenAIClient.query_llm``."""
 
     def _make_client(self):
@@ -49,7 +48,7 @@ class TestOpenAIClientQueryLlm(unittest.IsolatedAsyncioTestCase):
 
         messages = [Message(role="user", content="Hello")]
         result = await client.query_llm("gpt-4o", messages)
-        self.assertEqual(result, "Chat response")
+        assert result == "Chat response"
         client.client.responses.create.assert_awaited_once()
 
     async def test_reasoning_model_uses_responses_api(self):
@@ -60,11 +59,11 @@ class TestOpenAIClientQueryLlm(unittest.IsolatedAsyncioTestCase):
 
         messages = [Message(role="user", content="Reason about this")]
         result = await client.query_llm("o1", messages)
-        self.assertEqual(result, "Reasoning response")
+        assert result == "Reasoning response"
         client.client.responses.create.assert_awaited_once()
 
 
-class TestAzureOpenAIClientQueryLlm(unittest.IsolatedAsyncioTestCase):
+class TestAzureOpenAIClientQueryLlm:
     """Tests for ``AzureOpenAIClient``."""
 
     def _make_client(self):
@@ -84,9 +83,5 @@ class TestAzureOpenAIClientQueryLlm(unittest.IsolatedAsyncioTestCase):
         messages = [Message(role="user", content="Hello Azure")]
         result = await client.query_llm("gpt-4o", messages)
 
-        self.assertEqual(result, "Azure chat response")
+        assert result == "Azure chat response"
         client.client.responses.create.assert_awaited_once()
-
-
-if __name__ == "__main__":
-    unittest.main()

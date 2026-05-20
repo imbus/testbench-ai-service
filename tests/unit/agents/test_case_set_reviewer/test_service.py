@@ -1,6 +1,6 @@
-import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 import requests
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
@@ -29,13 +29,14 @@ def _make_context(**overrides):
 
 
 def _make_auth_info(auth_type=AuthType.SESSION_TOKEN, token="tok", user_key="U1"):
-    return AuthInfo(auth_type=auth_type, token=token, user_key=user_key)
+    return AuthInfo(auth_type=auth_type, token=token, user_key=user_key, conn=MagicMock())
 
 
 def _make_node(uid="TCS-1", key="K1"):
     node = MagicMock()
     node.base.uniqueID = uid
     node.base.key = key
+    node.spec = None
     return node
 
 
@@ -52,58 +53,63 @@ _AGENT_MODULE = "testbench_ai_service.agents.test_case_set_reviewer.agent"
 _SUFFICIENT_ROLES = [ProjectRole.TestManager]
 
 
-class TestTestCaseSetReviewerPrecheck(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+class TestTestCaseSetReviewerPrecheck:
+    @pytest.fixture(autouse=True)
+    def setup(self):
         self.service = TestCaseSetReviewer()
         self.auth_info = _make_auth_info()
 
     async def test_returns_passed_true_for_unlocked_tcs(self):
         context = _make_context()
         conn = MagicMock()
-        conn.get_project_test_case_set.return_value = {"uniqueID": "TCS-1", "spec": {}}
-        node = _make_node("TCS-1", "K1")
+        node = _make_node("TCS-1", "K1")  # node.spec = None → not locked
 
         with (
-            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.check_test_case_set_is_locked", return_value=False),
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
             patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
         ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertTrue(result.passed)
-        self.assertIn("TCS-1", result.items)
-        self.assertEqual(result.warnings, [])
+        assert result.passed
+        assert "TCS-1" in result.items
+        assert result.warnings == []
 
     async def test_locked_tcs_adds_warning_and_is_excluded(self):
         context = _make_context()
         conn = MagicMock()
-        conn.get_project_test_case_set.return_value = {"uniqueID": "TCS-1", "spec": {}}
         node = _make_node("TCS-1", "K1")
+        node.spec = MagicMock()
+        node.spec.locker = MagicMock()
+        node.spec.locker.key = "OTHER_USER"  # != context.user_key ("U1")
 
         with (
-            patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.check_test_case_set_is_locked", return_value=True),
-            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
+            # Use a non-privileged writing role: Tester is blocked by locks
+            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=[ProjectRole.Tester]),
         ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertFalse(result.passed)
-        self.assertFalse(result.items)
-        self.assertEqual(len(result.warnings), 1)
+        assert not (result.passed)
+        assert not (result.items)
+        assert len(result.warnings) == 1
 
     async def test_empty_nodes_returns_passed_false(self):
         context = _make_context()
         conn = MagicMock()
 
-        with patch(f"{_AGENT_MODULE}.get_test_case_nodes", return_value=[]):
+        with (
+            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[]),
+            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
+        ):
             result = await self.service.precheck(context, conn, self.auth_info)
 
-        self.assertFalse(result.passed)
-        self.assertIsNone(result.items)
+        assert not (result.passed)
+        assert result.items == []
 
 
-class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+class TestTestCaseSetReviewerRun:
+    @pytest.fixture(autouse=True)
+    def setup(self):
         self.service = TestCaseSetReviewer()
 
     async def test_run_invokes_review_for_matched_items(self):
@@ -124,7 +130,7 @@ class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
         ):
             await self.service.run(context, conn, llm_client, ["TCS1", "TCS2"])
 
-        self.assertEqual(mock_review.await_count, 2)
+        assert mock_review.await_count == 2
 
     async def test_run_with_none_items_is_noop(self):
         context = _make_context()
@@ -167,8 +173,9 @@ class TestTestCaseSetReviewerRun(unittest.IsolatedAsyncioTestCase):
         mock_handler.assert_called_once()
 
 
-class TestBuildAgentData(unittest.TestCase):
-    def setUp(self):
+class TestBuildAgentData:
+    @pytest.fixture(autouse=True)
+    def setup(self):
         self.service = TestCaseSetReviewer()
 
     def test_contains_required_keys(self):
@@ -186,9 +193,9 @@ class TestBuildAgentData(unittest.TestCase):
         ):
             data = self.service._build_agent_data(tcs)
 
-        self.assertIn("test_case", data)
-        self.assertIn("parameter_combinations", data)
-        self.assertIn("test_case_set_obj", data)
+        assert "test_case" in data
+        assert "parameter_combinations" in data
+        assert "test_case_set_obj" in data
 
     def test_description_included_when_present(self):
         tcs = _make_tcs()
@@ -210,12 +217,13 @@ class TestBuildAgentData(unittest.TestCase):
         ):
             data = self.service._build_agent_data(tcs)
 
-        self.assertIn("test_case_set_description", data)
-        self.assertEqual(data["test_case_set_description"], "Plain description")
+        assert "test_case_set_description" in data
+        assert data["test_case_set_description"] == "Plain description"
 
 
-class TestGetAiResponse(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+class TestGetAiResponse:
+    @pytest.fixture(autouse=True)
+    def setup(self):
         self.service = TestCaseSetReviewer()
 
     async def test_returns_use_case_result(self):
@@ -234,8 +242,8 @@ class TestGetAiResponse(unittest.IsolatedAsyncioTestCase):
 
             result = await self.service._get_ai_response(llm_client, llm_config, prompt_config)
 
-        self.assertIsInstance(result, AgentResult)
-        self.assertEqual(result.result, "- Review note")
+        assert isinstance(result, AgentResult)
+        assert result.result == "- Review note"
 
     async def test_uses_prompt_model_when_llm_config_model_is_none(self):
         llm_client = MagicMock()
@@ -254,10 +262,4 @@ class TestGetAiResponse(unittest.IsolatedAsyncioTestCase):
             await self.service._get_ai_response(llm_client, llm_config, prompt_config)
 
         call_kwargs = llm_client.query_llm.call_args
-        self.assertEqual(
-            call_kwargs.kwargs.get("model") or call_kwargs.args[0], "gpt-4o-from-prompt"
-        )
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert call_kwargs.kwargs.get("model") or call_kwargs.args[0] == "gpt-4o-from-prompt"

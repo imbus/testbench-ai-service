@@ -1,59 +1,23 @@
 from unittest.mock import MagicMock
 
 import pytest
-import requests
 from fastapi import HTTPException, status
 
 from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.testbench import FilteringOptions
-from testbench_ai_service.utils.agent import (
-    build_execution_context,
-    check_test_case_set_is_locked,
-)
+from testbench_ai_service.utils.agent import build_execution_context
 
 
 def _session_auth(user_key: str = "U1") -> AuthInfo:
-    return AuthInfo(auth_type=AuthType.SESSION_TOKEN, token="tok", user_key=user_key)
+    return AuthInfo(
+        auth_type=AuthType.SESSION_TOKEN, token="tok", user_key=user_key, conn=MagicMock()
+    )
 
 
 def _jwt_auth(token: str, user_key: str = "U1") -> AuthInfo:
-    return AuthInfo(auth_type=AuthType.JWT_TOKEN, token=token, user_key=user_key)
-
-
-class _Locker:
-    def __init__(self, key: str):
-        self.key = key
-
-
-class _Tab:
-    def __init__(self, locker=None):
-        self.locker = locker
-
-
-class _Root:
-    def __init__(self, tab=None, tab_name="tab"):
-        setattr(self, tab_name, tab)
-
-
-class _Tree:
-    def __init__(self, root):
-        self.root = root
-
-
-class _Context:
-    def __init__(self, project_key, tov_key, cycle_key, user_key, filtering=None):
-        self.project_key = project_key
-        self.tov_key = tov_key
-        self.cycle_key = cycle_key
-        self.user_key = user_key
-        self.filtering = filtering
-
-
-@pytest.fixture
-def base_context():
-    return _Context("proj1", "tov1", "cycle1", "user1")
+    return AuthInfo(auth_type=AuthType.JWT_TOKEN, token=token, user_key=user_key, conn=MagicMock())
 
 
 @pytest.fixture
@@ -92,70 +56,6 @@ def resolved_mocks(mocker):
             return_value=PromptConfig(file="prompts/test.yaml", name="test"),
         ),
     }
-
-
-class TestCheckTestCaseSetIsLocked:
-    def test_locked_by_another_user_returns_true(self, mocker, base_context):
-        mocker.patch(
-            "testbench_ai_service.utils.agent.get_test_structure_tree",
-            return_value=_Tree(_Root(_Tab(_Locker("other_user")), "tab")),
-        )
-        assert check_test_case_set_is_locked(MagicMock(), base_context, "uid1", "tab") is True
-
-    def test_locked_by_same_user_returns_false(self, mocker, base_context):
-        mocker.patch(
-            "testbench_ai_service.utils.agent.get_test_structure_tree",
-            return_value=_Tree(_Root(_Tab(_Locker("user1")), "tab")),
-        )
-        assert check_test_case_set_is_locked(MagicMock(), base_context, "uid1", "tab") is False
-
-    def test_unlocked_tab_returns_false(self, mocker, base_context):
-        mocker.patch(
-            "testbench_ai_service.utils.agent.get_test_structure_tree",
-            return_value=_Tree(_Root(_Tab(locker=None), "tab")),
-        )
-        assert check_test_case_set_is_locked(MagicMock(), base_context, "uid1", "tab") is False
-
-    def test_nonexistent_tab_attribute_returns_false(self, mocker, base_context):
-        mocker.patch(
-            "testbench_ai_service.utils.agent.get_test_structure_tree",
-            return_value=_Tree(_Root(_Tab(), "tab")),
-        )
-        assert (
-            check_test_case_set_is_locked(MagicMock(), base_context, "uid1", "nonexistent_tab")
-            is False
-        )
-
-    def test_http_error_is_converted_to_http_exception(self, mocker):
-        mock_response = MagicMock()
-        mock_response.status_code = 403
-        mock_response.json.return_value = {"message": "Forbidden"}
-        mocker.patch(
-            "testbench_ai_service.utils.agent.get_test_structure_tree",
-            side_effect=requests.exceptions.HTTPError("Forbidden", response=mock_response),
-        )
-
-        with pytest.raises(HTTPException) as exc_info:
-            check_test_case_set_is_locked(
-                MagicMock(), _Context("proj1", "tov1", "cycle1", "user1"), "uid1", "tab"
-            )
-
-        assert exc_info.value.status_code == status.HTTP_403_FORBIDDEN
-        assert exc_info.value.detail == "Forbidden"
-
-    def test_connection_error_is_converted_to_502(self, mocker):
-        mocker.patch(
-            "testbench_ai_service.utils.agent.get_test_structure_tree",
-            side_effect=requests.exceptions.ConnectionError("Connection refused"),
-        )
-
-        with pytest.raises(HTTPException) as exc_info:
-            check_test_case_set_is_locked(
-                MagicMock(), _Context("proj1", "tov1", "cycle1", "user1"), "uid1", "tab"
-            )
-
-        assert exc_info.value.status_code == status.HTTP_502_BAD_GATEWAY
-        assert "Could not connect to TestBench server" in exc_info.value.detail
 
 
 class TestBuildExecutionContextSessionToken:

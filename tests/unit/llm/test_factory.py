@@ -1,5 +1,6 @@
-import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.llm.factory import LLMFactory
@@ -15,7 +16,7 @@ def _make_llm_config(provider=LLMProvider.OPENAI, model="gpt-4o"):
     return config
 
 
-class TestLLMFactoryGetClient(unittest.TestCase):
+class TestLLMFactoryGetClient:
     """Tests for ``LLMFactory.get_client``."""
 
     @patch.object(LLMFactory, "_create_client")
@@ -27,7 +28,7 @@ class TestLLMFactoryGetClient(unittest.TestCase):
         factory = LLMFactory()
         config = _make_llm_config()
         result = factory.get_client(config)
-        self.assertIs(result, mock_client)
+        assert result is mock_client
 
     @patch.object(LLMFactory, "_create_client")
     @patch.object(LLMFactory, "_get_api_key", return_value="test-key")
@@ -39,7 +40,7 @@ class TestLLMFactoryGetClient(unittest.TestCase):
         config = _make_llm_config()
         first = factory.get_client(config)
         second = factory.get_client(config)
-        self.assertIs(first, second)
+        assert first is second
         mock_create.assert_called_once()
 
     @patch.object(LLMFactory, "_create_client")
@@ -55,7 +56,7 @@ class TestLLMFactoryGetClient(unittest.TestCase):
         factory = LLMFactory()
         config = _make_llm_config()
         result = factory.get_client(config, project_name="ProjectAlpha")
-        self.assertIs(result, project_client)
+        assert result is project_client
 
     @patch.object(LLMFactory, "_create_client")
     @patch.object(LLMFactory, "_get_project_api_key")
@@ -70,10 +71,10 @@ class TestLLMFactoryGetClient(unittest.TestCase):
         factory = LLMFactory()
         config = _make_llm_config()
         result = factory.get_client(config, project_name="Unknown")
-        self.assertIs(result, global_client)
+        assert result is global_client
 
 
-class TestLLMFactoryInitClients(unittest.TestCase):
+class TestLLMFactoryInitClients:
     """Tests for ``LLMFactory.init_clients``."""
 
     @patch.object(LLMFactory, "get_client")
@@ -81,10 +82,10 @@ class TestLLMFactoryInitClients(unittest.TestCase):
         factory = LLMFactory()
         configs = [_make_llm_config(), _make_llm_config(provider=LLMProvider.CUSTOM)]
         factory.init_clients(configs)
-        self.assertEqual(mock_get_client.call_count, len(configs))
+        assert mock_get_client.call_count == len(configs)
 
 
-class TestLLMFactoryCloseClients(unittest.IsolatedAsyncioTestCase):
+class TestLLMFactoryCloseClients:
     """Tests for ``LLMFactory.close_clients``."""
 
     async def test_closes_all_cached_clients(self):
@@ -98,7 +99,7 @@ class TestLLMFactoryCloseClients(unittest.IsolatedAsyncioTestCase):
         client_b.close.assert_awaited_once()
 
 
-class TestLLMFactoryCreateClient(unittest.TestCase):
+class TestLLMFactoryCreateClient:
     @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
     def test_creates_azure_openai_client(self, mock_azure_client_class):
         config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
@@ -111,7 +112,7 @@ class TestLLMFactoryCreateClient(unittest.TestCase):
         factory = LLMFactory()
         client = factory._create_client(LLMProvider.AZURE_OPENAI, config, api_key="azure-key")
 
-        self.assertIs(client, mock_azure_client_class.return_value)
+        assert client is mock_azure_client_class.return_value
         mock_azure_client_class.assert_called_once_with(
             api_key="azure-key",
             azure_endpoint="https://example.openai.azure.com",
@@ -127,11 +128,11 @@ class TestLLMFactoryCreateClient(unittest.TestCase):
 
         factory = LLMFactory()
 
-        with self.assertRaises(ValueError):
+        with pytest.raises(ValueError, match=r"'deployment_mapping' must be a dictionary"):
             factory._create_client(LLMProvider.AZURE_OPENAI, config, api_key="azure-key")
 
 
-class TestLLMFactoryResolveProvider(unittest.TestCase):
+class TestLLMFactoryResolveProvider:
     """Tests for ``LLMFactory._resolve_provider``."""
 
     def _make_config(self, provider: LLMProvider):
@@ -142,49 +143,41 @@ class TestLLMFactoryResolveProvider(unittest.TestCase):
     def test_gpt_model_with_openai_config_returns_openai(self):
         factory = LLMFactory()
         config = self._make_config(LLMProvider.OPENAI)
-        self.assertEqual(factory._resolve_provider(config, "gpt-4o"), LLMProvider.OPENAI)
+        assert factory._resolve_provider(config, "gpt-4o") == LLMProvider.OPENAI
 
     def test_gpt_model_with_azure_config_returns_azure(self):
         factory = LLMFactory()
         config = self._make_config(LLMProvider.AZURE_OPENAI)
-        self.assertEqual(factory._resolve_provider(config, "gpt-4o"), LLMProvider.AZURE_OPENAI)
+        assert factory._resolve_provider(config, "gpt-4o") == LLMProvider.AZURE_OPENAI
 
-    def test_o_series_model_with_openai_config_returns_openai(self):
+    @pytest.mark.parametrize("model", ["o1", "o3", "o4-mini", "o1-preview", "o3-deep-research"])
+    def test_o_series_model_with_openai_config_returns_openai(self, model):
         factory = LLMFactory()
         config = self._make_config(LLMProvider.OPENAI)
-        for model in ("o1", "o3", "o4-mini", "o1-preview", "o3-deep-research"):
-            with self.subTest(model=model):
-                self.assertEqual(factory._resolve_provider(config, model), LLMProvider.OPENAI)
+        assert factory._resolve_provider(config, model) == LLMProvider.OPENAI
 
-    def test_o_series_model_with_azure_config_returns_azure(self):
+    @pytest.mark.parametrize("model", ["o1", "o4-mini"])
+    def test_o_series_model_with_azure_config_returns_azure(self, model):
         factory = LLMFactory()
         config = self._make_config(LLMProvider.AZURE_OPENAI)
-        for model in ("o1", "o4-mini"):
-            with self.subTest(model=model):
-                self.assertEqual(factory._resolve_provider(config, model), LLMProvider.AZURE_OPENAI)
+        assert factory._resolve_provider(config, model) == LLMProvider.AZURE_OPENAI
 
     def test_claude_model_returns_anthropic(self):
         factory = LLMFactory()
         config = self._make_config(LLMProvider.OPENAI)
-        self.assertEqual(
-            factory._resolve_provider(config, "claude-3-sonnet"), LLMProvider.ANTHROPIC
-        )
+        assert factory._resolve_provider(config, "claude-3-sonnet") == LLMProvider.ANTHROPIC
 
     def test_none_model_returns_config_provider(self):
         factory = LLMFactory()
         config = self._make_config(LLMProvider.ANTHROPIC)
-        self.assertEqual(factory._resolve_provider(config, None), LLMProvider.ANTHROPIC)
+        assert factory._resolve_provider(config, None) == LLMProvider.ANTHROPIC
 
     def test_openai_model_with_non_openai_config_falls_back_to_openai(self):
         factory = LLMFactory()
         config = self._make_config(LLMProvider.ANTHROPIC)
-        self.assertEqual(factory._resolve_provider(config, "gpt-4o"), LLMProvider.OPENAI)
+        assert factory._resolve_provider(config, "gpt-4o") == LLMProvider.OPENAI
 
-    def test_o_series_false_positive_not_matched(self):
+    @pytest.mark.parametrize("model", ["ollama-llama3", "openhermes"])
+    def test_non_openai_model_names_not_matched_as_openai(self, model):
         factory = LLMFactory()
-        self.assertFalse(factory._is_openai_model("ollama-llama3"))
-        self.assertFalse(factory._is_openai_model("openhermes"))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert not factory._is_openai_model(model)

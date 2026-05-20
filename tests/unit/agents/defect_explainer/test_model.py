@@ -1,5 +1,3 @@
-import unittest
-
 from testbench_ai_service.agents.defect_explainer.model import (
     Comments,
     Result,
@@ -9,18 +7,16 @@ from testbench_ai_service.agents.defect_explainer.model import (
 from testbench_ai_service.models.testbench import ActivityStatus, ExecStatus, VerdictStatus
 
 
-class TestResult(unittest.TestCase):
-    """Tests for ``Result``."""
-
+class TestResult:
     def test_stores_required_fields(self):
         result = Result(
             status=ActivityStatus.Assigned,
             execStatus=ExecStatus.Blocked,
             verdict=VerdictStatus.Fail,
         )
-        self.assertEqual(result.status, ActivityStatus.Assigned)
-        self.assertEqual(result.execStatus, ExecStatus.Blocked)
-        self.assertEqual(result.verdict, VerdictStatus.Fail)
+        assert result.status == ActivityStatus.Assigned
+        assert result.execStatus == ExecStatus.Blocked
+        assert result.verdict == VerdictStatus.Fail
 
     def test_timestamp_has_default(self):
         result = Result(
@@ -28,13 +24,11 @@ class TestResult(unittest.TestCase):
             execStatus=ExecStatus.NotBlocked,
             verdict=VerdictStatus.Pass,
         )
-        self.assertIsNotNone(result.timestamp)
-        self.assertIsInstance(result.timestamp, str)
+        assert result.timestamp is not None
+        assert isinstance(result.timestamp, str)
 
 
-class TestTestCase(unittest.TestCase):
-    """Tests for ``TestCase``."""
-
+class TestTestCase:
     def test_stores_all_fields(self):
         result = Result(
             status=ActivityStatus.Performed,
@@ -47,25 +41,21 @@ class TestTestCase(unittest.TestCase):
             uniqueID="iTB-TC-001",
             result=result,
         )
-        self.assertEqual(tc.testCaseExecutionKey, "ek1")
-        self.assertEqual(tc.uniqueID, "iTB-TC-001")
+        assert tc.testCaseExecutionKey == "ek1"
+        assert tc.uniqueID == "iTB-TC-001"
 
 
-class TestComments(unittest.TestCase):
-    """Tests for ``Comments``."""
-
+class TestComments:
     def test_html_can_be_none(self):
         comments = Comments(html=None)
-        self.assertIsNone(comments.html)
+        assert comments.html is None
 
     def test_html_stores_string(self):
         comments = Comments(html="<p>Note</p>")
-        self.assertEqual(comments.html, "<p>Note</p>")
+        assert comments.html == "<p>Note</p>"
 
 
-class TestTestCaseSetProtocol(unittest.TestCase):
-    """Tests for ``TestCaseSetProtocol``."""
-
+class TestTestCaseSetProtocol:
     def test_valid_protocol_with_no_test_cases(self):
         protocol = TestCaseSetProtocol(
             testCaseSetKey="tcs1",
@@ -74,9 +64,5 @@ class TestTestCaseSetProtocol(unittest.TestCase):
             comments=Comments(html=None),
             testCases=[],
         )
-        self.assertEqual(protocol.testCaseSetKey, "tcs1")
-        self.assertEqual(protocol.testCases, [])
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert protocol.testCaseSetKey == "tcs1"
+        assert protocol.testCases == []

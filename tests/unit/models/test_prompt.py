@@ -1,5 +1,4 @@
-import unittest
-
+import pytest
 from pydantic import ValidationError
 
 from testbench_ai_service.models.prompt import (
@@ -11,34 +10,34 @@ from testbench_ai_service.models.prompt import (
 )
 
 
-class TestMessageTemplate(unittest.TestCase):
+class TestMessageTemplate:
     """Tests for the ``MessageTemplate`` model."""
 
     def test_default_role_is_user(self):
         template = MessageTemplate(text="Hello")
-        self.assertEqual(template.role, "user")
+        assert template.role == "user"
 
     def test_system_role_is_accepted(self):
         template = MessageTemplate(role="system", text="You are a helpful assistant.")
-        self.assertEqual(template.role, "system")
+        assert template.role == "system"
 
     def test_invalid_role_raises_validation_error(self):
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             MessageTemplate(role="unknown", text="bad")
 
 
-class TestPromptVariant(unittest.TestCase):
+class TestPromptVariant:
     """Tests for the ``PromptVariant`` model."""
 
     def test_valid_variant(self):
         variant = PromptVariant(
             name="default", model="gpt-4o", messages=[MessageTemplate(text="Hello")]
         )
-        self.assertEqual(variant.name, "default")
-        self.assertEqual(len(variant.messages), 1)
+        assert variant.name == "default"
+        assert len(variant.messages) == 1
 
 
-class TestPromptDefinition(unittest.TestCase):
+class TestPromptDefinition:
     """Tests for the ``PromptDefinition`` model."""
 
     def _make_variant(self, name="v1"):
@@ -51,32 +50,32 @@ class TestPromptDefinition(unittest.TestCase):
             default_variant="v1",
             variants=[self._make_variant()],
         )
-        self.assertEqual(defn.name, "my-prompt")
+        assert defn.name == "my-prompt"
 
     def test_empty_variants_raises_validation_error(self):
-        with self.assertRaises(ValidationError):
+        with pytest.raises(ValidationError):
             PromptDefinition(name="p", default_model="gpt-4o", default_variant="v1", variants=[])
 
     def test_description_defaults_to_none(self):
         defn = PromptDefinition(
             name="p", default_model="gpt-4o", default_variant="v1", variants=[self._make_variant()]
         )
-        self.assertIsNone(defn.description)
+        assert defn.description is None
 
 
-class TestMessage(unittest.TestCase):
+class TestMessage:
     """Tests for the ``Message`` model."""
 
     def test_default_role_is_user(self):
         msg = Message(content="Hello")
-        self.assertEqual(msg.role, "user")
+        assert msg.role == "user"
 
     def test_assistant_role(self):
         msg = Message(role="assistant", content="Response")
-        self.assertEqual(msg.role, "assistant")
+        assert msg.role == "assistant"
 
 
-class TestPrompt(unittest.TestCase):
+class TestPrompt:
     """Tests for the ``Prompt`` model."""
 
     def test_stores_model_name_and_messages(self):
@@ -84,9 +83,5 @@ class TestPrompt(unittest.TestCase):
             model_name="gpt-4o",
             messages=[Message(role="user", content="Hello")],
         )
-        self.assertEqual(prompt.model_name, "gpt-4o")
-        self.assertEqual(len(prompt.messages), 1)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert prompt.model_name == "gpt-4o"
+        assert len(prompt.messages) == 1

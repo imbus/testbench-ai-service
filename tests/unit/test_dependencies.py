@@ -1,4 +1,3 @@
-import unittest
 from unittest.mock import MagicMock
 
 from testbench_ai_service.auth import AuthInfo, AuthType
@@ -14,7 +13,7 @@ def _make_auth_info(token: str = "test-token", conn=None) -> AuthInfo:
     )
 
 
-class TestGetAppConfig(unittest.TestCase):
+class TestGetAppConfig:
     def test_returns_config_from_app_state(self):
         mock_config = MagicMock()
         request = MagicMock()
@@ -22,10 +21,10 @@ class TestGetAppConfig(unittest.TestCase):
 
         result = get_app_config(request)
 
-        self.assertIs(result, mock_config)
+        assert result is mock_config
 
 
-class TestGetLlmFactory(unittest.TestCase):
+class TestGetLlmFactory:
     def test_returns_llm_factory_from_app_state(self):
         mock_factory = MagicMock()
         request = MagicMock()
@@ -33,18 +32,14 @@ class TestGetLlmFactory(unittest.TestCase):
 
         result = get_llm_factory(request)
 
-        self.assertIs(result, mock_factory)
+        assert result is mock_factory
 
 
-class TestGetTbConnection(unittest.TestCase):
+class TestGetTbConnection:
     def test_returns_connection_from_auth_info(self):
         mock_conn = MagicMock()
         auth_info = _make_auth_info(conn=mock_conn)
 
         result = get_tb_connection(auth_info=auth_info)
 
-        self.assertIs(result, mock_conn)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert result is mock_conn
