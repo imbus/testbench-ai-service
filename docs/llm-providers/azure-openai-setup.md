@@ -3,13 +3,13 @@ sidebar_position: 3
 title: Azure OpenAI Setup
 ---
 
-# Setting Up Azure OpenAI
+# Azure OpenAI Setup
 
 This guide walks you through connecting the TestBench AI Service to an Azure OpenAI resource.
 
 ---
 
-## Prerequisites
+## Requirements
 
 - An active [Azure subscription](https://azure.microsoft.com/free/)
 - An **Azure OpenAI resource** with at least one model deployment
@@ -17,24 +17,20 @@ This guide walks you through connecting the TestBench AI Service to an Azure Ope
 
 ---
 
-## Step 1 — Create an Azure OpenAI resource
+## 1. Create an Azure OpenAI resource
 
 1. Open the [Azure portal](https://portal.azure.com) and navigate to **Azure OpenAI**.
 2. Click **Create** and fill in the required details (subscription, resource group, region, name).
 3. Once the resource is created, open it and go to **Keys and Endpoint**.
 4. Copy the **Endpoint URL** (e.g. `https://your-resource.openai.azure.com`) and one of the **API keys**.
 
----
-
-## Step 2 — Create a model deployment
+## 2. Create a model deployment
 
 1. In your Azure OpenAI resource, navigate to **Azure OpenAI Studio** → **Deployments** → **Deploy model**.
 2. Select a base model (e.g. `gpt-4o` or `gpt-4.1-mini`) and give it a deployment name (e.g. `my-gpt4o`).
 3. Note down the **deployment name** — this is what you will reference in prompt variants and in `config.toml`.
 
----
-
-## Step 3 — Set the API key
+## 3. Set the API key
 
 The service reads the Azure OpenAI API key from the environment variable `AZURE_OPENAI_API_KEY`.
 
@@ -49,9 +45,7 @@ AZURE_OPENAI_API_KEY=your_azure_openai_api_key
 Never commit API keys to version control. Add `.env` to your `.gitignore`.
 :::
 
----
-
-## Step 4 — Configure `config.toml`
+## 4. Configure `config.toml`
 
 Update the `[testbench-ai-service.llm_config]` section in your `config.toml`:
 
@@ -68,9 +62,7 @@ Both `azure_endpoint` and `api_version` are **required** when `provider = "azure
 
 Microsoft releases new API versions regularly. Check the [Azure OpenAI REST API reference](https://learn.microsoft.com/azure/ai-services/openai/reference) for the latest stable version. A commonly used recent version is `2025-04-01-preview`.
 
----
-
-## Step 5 — Map deployment names to canonical models
+## 5. Map deployment names to canonical models
 
 In prompt YAML files you reference your Azure **deployment name**. The service needs to know the underlying canonical model name in order to route requests correctly (for example, reasoning models like `o3` require different API parameters than chat models like `gpt-4o`).
 
@@ -104,14 +96,25 @@ The key is the deployment name you use in prompt variants; the value is the cano
 
 | Canonical name  | Type      |
 | --------------- | --------- |
+| `gpt-5`       | Reasoning |
+| `gpt-5-mini`  | Reasoning |
+| `gpt-5-nano`  | Reasoning |
+| `gpt-5-pro`   | Reasoning |
+| `gpt-5.1`     | Reasoning |
+| `gpt-5.2`     | Reasoning |
+| `gpt-5.2-pro` | Reasoning |
+| `gpt-5.4`     | Reasoning |
+| `gpt-5.4-mini`| Reasoning |
+| `gpt-5.4-pro` | Reasoning |
 | `o1`          | Reasoning |
+| `o1-mini`     | Reasoning |
+| `o1-pro`      | Reasoning |
 | `o3`          | Reasoning |
 | `o3-mini`     | Reasoning |
+| `o3-pro`      | Reasoning |
 | `o4-mini`     | Reasoning |
 
----
-
-## Step 6 — Reference the deployment in a prompt variant
+## 6. Reference the deployment in a prompt variant
 
 In your prompt YAML file, set `model` to the Azure **deployment name**:
 
@@ -169,7 +172,7 @@ variants:
 
 ---
 
-## Project-specific Azure OpenAI configuration
+## Project-specific configuration
 
 You can override the Azure OpenAI settings per TestBench project. This is useful when different projects use different Azure resources or deployments.
 

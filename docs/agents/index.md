@@ -8,7 +8,7 @@ title: Agents
 An **agent** is a self-contained AI-driven workflow that the service exposes as an HTTP endpoint. Each agent follows the same lifecycle:
 
 1. **Trigger**: TestBench sends a POST request with project, test-object-version, and (optionally) cycle information.
-2. **Precheck**: The service validates prerequisites (e.g., that test structure elements are not locked by another user) and collects the items to process.
+2. **Precheck**: The service validates requirements (e.g., that test structure elements are not locked by another user) and collects the items to process.
 3. **Background execution**: The API responds with `202 Accepted` immediately. In the background, prompt templates are rendered with test data, sent to the configured LLM, and the results are written back to TestBench.
 
 ---
@@ -100,8 +100,8 @@ On success, `202 Accepted`:
 
 | Status | Meaning |
 |--------|---------|
-| `401` | Missing or invalid JWT token. |
-| `403` | Insufficient permissions (requires Administrator, TestManager, or TestDesigner role). |
+| `401` | Missing or invalid authorization token. |
+| `403` | Insufficient permissions or project role. See each agent's page for the exact requirements. |
 | `404` | Project not found, or agent is disabled for the project. |
 | `409` | Precheck failed. No items passed validation. |
 
@@ -109,11 +109,17 @@ On success, `202 Accepted`:
 
 ## Authorization
 
-All agent endpoints require a valid **JWT token** passed as the `Authorization` header. The token is validated by calling the TestBench REST API. The user must have at least one of the following roles:
+All agent endpoints require an **`Authorization` header** containing either a JWT token or a session token. The token is validated by calling the TestBench REST API.
 
-- Administrator
-- TestManager
-- TestDesigner
+Allowed project roles and required API token permissions differ per agent. See each agent's page for details:
+
+- [Test Case Set Reviewer](test-case-set-reviewer.md#authorization)
+- [Test Case Set Describer](test-case-set-describer.md#authorization)
+- [Defect Explainer](defect-explainer.md#authorization)
+
+:::note
+The API token permission check applies only to JWT tokens. Session tokens bypass it but still require the correct project role.
+:::
 
 ---
 

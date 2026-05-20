@@ -1,30 +1,28 @@
 ---
 sidebar_position: 2
-title: Anthropic (Claude) Setup
+title: Anthropic Setup
 ---
 
-# Setting Up Anthropic (Claude)
+# Anthropic Setup
 
 This guide walks you through connecting the TestBench AI Service to the Anthropic API (Claude models).
 
 ---
 
-## Prerequisites
+## Requirements
 
 - An [Anthropic account](https://console.anthropic.com) with API access
 - The TestBench AI Service installed and a `config.toml` present
 
 ---
 
-## Step 1 — Create an API key
+## 1. Create an API key
 
 1. Log in to the [Anthropic Console](https://console.anthropic.com).
 2. Navigate to **API Keys** in the left sidebar.
 3. Click **Create Key**, give it a name, and copy the key immediately — it is only shown once.
 
----
-
-## Step 2 — Set the API key
+## 2. Set the API key
 
 The service reads the Anthropic API key from the environment variable `ANTHROPIC_API_KEY`.
 
@@ -39,9 +37,7 @@ ANTHROPIC_API_KEY=sk-ant-...your_anthropic_api_key
 Never commit API keys to version control. Add `.env` to your `.gitignore`.
 :::
 
----
-
-## Step 3 — Configure `config.toml`
+## 3. Configure `config.toml`
 
 Set the provider in the `[testbench-ai-service.llm_config]` section:
 
@@ -52,9 +48,7 @@ provider = "anthropic"
 
 That is the only required setting for Anthropic. No endpoint URL or API version is needed.
 
----
-
-## Step 4 — Reference the model in a prompt variant
+## 4. Reference the model in a prompt variant
 
 In your prompt YAML file, set `model` to any supported Claude model name:
 
@@ -82,7 +76,7 @@ Standard chat models use `temperature = 0` for deterministic outputs.
 
 ### Extended thinking models (budget)
 
-These models support extended thinking with a configurable token budget. The `reasoning_effort` setting (`low`, `medium`, `high`) maps to a thinking token budget (2 048 / 4 096 / 8 192 tokens).
+These models support extended thinking with a configurable token budget. The `reasoning_effort` setting (`low`, `medium`, `high`) maps to a thinking token budget (2048 / 4096 / 8192 tokens).
 
 | Model | Notes |
 |---|---|
@@ -94,7 +88,7 @@ These models support extended thinking with a configurable token budget. The `re
 
 ### Adaptive thinking models
 
-These models use a streaming-based thinking approach with adaptive budgets. `reasoning_effort` defaults to `high`.
+These models use a streaming-based thinking approach with adaptive budgets. `reasoning_effort` defaults to `high`. Valid values are `low`, `medium`, `high`, `xhigh`, and `max`.
 
 | Model | Notes |
 |---|---|
@@ -102,7 +96,10 @@ These models use a streaming-based thinking approach with adaptive budgets. `rea
 | `claude-opus-4-6` | Claude Opus 4.6 |
 | `claude-opus-4-7` | Claude Opus 4.7 |
 
-Models not in any list are sent as-is with a fallback call and a warning in the logs.
+
+:::note
+Models not in either list are sent as-is with a fallback call and a warning in the logs.
+:::
 
 ---
 
@@ -171,5 +168,4 @@ If a project-specific key is present the service creates a dedicated client for 
 | `API key for provider 'anthropic' not found` | `ANTHROPIC_API_KEY` is not set | Set the variable in your `.env` file or system environment |
 | `AuthenticationError` from Anthropic | Invalid or expired API key | Regenerate the key in the Anthropic Console and update `.env` |
 | `Model not found` | Model name is incorrect or not available in your tier | Check the [Anthropic model list](https://docs.anthropic.com/en/docs/about-claude/models/all-models) and verify your account access |
-| Thinking budget exceeded | `max_tokens` too low relative to the thinking budget | Increase `max_tokens` in the `llm_config` (must exceed the thinking token budget) |
 | Empty response | Model returned no output | Check your prompt template for issues |

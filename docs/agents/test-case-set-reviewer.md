@@ -9,6 +9,34 @@ AI-powered quality reviews of test case sets. The service analyzes test case str
 
 **Endpoint:** `POST /test-case-set-reviews`
 
+## Authorization
+
+The triggering user must hold at least one of the following **project roles**:
+
+| Role | Access granted |
+|------|----------------|
+| `TestManager` | All unlocked test case sets. |
+| `TestDesigner` | All unlocked test case sets. |
+| `TestProgrammer` | Only test case sets whose spec status is `InReview` **and** where the user is the assigned reviewer. |
+| `Tester` | Only test case sets whose spec status is `InReview` **and** where the user is the assigned reviewer. |
+
+When authenticating with a **JWT token**, the token must also grant all of the following API token permissions:
+
+| Permission | Description |
+|------------|-------------|
+| `ReadOwnUserDetails` | Read the authenticated user's details. |
+| `ReadProjectDetails` | Read project metadata. |
+| `ReadTovReport` | Read test-object-version reports. |
+| `ReadCycleReport` | Read test cycle reports. |
+| `ReadReportingJobDetails` | Read reporting job details. |
+| `DownloadReportFile` | Download report files. |
+| `ReadTestThemeTree` | Read the test theme tree. |
+| `ReadTestCaseSetDetails` | Read test case set details. |
+| `ModifySpecifications` | Write the review result back to the specification. |
+| `ModifySpecManagementInfo` | Update specification management metadata. |
+
+---
+
 ## How it works
 
 1. The service retrieves all test case sets from the specified test-object-version (and optional cycle / subtree).

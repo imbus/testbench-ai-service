@@ -2,6 +2,9 @@
 sidebar_position: 9
 title: Windows Service Installation
 ---
+
+# Windows Service Installation
+
 The TestBench AI Service can be deployed as a Windows service for automatic startup and process management.
 
 For the full installation guide covering NSSM, FireDaemon, YAJSW, and Windows Task Scheduler, see the [**Windows Service Installation Guide**](../docs/windows-service-installation).
@@ -14,7 +17,7 @@ Use these values when following the central guide:
 | `<serviceDisplayName>` | `TestBench AI Service`                                   |
 | `<serviceExecutable>`  | `testbench-ai-service.exe`                               |
 | `<servicePort>`        | `8010`                                                   |
-| `<serviceInstallDir>`  | Your installation directory, e.g.`C:\TestBenchAIService` |
+| `<serviceInstallDir>`  | Your installation directory, e.g. `C:\TestBenchAIService` |
 
 :::note[Executable path]
 

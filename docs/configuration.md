@@ -25,7 +25,7 @@ The following order shows which source takes precedence when the same setting is
 1. **Request-level overrides** (per-request `prompt_config` and `llm_config` in the API body)
 2. **Project-specific overrides** (`[testbench-ai-service.projects.<name>]`)
 3. **Command-line flags** (`start --host ... --port ...`)
-4. **Environment variables** (for API keys: `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`)
+4. **Environment variables** (for API keys: `OPENAI_API_KEY`, `AZURE_OPENAI_API_KEY`, `ANTHROPIC_API_KEY`)
 5. **`config.toml`**
 6. **Built-in defaults**
 
@@ -206,19 +206,19 @@ trusted_proxies = ["10.0.0.1"]
 
 ## LLM provider
 
-:::tip Provider setup guides
-For step-by-step instructions on configuring each provider see the [LLM Providers](llm-provider/index.md) section:
-- [OpenAI Setup](llm-provider/openai-setup.md)
-- [Anthropic (Claude) Setup](llm-provider/anthropic-setup.md)
-- [Azure OpenAI Setup](llm-provider/azure-openai-setup.md)
-- [Custom LLM Client](llm-provider/custom-client.md)
+:::tip[Provider setup guides]
+For step-by-step instructions on configuring each provider see the [LLM Providers](llm-providers/index.md) section:
+- [OpenAI Setup](llm-providers/openai-setup.md)
+- [Anthropic Setup](llm-providers/anthropic-setup.md)
+- [Azure OpenAI Setup](llm-providers/azure-openai-setup.md)
+- [Custom LLM Client](llm-providers/custom-client.md)
 :::
 
 **`[testbench-ai-service.llm_config]`**
 
 | Option             | Type    | Description                                                                               | Default          |
 | ------------------ | ------- | ----------------------------------------------------------------------------------------- | ---------------- |
-| `provider`       | String  | LLM provider:`"openai"`, `"azure_openai"`, `"anthropic"`, or `"custom"`.          | `"openai"`     |
+| `provider`       | String  | LLM provider: `"openai"`, `"azure_openai"`, `"anthropic"`, or `"custom"`.          | `"openai"`     |
 | `model`          | String  | Override the default model (if not set, the model from the prompt variant is used).       | —               |
 | `azure_endpoint` | String  | Azure OpenAI endpoint URL (required when `provider = "azure_openai"`).                  | —               |
 | `api_version`    | String  | Azure OpenAI API version (required when `provider = "azure_openai"`).                   | —               |
@@ -247,19 +247,20 @@ provider = "anthropic"
 [testbench-ai-service.llm_config]
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"
-api_version = "2024-10-21"
+api_version = "2025-04-01-preview"
 model = "gpt-4o"  # use your Azure deployment name here
 ```
 
-### Automatic provider detection
+### Automatic model routing
 
 The service automatically routes each request to the correct client based on the model name specified in the prompt variant, regardless of the globally configured `provider`. This lets you mix models from different providers across prompt variants without changing the global config:
 
-| Model name prefix | Routed to                |
-| ----------------- | ------------------------ |
-| `gpt-*`         | OpenAI                   |
-| `claude-*`      | Anthropic                |
-| anything else     | uses `config.provider` |
+| Model name prefix | Routed to |
+| ----------------- | --------- |
+| `gpt-*` (including `gpt-5.*`) | OpenAI (or Azure OpenAI when configured) |
+| o-series (`o1`, `o3`, `o4-mini`, …) | OpenAI (or Azure OpenAI when configured) |
+| `claude-*` | Anthropic |
+| anything else | uses `config.provider` |
 
 For example, if `provider = "openai"` is configured globally but a prompt variant specifies `model: "claude-sonnet-4-6"`, the service automatically uses the Anthropic client for that variant. The corresponding API key (`ANTHROPIC_API_KEY`) must be set in the environment.
 

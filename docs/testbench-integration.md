@@ -60,7 +60,7 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 │ │ - Call TestBench REST API to verify token               ├─┼─────────────┘
 │ └─────────────────────────────────────────────────────────┘ │
 │ ┌─────────────────────────────────────────────────────────┐ │
-│ │ 3. Check user roles (Admin/TestManager/TestDesigner)    │ │
+│ │ 3. Check user's project role for the triggered agent    │ │
 │ └─────────────────────────────────────────────────────────┘ │
 └────────┬────────────────────────────────────────────────────┘
          │
@@ -75,7 +75,7 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 
 1. The user triggers an AI agent in the TestBench UI. TestBench sends a POST request to the AI Service with the user's JWT token as the `Authorization` header.
 2. The AI Service validates the token by calling the TestBench REST API.
-3. If valid, the AI Service checks that the authenticated user has the required project role.
+3. If valid, the AI Service checks that the authenticated user has the required project role for the triggered agent.
 4. The request is accepted and processed in the background.
 
 No separate username/password configuration is needed. The AI Service uses the JWT token issued by TestBench.
@@ -100,7 +100,7 @@ No separate username/password configuration is needed. The AI Service uses the J
 | `Connection refused` | Service is not running or port mismatch.    | Start the service; verify `host` and `port` in config.                                                               |
 | `401 Unauthorized`   | Missing or invalid JWT token.               | Re-login to TestBench and retry.                                                                                         |
 | `502 Bad Gateway`    | AI Service cannot reach TestBench REST API. | Verify `tb_server_url` in `config.toml` is correct and reachable.                                                    |
-| `404 Not Found`      | agent disabled for the project.             | Check `enabled = true` in the agent config; check project-specific overrides.                                          |
+| `404 Not Found`      | Agent disabled for the project.             | Check `enabled = true` in the agent config; check project-specific overrides.                                          |
 | `409 Conflict`       | Precheck failed (e.g., all items locked).   | Unlock the test structure elements in TestBench and retry.                                                               |
 | LLM errors in logs     | Missing or invalid API key.                 | Verify your provider key is set in `.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
 

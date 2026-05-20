@@ -3,28 +3,26 @@ sidebar_position: 1
 title: OpenAI Setup
 ---
 
-# Setting Up OpenAI
+# OpenAI Setup
 
 This guide walks you through connecting the TestBench AI Service to the OpenAI API.
 
 ---
 
-## Prerequisites
+## Requirements
 
 - An [OpenAI account](https://platform.openai.com) with API access
 - The TestBench AI Service installed and a `config.toml` present
 
 ---
 
-## Step 1 — Create an API key
+## 1. Create an API key
 
 1. Log in to the [OpenAI Platform](https://platform.openai.com).
 2. Navigate to **API keys** in the left sidebar.
 3. Click **Create new secret key**, give it a name, and copy the key immediately — it is only shown once.
 
----
-
-## Step 2 — Set the API key
+## 2. Set the API key
 
 The service reads the OpenAI API key from the environment variable `OPENAI_API_KEY`.
 
@@ -39,9 +37,7 @@ OPENAI_API_KEY=sk-...your_openai_api_key
 Never commit API keys to version control. Add `.env` to your `.gitignore`.
 :::
 
----
-
-## Step 3 — Configure `config.toml`
+## 3. Configure `config.toml`
 
 Set the provider in the `[testbench-ai-service.llm_config]` section:
 
@@ -52,9 +48,7 @@ provider = "openai"
 
 That is the only required setting for OpenAI. No endpoint URL or API version is needed.
 
----
-
-## Step 4 — Reference the model in a prompt variant
+## 4. Reference the model in a prompt variant
 
 In your prompt YAML file, set `model` to any supported OpenAI model name:
 
@@ -81,17 +75,41 @@ variants:
 
 ### Supported reasoning models
 
-Reasoning models use `reasoning_effort` (`low`, `medium`, `high`) instead of temperature.
+Reasoning models use `reasoning_effort` (`low`, `medium`, `high`) instead of temperature. The default is `medium`.
+
+**GPT-5 family**
+
+| Model | Notes |
+|---|---|
+| `gpt-5` | GPT-5 |
+| `gpt-5-mini` | Compact GPT-5 variant |
+| `gpt-5-nano` | Lightweight GPT-5 variant |
+| `gpt-5-pro` | High-capability GPT-5 variant |
+| `gpt-5.1` | GPT-5.1 |
+| `gpt-5.2` | GPT-5.2 |
+| `gpt-5.2-pro` | High-capability GPT-5.2 variant |
+| `gpt-5.4` | GPT-5.4 (default model in built-in prompts) |
+| `gpt-5.4-mini` | Compact GPT-5.4 variant |
+| `gpt-5.4-pro` | High-capability GPT-5.4 variant |
+
+**o-series**
 
 | Model | Notes |
 |---|---|
 | `o1` | First-generation reasoning model |
 | `o1-mini` | Lighter o1 variant |
+| `o1-pro` | High-capability o1 variant |
 | `o3` | Powerful reasoning |
 | `o3-mini` | Lightweight o3 |
-| `o4-mini` | Latest compact reasoning model |
+| `o3-pro` | High-capability o3 variant |
+| `o3-deep-research` | o3 variant for deep research tasks |
+| `o4-mini` | Compact o4 reasoning model |
+| `o4-mini-deep-research` | o4-mini variant for deep research tasks |
 
+
+:::note
 Models not in either list are sent as-is with a fallback call and a warning in the logs.
+:::
 
 ---
 

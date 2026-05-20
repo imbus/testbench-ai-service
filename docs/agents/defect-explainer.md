@@ -9,10 +9,40 @@ AI-generated explanations for defects found during test execution. The service a
 
 **Endpoint:** `POST /defect-explanations`
 
+## Authorization
+
+The triggering user must hold at least one of the following **project roles**:
+
+| Role | Description |
+|------|-------------|
+| `TestManager` | Full project management access. |
+| `Tester` | Execution access. |
+
+When authenticating with a **JWT token**, the token must also grant all of the following API token permissions:
+
+| Permission | Description |
+|------------|-------------|
+| `ReadOwnUserDetails` | Read the authenticated user's details. |
+| `ReadProjectDetails` | Read project metadata. |
+| `ReadTovReport` | Read test-object-version reports. |
+| `ReadCycleReport` | Read test cycle reports. |
+| `ReadReportingJobDetails` | Read reporting job details. |
+| `DownloadReportFile` | Download report files. |
+| `ReadTestThemeTree` | Read the test theme tree. |
+| `ReadTestCaseSetDetails` | Read test case set details. |
+| `ImportExecutionResults` | Import execution results (required to write back explanations). |
+| `ReadExecutionImportingJobDetails` | Read execution import job status. |
+
+---
+
 ## How it works
 
 1. The service retrieves all test case sets from the specified test-object-version and **cycle** (a `cycle_key` is required).
-2. For each test case set, it checks that the **execution tab** is not locked by another user.
+2. For each test case set, it applies the following precheck filters. A test case set is included only if **all** conditions are met:
+   - The **execution tab** is not locked by another user.
+   - Execution data exists.
+   - The execution **verdict** is `ToVerify`.
+   - The execution **activity status** is `Performed`.
 3. Items that pass the precheck are processed concurrently in the background:
    - Failed test cases are extracted from the execution comments.
    - For each failed test case, the test data and error message are rendered into the prompt template.

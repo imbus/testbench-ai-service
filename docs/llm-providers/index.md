@@ -35,7 +35,8 @@ The service automatically routes each request to the correct provider based on t
 
 | Model name prefix | Routed to |
 |---|---|
-| `gpt-*`, `o1`, `o3`, `o4-*` | OpenAI (or Azure OpenAI when configured) |
+| `gpt-*` (including `gpt-5.*`) | OpenAI (or Azure OpenAI when configured) |
+| `o`-series (`o1`, `o3`, `o4-mini`, …) | OpenAI (or Azure OpenAI when configured) |
 | `claude-*` | Anthropic |
 | anything else | uses `config.provider` |
 

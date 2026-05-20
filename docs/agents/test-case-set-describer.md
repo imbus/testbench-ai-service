@@ -9,6 +9,32 @@ Automatic generation of descriptive summaries for test case sets. The service an
 
 **Endpoint:** `POST /test-case-set-descriptions`
 
+## Authorization
+
+The triggering user must hold at least one of the following **project roles**:
+
+| Role | Description |
+|------|-------------|
+| `TestManager` | Full project management access. |
+| `TestDesigner` | Specification authoring access. |
+
+When authenticating with a **JWT token**, the token must also grant all of the following API token permissions:
+
+| Permission | Description |
+|------------|-------------|
+| `ReadOwnUserDetails` | Read the authenticated user's details. |
+| `ReadProjectDetails` | Read project metadata. |
+| `ReadTovReport` | Read test-object-version reports. |
+| `ReadCycleReport` | Read test cycle reports. |
+| `ReadReportingJobDetails` | Read reporting job details. |
+| `DownloadReportFile` | Download report files. |
+| `ReadTestThemeTree` | Read the test theme tree. |
+| `ReadTestCaseSetDetails` | Read test case set details. |
+| `ModifySpecifications` | Write the generated description back to the specification. |
+| `ModifySpecManagementInfo` | Update specification management metadata. |
+
+---
+
 ## How it works
 
 1. The service retrieves all test case sets from the specified test-object-version (and optional cycle / subtree).

@@ -116,7 +116,7 @@ Each prompt YAML file is a list of prompt definitions:
 ```
 
 :::note
-Each block must have **either** `text` (inline template) **or** `file` (path to an external template file such as `.jinja`, `.j2`, or `.md`) — not both. External `file` paths are resolved relative to the directory of the prompt YAML file.
+Each message must have **either** `text` (inline template) **or** `file` (path to an external template file such as `.jinja`, `.j2`, or `.md`) — not both. External `file` paths are resolved relative to the directory of the prompt YAML file.
 :::
 
 ### Schema reference
@@ -138,7 +138,7 @@ Each block must have **either** `text` (inline template) **or** `file` (path to 
 | `name`        | String | Unique variant identifier.                                                                           | Yes      |
 | `description` | String | Human-readable description.                                                                          | No       |
 | `model`       | String | LLM model to use (e.g.,`"gpt-4.1"`, `"o3"`). Falls back to `default_model` if not set.         | No       |
-| `vars`        | Object | Declared user-provided variables for this variant (see[Variable declarations](#variable-declarations)). | No       |
+| `vars`        | Object | Declared user-provided variables for this variant (see [Variable declarations](#variable-declarations)). | No       |
 | `messages`    | List   | Ordered list of message blocks.                                                                      | Yes      |
 
 #### Message fields
@@ -147,7 +147,7 @@ Exactly one of `text` or `file` must be provided per message.
 
 | Field    | Type   | Description                                                                                                                                  | Default    |
 | -------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| `role` | String | Message role:`"system"`, `"user"`, or `"assistant"`.                                                                                   | `"user"` |
+| `role` | String | Message role: `"system"`, `"user"`, or `"assistant"`.                                                                                   | `"user"` |
 | `text` | String | Inline Jinja2 template string.                                                                                                               | —         |
 | `file` | String | Path to an external template file (`.jinja`, `.j2`, or `.md`). Relative paths are resolved from the directory of the prompt YAML file. | —         |
 

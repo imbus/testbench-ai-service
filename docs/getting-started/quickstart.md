@@ -5,16 +5,19 @@ title: Quickstart
 
 # Quickstart
 
-## 1. Set Your LLM API Key
+## 1. Set your LLM API key
 
-OpenAI is the default language model provider. If you use Azure OpenAI, set that key instead. Create a `.env` file at the root of your installation directory:
+OpenAI is the default provider. Create a `.env` file at the root of your installation directory and set the key for the provider you want to use:
 
 ```bash
-# OpenAI
+# OpenAI (default)
 OPENAI_API_KEY=your_openai_api_key
 
 # Azure OpenAI
-AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+# AZURE_OPENAI_API_KEY=your_azure_openai_api_key
+
+# Anthropic
+# ANTHROPIC_API_KEY=your_anthropic_api_key
 ```
 
 The server automatically loads environment variables from this file.

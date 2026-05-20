@@ -23,7 +23,9 @@ class LLMClient(ABC):
     def __init__(self, api_key: str | None = None, *args, **kwargs):
         """
         Called once when the client is first needed.
-        api_key is loaded from the environment variable CUSTOM_API_KEY (optional).
+        api_key is always None for custom providers (the service does not load
+        a CUSTOM_API_KEY environment variable). Read your own key from the
+        environment inside __init__ if authentication is required.
         Additional kwargs from llm_config (e.g. timeout, max_retries) are forwarded here.
         """
 

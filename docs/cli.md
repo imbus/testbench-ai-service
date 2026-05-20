@@ -42,7 +42,7 @@ testbench-ai-service init [OPTIONS]
 | ---------------------- | -------------------------------------------------------------------------------------------------------------- | --------------- |
 | `--path PATH`        | Path to the configuration file to generate.                                                                    | `config.toml` |
 | `--force`, `-f`    | Overwrite the configuration file and prompts directory if they exist.                                          | —              |
-| `--prompts-dir PATH` | Copy default prompt files to PATH and set `prompts_dir` in the config.``Pass an empty string to skip. | `prompts`     |
+| `--prompts-dir PATH` | Copy default prompt files to PATH and set `prompts_dir` in the config. Pass an empty string to skip. | `prompts`     |
 
 ### Examples
 
