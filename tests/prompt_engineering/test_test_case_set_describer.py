@@ -1,28 +1,33 @@
 import os
 import textwrap
-import unittest
+from pathlib import Path
 
+import pytest
 from dotenv import load_dotenv
 
 from testbench_ai_service.agents.test_case_set_describer.agent import TestCaseSetDescriber
-from testbench_ai_service.config import PROMPTS_DIR, LLMConfig, PromptConfig
+from testbench_ai_service.config import DEFAULT_AGENTS, PROMPTS_DIR, LLMConfig, PromptConfig
 from testbench_ai_service.llm.openai import OpenAIClient
 
 load_dotenv()
 
 
-class TestTestCaseSetDescriberPromptingEnglish(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
+@pytest.mark.prompt_engineering
+class TestTestCaseSetDescriberPromptingEnglish:
+    @pytest.fixture(autouse=True)
+    async def setup(self):
         api_key = os.getenv("OPENAI_API_KEY")
-
         self.llm_config = LLMConfig()
         self.llm_client = OpenAIClient(api_key=api_key)
+        self.default_prompt_config: PromptConfig = DEFAULT_AGENTS["test_case_set_describer"].prompt
+        self.prompt_file = Path(PROMPTS_DIR / "en" / self.default_prompt_config.file)
+        self.prompt_config = PromptConfig(
+            file=self.prompt_file,
+            name=self.default_prompt_config.name,
+            variant=self.default_prompt_config.variant,
+        )
         self.describer = TestCaseSetDescriber()
-        self.prompt_file = (PROMPTS_DIR / "en" / "test_case_set_describer.yaml").resolve()
-        self.prompt_name = "TestCaseSetDescriber"
-        self.prompt_variant = "full-description"
-
-    async def asyncTearDown(self):
+        yield
         await self.llm_client.client.close()
 
     async def test_describe_test_case_set_en(self):
@@ -44,25 +49,19 @@ class TestTestCaseSetDescriberPromptingEnglish(unittest.IsolatedAsyncioTestCase)
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.describer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "step_sequence": step_sequence,
                 "parameter_combinations": parameter_combinations,
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertGreater(len(response.result), 100)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert len(response.result) > 100
 
     async def test_describe_minimal_test_case_en(self):
         step_sequence = textwrap.dedent(
@@ -82,39 +81,37 @@ class TestTestCaseSetDescriberPromptingEnglish(unittest.IsolatedAsyncioTestCase)
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.describer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "step_sequence": step_sequence,
                 "parameter_combinations": parameter_combinations,
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertGreater(len(response.result), 100)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert len(response.result) > 100
 
 
-class TestTestCaseSetDescriberPromptingGerman(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
+@pytest.mark.prompt_engineering
+class TestTestCaseSetDescriberPromptingGerman:
+    @pytest.fixture(autouse=True)
+    async def setup(self):
         api_key = os.getenv("OPENAI_API_KEY")
-
         self.llm_config = LLMConfig()
         self.llm_client = OpenAIClient(api_key=api_key)
+        self.default_prompt_config: PromptConfig = DEFAULT_AGENTS["test_case_set_describer"].prompt
+        self.prompt_file = Path(PROMPTS_DIR / "de" / self.default_prompt_config.file)
+        self.prompt_config = PromptConfig(
+            file=self.prompt_file,
+            name=self.default_prompt_config.name,
+            variant=self.default_prompt_config.variant,
+        )
         self.describer = TestCaseSetDescriber()
-        self.prompt_file = (PROMPTS_DIR / "de" / "test_case_set_describer.yaml").resolve()
-        self.prompt_name = "TestCaseSetDescriber"
-        self.prompt_variant = "full-description"
-
-    async def asyncTearDown(self):
+        yield
         await self.llm_client.client.close()
 
     async def test_describe_test_case_set_de(self):
@@ -136,25 +133,19 @@ class TestTestCaseSetDescriberPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.describer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "step_sequence": step_sequence,
                 "parameter_combinations": parameter_combinations,
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertGreater(len(response.result), 100)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert len(response.result) > 100
 
     async def test_describe_minimal_test_case_de(self):
         step_sequence = textwrap.dedent(
@@ -174,22 +165,16 @@ class TestTestCaseSetDescriberPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.describer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "step_sequence": step_sequence,
                 "parameter_combinations": parameter_combinations,
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertGreater(len(response.result), 100)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert len(response.result) > 100

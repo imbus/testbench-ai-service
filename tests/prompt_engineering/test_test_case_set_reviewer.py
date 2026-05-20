@@ -1,26 +1,32 @@
 import os
 import textwrap
-import unittest
+from pathlib import Path
 
+import pytest
 from dotenv import load_dotenv
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
-from testbench_ai_service.config import PROMPTS_DIR, LLMConfig, PromptConfig
+from testbench_ai_service.config import DEFAULT_AGENTS, PROMPTS_DIR, LLMConfig, PromptConfig
 from testbench_ai_service.llm.openai import OpenAIClient
 
 load_dotenv()
 
 
-class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
+@pytest.mark.prompt_engineering
+class TestTestCaseSetReviewerPromptingEnglish:
+    @pytest.fixture(autouse=True)
+    async def setup(self):
         api_key = os.getenv("OPENAI_API_KEY")
-
         self.llm_config = LLMConfig()
         self.llm_client = OpenAIClient(api_key=api_key)
         self.reviewer = TestCaseSetReviewer()
-        self.prompt_file = (PROMPTS_DIR / "en" / "test_case_set_reviewer.yaml").resolve()
-        self.prompt_name = "TestCaseSetReviewer"
-        self.prompt_variant = "interaction-based-tests-detailed-prompt"
+        self.default_prompt_config: PromptConfig = DEFAULT_AGENTS["test_case_set_reviewer"].prompt
+        self.prompt_file = Path(PROMPTS_DIR / "en" / self.default_prompt_config.file)
+        self.prompt_config = PromptConfig(
+            file=self.prompt_file,
+            name=self.default_prompt_config.name,
+            variant=self.default_prompt_config.variant,
+        )
         self.glossary = textwrap.dedent(
             """
             - 'Set': Used for text fields, checkboxes, or similar elements. Examples: Set Login, Set Description
@@ -36,8 +42,7 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             - 'Collapse' for tree structures. Examples: Collapse project tree, Collapse folder
             """
         ).strip()
-
-    async def asyncTearDown(self):
+        yield
         await self.llm_client.client.close()
 
     async def test_review_tcs_with_bad_tc_name_en(self):
@@ -51,22 +56,16 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             """
         ).strip()
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review successful! No findings.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review successful! No findings." not in response.result
 
     async def test_review_tcs_with_non_imperative_steps_en(self):
         test_case = textwrap.dedent(
@@ -84,22 +83,16 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             """
         ).strip()
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review successful! No findings.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review successful! No findings." not in response.result
 
     async def test_review_tcs_with_spelling_mistakes_en(self):
         test_case = textwrap.dedent(
@@ -112,22 +105,16 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             """
         ).strip()
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review successful! No findings.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review successful! No findings." not in response.result
 
     async def test_review_tcs_with_missing_validation_step_en(self):
         test_case = textwrap.dedent(
@@ -139,22 +126,16 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             """
         ).strip()
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review successful! No findings.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review successful! No findings." not in response.result
 
     async def test_review_tcs_with_incorrect_description_en(self):
         test_case = textwrap.dedent(
@@ -173,28 +154,19 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
         ).strip()
         test_case_set_description = "Checks if temporary user accounts can delete admin accounts."
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-            block_tags={
-                "include_description": True,
-            },
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "test_case_set_description": test_case_set_description,
                 "test_case": test_case,
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review successful! No findings.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review successful! No findings." not in response.result
 
     async def test_review_tcs_with_non_glossary_synonyms_en(self):
         test_case = textwrap.dedent(
@@ -214,13 +186,10 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
         ).strip()
 
         prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
+            file=self.prompt_config.file,
+            name=self.prompt_config.name,
+            variant=self.prompt_config.variant,
             vars={"glossary": self.glossary},
-            block_tags={
-                "include_glossary": True,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
@@ -230,21 +199,26 @@ class TestTestCaseSetReviewerPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review successful! No findings.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review successful! No findings." not in response.result
 
 
-class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
+@pytest.mark.prompt_engineering
+class TestTestCaseSetReviewerPromptingGerman:
+    @pytest.fixture(autouse=True)
+    async def setup(self):
         api_key = os.getenv("OPENAI_API_KEY")
-
         self.llm_config = LLMConfig()
         self.llm_client = OpenAIClient(api_key=api_key)
         self.reviewer = TestCaseSetReviewer()
-        self.prompt_file = (PROMPTS_DIR / "de" / "test_case_set_reviewer.yaml").resolve()
-        self.prompt_name = "TestCaseSetReviewer"
-        self.prompt_variant = "interaction-based-tests-detailed-prompt"
+        self.default_prompt_config: PromptConfig = DEFAULT_AGENTS["test_case_set_reviewer"].prompt
+        self.prompt_file = Path(PROMPTS_DIR / "de" / self.default_prompt_config.file)
+        self.prompt_config = PromptConfig(
+            file=self.prompt_file,
+            name=self.default_prompt_config.name,
+            variant=self.default_prompt_config.variant,
+        )
         self.glossary = textwrap.dedent(
             """
             - "Setze" für Textfelder, Checkboxen oder Ähnliches. Beispiele: Setze Login, Setze Beschreibung
@@ -260,8 +234,7 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             - "Kollabiere" für Baumstrukturen. Beispiele: Kollabiere Projektbaum, Kollabiere Ordner
             """
         ).strip()
-
-    async def asyncTearDown(self):
+        yield
         await self.llm_client.client.close()
 
     async def test_review_tcs_with_bad_tc_name_de(self):
@@ -275,22 +248,16 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         ).strip()
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review erfolgreich! Keine Befunde.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review erfolgreich! Keine Befunde." not in response.result
 
     async def test_review_tcs_with_non_imperative_steps_de(self):
         test_case = textwrap.dedent(
@@ -308,22 +275,16 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         ).strip()
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review erfolgreich! Keine Befunde.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review erfolgreich! Keine Befunde." not in response.result
 
     async def test_review_tcs_with_spelling_mistakes_de(self):
         test_case = textwrap.dedent(
@@ -336,22 +297,16 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         ).strip()
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review erfolgreich! Keine Befunde.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review erfolgreich! Keine Befunde." not in response.result
 
     async def test_review_tcs_with_missing_validation_step_de(self):
         test_case = textwrap.dedent(
@@ -363,22 +318,16 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         ).strip()
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review erfolgreich! Keine Befunde.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review erfolgreich! Keine Befunde." not in response.result
 
     async def test_review_tcs_with_incorrect_description_de(self):
         test_case = textwrap.dedent(
@@ -399,28 +348,19 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             "Prüft, ob ein Admin durch einen temporären Nutzer gelöscht werden kann."
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-            block_tags={
-                "include_description": True,
-            },
-        )
-
         response = await self.reviewer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "test_case_set_description": test_case_set_description,
                 "test_case": test_case,
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review erfolgreich! Keine Befunde.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review erfolgreich! Keine Befunde." not in response.result
 
     async def test_review_tcs_with_non_glossary_synonyms_de(self):
         test_case = textwrap.dedent(
@@ -440,13 +380,10 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
         ).strip()
 
         prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
+            file=self.prompt_config.file,
+            name=self.prompt_config.name,
+            variant=self.prompt_config.variant,
             vars={"glossary": self.glossary},
-            block_tags={
-                "include_glossary": True,
-            },
         )
 
         response = await self.reviewer._get_ai_response(
@@ -456,6 +393,6 @@ class TestTestCaseSetReviewerPromptingGerman(unittest.IsolatedAsyncioTestCase):
             agent_data={"test_case": test_case},
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("Review erfolgreich! Keine Befunde.", response.result)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "Review erfolgreich! Keine Befunde." not in response.result

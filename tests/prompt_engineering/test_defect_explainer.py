@@ -1,28 +1,33 @@
 import os
 import textwrap
-import unittest
+from pathlib import Path
 
+import pytest
 from dotenv import load_dotenv
 
 from testbench_ai_service.agents.defect_explainer.agent import DefectExplainer
-from testbench_ai_service.config import PROMPTS_DIR, LLMConfig, PromptConfig
+from testbench_ai_service.config import DEFAULT_AGENTS, PROMPTS_DIR, LLMConfig, PromptConfig
 from testbench_ai_service.llm.openai import OpenAIClient
 
 load_dotenv()
 
 
-class TestDefectExplanationsPromptingEnglish(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
+@pytest.mark.prompt_engineering
+class TestDefectExplanationsPromptingEnglish:
+    @pytest.fixture(autouse=True)
+    async def setup(self):
         api_key = os.getenv("OPENAI_API_KEY")
-
         self.llm_config = LLMConfig()
         self.llm_client = OpenAIClient(api_key=api_key)
+        self.default_prompt_config: PromptConfig = DEFAULT_AGENTS["defect_explainer"].prompt
+        self.prompt_file = Path(PROMPTS_DIR / "en" / self.default_prompt_config.file)
+        self.prompt_config = PromptConfig(
+            file=self.prompt_file,
+            name=self.default_prompt_config.name,
+            variant=self.default_prompt_config.variant,
+        )
         self.explainer = DefectExplainer()
-        self.prompt_file = (PROMPTS_DIR / "en" / "defect_explainer.yaml").resolve()
-        self.prompt_name = "DefectExplainer"
-        self.prompt_variant = "DEU"
-
-    async def asyncTearDown(self):
+        yield
         await self.llm_client.client.close()
 
     async def test_explain_element_not_found_en(self):
@@ -36,26 +41,20 @@ class TestDefectExplanationsPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "failed_test_case": failed_test_case,
                 "error_message": "Element with identifier 'Verdict Badge' not found on the page",
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("\n", response.result)
-        self.assertLess(len(response.result), 500)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "\n" not in response.result
+        assert len(response.result) < 500
 
     async def test_explain_value_mismatch_en(self):
         failed_test_case = textwrap.dedent(
@@ -68,26 +67,20 @@ class TestDefectExplanationsPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "failed_test_case": failed_test_case,
                 "error_message": "Expected: 'https://carconfig.example.com/report/123'",
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("\n", response.result)
-        self.assertLess(len(response.result), 500)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "\n" not in response.result
+        assert len(response.result) < 500
 
     async def test_explain_early_failure_with_cascade_en(self):
         failed_test_case = textwrap.dedent(
@@ -101,40 +94,38 @@ class TestDefectExplanationsPromptingEnglish(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "failed_test_case": failed_test_case,
                 "error_message": "Timeout after 30000 ms while waiting for browser context",
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("\n", response.result)
-        self.assertLess(len(response.result), 500)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "\n" not in response.result
+        assert len(response.result) < 500
 
 
-class TestDefectExplanationsPromptingGerman(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
+@pytest.mark.prompt_engineering
+class TestDefectExplanationsPromptingGerman:
+    @pytest.fixture(autouse=True)
+    async def setup(self):
         api_key = os.getenv("OPENAI_API_KEY")
-
         self.llm_config = LLMConfig()
         self.llm_client = OpenAIClient(api_key=api_key)
+        self.default_prompt_config: PromptConfig = DEFAULT_AGENTS["defect_explainer"].prompt
+        self.prompt_file = Path(PROMPTS_DIR / "de" / self.default_prompt_config.file)
+        self.prompt_config = PromptConfig(
+            file=self.prompt_file,
+            name=self.default_prompt_config.name,
+            variant=self.default_prompt_config.variant,
+        )
         self.explainer = DefectExplainer()
-        self.prompt_file = (PROMPTS_DIR / "de" / "defect_explainer.yaml").resolve()
-        self.prompt_name = "DefectExplainer"
-        self.prompt_variant = "DEU"
-
-    async def asyncTearDown(self):
+        yield
         await self.llm_client.client.close()
 
     async def test_explain_element_not_found_de(self):
@@ -148,26 +139,20 @@ class TestDefectExplanationsPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "failed_test_case": failed_test_case,
                 "error_message": "Element mit der Bezeichnung 'Verdict Badge' wurde auf der Seite nicht gefunden",
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("\n", response.result)
-        self.assertLess(len(response.result), 500)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "\n" not in response.result
+        assert len(response.result) < 500
 
     async def test_explain_value_mismatch_de(self):
         failed_test_case = textwrap.dedent(
@@ -180,26 +165,20 @@ class TestDefectExplanationsPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "failed_test_case": failed_test_case,
                 "error_message": "Erwartet: 'https://carconfig.example.com/report/123'",
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("\n", response.result)
-        self.assertLess(len(response.result), 500)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "\n" not in response.result
+        assert len(response.result) < 500
 
     async def test_explain_early_failure_with_cascade_de(self):
         failed_test_case = textwrap.dedent(
@@ -213,23 +192,17 @@ class TestDefectExplanationsPromptingGerman(unittest.IsolatedAsyncioTestCase):
             """
         )
 
-        prompt_config = PromptConfig(
-            file=self.prompt_file,
-            name=self.prompt_name,
-            variant=self.prompt_variant,
-        )
-
         response = await self.explainer._get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
-            prompt_config=prompt_config,
+            prompt_config=self.prompt_config,
             agent_data={
                 "failed_test_case": failed_test_case,
                 "error_message": "Zeitüberschreitung nach 30000 ms beim Warten auf Browser-Kontext",
             },
         )
 
-        self.assertIsInstance(response.result, str)
-        self.assertNotEqual(response.result, "")
-        self.assertNotIn("\n", response.result)
-        self.assertLess(len(response.result), 500)
+        assert isinstance(response.result, str)
+        assert response.result != ""
+        assert "\n" not in response.result
+        assert len(response.result) < 500
