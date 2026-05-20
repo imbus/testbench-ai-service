@@ -1,21 +1,18 @@
 import re
+from collections.abc import Set as AbstractSet
 
-import requests
+import jwt
 from fastapi import HTTPException, status
-from jwt import DecodeError, decode
+from jwt import DecodeError
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import AppConfig
-from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ElementType, ExecutionContext, TriggerAgentRequest
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     TestCaseSetNode,
-    TestStructureItemExecution,
-    TestStructureItemSpecification,
-    TestStructureTree,
 )
 from testbench_ai_service.utils.config import (
     get_language_from_config,
@@ -25,8 +22,6 @@ from testbench_ai_service.utils.config import (
 from testbench_ai_service.utils.testbench import (
     get_project_name,
     get_test_structure_tree,
-    post_project_cycle_structure,
-    post_project_tov_structure,
 )
 
 
@@ -42,7 +37,7 @@ def _extract_jwt_scope(token: str) -> tuple[str, str, str | None]:
             is missing or does not contain the required keys.
     """
     try:
-        token_info = decode(token, options={"verify_signature": False})
+        token_info = jwt.decode(token, options={"verify_signature": False})
     except DecodeError as e:
         logger.warning("Invalid JWT token: %s", e)
         raise HTTPException(
@@ -149,108 +144,35 @@ def build_execution_context(
     )
 
 
-def check_test_case_set_is_locked(
-    conn: TBConnection, context: ExecutionContext, uniqueID: str, tab: str
-) -> bool:
-    """
-    Returns True if the given test structure element tab is locked by a *different* user.
-    Returns False if it is free or locked by the current user.
-    """
-    test_structure_tree = fetch_test_structure_tree(conn, context, uniqueID)
-
-    return bool(is_test_case_locked_by_user(test_structure_tree, context, tab))
-
-
-def is_test_case_locked_by_user(
-    test_structure_tree: TestStructureTree, context: ExecutionContext, tab: str
-):
-    tab_object: TestStructureItemSpecification | TestStructureItemExecution = getattr(  # type: ignore[assignment]
-        test_structure_tree.root, tab, None
-    )
-    if tab_object is not None and tab_object.locker is not None:
-        return tab_object.locker.key != context.user_key
-    return False
-
-
 def has_required_permissions(
-    required_permissions: set[PermissionWithCode],
-    token_perms: list[int],
+    token: str,
+    required_permissions: AbstractSet[PermissionWithCode],
 ) -> bool:
-    token_perm_set = set(token_perms)
-    return all(perm.value in token_perm_set for perm in required_permissions)
+    """Check if the JWT token contains all required permissions in its scope."""
+    token_info = jwt.decode(token, options={"verify_signature": False})
+    token_perms = set(token_info.get("perms", []))
+    return all(perm.value in token_perms for perm in required_permissions)
 
 
-def fetch_test_structure_tree(
-    conn: TBConnection, context: ExecutionContext, uniqueID: str
-) -> TestStructureTree:
-    try:
-        test_structure_tree = get_test_structure_tree(
-            conn=conn,
-            project_key=context.project_key,
-            tov_key=context.tov_key,
-            cycle_key=context.cycle_key,
-            root_uid=uniqueID,
-            filtering=context.filtering,
-        )
-    except requests.exceptions.HTTPError as e:
-        handle_requests_http_error(e)
-    except requests.exceptions.ConnectionError as e:
-        logger.error("Could not connect to TestBench server: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not connect to TestBench server: {e!s}",
-        ) from e
+def get_test_case_set_nodes(conn: TBConnection, context: ExecutionContext) -> list[TestCaseSetNode]:
+    """Return the TestCaseSetNodes to process for the given execution context."""
+    if context.element_type not in {ElementType.TESTCASESET, ElementType.TESTTHEME}:
+        return []
 
-    return test_structure_tree
+    structure = get_test_structure_tree(
+        conn=conn,
+        project_key=context.project_key,
+        tov_key=context.tov_key,
+        cycle_key=context.cycle_key,
+        root_uid=context.root_uid,
+        filtering=context.filtering,
+    )
 
-
-def get_test_case_nodes(context: ExecutionContext, conn: TBConnection):
     if context.element_type == ElementType.TESTCASESET:
-        data = conn.get_project_test_case_set(context.project_key, context.root_key)
-        exec_data = data.get("exec")
-        node = TestCaseSetNode(
-            base={
-                "key": context.root_key,
-                "numbering": "",
-                "parentKey": "",
-                "name": "",
-                "uniqueID": data["uniqueID"],
-                "matchesFilter": True,
-            },
-            exec={
-                "key": exec_data["key"],
-                "status": exec_data["status"],
-                "execStatus": exec_data["execStatus"],
-                "verdict": exec_data["verdict"],
-            }
-            if exec_data
-            else None,
-        )
-        tc_nodes = [node]
+        return [structure.root] if isinstance(structure.root, TestCaseSetNode) else []
 
-    elif context.element_type == ElementType.TESTTHEME:
-        if context.cycle_key:
-            test_case = post_project_cycle_structure(
-                conn,
-                context.project_key,
-                context.cycle_key,
-                context.root_uid,
-                context.filtering,
-            )
-        else:
-            test_case = post_project_tov_structure(
-                conn,
-                context.project_key,
-                context.tov_key,
-                context.root_uid,
-                context.filtering,
-            )
-        tc_nodes = [
-            node
-            for node in test_case.nodes
-            if isinstance(node, TestCaseSetNode) and re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
-        ]
-
-    else:
-        tc_nodes = []
-    return tc_nodes
+    return [
+        node
+        for node in structure.nodes
+        if isinstance(node, TestCaseSetNode) and re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
+    ]

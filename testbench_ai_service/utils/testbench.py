@@ -1,3 +1,4 @@
+import asyncio
 import tempfile
 import zipfile
 from io import BytesIO
@@ -18,6 +19,7 @@ from testbench_ai_service.models.testbench import (
     ProjectMember,
     ProjectRole,
     SpecificationDetailsForUpdate,
+    TestCaseSetDetails,
     TestStructureTree,
     TovStructureOptions,
 )
@@ -31,6 +33,13 @@ def get_user_key(conn: TBConnection) -> str:
 def get_project_name(conn: TBConnection, project_key: str) -> str:
     project = conn.get_project(project_key)
     return project["name"]  # type: ignore[no-any-return]
+
+
+def get_test_case_set_details(
+    conn: TBConnection, project_key: str, test_case_set_key: str
+) -> TestCaseSetDetails:
+    tcs_dict = conn.get_project_test_case_set(project_key, test_case_set_key)
+    return TestCaseSetDetails.model_validate(tcs_dict)
 
 
 def get_json_report_data(
@@ -161,10 +170,10 @@ async def patch_test_structure_element_spec(
     spec_key: str,
     spec_update: SpecificationDetailsForUpdate,
 ):
-    return conn.session.patch(
-        f"{conn.server_url}2/projects/{project_key}/specifications/{spec_key}",
-        json=spec_update.model_dump(exclude_unset=True),
-    ).json()
+    url = f"{conn.server_url}2/projects/{project_key}/specifications/{spec_key}"
+    body = spec_update.model_dump(exclude_unset=True)
+    response = await asyncio.to_thread(conn.session.patch, url, json=body)
+    return response.json()
 
 
 def get_own_global_roles(conn: TBConnection) -> list[GlobalHumanRole]:
@@ -190,15 +199,15 @@ def get_project_roles(conn: TBConnection, project_key: str) -> list[ProjectRole]
     return membership.roles if membership else []
 
 
-def has_any_required_role(
-    conn: TBConnection, project: str, required_roles: list[GlobalHumanRole | ProjectRole]
+def has_any_allowed_role(
+    conn: TBConnection, project: str, allowed_roles: list[GlobalHumanRole | ProjectRole]
 ) -> bool:
     """
-    Checks if user in connection has any of the required roles for a project.
+    Checks if user in connection has any of the allowed roles for a project.
 
-    Returns: `True` if the user has at least one required role, else `False`.
+    Returns: `True` if the user has at least one allowed role, else `False`.
     """
     global_roles = get_own_global_roles(conn)
     project_roles = get_project_roles(conn, project)
     all_roles = global_roles + project_roles
-    return bool(set(all_roles) & set(required_roles))
+    return bool(set(all_roles) & set(allowed_roles))

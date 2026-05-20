@@ -205,19 +205,6 @@ def merge_model_dicts(
     return merged
 
 
-def create_app_config(config_data: dict) -> AppConfig:
-    """
-    Create an AppConfig instance using the provided configuration data.
-
-    Args:
-        config_data: Parsed configuration data as a dictionary.
-
-    Returns:
-        AppConfig: An AppConfig instance initialized with the given configuration data.
-    """
-    return AppConfig(**config_data)
-
-
 def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) -> AppConfig:
     """
     This function reads a TOML configuration file, extracts the section specified by `config_prefix`,
@@ -269,7 +256,7 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
             return None  # type: ignore[unreachable]
 
     try:
-        return create_app_config(config_dict[config_prefix])
+        return AppConfig(**config_dict[config_prefix])
     except ValidationError as e:
         print_config_errors(e, config_file_path, config_prefix)
         sys.exit(1)

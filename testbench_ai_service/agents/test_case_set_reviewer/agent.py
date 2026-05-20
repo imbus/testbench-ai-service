@@ -1,14 +1,11 @@
 import asyncio
-from typing import ClassVar
 
 import requests
-from jwt import decode
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.test_case_set_reviewer.utils import (
-    get_review_comment_for_test_case_set,
     get_test_case_set_as_string,
     patch_previous_review_comment_for_test_structure_element,
     patch_review_result_for_test_structure_element,
@@ -24,18 +21,25 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
-from testbench_ai_service.models.testbench import PermissionWithCode, ProjectRole, SpecStatus
+from testbench_ai_service.models.testbench import (
+    PermissionWithCode,
+    ProjectRole,
+    SpecStatus,
+)
 from testbench_ai_service.utils.agent import (
-    check_test_case_set_is_locked,
-    get_test_case_nodes,
+    get_test_case_set_nodes,
     has_required_permissions,
+)
+from testbench_ai_service.utils.html_utils import (
+    extract_text_from_html_body,
+    strip_html_body_tags,
 )
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
-from testbench_ai_service.utils.string_processor import extract_text_from_html_body
 from testbench_ai_service.utils.testbench import (
     get_project_roles,
     get_test_case_set_catalog,
+    get_test_case_set_details,
 )
 from testbench_ai_service.utils.testbench_helpers import (
     get_parameter_combinations_as_string,
@@ -50,27 +54,8 @@ class TestCaseSetReviewerAgentData(AgentData, total=False):
 
 
 class TestCaseSetReviewer(Agent):
-    GENERATED_PLACEHOLDERS: ClassVar[frozenset[str]] = frozenset(
+    REQUIRED_PERMISSIONS: frozenset[PermissionWithCode] = frozenset(
         {
-            "parameter_combinations",
-            "test_case",
-            "test_case_set_description",
-            "test_case_set_obj",
-        }
-    )
-
-    async def precheck(  # noqa: C901
-        self,
-        context: ExecutionContext,
-        conn: TBConnection,
-        auth_info: AuthInfo,
-    ) -> PrecheckResult:
-        """
-        Fetches the test case set catalog and checks that each spec tab is unlocked.
-        """
-        warnings = []
-        required_permissions = {
-            PermissionWithCode.AccessSecuredData,
             PermissionWithCode.ReadOwnUserDetails,
             PermissionWithCode.ReadProjectDetails,
             PermissionWithCode.ReadTovReport,
@@ -80,59 +65,76 @@ class TestCaseSetReviewer(Agent):
             PermissionWithCode.ReadTestThemeTree,
             PermissionWithCode.ReadTestCaseSetDetails,
             PermissionWithCode.ModifySpecifications,
-            PermissionWithCode.ReadTestThemeDetails,
             PermissionWithCode.ModifySpecManagementInfo,
         }
+    )
+    ALLOWED_ROLES: frozenset[ProjectRole] = frozenset(
+        {
+            ProjectRole.TestManager,
+            ProjectRole.TestDesigner,
+            ProjectRole.TestProgrammer,
+            ProjectRole.Tester,
+        }
+    )
 
-        if auth_info.auth_type == AuthType.JWT_TOKEN:
-            token_info = decode(auth_info.token, options={"verify_signature": False})
-            token_perms = token_info.get("perms", [])
-            if not has_required_permissions(required_permissions, token_perms):
-                warnings.append(
-                    get_translation(
-                        "shared.precheck.insufficient_jwt_permissions", context.language
-                    )
-                )
-                return PrecheckResult(passed=False, warnings=warnings)
+    async def precheck(
+        self,
+        context: ExecutionContext,
+        conn: TBConnection,
+        auth_info: AuthInfo,
+    ) -> PrecheckResult:
+        """
+        Precheck to determine which test case sets the agent should review,
+        based on the user's permissions and roles.
+        """
+        warnings = []
 
-        tc_nodes = get_test_case_nodes(context, conn)
+        if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
+            auth_info.token, self.REQUIRED_PERMISSIONS
+        ):
+            msg = get_translation(
+                "test_case_set_reviewer.precheck.insufficient_permissions", context.language
+            )
+            warnings.append(msg)
+            return PrecheckResult(passed=False, warnings=warnings)
 
-        project_roles = get_project_roles(conn, context.project_key)
-        _sufficient_roles = {ProjectRole.TestManager}
+        project_roles = set(get_project_roles(conn, context.project_key))
+        if project_roles.isdisjoint(self.ALLOWED_ROLES):
+            msg = get_translation(
+                "test_case_set_reviewer.precheck.insufficient_role", context.language
+            )
+            warnings.append(msg)
+            return PrecheckResult(passed=False, warnings=warnings)
+
+        tcs_nodes = get_test_case_set_nodes(conn, context)
+
         items = []
-
-        for node in tc_nodes:
-            test_case_set = conn.get_project_test_case_set(context.project_key, node.base.key)
-            spec = test_case_set.get("spec") or {}
-
-            if check_test_case_set_is_locked(conn, context, test_case_set.get("uniqueID"), "spec"):
-                warnings.append(
-                    get_translation(
-                        "shared.precheck.spec_locked", context.language, uid=node.base.uniqueID
-                    )
+        for node in tcs_nodes:
+            locked_by_other_user = (
+                node.spec is not None
+                and node.spec.locker is not None
+                and node.spec.locker.key != context.user_key
+            )
+            if locked_by_other_user:
+                msg = get_translation(
+                    "shared.precheck.spec_locked", context.language, uid=node.base.uniqueID
                 )
+                warnings.append(msg)
                 continue
 
-            if _sufficient_roles.intersection(project_roles):
+            if (
+                ProjectRole.TestManager in project_roles
+                or ProjectRole.TestDesigner in project_roles
+            ):
                 items.append(node.base.uniqueID)
-            elif ProjectRole.TestDesigner in project_roles:
-                responsible = (spec.get("responsible") or {}).get("key")
-                is_responsible = responsible == context.user_key or responsible is None
-                if is_responsible:
-                    items.append(node.base.uniqueID)
-            elif ProjectRole.Tester in project_roles or ProjectRole.TestProgrammer in project_roles:
-                is_in_review = spec.get("status", "") == SpecStatus.InReview.value
-                is_current_reviewer = (spec.get("reviewer") or {}).get(
-                    "key", ""
-                ) == context.user_key
-                if is_in_review and is_current_reviewer:
-                    items.append(node.base.uniqueID)
-            else:
-                warnings.append(
-                    get_translation(
-                        "test_case_set_reviewer.precheck.insufficient_role", context.language
-                    )
-                )
+                continue
+
+            tcs = get_test_case_set_details(conn, context.project_key, node.base.key)
+
+            in_review = tcs.spec.status == SpecStatus.InReview
+            is_current_reviewer = tcs.spec.reviewer and tcs.spec.reviewer.key == context.user_key
+            if in_review and is_current_reviewer:
+                items.append(node.base.uniqueID)
 
         if items:
             return PrecheckResult(passed=True, warnings=warnings, items=items)
@@ -144,14 +146,13 @@ class TestCaseSetReviewer(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        item_ids: list[str] | None,
+        item_ids: list[str],
     ) -> None:
         """Reviews all test case sets concurrently."""
         if not item_ids:
             return
-        tasks = []
-        test_case_set_catalog = {}
 
+        test_case_set_catalog = {}
         try:
             test_case_set_catalog = get_test_case_set_catalog(
                 conn=conn,
@@ -164,6 +165,8 @@ class TestCaseSetReviewer(Agent):
             logger.debug("Retrieved test case sets: %s", list(test_case_set_catalog.keys()))
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
+
+        tasks = []
         for tcs in test_case_set_catalog.values():
             if tcs.details.uniqueID in item_ids:
                 task = asyncio.create_task(
@@ -184,12 +187,7 @@ class TestCaseSetReviewer(Agent):
     ) -> None:
         """Performs a review for a single test case set."""
         try:
-            tcs_key = test_case_set.details.key
-            tcs_spec_key = test_case_set.details.spec.key
-
-            previous_review_comment = await get_review_comment_for_test_case_set(
-                conn=conn, project_key=context.project_key, test_case_set_key=tcs_key
-            )
+            previous_review_comment = strip_html_body_tags(test_case_set.details.spec.reviewComment)
             try:
                 logger.debug(
                     "Sending PATCH request to mark review started for test case set '%s'",
@@ -198,7 +196,7 @@ class TestCaseSetReviewer(Agent):
                 await patch_review_started_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=tcs_spec_key,
+                    spec_key=test_case_set.details.spec.key,
                     previous_review_comment=previous_review_comment,
                     language=context.language,
                     user_key=context.user_key,
@@ -231,7 +229,7 @@ class TestCaseSetReviewer(Agent):
                 await patch_review_result_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=tcs_spec_key,
+                    spec_key=test_case_set.details.spec.key,
                     review_notes=review_response.result,
                     previous_review_comment=previous_review_comment,
                     language=context.language,
@@ -255,7 +253,7 @@ class TestCaseSetReviewer(Agent):
                 await patch_previous_review_comment_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=tcs_spec_key,
+                    spec_key=test_case_set.details.spec.key,
                     previous_review_comment=previous_review_comment,
                     language=context.language,
                     user_key=context.user_key,
