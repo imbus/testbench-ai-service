@@ -40,6 +40,7 @@ from testbench_ai_service.utils.testbench import (
 class DefectExplainerAgentData(AgentData):
     failed_test_case: str
     error_message: str
+    test_case_set_obj: TestCaseSet
 
 
 class DefectExplainer(Agent):
@@ -257,6 +258,7 @@ class DefectExplainer(Agent):
         return {
             "failed_test_case": get_test_case_set_as_string(test_case_set, test_case),
             "error_message": error["error"],
+            "test_case_set_obj": test_case_set,
         }
 
     async def _generate_explanation_for_failed_test_case(
