@@ -91,7 +91,7 @@ class PrecheckResult(BaseModel):
 
     passed: bool
     warnings: list[str] = []
-    items: list[str] | None = None
+    items: list[str] = []
 
 
 class AgentDetailsResponse(BaseModel):

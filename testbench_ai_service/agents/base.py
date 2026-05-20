@@ -46,7 +46,7 @@ class Agent(ABC):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        item_ids: list[str] | None,
+        item_ids: list[str],
     ) -> None:
         """
         Executes the agent for all items that passed ``precheck()``.

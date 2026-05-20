@@ -1,3 +1,4 @@
+import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -9,17 +10,15 @@ from testbench_ai_service.dependencies import (
     get_llm_factory,
     get_tb_connection,
 )
-from testbench_ai_service.exceptions import HTTPError
+from testbench_ai_service.exceptions import HTTPError, handle_requests_http_error
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import TriggerAgentRequest, TriggerAgentResponse
-from testbench_ai_service.models.testbench import GlobalHumanRole, ProjectRole
 from testbench_ai_service.tasks import run_agent
 from testbench_ai_service.utils.agent import build_execution_context
 from testbench_ai_service.utils.config import agent_enabled, get_agent_config
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.import_utils import load_class_from_path
-from testbench_ai_service.utils.testbench import has_any_required_role
 
 TRIGGER_AGENT_ROUTE_KWARGS: dict = {
     "response_model": TriggerAgentResponse,
@@ -27,13 +26,7 @@ TRIGGER_AGENT_ROUTE_KWARGS: dict = {
     "responses": {
         403: {
             "model": HTTPError,
-            "description": (
-                "Forbidden\n\n"
-                "You need at least one of the following roles to proceed:\n"
-                "- Administrator\n"
-                "- TestManager\n"
-                "- TestDesigner"
-            ),
+            "description": "Forbidden",
         },
         404: {
             "model": HTTPError,
@@ -107,7 +100,6 @@ async def trigger_agent_execution(
 
     Raises:
         HTTPException 404: If the agent is disabled for the resolved project.
-        HTTPException 403: If the caller lacks all required roles.
         HTTPException 409: If the agent-specific precheck fails.
     """
     logger.debug(
@@ -126,38 +118,28 @@ async def trigger_agent_execution(
         )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
-    required_roles: list[GlobalHumanRole | ProjectRole] = [
-        GlobalHumanRole.Administrator,
-        ProjectRole.TestManager,
-        ProjectRole.TestDesigner,
-    ]
-    if not has_any_required_role(conn, context.project_key, required_roles):
-        logger.warning(
-            "Access denied: User does not have any of the required roles for the agent '%s'",
-            agent_key,
-        )
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=get_translation(
-                "routes.error.insufficient_global_role",
-                context.language,
-                roles=", ".join(role.value for role in required_roles),
-            ),
-        )
-
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
     agent = load_agent(agent_config)
 
-    precheck_result = await agent.precheck(context, conn, auth_info)
+    try:
+        precheck_result = await agent.precheck(context, conn, auth_info)
+    except requests.exceptions.HTTPError as e:
+        handle_requests_http_error(e)
+    except requests.exceptions.ConnectionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Could not connect to TestBench server: {e}",
+        ) from e
     logger.debug("Precheck result for agent '%s': %s", agent_key, precheck_result)
 
     if not precheck_result.passed:
         logger.debug("Conflict: The precheck failed for agent '%s'.", agent_key)
         precheck_failed_msg = get_translation("routes.error.precheck_failed", context.language)
-        warnings_text = "; ".join(precheck_result.warnings)
-        detail = (
-            f"{precheck_failed_msg} {warnings_text}" if warnings_text else f"{precheck_failed_msg}"
-        )
+        warnings_text = "\n".join(precheck_result.warnings)
+        if warnings_text:
+            detail = f"{precheck_failed_msg.removesuffix('.')}:\n{warnings_text}"
+        else:
+            detail = precheck_failed_msg
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=detail,
