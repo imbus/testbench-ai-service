@@ -173,35 +173,6 @@ def validate_yaml_to_schema(path: Path) -> Path:
     return path
 
 
-def validate_value_in_yaml(path: Path, key: str, value: Any):
-    """
-    Validate that a given key-value pair exists in a YAML file.
-
-    Expects the YAML file to contain a list of mappings and checks
-    whether any mapping contains the specified key-value pair.
-
-    Args:
-        path: Path to the YAML file to inspect.
-        key: The key to look for in each mapping.
-        value: The expected value for the given key.
-
-    Raises:
-        ValueError: If the YAML content is not a list, or the key-value
-            pair is not found in any mapping.
-    """
-    with path.open("r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-
-    if not isinstance(data, list):
-        raise ValueError(f"Expected a list of mappings in '{path}', got {type(data).__name__}.")
-
-    for item in data:
-        if isinstance(item, dict) and item.get(key) == value:
-            return
-
-    raise ValueError(f"No entry with '{key}: {value}' found in '{path}'.")
-
-
 def validate_tb_server_url(tb_server_url: str):
     """Checks whether the Testbench server is accessible."""
     try:
@@ -217,7 +188,6 @@ def validate_tb_server_url(tb_server_url: str):
 
 def validate_prompt_file(
     file: Path,
-    name: str | None = None,
     prompts_dir: Path | None = None,
     language: str | None = None,
 ) -> Path:
@@ -244,6 +214,4 @@ def validate_prompt_file(
     file = resolve_prompt_file_path(file, prompts_dir=prompts_dir, language=language)
     validate_file(file)
     validate_yaml_to_schema(file)
-    if name:
-        validate_value_in_yaml(file, "name", name)
     return file

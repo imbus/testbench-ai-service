@@ -20,7 +20,7 @@ from testbench_ai_service.models.prompt import (
 )
 
 
-def load_prompt_file(prompt_path: str) -> list[dict]:
+def load_prompt_file(prompt_path: str) -> dict:
     """Loads a prompt YAML file from the given path."""
     prompt_file = Path(prompt_path)
     if not prompt_file.is_file():
@@ -34,25 +34,16 @@ def load_prompt_file(prompt_path: str) -> list[dict]:
             logger.error(f"Error parsing YAML file {prompt_path}: {e}")
             raise
 
-    if not isinstance(prompt_data, list):
-        raise ValueError(f"Expected list at root of {prompt_path}, got {type(prompt_data)}")
+    if not isinstance(prompt_data, dict):
+        raise ValueError(f"Expected mapping at root of {prompt_path}, got {type(prompt_data)}")
 
     return prompt_data
 
 
-def load_prompt_definitions(prompt_path: str) -> list[PromptDefinition]:
-    """Loads prompt definitions from the given path."""
+def get_prompt_definition(prompt_path) -> PromptDefinition:
+    """Retrieves the prompt definition from the prompt file."""
     prompt_data = load_prompt_file(prompt_path)
-    return [PromptDefinition.model_validate(prompt) for prompt in prompt_data]
-
-
-def get_prompt_definition(prompt_path, prompt_name) -> PromptDefinition:
-    """Retrieves a specific prompt definition by name from the prompt file."""
-    prompt_definitions = load_prompt_definitions(prompt_path)
-    for prompt_def in prompt_definitions:
-        if prompt_def.name == prompt_name:
-            return prompt_def
-    raise ValueError(f"Prompt '{prompt_name}' not found in prompt file.")
+    return PromptDefinition.model_validate(prompt_data)
 
 
 def get_prompt_variant(
@@ -144,7 +135,7 @@ def build_prompt(prompt_config: PromptConfig, agent_data: AgentData | None = Non
         FileNotFoundError: If the prompt file or a referenced template file doesn't exist.
         ValueError: If prompt name or variant is not found.
     """
-    prompt_definition = get_prompt_definition(prompt_config.file, prompt_config.name)
+    prompt_definition = get_prompt_definition(prompt_config.file)
     prompt_variant = get_prompt_variant(prompt_definition, prompt_config.variant)
     base_path = Path(prompt_config.file).parent
 
@@ -159,7 +150,7 @@ def build_prompt(prompt_config: PromptConfig, agent_data: AgentData | None = Non
 
 
 def get_prompt_model(prompt_config: PromptConfig) -> str:
-    prompt_definition = get_prompt_definition(prompt_config.file, prompt_config.name)
+    prompt_definition = get_prompt_definition(prompt_config.file)
     prompt_variant = get_prompt_variant(prompt_definition, prompt_config.variant)
     return prompt_variant.model or prompt_definition.default_model
 

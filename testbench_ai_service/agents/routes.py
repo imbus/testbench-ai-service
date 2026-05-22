@@ -14,11 +14,13 @@ from testbench_ai_service.exceptions import HTTPError, handle_requests_http_erro
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import TriggerAgentRequest, TriggerAgentResponse
+from testbench_ai_service.models.prompt import PromptDefinition
 from testbench_ai_service.tasks import run_agent
 from testbench_ai_service.utils.agent import build_execution_context
-from testbench_ai_service.utils.config import agent_enabled, get_agent_config
+from testbench_ai_service.utils.config import agent_enabled, get_agent_config, get_prompt_config
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.import_utils import load_class_from_path
+from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 
 TRIGGER_AGENT_ROUTE_KWARGS: dict = {
     "response_model": TriggerAgentResponse,
@@ -159,7 +161,11 @@ async def trigger_agent_execution(
     return TriggerAgentResponse(status="accepted", warnings=precheck_result.warnings)
 
 
-def create_agent_router(agent_key: str, config: AgentConfig) -> APIRouter:
+def create_agent_router(
+    agent_key: str,
+    config: AgentConfig,
+    prompt_definition: PromptDefinition | None = None,
+) -> APIRouter:
     router = APIRouter(
         tags=["Agents"],
         dependencies=[Depends(validate_auth_token)],
@@ -167,8 +173,8 @@ def create_agent_router(agent_key: str, config: AgentConfig) -> APIRouter:
 
     @router.post(
         config.endpoint_path,
-        summary=config.summary,
-        description=config.description,
+        summary=prompt_definition.summary if prompt_definition else None,
+        description=prompt_definition.description if prompt_definition else None,
         **TRIGGER_AGENT_ROUTE_KWARGS,
     )
     async def trigger_agent(
@@ -200,6 +206,11 @@ def get_agent_routers(app_config: AppConfig) -> list[APIRouter]:
             logger.debug("Agent '%s' is disabled in config, skipping router creation", agent_key)
             continue
         logger.debug("Creating router for enabled agent '%s'", agent_key)
-        router = create_agent_router(agent_key, agent_config)
+        try:
+            prompt_config = get_prompt_config(agent_key, app_config)
+            prompt_def = get_prompt_definition(prompt_config.file)
+        except Exception:
+            prompt_def = None
+        router = create_agent_router(agent_key, agent_config, prompt_def)
         routers.append(router)
     return routers

@@ -31,14 +31,10 @@ log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 enabled = true
 endpoint_path = "/test-case-set-reviews"
 class_path = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
-summary = "Trigger test case set reviews"
-description = """This endpoint triggers asynchronous reviews for the specified test case sets.
-The review results will be added as comments to the `reviewComment` attribute (review comments section) of corresponding test structure element specifications."""
 
 # Global prompt configuration for test case set reviewer
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
 file = "test_case_set_reviewer/prompt.yaml"
-name = "TestCaseSetReviewer"
 
 # Optional: supply user-provided variables for prompt templates (accessible as {{ vars.<key> }})
 # [testbench-ai-service.agents.test_case_set_reviewer.prompt.vars]
@@ -49,28 +45,20 @@ name = "TestCaseSetReviewer"
 enabled = true
 endpoint_path = "/test-case-set-descriptions"
 class_path = "testbench_ai_service.agents.test_case_set_describer.agent.TestCaseSetDescriber"
-summary = "Trigger generation of test case set descriptions"
-description = """This endpoint triggers asynchronous generation of descriptions for the specified test case sets.
-The generated descriptions will be assigned to their respective test structure element specifications."""
 
 # Global prompt configuration for test case set describer
 [testbench-ai-service.agents.test_case_set_describer.prompt]
 file = "test_case_set_describer/prompt.yaml"
-name = "TestCaseSetDescriber"
 
 # Global agent configuration for defect explainer
 [testbench-ai-service.agents.defect_explainer]
 enabled = true
 endpoint_path = "/defect-explanations"
 class_path = "testbench_ai_service.agents.defect_explainer.agent.DefectExplainer"
-summary = "Trigger generation of defect explanations"
-description = """This endpoint triggers asynchronous generation of defect explanations for the specified test case sets.
-            The generated explanations will be added to the comment section of the corresponding test structure element execution overview."""
 
 # Global prompt configuration for defect explainer
 [testbench-ai-service.agents.defect_explainer.prompt]
 file = "defect_explainer/prompt.yaml"
-name = "DefectExplainer"
 
 
 # Project-specific configurations (override global configurations)

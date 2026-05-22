@@ -74,6 +74,7 @@ class PromptDefinition(BaseModel):
     """A prompt definition with multiple variants."""
 
     name: str
+    summary: str | None = None
     description: str | None = None
     default_model: str
     default_variant: str
@@ -114,6 +115,8 @@ class PromptDetailsResponse(BaseModel):
     """Response model for the prompt details endpoint."""
 
     name: str
+    summary: str | None = None
+    description: str | None = None
     file: Path
     default_variant: str
     variants: list[PromptVariantResponse]
