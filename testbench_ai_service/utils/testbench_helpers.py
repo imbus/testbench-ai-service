@@ -1,4 +1,4 @@
-from typing import Any
+from dataclasses import dataclass
 
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench2robotframework.model import KeywordCall, TestCaseDetails
@@ -24,6 +24,12 @@ def get_interaction_calls_for_test_case(test_case: TestCaseDetails) -> list[Keyw
     return interaction_calls
 
 
+@dataclass
+class _TestCaseRow:
+    unique_id: str
+    values: dict[str, str]
+
+
 def get_parameter_combinations_as_string(test_case_set: TestCaseSet) -> str:
     """
     Converts the parameter combinations of a test case set to a Markdown table string.
@@ -37,35 +43,28 @@ def get_parameter_combinations_as_string(test_case_set: TestCaseSet) -> str:
     | March | $420 |
     ```
     """
-    simple_test_cases = []
-    for test_case in test_case_set.test_cases.values():
-        simple_test_cases.append(
-            {
-                "uniqueID": test_case.uniqueID,
-                "values": {param.name: param.value for param in test_case.parameters},
-            }
+    rows = [
+        _TestCaseRow(
+            unique_id=test_case.uniqueID,
+            values={
+                param.name: param.value if param.value is not None else ""
+                for param in test_case.parameters
+            },
         )
-    return _json_to_markdown_table(simple_test_cases)
+        for test_case in test_case_set.test_cases.values()
+    ]
+    return _to_markdown_table(rows)
 
 
-def _json_to_markdown_table(data: list[dict[str, Any]]) -> str:
-    all_keys_set: set[str] = set()
-    for entry in data:
-        all_keys_set.update(entry["values"].keys())
-    all_keys = sorted(all_keys_set)
+def _to_markdown_table(rows: list[_TestCaseRow]) -> str:
+    all_keys = sorted({key for row in rows for key in row.values})
 
-    # Prepare Markdown table header
     header = "| uniqueID | " + " | ".join(all_keys) + " |"
     separator = "|-----------|" + "|".join(["-" * (len(k) + 2) for k in all_keys]) + "|"
 
-    # Prepare rows
-    rows = []
-    for entry in data:
-        row_values = dict.fromkeys(all_keys, "")
-        for key, val in entry["values"].items():
-            row_values[key] = val
-        row = "| " + entry["uniqueID"] + " | " + " | ".join(row_values[k] for k in all_keys) + " |"
-        rows.append(row)
+    table_rows = [
+        "| " + row.unique_id + " | " + " | ".join(row.values.get(k, "") for k in all_keys) + " |"
+        for row in rows
+    ]
 
-    # Combine everything
-    return "\n".join([header, separator, *rows])
+    return "\n".join([header, separator, *table_rows])
