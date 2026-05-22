@@ -1,37 +1,36 @@
 # yaml-language-server: $schema=../../prompt.schema.json
 
-- name: "TestCaseSetReviewer"
-  description: >
-    Reviews test case sets based on defined quality criteria. Supports optional glossary integration
-    via template blocks. One variant uses a single user block (optimized for reasoning models);
-    the other uses separate system and user blocks.
-  default_model: "gpt-5.4"
-  default_variant: "Single Block"
-  variants:
-    - name: "Single Block"
-      description: "Delivers all instructions in a single user message; best suited for reasoning models that don't support a system role."
-      model: "gpt-5.4"
-      vars:
-        glossary:
-          name: "Glossary"
-          description: "Optional glossary of project-specific keyword terms. When provided, test steps are checked against it."
-          value_type: "text"
-          required: false
-      messages:
-        - role: "user"
-          file: "single_block.jinja"
-
-    - name: "Separated Roles"
-      description: "Splits the prompt into system and user message blocks; best suited for chat models that support a system role."
-      model: "gpt-5.2-pro"
-      vars:
-        glossary:
-          name: "Glossary"
-          description: "Optional glossary of project-specific keyword terms. When provided, test steps are checked against it."
-          value_type: "text"
-          required: false
-      messages:
-        - role: "system"
-          file: "separated_roles_system.jinja"
-        - role: "user"
-          file: "separated_roles_user.jinja"
+name: "Test Case Set Reviewer"
+summary: "Review test case sets"
+description: >
+  This agent reviews the specified test case sets.
+  The review results are added to the review comments field of the corresponding test case set specifications.
+default_model: "gpt-5.4"
+default_variant: "Full Review"
+variants:
+  - name: "Full Review"
+    description: "Comprehensive ISTQB/ISO 29119 quality review. Examines naming, description, step formulation, validation coverage, and consistency. Uses system+user message structure for best results with GPT chat models."
+    model: "gpt-5.4"
+    vars:
+      glossary:
+        name: "Glossary"
+        description: "Optional glossary of project-specific keyword terms. When provided, test step names are checked for compliance."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "system"
+        file: "full_review_system.jinja"
+      - role: "user"
+        file: "full_review_user.jinja"
+  - name: "Quick Review"
+    description: "Lightweight structural review focused on missing validation steps, generic names, incorrect step form, and glossary mismatches when a glossary is provided. Fast and cost-efficient; suitable for high-volume batch processing."
+    model: "gpt-5.4-mini"
+    vars:
+      glossary:
+        name: "Glossary"
+        description: "Optional glossary of project-specific keyword terms. When provided, test step names are checked for compliance."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "user"
+        file: "quick_review_user.jinja"

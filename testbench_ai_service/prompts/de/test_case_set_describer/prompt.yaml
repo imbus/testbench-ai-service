@@ -1,24 +1,27 @@
 # yaml-language-server: $schema=../../prompt.schema.json
 
-- name: "TestCaseSetDescriber"
-  description: >
-    Erstellt eine allgemeine Beschreibung für einen TestBench-Testfallsatz.
-  default_model: "gpt-5.4"
-  default_variant: "Full Description"
-  variants:
-    - name: "Full Description"
-      description: "Erstellt eine vollständige Beschreibung mit Testziel, Prüfungen und einer Zusammenfassung je Testfall."
-      model: "gpt-5.4"
-      messages:
-        - role: "system"
-          file: "system.jinja"
-        - role: "user"
-          file: "full_description_user.jinja" 
-    - name: "Short Description"
-      description: "Erstellt eine kompakte Beschreibung, die ausschließlich das Testziel in einem Satz beschreibt."
-      model: "gpt-5.1"
-      messages:
-        - role: "system"
-          file: "system.jinja"
-        - role: "user"
-          file: "short_description_user.jinja"
+name: "Testfallsatz-Beschreiber"
+summary: "Testfallsatz-Beschreibungen generieren"
+description: >
+  Dieser Agent generiert Beschreibungen für die angegebenen Testfallsätze.
+  Die generierten Beschreibungen werden in das Beschreibungsfeld der jeweiligen
+  Testfallsatz-Spezifikationen eingefügt.
+default_model: "gpt-5.4"
+default_variant: "Vollständige Beschreibung"
+variants:
+  - name: "Vollständige Beschreibung"
+    description: "Erstellt eine strukturierte Beschreibung mit drei Abschnitten: Testziel, wichtigste Überprüfungen und eine Zusammenfassung jedes konkreten Testfalls. Empfohlen für vollständige Dokumentation."
+    model: "gpt-5.4"
+    messages:
+      - role: "system"
+        file: "beschreibung_system.jinja"
+      - role: "user"
+        file: "vollstaendige_beschreibung_user.jinja"
+  - name: "Kurzbeschreibung"
+    description: "Erstellt ausschließlich das Testziel als einzelner Satz. Schnell und kosteneffizient; ideal wenn eine kurze Beschriftung benötigt wird."
+    model: "gpt-5.4-mini"
+    messages:
+      - role: "system"
+        file: "beschreibung_system.jinja"
+      - role: "user"
+        file: "kurzbeschreibung_user.jinja"

@@ -1,0 +1,39 @@
+<input_format>
+Ein Testfallsatz besteht aus einer abstrakten Schrittfolge und einer Parameterkombinationstabelle.
+
+Schrittstruktur:
+```
+{Testfallsatzname}
+    {Schrittname}    step_type:flow
+    {Schrittname}    param=${Platzhalter}    step_type:check
+```
+- `step_type:flow` = Aktionsschritt; `step_type:check` = Validierungsschritt
+- `${Platzhalter}` wird in der Parametertabelle aufgelöst - als abstrakt behandeln.
+</input_format>
+
+<abstract_test_case_set>
+```
+{{ agent.step_sequence }}
+```
+</abstract_test_case_set>
+
+<parameter_combinations>
+```
+{{ agent.parameter_combinations }}
+```
+</parameter_combinations>
+
+<task>
+Schreibe genau einen Satz, der das Testziel dieses Testfallsatzes beschreibt.
+Der Satz muss mit "Dieser Testfallsatz prüft..." beginnen und den Gesamtzweck der abstrakten Testsequenz erfassen.
+Ergänze keine Vorbedingungen, erwarteten Ergebnisse oder Domänendetails, die im Artefakt nicht explizit enthalten sind.
+</task>
+
+<output_format>
+Klartext, nur ein Satz:
+```
+Dieser Testfallsatz prüft [Testziel].
+```
+- Keine führenden Leerzeichen oder Leerzeilen.
+- Keine Bezeichner aus dem Input verändern.
+</output_format>

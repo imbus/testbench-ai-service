@@ -1,0 +1,29 @@
+# Zu prüfender Testfallsatz
+
+## Beschreibung (HTML)
+{% if agent.test_case_set_description %}
+```
+{{ agent.test_case_set_description }}
+```
+{% else %}
+Keine Testfallsatzbeschreibung vorhanden.
+{% endif %}
+
+## Testfallsatzname und Schritte
+```
+{{ agent.test_case }}
+```
+
+## Parameterkombinationen
+{% if agent.parameter_combinations %}
+```
+{{ agent.parameter_combinations }}
+```
+{% else %}
+Keine Parameterkombinationen vorhanden.
+{% endif %}
+
+# Anweisung
+Alle Prüfkriterien systematisch anwenden.
+Die Ausgabe im vorgegebenen Format zurückgeben.
+Nur bewerten - keine Verbesserungsvorschläge oder Umformulierungen.

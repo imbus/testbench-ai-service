@@ -1,34 +1,31 @@
 # yaml-language-server: $schema=../../prompt.schema.json
 
-- name: "DefectExplainer"
-  description: >
-    Generates an explanation for a failed Robot Framework test run.
-  default_model: gpt-5.4
-  default_variant: "Single Block"
-  variants:
-    - name: "Single Block"
-      description: "Liefert alle Anweisungen in einer einzigen Nutzernachricht; geeignet für Reasoning-Modelle ohne System-Rollenunterstützung."
-      model: "gpt-5.4"
-      vars:
-        validate_output:
-          name: "Output Validierung"
-          description: "Wenn aktiviert, werden zusätzliche Anweisungen zur Validierung der Ausgabe gegeben (z.B. auf Einhaltung von Formatvorgaben)."
-          value_type: "boolean"
-          required: false
-      messages:
-        - role: "user"
-          file: "single_block.jinja"
-    - name: "Separated Roles"
-      description: "Teilt den Prompt in System- und Nutzernachricht auf; geeignet für Chat-Modelle mit System-Rollenunterstützung."
-      model: "gpt-5.4"
-      vars:
-        validate_output:
-          name: "Output Validierung"
-          description: "Wenn aktiviert, werden zusätzliche Anweisungen zur Validierung der Ausgabe gegeben (z.B. auf Einhaltung von Formatvorgaben)."
-          value_type: "boolean"
-          required: false
-      messages:
-        - role: "system"
-          file: "separated_roles_system.jinja"
-        - role: "user"
-          file: "separated_roles_user.jinja"
+name: "Fehler-Erklärer"
+summary: "Fehlererklärungen generieren"
+description: >
+  Dieser Agent generiert Fehlererklärungen für die angegebenen Testfallsätze.
+  Die generierten Erklärungen werden in das Bemerkungsfeld der jeweiligen
+  Testfallsatz-Durchführungsübersicht eingetragen.
+default_model: "gpt-5.4"
+default_variant: "Detaillierte Erklärung"
+variants:
+  - name: "Detaillierte Erklärung"
+    description: "Strukturierte Fehleranalyse mit fokussierter Schritt-für-Schritt-Untersuchung. Erzeugt eine fachlich verständliche Ein-Satz-Zusammenfassung. Nutzt die Trennung in System- und Nutzernachricht für beste Ergebnisse mit GPT-Chat-Modellen."
+    model: "gpt-5.4"
+    vars:
+      validate_output:
+        name: "Output Validierung"
+        description: "Wenn aktiviert, führt das Modell vor der Ausgabe eine Selbstprüfung durch, um sicherzustellen, dass die Ausgabe genau ein Klartext-Satz ohne technische Begriffe ist."
+        value_type: "boolean"
+        required: false
+    messages:
+      - role: "system"
+        file: "detaillierte_erklaerung_system.jinja"
+      - role: "user"
+        file: "detaillierte_erklaerung_user.jinja"
+  - name: "Kurzzusammenfassung"
+    description: "Schnelle Ein-Satz-Erklärung des Fehlers basierend auf dem übergeordneten fehlgeschlagenen Schritt. Kosteneffizient; geeignet für hohe Verarbeitungsvolumen."
+    model: "gpt-5.4-mini"
+    messages:
+      - role: "user"
+        file: "kurzzusammenfassung_user.jinja"

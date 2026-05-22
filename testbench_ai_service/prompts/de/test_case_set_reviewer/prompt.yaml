@@ -1,36 +1,37 @@
 # yaml-language-server: $schema=../../prompt.schema.json
 
-- name: "TestCaseSetReviewer"
-  description: >
-    Bewertet Testfallsätze anhand definierter Qualitätskriterien. Unterstützt optionale Glossarintegration
-    via Template-Blöcken. Eine Variante nutzt einen einzelnen Nutzerblock (optimiert für Reasoning-Modelle);
-    die andere teilt in System- und Nutzerblock auf.
-  default_model: "gpt-5.4"
-  default_variant: "Single Block"
-  variants:
-    - name: "Single Block"
-      description: "Liefert alle Anweisungen in einer einzigen Nutzernachricht; geeignet für Reasoning-Modelle ohne System-Rollenunterstützung."
-      model: "gpt-5.4"
-      vars:
-        glossary:
-          name: "Glossar"
-          description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschritte dagegen geprüft."
-          value_type: "text"
-          required: false
-      messages:
-        - role: "user"
-          file: "single_block.jinja"
-    - name: "Separated Roles"
-      description: "Teilt den Prompt in System- und Nutzernachricht auf; geeignet für Chat-Modelle mit System-Rollenunterstützung."
-      model: "gpt-5.2-pro"
-      vars:
-        glossary:
-          name: "Glossar"
-          description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschritte dagegen geprüft."
-          value_type: "text"
-          required: false
-      messages:
-        - role: "system"
-          file: "separated_roles_system.jinja"
-        - role: "user"
-          file: "separated_roles_user.jinja"
+name: "Testfallsatz-Reviewer"
+summary: "Testfallsätze reviewen"
+description: >
+  Dieser Agent führt Reviews für die angegebenen Testfallsätze durch.
+  Die Review-Ergebnisse werden als Review-Anmerkungen in das entsprechende Feld
+  der jeweiligen Testfallsatz-Spezifikationen eingetragen.
+default_model: "gpt-5.4"
+default_variant: "Umfassende Prüfung"
+variants:
+  - name: "Umfassende Prüfung"
+    description: "Umfassende ISTQB/ISO 29119-Qualitätsprüfung. Prüft Benennung, Beschreibung, Schrittformulierung, Validierungsabdeckung und Konsistenz. Nutzt die Trennung in System- und Nutzernachricht für beste Ergebnisse mit GPT-Chat-Modellen."
+    model: "gpt-5.4"
+    vars:
+      glossary:
+        name: "Glossar"
+        description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschrittnamen auf Compliance geprüft."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "system"
+        file: "umfassende_pruefung_system.jinja"
+      - role: "user"
+        file: "umfassende_pruefung_user.jinja"
+  - name: "Kompakte Prüfung"
+    description: "Kompakte Strukturprüfung mit Fokus auf fehlende Validierungsschritte, generische Namen, falsche Schrittform und Glossarabweichungen, wenn ein Glossar vorliegt. Schnell und kosteneffizient; geeignet für hohe Verarbeitungslast."
+    model: "gpt-5.4-mini"
+    vars:
+      glossary:
+        name: "Glossar"
+        description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschrittnamen auf Compliance geprüft."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "user"
+        file: "kompakte_pruefung_user.jinja"

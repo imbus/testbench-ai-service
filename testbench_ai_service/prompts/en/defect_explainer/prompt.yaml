@@ -1,34 +1,31 @@
 # yaml-language-server: $schema=../../prompt.schema.json
 
-- name: "DefectExplainer"
-  description: >
-    Generates an explanation for a failed Robot Framework test run.
-  default_model: "gpt-5.4"
-  default_variant: "Single Block"
-  variants:
-    - name: "Single Block"
-      description: "Delivers all instructions in a single user message; best suited for reasoning models that don't support a system role."
-      model: "gpt-5.4"
-      vars:
-        validate_output:
-          name: "Validate Output"
-          description: "If enabled, the model will first output a management summary and then validate that the output contains only the summary."
-          value_type: "boolean"
-          required: false
-      messages:
-        - role: "user"
-          file: "single_block.jinja"
-    - name: "Separated Roles"
-      description: "Splits the prompt into system and user message blocks; best suited for chat models that support a system role."
-      model: "gpt-5.2-pro"
-      vars:
-        validate_output:
-          name: "Validate Output"
-          description: "If enabled, the model will first output a management summary and then validate that the output contains only the summary."
-          value_type: "boolean"
-          required: false
-      messages:
-        - role: "system"
-          file: "separated_roles_system.jinja"
-        - role: "user"
-          file: "separated_roles_user.jinja"
+name: "Defect Explainer"
+summary: "Generate defect explanations"
+description: >
+  This agent generates defect explanations for the specified test case sets.
+  The generated explanations are added to the comment section of the corresponding
+  test case set execution overview.
+default_model: "gpt-5.4"
+default_variant: "Detailed Explanation"
+variants:
+  - name: "Detailed Explanation"
+    description: "Structured failure analysis with focused step-by-step examination. Produces a business-readable one-sentence summary. Uses system+user message structure for best results with GPT chat models."
+    model: "gpt-5.4"
+    vars:
+      validate_output:
+        name: "Validate Output"
+        description: "When enabled, the model performs a self-check before returning the result to ensure the output is exactly one plain-text sentence without technical terms."
+        value_type: "boolean"
+        required: false
+    messages:
+      - role: "system"
+        file: "detailed_explanation_system.jinja"
+      - role: "user"
+        file: "detailed_explanation_user.jinja"
+  - name: "Quick Summary"
+    description: "Fast one-sentence business explanation of the failure based on the highest-level failing step. Cost-efficient; suitable for high-volume runs where speed matters."
+    model: "gpt-5.4-mini"
+    messages:
+      - role: "user"
+        file: "quick_summary_user.jinja"
