@@ -154,7 +154,7 @@ async def patch_generated_description_for_test_structure_element(
     if previous_description.replace("\n", "").strip():
         description_html = (
             f"<html><body>{previous_description}<br/><br/><b>{heading} - {current_time}</b><br/>{description}"
-            f"<div style='padding: 5px;'><div style='border-top: 1px solid black; width: 50%; font-size: 10px;'>{ai_disclaimer}</div></div></body></html>"
+            f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{ai_disclaimer}</div></div></body></html>"
         )
     else:
         description_html = (

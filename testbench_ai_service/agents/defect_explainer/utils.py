@@ -329,7 +329,7 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
 
 def add_disclaimer(comment: str, language: LanguageOption) -> str:
     ai_disclaimer = get_translation("shared.run.disclaimer", language)
-    disclaimer = f"<div style='padding: 5px;'><div style='border-top: 1px solid black; width: 50%; font-size: 10px;'>{ai_disclaimer}</div></div>"
+    disclaimer = f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{ai_disclaimer}</div></div>"
     return comment.replace("</table>", "</table>" + disclaimer, 1)
 
 

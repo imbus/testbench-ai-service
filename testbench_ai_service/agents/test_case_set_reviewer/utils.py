@@ -125,7 +125,7 @@ async def patch_review_result_for_test_structure_element(
     review_notes = review_notes.replace("\n", "<br/>")
     review_comment_html = (
         f"<html><body><b>{heading} - {current_time}</b><br/>{review_notes}"
-        f"<div style='padding: 5px;'><div style='border-top: 1px solid black; width: 50%; font-size: 10px;'>{ai_disclaimer}</div></div>"
+        f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{ai_disclaimer}</div></div>"
         f"<br/>{previous_review_comment}</body></html>"
     )
 
