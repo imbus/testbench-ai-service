@@ -32,7 +32,7 @@ def _make_context(**overrides):
         "root_uid": None,
         "language": LanguageOption.ENGLISH,
         "llm_config": LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o"),
-        "prompt_config": PromptConfig(file="prompts/test.yaml", name="Test"),
+        "prompt_config": PromptConfig(file="prompts/test.yaml"),
     }
     defaults.update(overrides)
     return ExecutionContext(**defaults)
@@ -279,7 +279,7 @@ class TestGetAiResponse:
         llm_client = MagicMock()
         llm_client.query_llm = AsyncMock(return_value="The defect is caused by X")
         llm_config = LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o")
-        prompt_config = PromptConfig(file="prompts/test.yaml", name="Test")
+        prompt_config = PromptConfig(file="prompts/test.yaml")
 
         with patch("testbench_ai_service.agents.defect_explainer.agent.build_prompt") as mock_build:
             mock_prompt = MagicMock()
@@ -296,7 +296,7 @@ class TestGetAiResponse:
         llm_client = MagicMock()
         llm_client.query_llm = AsyncMock(return_value="explanation")
         llm_config = LLMConfig(provider=LLMProvider.OPENAI, model=None)
-        prompt_config = PromptConfig(file="prompts/test.yaml", name="Test")
+        prompt_config = PromptConfig(file="prompts/test.yaml")
 
         with patch("testbench_ai_service.agents.defect_explainer.agent.build_prompt") as mock_build:
             mock_prompt = MagicMock()

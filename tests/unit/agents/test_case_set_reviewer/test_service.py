@@ -22,7 +22,7 @@ def _make_context(**overrides):
         "root_uid": None,
         "language": LanguageOption.ENGLISH,
         "llm_config": LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o"),
-        "prompt_config": PromptConfig(file="prompts/test.yaml", name="Test"),
+        "prompt_config": PromptConfig(file="prompts/test.yaml"),
     }
     defaults.update(overrides)
     return ExecutionContext(**defaults)
@@ -230,7 +230,7 @@ class TestGetAiResponse:
         llm_client = MagicMock()
         llm_client.query_llm = AsyncMock(return_value="- Review note")
         llm_config = LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o")
-        prompt_config = PromptConfig(file="prompts/test.yaml", name="Test")
+        prompt_config = PromptConfig(file="prompts/test.yaml")
 
         with patch(
             "testbench_ai_service.agents.test_case_set_reviewer.agent.build_prompt"
@@ -249,7 +249,7 @@ class TestGetAiResponse:
         llm_client = MagicMock()
         llm_client.query_llm = AsyncMock(return_value="response")
         llm_config = LLMConfig(provider=LLMProvider.OPENAI, model=None)
-        prompt_config = PromptConfig(file="prompts/test.yaml", name="Test")
+        prompt_config = PromptConfig(file="prompts/test.yaml")
 
         with patch(
             "testbench_ai_service.agents.test_case_set_reviewer.agent.build_prompt"

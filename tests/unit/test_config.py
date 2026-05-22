@@ -79,20 +79,19 @@ class TestLLMConfig:
 class TestPromptConfig:
     def test_requires_file_field(self):
         with pytest.raises(ValidationError):
-            PromptConfig(name="MyPrompt")
+            PromptConfig()
 
     def test_minimal_valid_prompt_config(self):
-        cfg = PromptConfig(file="prompts/test.yaml", name="MyPrompt")
-        assert cfg.name == "MyPrompt"
+        cfg = PromptConfig(file="prompts/test.yaml")
         assert cfg.file == Path("prompts/test.yaml")
 
     def test_optional_fields_default_to_none(self):
-        cfg = PromptConfig(file="prompts/test.yaml", name="Test")
+        cfg = PromptConfig(file="prompts/test.yaml")
         assert cfg.variant is None
         assert cfg.vars is None
 
     def test_extra_fields_allowed(self):
-        cfg = PromptConfig(file="prompts/test.yaml", name="Test", glossary="/path/glossary.txt")
+        cfg = PromptConfig(file="prompts/test.yaml", glossary="/path/glossary.txt")
         assert cfg.glossary == "/path/glossary.txt"
 
 
@@ -100,7 +99,6 @@ class TestProjectPromptConfig:
     def test_all_fields_optional(self):
         cfg = ProjectPromptConfig()
         assert cfg.file is None
-        assert cfg.name is None
         assert cfg.variant is None
         assert cfg.vars is None
 
@@ -115,8 +113,7 @@ class TestAgentConfig:
             enabled=True,
             endpoint_path="/test",
             class_path="testbench_ai_service.agents.base.Agent",
-            prompt=PromptConfig(file="prompts/test.yaml", name="Test"),
-            name="Test Agent",
+            prompt=PromptConfig(file="prompts/test.yaml"),
         )
         assert cfg.enabled
         assert cfg.endpoint_path == "/test"

@@ -12,7 +12,6 @@ from testbench_ai_service.validators import (
     validate_custom_class_path,
     validate_file,
     validate_tb_server_url,
-    validate_value_in_yaml,
     validate_yaml_to_schema,
 )
 
@@ -131,21 +130,19 @@ class TestValidateYamlToSchema:
         return path
 
     def test_valid_yaml_returns_path(self):
-        valid_data = [
-            {
-                "name": "Test Item",
-                "description": "desc",
-                "default_model": "ModelA",
-                "default_variant": "default",
-                "variants": [
-                    {
-                        "name": "Variant 1",
-                        "model": "ModelA",
-                        "messages": [{"role": "user", "text": "Hi"}],
-                    }
-                ],
-            }
-        ]
+        valid_data = {
+            "name": "Test Item",
+            "description": "desc",
+            "default_model": "ModelA",
+            "default_variant": "default",
+            "variants": [
+                {
+                    "name": "Variant 1",
+                    "model": "ModelA",
+                    "messages": [{"role": "user", "text": "Hi"}],
+                }
+            ],
+        }
         with tempfile.TemporaryDirectory() as tmpdir:
             path = self._write_yaml(tmpdir, "valid.yaml", valid_data)
             result = validate_yaml_to_schema(path)
@@ -163,33 +160,6 @@ class TestValidateYamlToSchema:
             path = self._write_yaml(tmpdir, "invalid.yaml", {"name": "Alice"})
             with pytest.raises(ValueError, match="Schema validation error"):
                 validate_yaml_to_schema(path)
-
-
-class TestValidateValueInYaml:
-    def _write_yaml(self, tmpdir: str, data) -> Path:
-        path = Path(tmpdir) / "test.yaml"
-        path.write_text(yaml.safe_dump(data))
-        return path
-
-    def test_existing_key_value_pair_passes(self):
-        data = [{"name": "Alice", "age": 30}, {"name": "Bob", "age": 25}]
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = self._write_yaml(tmpdir, data)
-            validate_value_in_yaml(path, "name", "Alice")
-            validate_value_in_yaml(path, "age", 25)
-
-    def test_non_list_yaml_raises(self):
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = self._write_yaml(tmpdir, {"name": "Alice"})
-            with pytest.raises(ValueError, match="Expected a list of mappings"):
-                validate_value_in_yaml(path, "name", "Alice")
-
-    def test_missing_value_raises(self):
-        data = [{"name": "Alice"}, {"name": "Bob"}]
-        with tempfile.TemporaryDirectory() as tmpdir:
-            path = self._write_yaml(tmpdir, data)
-            with pytest.raises(ValueError, match="No entry with 'name: Charlie' found"):
-                validate_value_in_yaml(path, "name", "Charlie")
 
 
 class TestValidateTbServerUrl:

@@ -179,8 +179,7 @@ class TestRunAgentReviewTask:
             notes_html = notes.replace("\n", "<br/>")
             expected_result_html = (
                 f"<html><body><b>{heading} - {current_time}</b><br/>{notes_html}"
-                f"<div style='padding: 5px;'><div style='border-top: 1px solid black; "
-                f"width: 50%; font-size: 10px;'>{disclaimer}</div></div>"
+                f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{disclaimer}</div></div>"
                 f"<br/>{previous_comment}</body></html>"
             )
             result_payload = SpecificationDetailsForUpdate(

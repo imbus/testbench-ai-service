@@ -17,7 +17,7 @@ def _make_execution_context(**overrides):
         "tov_key": "tv1",
         "language": LanguageOption.ENGLISH,
         "llm_config": LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o"),
-        "prompt_config": PromptConfig(file="prompts/test.yaml", name="test"),
+        "prompt_config": PromptConfig(file="prompts/test.yaml"),
     }
     defaults.update(overrides)
     return ExecutionContext(**defaults)

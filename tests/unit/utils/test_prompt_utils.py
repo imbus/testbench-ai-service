@@ -7,19 +7,14 @@ from testbench_ai_service.utils.prompt_utils import build_prompt, get_prompt_def
 
 _DATA_DIR = Path(__file__).parent / "data"
 _DUMMY_PROMPT_PATH = _DATA_DIR / "dummy_prompt.yaml"
-_PROMPT_NAME = "TestCaseSetReviewer"
 
 
 class TestGetPromptDefinition:
-    """get_prompt_definition loads a named entry from a YAML prompt file."""
+    """get_prompt_definition loads an entry from a YAML prompt file."""
 
     def test_missing_file_raises_file_not_found(self):
         with pytest.raises(FileNotFoundError):
-            get_prompt_definition("nonexistent.yaml", _PROMPT_NAME)
-
-    def test_missing_prompt_name_raises_value_error(self):
-        with pytest.raises(ValueError, match="not found in prompt file"):
-            get_prompt_definition(_DUMMY_PROMPT_PATH, "NoSuchPrompt")
+            get_prompt_definition("nonexistent.yaml")
 
 
 class TestBuildPrompt:
@@ -28,7 +23,6 @@ class TestBuildPrompt:
     def _make_config(self, **kwargs) -> PromptConfig:
         defaults = {
             "file": _DUMMY_PROMPT_PATH,
-            "name": _PROMPT_NAME,
         }
         defaults.update(kwargs)
         return PromptConfig(**defaults)  # type: ignore[arg-type]
@@ -77,14 +71,10 @@ class TestBuildPrompt:
         )
         assert "${robot_variable}" in prompt.messages[1].content
 
-    def test_unknown_prompt_name_raises_value_error(self):
-        with pytest.raises(ValueError, match="not found in prompt file"):
-            build_prompt(prompt_config=self._make_config(name="UnknownPrompt"))
-
     def test_unknown_variant_raises_value_error(self):
         with pytest.raises(ValueError, match="not found in prompt"):
             build_prompt(prompt_config=self._make_config(variant="SomethingSomething"))
 
     def test_missing_prompt_file_raises_file_not_found(self):
         with pytest.raises(FileNotFoundError):
-            get_prompt_definition("nonexistent.yaml", _PROMPT_NAME)
+            get_prompt_definition("nonexistent.yaml")

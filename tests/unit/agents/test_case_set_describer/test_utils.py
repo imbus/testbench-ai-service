@@ -136,8 +136,8 @@ class TestPatchGeneratedDescription:
             "<html><body><p>Old desc</p><br/><br/>"
             "<b>Result Heading - 2025-09-16 12:34:56</b><br/>"
             "Line1<br/>Line2"
-            "<div style='padding: 5px;'>"
-            "<div style='border-top: 1px solid black; width: 50%; font-size: 10px;'>"
+            "<div style='padding-top: 5px;'>"
+            "<div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>"
             "Result Heading</div></div></body></html>"
         )
         called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]

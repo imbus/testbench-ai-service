@@ -24,7 +24,6 @@ class TestTestCaseSetReviewerPromptingEnglish:
         self.prompt_file = Path(PROMPTS_DIR / "en" / self.default_prompt_config.file)
         self.prompt_config = PromptConfig(
             file=self.prompt_file,
-            name=self.default_prompt_config.name,
             variant=self.default_prompt_config.variant,
         )
         self.glossary = textwrap.dedent(
@@ -187,7 +186,6 @@ class TestTestCaseSetReviewerPromptingEnglish:
 
         prompt_config = PromptConfig(
             file=self.prompt_config.file,
-            name=self.prompt_config.name,
             variant=self.prompt_config.variant,
             vars={"glossary": self.glossary},
         )
@@ -216,7 +214,6 @@ class TestTestCaseSetReviewerPromptingGerman:
         self.prompt_file = Path(PROMPTS_DIR / "de" / self.default_prompt_config.file)
         self.prompt_config = PromptConfig(
             file=self.prompt_file,
-            name=self.default_prompt_config.name,
             variant=self.default_prompt_config.variant,
         )
         self.glossary = textwrap.dedent(
@@ -381,7 +378,6 @@ class TestTestCaseSetReviewerPromptingGerman:
 
         prompt_config = PromptConfig(
             file=self.prompt_config.file,
-            name=self.prompt_config.name,
             variant=self.prompt_config.variant,
             vars={"glossary": self.glossary},
         )

@@ -23,7 +23,6 @@ class TestTestCaseSetDescriberPromptingEnglish:
         self.prompt_file = Path(PROMPTS_DIR / "en" / self.default_prompt_config.file)
         self.prompt_config = PromptConfig(
             file=self.prompt_file,
-            name=self.default_prompt_config.name,
             variant=self.default_prompt_config.variant,
         )
         self.describer = TestCaseSetDescriber()
@@ -107,7 +106,6 @@ class TestTestCaseSetDescriberPromptingGerman:
         self.prompt_file = Path(PROMPTS_DIR / "de" / self.default_prompt_config.file)
         self.prompt_config = PromptConfig(
             file=self.prompt_file,
-            name=self.default_prompt_config.name,
             variant=self.default_prompt_config.variant,
         )
         self.describer = TestCaseSetDescriber()

@@ -23,7 +23,6 @@ class TestDefectExplanationsPromptingEnglish:
         self.prompt_file = Path(PROMPTS_DIR / "en" / self.default_prompt_config.file)
         self.prompt_config = PromptConfig(
             file=self.prompt_file,
-            name=self.default_prompt_config.name,
             variant=self.default_prompt_config.variant,
         )
         self.explainer = DefectExplainer()
@@ -121,7 +120,6 @@ class TestDefectExplanationsPromptingGerman:
         self.prompt_file = Path(PROMPTS_DIR / "de" / self.default_prompt_config.file)
         self.prompt_config = PromptConfig(
             file=self.prompt_file,
-            name=self.default_prompt_config.name,
             variant=self.default_prompt_config.variant,
         )
         self.explainer = DefectExplainer()
