@@ -312,7 +312,7 @@ If your deployment names don't match any known canonical model name, add a `depl
 [testbench-ai-service.llm_config]
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"
-api_version = "2024-10-21"
+api_version = "2025-04-01-preview"
 
 [testbench-ai-service.llm_config.deployment_mapping]
 "my-gpt4-deployment" = "gpt-4.1"

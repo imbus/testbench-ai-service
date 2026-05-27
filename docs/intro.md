@@ -22,7 +22,7 @@ At its core the service:
 
 - **Multiple Agents**: test case set reviews, test case set description generation, and defect explanations, each configurable independently.
 - **Pluggable LLM providers**: ships with OpenAI, Azure OpenAI, and Anthropic support; bring your own provider by implementing a custom `LLMClient`.
-- **Automatic provider routing**: model names starting with `gpt-*` are automatically routed to OpenAI, `claude-*` to Anthropic — without changing the global config.
+- **Automatic provider routing**: model names starting with `gpt-*` and o-series models (`o1`, `o3`, `o4-mini`, …) are automatically routed to OpenAI, `claude-*` to Anthropic — without changing the global config.
 - **Configurable prompts**: YAML-based prompt definitions with variants, Jinja2 variables, and per-project overrides.
 - **Per-project configuration**: language, LLM provider, prompt variant, and enabled Agents can all be overridden per TestBench project.
 - **JWT authentication**: every API call is validated against the TestBench server using a JWT token; no separate credential management required.

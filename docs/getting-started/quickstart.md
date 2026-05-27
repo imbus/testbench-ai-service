@@ -43,7 +43,7 @@ If you want to use Azure OpenAI, configure the provider in `config.toml`:
 [testbench-ai-service.llm_config]
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"
-api_version = "2024-10-21"
+api_version = "2025-04-01-preview"
 ```
 
 :::tip

@@ -97,6 +97,7 @@ Reasoning models use `reasoning_effort` (`low`, `medium`, `high`) instead of tem
 | Model | Notes |
 |---|---|
 | `o1` | First-generation reasoning model |
+| `o1-preview` | Preview of first-generation reasoning model |
 | `o1-mini` | Lighter o1 variant |
 | `o1-pro` | High-capability o1 variant |
 | `o3` | Powerful reasoning |

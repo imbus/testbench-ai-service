@@ -15,7 +15,6 @@ Your class must extend `LLMClient` from `testbench_ai_service.llm.base` and impl
 
 ```python
 from abc import ABC, abstractmethod
-from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.models.prompt import Message
 
 class LLMClient(ABC):

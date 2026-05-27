@@ -72,6 +72,7 @@ Standard chat models use `temperature = 0` for deterministic outputs.
 | `claude-3-5-sonnet-20241022` | High-capability Claude 3.5 Sonnet |
 | `claude-3-5-haiku-20241022` | Fast, lightweight Claude 3.5 |
 | `claude-3-opus-20240229` | Most powerful Claude 3 model |
+| `claude-3-sonnet-20240229` | Claude 3 Sonnet |
 | `claude-3-haiku-20240307` | Compact Claude 3 model |
 
 ### Extended thinking models (budget)
@@ -81,6 +82,7 @@ These models support extended thinking with a configurable token budget. The `re
 | Model | Notes |
 |---|---|
 | `claude-3-7-sonnet-20250219` | Claude 3.7 Sonnet with extended thinking |
+| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 (dated version) |
 | `claude-haiku-4-5` | Claude Haiku 4.5 |
 | `claude-sonnet-4-5` | Claude Sonnet 4.5 |
 | `claude-opus-4-1` | Claude Opus 4.1 |
