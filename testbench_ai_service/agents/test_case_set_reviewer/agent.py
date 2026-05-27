@@ -24,7 +24,6 @@ from testbench_ai_service.models.agent import (
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     ProjectRole,
-    SpecStatus,
 )
 from testbench_ai_service.utils.agent import (
     get_test_case_set_nodes,
@@ -39,7 +38,6 @@ from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_message
 from testbench_ai_service.utils.testbench import (
     get_project_roles,
     get_test_case_set_catalog,
-    get_test_case_set_details,
 )
 from testbench_ai_service.utils.testbench_helpers import (
     get_parameter_combinations_as_string,
@@ -72,8 +70,6 @@ class TestCaseSetReviewer(Agent):
         {
             ProjectRole.TestManager,
             ProjectRole.TestDesigner,
-            ProjectRole.TestProgrammer,
-            ProjectRole.Tester,
         }
     )
 
@@ -122,19 +118,7 @@ class TestCaseSetReviewer(Agent):
                 warnings.append(msg)
                 continue
 
-            if (
-                ProjectRole.TestManager in project_roles
-                or ProjectRole.TestDesigner in project_roles
-            ):
-                items.append(node.base.uniqueID)
-                continue
-
-            tcs = get_test_case_set_details(conn, context.project_key, node.base.key)
-
-            in_review = tcs.spec.status == SpecStatus.InReview
-            is_current_reviewer = tcs.spec.reviewer and tcs.spec.reviewer.key == context.user_key
-            if in_review and is_current_reviewer:
-                items.append(node.base.uniqueID)
+            items.append(node.base.uniqueID)
 
         if items:
             return PrecheckResult(passed=True, warnings=warnings, items=items)

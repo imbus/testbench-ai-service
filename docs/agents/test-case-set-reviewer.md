@@ -13,12 +13,10 @@ AI-powered quality reviews of test case sets. The service analyzes test case str
 
 The triggering user must hold at least one of the following **project roles**:
 
-| Role | Access granted |
-|------|----------------|
-| `TestManager` | All unlocked test case sets. |
-| `TestDesigner` | All unlocked test case sets. |
-| `TestProgrammer` | Only test case sets whose spec status is `InReview` **and** where the user is the assigned reviewer. |
-| `Tester` | Only test case sets whose spec status is `InReview` **and** where the user is the assigned reviewer. |
+| Role | Description |
+|------|-------------|
+| `TestManager` | Full project management access. |
+| `TestDesigner` | Specification authoring access. |
 
 When authenticating with a **JWT token**, the token must also grant all of the following API token permissions:
 
