@@ -260,7 +260,7 @@ class TestBuildAgentData:
         error = {"error": "NullPointerException at line 42"}
 
         with patch(
-            "testbench_ai_service.agents.defect_explainer.agent.get_test_case_set_as_string",
+            "testbench_ai_service.agents.defect_explainer.agent.test_case_execution_as_str",
             return_value="test case text",
         ):
             data = self.service._build_agent_data(tcs, "TC1", error)

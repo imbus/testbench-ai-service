@@ -180,17 +180,17 @@ class TestBuildAgentData:
 
         with (
             patch(
-                "testbench_ai_service.agents.test_case_set_describer.agent.get_test_case_set_as_string",
+                "testbench_ai_service.agents.test_case_set_describer.agent.test_case_set_as_str",
                 return_value="steps",
             ),
             patch(
-                "testbench_ai_service.agents.test_case_set_describer.agent.get_parameter_combinations_as_string",
+                "testbench_ai_service.agents.test_case_set_describer.agent.parameter_combinations_as_str",
                 return_value="| col | val |",
             ),
         ):
             data = self.service._build_agent_data(tcs)
 
-        assert "step_sequence" in data
+        assert "test_case_set" in data
         assert "parameter_combinations" in data
         assert "test_case_set_obj" in data
         assert data["test_case_set_obj"] is tcs

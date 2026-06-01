@@ -23,8 +23,10 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     create_import_zip,
     custom_serializer,
     get_error_message,
-    get_test_case_set_as_string,
     import_data,
+)
+from testbench_ai_service.agents.defect_explainer.utils import (
+    test_case_execution_as_str as _tce_as_str,
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
@@ -432,17 +434,17 @@ class TestCustomSerializer:
         assert "int" in str(exc_info.value)
 
 
-class TestGetTestCaseSetAsString:
-    """Tests for ``get_test_case_set_as_string``."""
+class TestTestCaseExecutionAsStr:
+    """Tests for ``test_case_execution_as_str``."""
 
     def test_empty_test_sequence_returns_set_name_only(self):
         tcs = _make_tcs_ns("EmptySet", [])
-        assert get_test_case_set_as_string(tcs, "tc1") == "EmptySet"
+        assert _tce_as_str(tcs, "tc1") == "EmptySet"
 
     def test_single_keyword_without_params(self):
         kw = _make_keyword_call("Login Step", numbering="1", verdict="Pass")
         tcs = _make_tcs_ns("LoginSet", [kw])
-        lines = get_test_case_set_as_string(tcs, "tc1").splitlines()
+        lines = _tce_as_str(tcs, "tc1").splitlines()
         assert lines[0] == "LoginSet"
         assert "Login Step" in lines[1]
         assert "►[Pass]" in lines[1]
@@ -452,7 +454,7 @@ class TestGetTestCaseSetAsString:
         params = [_make_param("Username", "admin"), _make_param("*Password", "secret")]
         kw = _make_keyword_call("Login Step", verdict="Pass", params=params)
         tcs = _make_tcs_ns("LoginSet", [kw])
-        result = get_test_case_set_as_string(tcs, "tc1")
+        result = _tce_as_str(tcs, "tc1")
         assert "Username=admin" in result
         assert "Password=secret" in result  # leading '*' is stripped
 
@@ -462,7 +464,7 @@ class TestGetTestCaseSetAsString:
         )
         child = _make_keyword_call("Child Step", numbering="1.1", verdict="Fail", parent_id="1")
         tcs = _make_tcs_ns("TestSet", [parent, child])
-        result = get_test_case_set_as_string(tcs, "tc1")
+        result = _tce_as_str(tcs, "tc1")
         assert "Compound Step" in result
         assert "Child Step" in result
 
@@ -472,6 +474,44 @@ class TestGetTestCaseSetAsString:
         )
         child = _make_keyword_call("Child Step", numbering="1.1", verdict="Pass", parent_id="1")
         tcs = _make_tcs_ns("TestSet", [parent, child])
-        result = get_test_case_set_as_string(tcs, "tc1")
+        result = _tce_as_str(tcs, "tc1")
         assert "Passing Compound" in result
         assert "Child Step" not in result
+
+    def test_raises_value_error_for_unknown_test_case(self):
+        tcs = _make_tcs_ns("TestSet", [])
+        with pytest.raises(ValueError, match="unknown_key"):
+            _tce_as_str(tcs, "unknown_key")
+
+    def test_failed_compound_step_uses_down_triangle_prefix(self):
+        step = _make_keyword_call(
+            "Compound", numbering="1", verdict="Fail", keyword_type=KeywordType.Compound
+        )
+        tcs = _make_tcs_ns("TestSet", [step])
+        lines = _tce_as_str(tcs, "tc1").splitlines()
+        assert "▼[Fail]" in lines[1]
+
+    def test_child_indent_is_deeper_than_parent(self):
+        parent = _make_keyword_call(
+            "Compound", numbering="1", verdict="Fail", keyword_type=KeywordType.Compound
+        )
+        child = _make_keyword_call("Child", numbering="1.1", verdict="Pass", parent_id="1")
+        tcs = _make_tcs_ns("TestSet", [parent, child])
+        lines = _tce_as_str(tcs, "tc1").splitlines()
+        parent_indent = len(lines[1]) - len(lines[1].lstrip())
+        child_indent = len(lines[2]) - len(lines[2].lstrip())
+        assert child_indent > parent_indent
+
+    def test_children_hidden_after_passing_top_level_following_a_failed_one(self):
+        fail_parent = _make_keyword_call(
+            "FailStep", numbering="1", verdict="Fail", keyword_type=KeywordType.Compound
+        )
+        fail_child = _make_keyword_call("FailChild", numbering="1.1", verdict="Fail", parent_id="1")
+        pass_parent = _make_keyword_call(
+            "PassStep", numbering="2", verdict="Pass", keyword_type=KeywordType.Compound
+        )
+        pass_child = _make_keyword_call("PassChild", numbering="2.1", verdict="Fail", parent_id="2")
+        tcs = _make_tcs_ns("TestSet", [fail_parent, fail_child, pass_parent, pass_child])
+        result = _tce_as_str(tcs, "tc1")
+        assert "FailChild" in result
+        assert "PassChild" not in result

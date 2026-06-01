@@ -183,17 +183,17 @@ class TestBuildAgentData:
 
         with (
             patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_set_as_string",
+                "testbench_ai_service.agents.test_case_set_reviewer.agent.test_case_set_as_str",
                 return_value="test case string",
             ),
             patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_parameter_combinations_as_string",
+                "testbench_ai_service.agents.test_case_set_reviewer.agent.parameter_combinations_as_str",
                 return_value="| col | val |",
             ),
         ):
             data = self.service._build_agent_data(tcs)
 
-        assert "test_case" in data
+        assert "test_case_set" in data
         assert "parameter_combinations" in data
         assert "test_case_set_obj" in data
 
@@ -203,11 +203,11 @@ class TestBuildAgentData:
 
         with (
             patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_set_as_string",
+                "testbench_ai_service.agents.test_case_set_reviewer.agent.test_case_set_as_str",
                 return_value="",
             ),
             patch(
-                "testbench_ai_service.agents.test_case_set_reviewer.agent.get_parameter_combinations_as_string",
+                "testbench_ai_service.agents.test_case_set_reviewer.agent.parameter_combinations_as_str",
                 return_value="",
             ),
             patch(

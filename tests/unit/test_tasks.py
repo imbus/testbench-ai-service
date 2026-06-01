@@ -9,7 +9,6 @@ import pytest
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
-from testbench_ai_service.agents.test_case_set_reviewer.utils import get_test_case_set_as_string
 from testbench_ai_service.config import (
     DEFAULT_AGENTS,
     AppConfig,
@@ -27,6 +26,7 @@ from testbench_ai_service.tasks import run_agent
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
 from testbench_ai_service.utils.i18n import get_translation, load_translations
+from testbench_ai_service.utils.testbench_helpers import test_case_set_as_str as _tcs_as_str
 from tests.unit.helpers.data import get_test_data_path
 
 
@@ -109,9 +109,7 @@ class TestRunAgentReviewTask:
         self.items = self.test_case_sets
 
         self.tcs_strings = {
-            tcs.details.uniqueID: get_test_case_set_as_string(
-                self.tcs_catalog[tcs.details.uniqueID]
-            )
+            tcs.details.uniqueID: _tcs_as_str(self.tcs_catalog[tcs.details.uniqueID])
             for tcs in self.test_case_sets[:3]
         }
 
@@ -137,9 +135,7 @@ class TestRunAgentReviewTask:
     async def test_review_task_completes_and_patches_all_test_case_sets(self):
         """Happy path: all test case sets are patched with started + result payloads."""
         fake_now = datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
-        with patch(
-            "testbench_ai_service.agents.test_case_set_reviewer.utils.datetime"
-        ) as mock_datetime:
+        with patch("testbench_ai_service.utils.time_utils.datetime") as mock_datetime:
             mock_datetime.now.return_value = fake_now
             await run_agent(
                 agent_key="test_case_set_reviewer",
@@ -196,9 +192,7 @@ class TestRunAgentReviewTask:
         self.mock_tb_connection.session.patch.side_effect = Exception("patch error")
 
         fake_now = datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
-        with patch(
-            "testbench_ai_service.agents.test_case_set_reviewer.utils.datetime"
-        ) as mock_datetime:
+        with patch("testbench_ai_service.utils.time_utils.datetime") as mock_datetime:
             mock_datetime.now.return_value = fake_now
             with caplog.at_level(logging.ERROR, logger="testbench_ai_service"):
                 await run_agent(
@@ -241,9 +235,7 @@ class TestRunAgentReviewTask:
         self.mock_reviewer._get_ai_response = AsyncMock(side_effect=Exception("service error"))
 
         fake_now = datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
-        with patch(
-            "testbench_ai_service.agents.test_case_set_reviewer.utils.datetime"
-        ) as mock_datetime:
+        with patch("testbench_ai_service.utils.time_utils.datetime") as mock_datetime:
             mock_datetime.now.return_value = fake_now
             with caplog.at_level(logging.ERROR, logger="testbench_ai_service"):
                 await run_agent(
@@ -307,7 +299,7 @@ class TestRunAgentReviewTask:
         prompt_config: PromptConfig,
         agent_data: dict | None = None,
     ):
-        tcs_str = (agent_data or {}).get("test_case", "")
+        tcs_str = (agent_data or {}).get("test_case_set", "")
         for uid, s in self.tcs_strings.items():
             if tcs_str == s:
                 return self.review_responses[uid]

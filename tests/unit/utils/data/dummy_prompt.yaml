@@ -30,7 +30,7 @@ variants:
           {{ vars.test_case_set_description }}
           {% endif %}
           Review the following test case:
-          {{ agent.test_case }}
+          {{ agent.test_case_set }}
 
   - name: "DEU"
     model: "o4-mini-2025-04-16"
@@ -38,4 +38,4 @@ variants:
       - role: "user"
         text: |
           Prüfe den folgenden Testfall:
-          {{ agent.test_case }}
+          {{ agent.test_case_set }}

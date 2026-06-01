@@ -9,7 +9,7 @@ from testbench_ai_service.agents.test_case_set_describer.utils import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import SpecificationDetailsForUpdate
-from testbench_ai_service.utils.testbench_helpers import get_parameter_combinations_as_string
+from testbench_ai_service.utils.testbench_helpers import parameter_combinations_as_str
 
 
 class _DummyParameter:
@@ -29,19 +29,19 @@ class _DummyTestCaseSet:
         self.test_cases = test_cases
 
 
-class TestGetParameterCombinationsAsString:
-    """Tests for ``get_parameter_combinations_as_string``."""
+class TestParameterCombinationsAsStr:
+    """Tests for ``parameter_combinations_as_str``."""
 
     def test_single_test_case_single_param_produces_correct_headers_and_row(self):
         tc = _DummyTestCase("TC1", [_DummyParameter("ParamA", "ValueA")])
-        result = get_parameter_combinations_as_string(_DummyTestCaseSet({"tc1": tc}))
+        result = parameter_combinations_as_str(_DummyTestCaseSet({"tc1": tc}))
         assert "| uniqueID | ParamA |" in result
         assert "| TC1 | ValueA |" in result
 
     def test_multiple_test_cases_multiple_params(self):
         tc1 = _DummyTestCase("TC1", [_DummyParameter("A", "1"), _DummyParameter("B", "2")])
         tc2 = _DummyTestCase("TC2", [_DummyParameter("A", "3"), _DummyParameter("B", "4")])
-        result = get_parameter_combinations_as_string(_DummyTestCaseSet({"tc1": tc1, "tc2": tc2}))
+        result = parameter_combinations_as_str(_DummyTestCaseSet({"tc1": tc1, "tc2": tc2}))
         assert "| uniqueID | A | B |" in result
         assert "| TC1 | 1 | 2 |" in result
         assert "| TC2 | 3 | 4 |" in result
@@ -49,19 +49,19 @@ class TestGetParameterCombinationsAsString:
     def test_missing_param_in_some_test_cases_produces_empty_cell(self):
         tc1 = _DummyTestCase("TC1", [_DummyParameter("A", "1")])
         tc2 = _DummyTestCase("TC2", [_DummyParameter("B", "2")])
-        result = get_parameter_combinations_as_string(_DummyTestCaseSet({"tc1": tc1, "tc2": tc2}))
+        result = parameter_combinations_as_str(_DummyTestCaseSet({"tc1": tc1, "tc2": tc2}))
         assert "| uniqueID | A | B |" in result
         assert "| TC1 | 1 |  |" in result
         assert "| TC2 |  | 2 |" in result
 
     def test_no_test_cases_returns_header_and_separator_only(self):
-        result = get_parameter_combinations_as_string(_DummyTestCaseSet({}))
+        result = parameter_combinations_as_str(_DummyTestCaseSet({}))
         assert result.startswith("| uniqueID |")
         assert len(result.strip().splitlines()) == 2  # header + separator
 
     def test_empty_parameters_produces_id_only_columns(self):
         tc = _DummyTestCase("TC1", [])
-        result = get_parameter_combinations_as_string(_DummyTestCaseSet({"tc1": tc}))
+        result = parameter_combinations_as_str(_DummyTestCaseSet({"tc1": tc}))
         assert "| uniqueID |" in result
         assert "| TC1 |" in result
 
@@ -74,7 +74,7 @@ class TestPatchDescriptionGenerationStarted:
         new_callable=AsyncMock,
     )
     @patch("testbench_ai_service.agents.test_case_set_describer.utils.get_translation")
-    @patch("testbench_ai_service.agents.test_case_set_describer.utils.datetime")
+    @patch("testbench_ai_service.utils.time_utils.datetime")
     async def test_patches_spec_with_started_html_and_user_metadata(
         self, mock_datetime, mock_translate, mock_patch_spec
     ):
@@ -115,7 +115,7 @@ class TestPatchGeneratedDescription:
         new_callable=AsyncMock,
     )
     @patch("testbench_ai_service.agents.test_case_set_describer.utils.get_translation")
-    @patch("testbench_ai_service.agents.test_case_set_describer.utils.datetime")
+    @patch("testbench_ai_service.utils.time_utils.datetime")
     async def test_patches_spec_html_with_previous_and_generated_content(
         self, mock_datetime, mock_translate, mock_patch_spec
     ):
@@ -153,7 +153,7 @@ class TestPatchGeneratedDescription:
     @patch(
         "testbench_ai_service.agents.test_case_set_describer.utils.get_translation",
     )
-    @patch("testbench_ai_service.agents.test_case_set_describer.utils.datetime")
+    @patch("testbench_ai_service.utils.time_utils.datetime")
     async def test_empty_previous_description_omits_separator(
         self, mock_datetime, mock_translate, mock_patch_spec
     ):

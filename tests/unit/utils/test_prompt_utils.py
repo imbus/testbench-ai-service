@@ -29,13 +29,13 @@ class TestBuildPrompt:
 
     def test_model_name_is_read_from_prompt_definition(self):
         prompt = build_prompt(
-            prompt_config=self._make_config(), agent_data={"test_case": "Some test case."}
+            prompt_config=self._make_config(), agent_data={"test_case_set": "Some test case set."}
         )
         assert prompt.model_name == "o4-mini-2025-04-16"
 
     def test_default_variant_produces_system_and_user_messages(self):
         prompt = build_prompt(
-            prompt_config=self._make_config(), agent_data={"test_case": "Some test case."}
+            prompt_config=self._make_config(), agent_data={"test_case_set": "Some test case set."}
         )
         messages = prompt.messages
         assert len(messages) == 2
@@ -51,15 +51,19 @@ class TestBuildPrompt:
                 "test_case_set_description": "Some description.",
             },
         )
-        prompt = build_prompt(prompt_config=config, agent_data={"test_case": "Some test case."})
+        prompt = build_prompt(
+            prompt_config=config, agent_data={"test_case_set": "Some test case set."}
+        )
         user_content = prompt.messages[1].content
         assert "Some glossary." in user_content
         assert "Some description." in user_content
-        assert "Some test case." in user_content
+        assert "Some test case set." in user_content
 
     def test_non_default_variant_produces_single_user_message(self):
         config = self._make_config(variant="DEU")
-        prompt = build_prompt(prompt_config=config, agent_data={"test_case": "Some test."})
+        prompt = build_prompt(
+            prompt_config=config, agent_data={"test_case_set": "Some test case set."}
+        )
         messages = prompt.messages
         assert len(messages) == 1
         assert messages[0].role == "user"
@@ -67,7 +71,7 @@ class TestBuildPrompt:
 
     def test_vars_with_special_characters_is_preserved(self):
         prompt = build_prompt(
-            prompt_config=self._make_config(), agent_data={"test_case": "${robot_variable}"}
+            prompt_config=self._make_config(), agent_data={"test_case_set": "${robot_variable}"}
         )
         assert "${robot_variable}" in prompt.messages[1].content
 
