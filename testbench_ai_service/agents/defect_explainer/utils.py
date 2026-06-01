@@ -25,6 +25,9 @@ from testbench_ai_service.models.agent import ExecutionContext
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.utils.i18n import get_translation
 
+_SEPARATOR = "    "
+_VERDICT_WIDTH = 10  # fixed width for verdict padding, e.g. "[Pass]    " or "[Fail]    "
+
 
 async def update_description(
     updated_comment: str, test_case_set: TestCaseSet, conn: TBConnection, context: ExecutionContext
@@ -399,96 +402,70 @@ def get_error_message(comment: str) -> dict[str, dict[str, str]]:
     return errors
 
 
-def get_test_case_set_as_string(test_case_set: TestCaseSet, test_case: str) -> str:
-    """
-    Converts a test case set to a formatted string using the first test case in test case set.
+def _strip_param_prefix(name: str) -> str:
+    """Strips the leading ``*`` marker TestBench uses to denote required parameters."""
+    return name.replace("*", "").strip()
 
-    The output is structured as:
-    - The test case set name on the first line
-    - Each interaction (and its parameters, if any) indented on subsequent lines
 
-    Note: Since test cases in a set differ only in their actual arguments,
-    the first test case is representative for formatting purposes.
+def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> str:
+    """Formats the execution trace of a specific test case as a human-readable string.
+
+    Each step is rendered with its execution verdict, indented by nesting level.
+    Children of a compound step are only included when that compound step failed —
+    this focuses the output on the failing execution path.
+
+    Parameters of each step are rendered as ``param_name=param_value``.
+    Leading ``*`` markers (TestBench required-parameter convention) are stripped
+    from parameter names.
 
     Args:
-        test_case_set: A test case set object
+        test_case_set: The test case set containing the target test case.
+        test_case: The unique ID of the test case to format.
+
+    Raises:
+        ValueError: If ``test_case`` is not found in the test case set.
 
     Returns:
-        str: Formatted string representing the test case set
+        Multi-line string with the test case set name on the first line, followed
+        by one indented line per step.
 
-    ## Example output:
+    ## Example output
     ```
-    Endpreis berechnen ohne Rabatt - Instanz
-        CarConfig starten    step_type:flow
-        Fahrzeug wählen    param:Fahrzeugname    step_type:flow
-        Sondermodell wählen    param:Sondermodellname    step_type:flow
-        Zubehör wählen    param:Zubehörname    step_type:flow
-        Preis prüfen    param:Preis    step_type:check
-        CarConfig beenden    step_type:flow
+    Login Test Set
+        ►[Pass]      Open Browser
+        ►[Pass]      Navigate To Login    url=https://example.com
+        ▼[Fail]      Login    username=admin    password=secret
+            ►[Pass]  Enter Username    username=admin
+            ►[Fail]  Enter Password    password=secret
     ```
     """
-    # Add test case set name as first line
-    lines = [f"{test_case_set.details.name}"]
-    separator = "    "
-    # comment = "#"
-    # line_break = "\n"
+    test_case_details: TestCaseDetails = test_case_set.test_cases.get(test_case)
+    if test_case_details is None:
+        raise ValueError(
+            f"Test case '{test_case}' not found in test case set '{test_case_set.details.name}'."
+        )
 
-    testcase: TestCaseDetails = test_case_set.test_cases.get(test_case)
-    if not testcase:
-        raise ValueError(f"Test case '{test_case}' not found in the test case set.")
-    high_level_status = ""
-    for keyword_call in testcase.testSequence:
-        keyword_level = len(keyword_call.numbering.split(".")) - 1
-        verdict = keyword_call.exec.verdict.name
-        is_compound = keyword_call.spec.keywordType == KeywordType.Compound and verdict == "Fail"
-        prefix = "▼" if is_compound else "►"
-        if keyword_call.parentID is None:
-            high_level_status = verdict
-            parameters = [
-                f"{param.name.replace('*', '').strip()}={param.value}"
-                for param in keyword_call.spec.callParameters
-            ]
-            lines.append(
-                f"{separator}"
-                f"{prefix}[{verdict}]{(10 - len(verdict)) * ' '}{separator}"
-                f"{keyword_call.spec.name}"
-                + (f"{separator}{separator.join(parameters)}" if parameters else "")
-            )
-        else:
-            if high_level_status != "Fail":
-                continue
-            parameters = [
-                f"{param.name.replace('*', '').strip()}={param.value}"
-                for param in keyword_call.spec.callParameters
-            ]
-            # logs = (
-            #     keyword_call.exec.comments
-            #     if keyword_call.spec.keywordType == KeywordType.Atomic
-            #     else ""
-            # )
-            lines.append(
-                f"{separator}"
-                f"{separator * keyword_level}{prefix}[{verdict}]{(10 - len(verdict)) * ' '}{separator}"
-                f"{keyword_call.spec.name}"
-                + (f"{separator}{separator.join(parameters)}" if parameters else "")
-                # + (f"{line_break if logs else ''}{logs}")
-            )
+    lines = [test_case_set.details.name]
+    last_top_level_verdict = ""
+    print(test_case_details.testSequence)
+    for call in test_case_details.testSequence:
+        level = len(call.numbering.split(".")) - 1
+        verdict = call.exec.verdict.name
 
-    # for interaction_call in test_case_set.test_cases[test_case].testSequence:
-    #     prefix = "# " if interaction_call.spec.interactionType == KeywordType
-    # .Compound else "  "
+        if call.parentID is None:
+            last_top_level_verdict = verdict
+        elif last_top_level_verdict != "Fail":
+            continue
 
-    #     line = f"  {prefix}{interaction_call.spec.name}"
-    #     # Add parameters in format param:<parameter_name> if there are parameters
-    #     if interaction_call.spec.callParameters:
-    #         param_str = "    ".join(
-    #             [
-    #                 f"{param.name.replace('*', '').strip()}={param.value}"
-    #                 for param in interaction_call.spec.callParameters
-    #             ]
-    #         )
-    #         line += f"    {param_str}"
+        is_compound_fail = call.spec.keywordType == KeywordType.Compound and verdict == "Fail"
+        prefix = "▼" if is_compound_fail else "►"
+        verdict_label = f"[{verdict}]{' ' * (_VERDICT_WIDTH - len(verdict))}"
+        indent = _SEPARATOR * (level + 1)
+        params = [f"{_strip_param_prefix(p.name)}={p.value}" for p in call.spec.callParameters]
 
-    #     lines.append(line)
+        line = f"{indent}{prefix}{verdict_label}{_SEPARATOR}{call.spec.name}"
+        if params:
+            line += f"{_SEPARATOR}{_SEPARATOR.join(params)}"
+        lines.append(line)
 
     return "\n".join(lines)

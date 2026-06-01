@@ -6,7 +6,6 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.test_case_set_describer.utils import (
-    get_test_case_set_as_string,
     patch_description_generation_started_for_test_structure_element,
     patch_generated_description_for_test_structure_element,
     patch_previous_description_for_test_structure_element,
@@ -36,11 +35,14 @@ from testbench_ai_service.utils.testbench import (
     get_project_roles,
     get_test_case_set_catalog,
 )
-from testbench_ai_service.utils.testbench_helpers import get_parameter_combinations_as_string
+from testbench_ai_service.utils.testbench_helpers import (
+    parameter_combinations_as_str,
+    test_case_set_as_str,
+)
 
 
 class TestCaseSetDescriberAgentData(AgentData):
-    step_sequence: str
+    test_case_set: str
     parameter_combinations: str | None
     test_case_set_obj: TestCaseSet
 
@@ -253,8 +255,8 @@ class TestCaseSetDescriber(Agent):
 
     def _build_agent_data(self, test_case_set: TestCaseSet) -> TestCaseSetDescriberAgentData:
         return {
-            "step_sequence": get_test_case_set_as_string(test_case_set),
-            "parameter_combinations": get_parameter_combinations_as_string(test_case_set),
+            "test_case_set": test_case_set_as_str(test_case_set),
+            "parameter_combinations": parameter_combinations_as_str(test_case_set),
             "test_case_set_obj": test_case_set,
         }
 

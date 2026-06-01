@@ -6,7 +6,6 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.test_case_set_reviewer.utils import (
-    get_test_case_set_as_string,
     patch_previous_review_comment_for_test_structure_element,
     patch_review_result_for_test_structure_element,
     patch_review_started_for_test_structure_element,
@@ -40,12 +39,13 @@ from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
 )
 from testbench_ai_service.utils.testbench_helpers import (
-    get_parameter_combinations_as_string,
+    parameter_combinations_as_str,
+    test_case_set_as_str,
 )
 
 
 class TestCaseSetReviewerAgentData(AgentData, total=False):
-    test_case: str
+    test_case_set: str
     parameter_combinations: str | None
     test_case_set_description: str | None
     test_case_set_obj: TestCaseSet
@@ -263,8 +263,8 @@ class TestCaseSetReviewer(Agent):
     ) -> TestCaseSetReviewerAgentData:
         """Builds the agent-data dict (``agent.*`` namespace) for a single test case set."""
         data: TestCaseSetReviewerAgentData = {
-            "test_case": get_test_case_set_as_string(test_case_set),
-            "parameter_combinations": get_parameter_combinations_as_string(test_case_set),
+            "test_case_set": test_case_set_as_str(test_case_set),
+            "parameter_combinations": parameter_combinations_as_str(test_case_set),
             "test_case_set_obj": test_case_set,
         }
 

@@ -10,7 +10,7 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     add_explanations_to_comment,
     clean_up_comment,
     get_error_message,
-    get_test_case_set_as_string,
+    test_case_execution_as_str,
     update_description,
 )
 from testbench_ai_service.auth import AuthInfo, AuthType
@@ -256,7 +256,7 @@ class DefectExplainer(Agent):
         self, test_case_set: TestCaseSet, test_case: str, error: dict
     ) -> DefectExplainerAgentData:
         return {
-            "failed_test_case": get_test_case_set_as_string(test_case_set, test_case),
+            "failed_test_case": test_case_execution_as_str(test_case_set, test_case),
             "error_message": error["error"],
             "test_case_set_obj": test_case_set,
         }
@@ -319,7 +319,6 @@ class DefectExplainer(Agent):
             "Sending the following messages to the LLM for the defect explanation:\n %s",
             pretty_messages(messages),
         )
-
         explanation = await llm_client.query_llm(
             model=model, messages=messages, **(llm_config.model_extra or {})
         )
