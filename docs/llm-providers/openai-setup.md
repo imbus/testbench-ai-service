@@ -20,7 +20,7 @@ This guide walks you through connecting the TestBench AI Service to the OpenAI A
 
 1. Log in to the [OpenAI Platform](https://platform.openai.com).
 2. Navigate to **API keys** in the left sidebar.
-3. Click **Create new secret key**, give it a name, and copy the key immediately — it is only shown once.
+3. Click **Create new secret key**, give it a name, and copy the key immediately. It is only shown once.
 
 ## 2. Set the API key
 
@@ -42,6 +42,7 @@ Never commit API keys to version control. Add `.env` to your `.gitignore`.
 Set the provider in the `[testbench-ai-service.llm_config]` section:
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "openai"
 ```
@@ -55,7 +56,7 @@ In your prompt YAML file, set `model` to any supported OpenAI model name:
 ```yaml
 variants:
   - name: "Full Description"
-    model: "gpt-4.1-mini"
+    model: "gpt-5.5"
     messages:
       - role: "system"
         file: "system.jinja"
@@ -69,9 +70,16 @@ variants:
 |---|---|
 | `gpt-4o` | Flagship multimodal model |
 | `gpt-4o-mini` | Fast, cost-efficient |
+| `gpt-4o-search-preview` | gpt-4o with integrated web search |
+| `gpt-4o-mini-search-preview` | gpt-4o-mini with integrated web search |
 | `gpt-4.1` | 1 M context window |
 | `gpt-4.1-mini` | 1 M context, cost-efficient |
 | `gpt-4.1-nano` | Fastest and cheapest GPT-4.1 variant |
+| `gpt-4-turbo` | GPT-4 Turbo (legacy) |
+| `gpt-4` | GPT-4 (legacy) |
+| `gpt-3.5-turbo` | GPT-3.5 Turbo (legacy) |
+| `gpt-3.5-turbo-16k` | GPT-3.5 Turbo with 16k context (legacy) |
+| `gpt-3.5-turbo-instruct` | GPT-3.5 Turbo Instruct (legacy) |
 
 ### Supported reasoning models
 
@@ -84,28 +92,32 @@ Reasoning models use `reasoning_effort` (`low`, `medium`, `high`) instead of tem
 | `gpt-5` | GPT-5 |
 | `gpt-5-mini` | Compact GPT-5 variant |
 | `gpt-5-nano` | Lightweight GPT-5 variant |
+| `gpt-5-codex` | Code-focused GPT-5 variant |
 | `gpt-5-pro` | High-capability GPT-5 variant |
 | `gpt-5.1` | GPT-5.1 |
+| `gpt-5.1-codex` | Code-focused GPT-5.1 variant |
+| `gpt-5.1-codex-max` | Extended code-focused GPT-5.1 variant |
+| `gpt-5.1-codex-mini` | Compact code-focused GPT-5.1 variant |
 | `gpt-5.2` | GPT-5.2 |
+| `gpt-5.2-codex` | Code-focused GPT-5.2 variant |
 | `gpt-5.2-pro` | High-capability GPT-5.2 variant |
-| `gpt-5.4` | GPT-5.4 (default model in built-in prompts) |
+| `gpt-5.3-codex` | Code-focused GPT-5.3 variant |
+| `gpt-5.4` | GPT-5.4 |
 | `gpt-5.4-mini` | Compact GPT-5.4 variant |
+| `gpt-5.4-nano` | Lightweight GPT-5.4 variant |
 | `gpt-5.4-pro` | High-capability GPT-5.4 variant |
+| `gpt-5.5` | GPT-5.5 |
+| `gpt-5.5-pro` | High-capability GPT-5.5 variant |
 
 **o-series**
 
 | Model | Notes |
 |---|---|
 | `o1` | First-generation reasoning model |
-| `o1-preview` | Preview of first-generation reasoning model |
-| `o1-mini` | Lighter o1 variant |
 | `o1-pro` | High-capability o1 variant |
 | `o3` | Powerful reasoning |
 | `o3-mini` | Lightweight o3 |
-| `o3-pro` | High-capability o3 variant |
-| `o3-deep-research` | o3 variant for deep research tasks |
 | `o4-mini` | Compact o4 reasoning model |
-| `o4-mini-deep-research` | o4-mini variant for deep research tasks |
 
 
 :::note
@@ -125,6 +137,7 @@ OPENAI_API_KEY=sk-...your_openai_api_key
 **`config.toml`**
 
 ```toml
+# config.toml
 [testbench-ai-service]
 tb_server_url = "https://localhost:9443/api/"
 host = "127.0.0.1"
@@ -140,7 +153,7 @@ provider = "openai"
 ```yaml
 variants:
   - name: "Full Description"
-    model: "gpt-4.1-mini"
+    model: "gpt-5.5"
     messages:
       - role: "system"
         file: "system.jinja"

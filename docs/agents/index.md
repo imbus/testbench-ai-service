@@ -15,24 +15,43 @@ An **agent** is a self-contained AI-driven workflow that the service exposes as 
 
 ## Built-in Agents
 
-| Agent key | Dedicated endpoint | Description |
-|----------|----------|-------------|
-| [`test_case_set_reviewer`](test-case-set-reviewer.md) | `POST /test-case-set-reviews` | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification. |
-| [`test_case_set_describer`](test-case-set-describer.md) | `POST /test-case-set-descriptions` | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
-| [`defect_explainer`](defect-explainer.md) | `POST /defect-explanations` | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview. |
+| Agent key | Description |
+|-----------|-------------|
+| [`test_case_set_reviewer`](test-case-set-reviewer.md) | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification. |
+| [`test_case_set_describer`](test-case-set-describer.md) | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
+| [`defect_explainer`](defect-explainer.md) | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview. |
+
+---
+
+## Custom Agents
+
+In addition to the built-in agents, the service supports custom agents. A custom agent is a Python class that extends the `Agent` base class and is registered in `config.toml` via its `class_path`. It follows the same lifecycle and is exposed on the same generic endpoints as built-in agents.
+
+See the [Custom Agent](custom-agent.md) guide for step-by-step instructions.
 
 ---
 
 ## Generic agent endpoints
 
-In addition to the dedicated trigger endpoints above, the service exposes a set of generic endpoints that work with any agent by key:
+In addition to the dedicated trigger endpoints, the service exposes a set of generic endpoints that work with any agent by key:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/agents` | List all configured agents (supports filtering by key, project, enabled status). |
+| `GET` | `/agents` | List all configured agents. |
 | `GET` | `/agents/{agent_key}` | Get details for a specific agent. |
 | `GET` | `/agents/{agent_key}/prompt` | Inspect the configured prompt and its variants. |
 | `POST` | `/agents/{agent_key}/trigger` | Trigger any agent by key (same request body as dedicated endpoints). |
+
+### Query parameters
+
+The `GET` endpoints accept the following optional query parameters:
+
+| Parameter | Applies to | Type | Description |
+|-----------|------------|------|-------------|
+| `keys` | `GET /agents` | String (repeatable) | Filter the list by one or more agent keys. |
+| `project_key` | All `GET` endpoints | String | Resolve the agent's effective configuration for the given project key. |
+| `language` | All `GET` endpoints | String | Override language for prompt resolution (`en` or `de`). |
+| `enabled` | `GET /agents` | Boolean | Filter by enabled status. |
 
 For example, to trigger the Test Case Set Reviewer via the generic endpoint:
 
@@ -58,7 +77,6 @@ All agent trigger endpoints accept the same request body:
   "language": "en",
   "prompt_config": {
     "file": "custom_prompt/prompt.yaml",
-    "name": "PromptName",
     "variant": "variant-name",
     "vars": {
       "glossary": "Domain: automotive\nABS = Anti-lock Braking System"
@@ -102,8 +120,10 @@ On success, `202 Accepted`:
 |--------|---------|
 | `401` | Missing or invalid authorization token. |
 | `403` | Insufficient permissions or project role. See each agent's page for the exact requirements. |
-| `404` | Project not found, or agent is disabled for the project. |
+| `404` | Agent not found, project not found, or agent is disabled for the project. |
 | `409` | Precheck failed. No items passed validation. |
+| `422` | Invalid request body. The request failed schema validation. |
+| `502` | The service could not reach the TestBench REST API server. |
 
 ---
 
@@ -116,6 +136,8 @@ Allowed project roles and required API token permissions differ per agent. See e
 - [Test Case Set Reviewer](test-case-set-reviewer.md#authorization)
 - [Test Case Set Describer](test-case-set-describer.md#authorization)
 - [Defect Explainer](defect-explainer.md#authorization)
+
+For custom agents, implement your own permission and role checks inside `precheck()`. See [Custom Agent: 1. Implement the agent class](custom-agent.md#1-implement-the-agent-class) for details.
 
 :::note
 The API token permission check applies only to JWT tokens. Session tokens bypass it but still require the correct project role.

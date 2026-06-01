@@ -10,7 +10,7 @@ This page explains how TestBench communicates with the AI Service and how to con
 
 ## Overview
 
-TestBench triggers AI Agents by calling the AI Service's REST API. Unlike the Requirement Service or Defect Service, the AI Service does **not** use a proxy wrapper — TestBench connects directly via its built-in AI integration.
+TestBench triggers AI Agents by calling the AI Service's REST API. Unlike the Requirement Service or Defect Service, the AI Service does **not** use a proxy wrapper. TestBench connects directly via its built-in AI integration.
 
 Authentication is handled via **JWT tokens**: TestBench passes the current user's JWT token with every request, and the AI Service validates it against the TestBench REST API.
 

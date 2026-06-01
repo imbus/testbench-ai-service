@@ -25,6 +25,7 @@ The TestBench AI Service supports multiple LLM providers out of the box and can 
 Set the active provider in `config.toml`:
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "openai"   # openai | anthropic | azure_openai | custom
 ```
@@ -35,8 +36,8 @@ The service automatically routes each request to the correct provider based on t
 
 | Model name prefix | Routed to |
 |---|---|
-| `gpt-*` (including `gpt-5.*`) | OpenAI (or Azure OpenAI when configured) |
-| `o`-series (`o1`, `o3`, `o4-mini`, …) | OpenAI (or Azure OpenAI when configured) |
+| `gpt-*` | OpenAI (or Azure OpenAI when configured) |
+| `o*` | OpenAI (or Azure OpenAI when configured) |
 | `claude-*` | Anthropic |
 | anything else | uses `config.provider` |
 

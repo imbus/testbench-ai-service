@@ -12,9 +12,9 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 
 ```
 ┌─────────────────────────────────────┐
-│        Prompt YAML File             │
+│           Prompt YAML File          │
 │  ┌────────────────────────────────┐ │
-│  │  Prompt Definition (by name)   │ │
+│  │        Prompt Definition       │ │
 │  │  ┌──────────────────────────┐  │ │
 │  │  │  Variant (by name)       │  │ │
 │  │  │  - model: "gpt-4.1"      │  │ │
@@ -31,11 +31,9 @@ Prompts are the instructions sent to the LLM. The TestBench AI Service uses a st
 ```
 
 1. The service loads the YAML file specified in the agent's `prompt.file` config.
-2. It finds the **prompt definition** matching `prompt.name`.
-3. It selects the **variant** matching `prompt.variant` (or the `default_variant`).
-4. Each message is rendered with Jinja2. Content is either an inline `text` string or loaded from an external `file`. Template variables are resolved from two namespaces: `{{ agent.<key> }}` for agent-generated data and `{{ vars.<key> }}` for user-provided values.
-5. Messages with the same `role` are merged into a single message.
-6. The resulting messages and the variant's `model` (or the definition's `default_model`) are sent to the LLM.
+2. It selects the **variant** matching `prompt.variant` (or the `default_variant` from the YAML).
+3. Each message is rendered with Jinja2. Content is either an inline `text` string or loaded from an external `file`. Template variables are resolved from two namespaces: `{{ agent.<key> }}` for agent-generated data and `{{ vars.<key> }}` for user-provided values.
+4. The resulting messages and the variant's `model` (or the definition's `default_model`) are sent to the LLM.
 
 ---
 
@@ -79,40 +77,41 @@ will load `prompts/en/test_case_set_reviewer/prompt.yaml`.
 
 ## YAML schema
 
-Each prompt YAML file is a list of prompt definitions:
+Each prompt YAML file contains a single prompt definition:
 
 ```yaml
-- name: "TestCaseSetReviewer"
-  description: "Reviews test case sets from TestBench."
-  default_model: "gpt-4.1"          # fallback model for variants that don't specify one
-  default_variant: "detailed-prompt"
-  variants:
-    - name: "detailed-prompt"
-      model: "gpt-4.1"               # optional — overrides default_model for this variant
-      vars:
-        glossary:                    # declare a user-provided variable
-          name: "Glossary"
-          description: "Optional glossary of project-specific terms."
-          value_type: "text"
-          required: false
-      messages:
-        - role: "system"
-          text: |                   # inline Jinja2 template
-            You are a test analyst.
-        - role: "user"
-          file: "review_user.jinja" # OR reference an external template file
+name: "TestCaseSetReviewer"
+summary: "Review test case sets"
+description: "Analyzes test case sets against best practices and writes results to the review comment field."  # optional
+default_model: "gpt-5.5"          # fallback model for variants that don't specify one
+default_variant: "Full Review"
+variants:
+  - name: "Full Review"
+    model: "gpt-5.5"               # optional — overrides default_model for this variant
+    vars:
+      glossary:                    # declare a user-provided variable
+        name: "Glossary"
+        description: "Optional glossary of project-specific terms."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "system"
+        text: |                   # inline Jinja2 template
+          You are a test analyst.
+      - role: "user"
+        file: "review_user.jinja" # OR reference an external template file
 
-    - name: "quick-review"
-      model: "gpt-4.1-mini"
-      messages:
-        - role: "user"
-          text: |
-            Review this test case:
-            {{ agent.test_case }}
-            {% if vars.glossary %}
-            Use this glossary:
-            {{ vars.glossary }}
-            {% endif %}
+  - name: "Quick Review"
+    model: "gpt-5.5-mini"
+    messages:
+      - role: "user"
+        text: |
+          Review this test case:
+          {{ agent.test_case }}
+          {% if vars.glossary %}
+          Use this glossary:
+          {{ vars.glossary }}
+          {% endif %}
 ```
 
 :::note
@@ -123,13 +122,14 @@ Each message must have **either** `text` (inline template) **or** `file` (path t
 
 #### Prompt definition fields
 
-| Field               | Type   | Description                                                   | Required |
-| ------------------- | ------ | ------------------------------------------------------------- | -------- |
-| `name`            | String | Unique identifier for the prompt definition.                  | Yes      |
-| `description`     | String | Human-readable description.                                   | No       |
-| `default_model`   | String | Fallback LLM model for variants that don't declare their own. | Yes      |
+| Field  | Type  | Description | Required |
+| ------ | ----- | ----------- | -------- |
+| `name` | String | Identifier for the prompt definition. Shown as the **agent name** in TestBench and the OpenAPI UI. | Yes |
+| `summary` | String | Short label for the agent. Shown as the **agent summary** in TestBench and the OpenAPI UI. | No |
+| `description` | String | Longer description of the agent. Shown as the **agent description** in TestBench and the OpenAPI UI. | No |
+| `default_model` | String | Fallback LLM model for variants that don't declare their own. | Yes      |
 | `default_variant` | String | Name of the default variant to use when none is specified.    | Yes      |
-| `variants`        | List   | At least one variant is required.                             | Yes      |
+| `variants`        | List[Variant]   | At least one variant is required.                             | Yes      |
 
 #### Variant fields
 
@@ -137,9 +137,9 @@ Each message must have **either** `text` (inline template) **or** `file` (path t
 | --------------- | ------ | ---------------------------------------------------------------------------------------------------- | -------- |
 | `name`        | String | Unique variant identifier.                                                                           | Yes      |
 | `description` | String | Human-readable description.                                                                          | No       |
-| `model`       | String | LLM model to use (e.g.,`"gpt-4.1"`, `"o3"`). Falls back to `default_model` if not set.         | No       |
+| `model`       | String | LLM model to use (e.g.,`"gpt-5.5"`, `"o3"`). Falls back to `default_model` if not set.         | No       |
 | `vars`        | Object | Declared user-provided variables for this variant (see [Variable declarations](#variable-declarations)). | No       |
-| `messages`    | List   | Ordered list of message blocks.                                                                      | Yes      |
+| `messages`    | List[Message]   | Ordered list of message blocks.                                                                      | Yes      |
 
 #### Message fields
 
@@ -211,7 +211,6 @@ Configuration (supplying user-provided variables):
 # config.toml
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
 file = "test_case_set_reviewer/prompt.yaml"
-name = "TestCaseSetReviewer"
 
 [testbench-ai-service.agents.test_case_set_reviewer.prompt.vars]
 glossary = "Domain: automotive\nABS = Anti-lock Braking System"
@@ -234,26 +233,26 @@ When you run `testbench-ai-service init`, the built-in prompt files are copied t
 Add a new entry to the `variants` list in the YAML file:
 
 ```yaml
-- name: "TestCaseSetReviewer"
-  description: "Reviews test case sets."
-  default_model: "gpt-4.1"
-  default_variant: "detailed-prompt"
-  variants:
-    - name: "detailed-prompt"
-      model: "gpt-4.1"
-      messages:
-        - role: "system"
-          text: |
-            You are a test analyst.
-        - role: "user"
-          file: "detailed_prompt_user.jinja"  # external template file
+name: "TestCaseSetReviewer"
+summary: "Review test case sets"
+default_model: "gpt-5.5"
+default_variant: "Full Review"
+variants:
+  - name: "Full Review"
+    model: "gpt-5.5"
+    messages:
+      - role: "system"
+        text: |
+          You are a test analyst.
+      - role: "user"
+        file: "full_review_user.jinja"  # external template file
 
-    - name: "quick-review"
-      model: "gpt-4.1-mini"
-      messages:
-        - role: "user"
-          text: |
-            Review this test case: {{ agent.test_case }}
+  - name: "Quick Review"
+    model: "gpt-5.5-mini"
+    messages:
+      - role: "user"
+        text: |
+          Review this test case: {{ agent.test_case }}
 ```
 
 ### Creating a new prompt file
@@ -265,7 +264,6 @@ Add a new entry to the `variants` list in the YAML file:
 # config.toml
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
 file = "my_custom_reviews.yaml"
-name = "MyCustomReviews"
 ```
 
 ---

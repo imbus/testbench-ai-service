@@ -34,6 +34,7 @@ The following order shows which source takes precedence when the same setting is
 ## Full example
 
 ```toml
+# config.toml
 [testbench-ai-service]
 tb_server_url = "https://localhost:9443/api/"
 host = "127.0.0.1"
@@ -41,6 +42,8 @@ port = 8010
 debug = false
 language = "de"
 prompts_dir = "prompts"
+# tb_ssl_verify = true          # set to false to disable TLS verification (insecure)
+# tb_ssl_ca_bundle = "/path/to/ca-bundle.pem"  # path to custom CA bundle
 
 # LLM provider configuration
 [testbench-ai-service.llm_config]
@@ -65,35 +68,31 @@ class_path = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseS
 
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
 file = "test_case_set_reviewer/prompt.yaml"
-name = "TestCaseSetReviewer"
 
 # agent: Test Case Set Describer
 [testbench-ai-service.agents.test_case_set_describer]
 enabled = true
 endpoint_path = "/test-case-set-descriptions"
 class_path = "testbench_ai_service.agents.test_case_set_describer.agent.TestCaseSetDescriber"
-summary = "Trigger generation of test case set descriptions"
-description = "Triggers asynchronous generation of descriptions for specified test case sets."
 
 [testbench-ai-service.agents.test_case_set_describer.prompt]
 file = "test_case_set_describer/prompt.yaml"
-name = "TestCaseSetDescriber"
 
 # agent: Defect Explainer
 [testbench-ai-service.agents.defect_explainer]
 enabled = true
 endpoint_path = "/defect-explanations"
 class_path = "testbench_ai_service.agents.defect_explainer.agent.DefectExplainer"
-summary = "Trigger generation of defect explanations"
-description = "Triggers asynchronous generation of defect explanations."
 
 [testbench-ai-service.agents.defect_explainer.prompt]
 file = "defect_explainer/prompt.yaml"
-name = "DefectExplainer"
 
 # Project-specific overrides
 [testbench-ai-service.projects."My Project"]
 language = "en"
+
+[testbench-ai-service.projects."My Project".agents.test_case_set_reviewer]
+enabled = false
 ```
 
 ---
@@ -104,12 +103,14 @@ language = "en"
 
 | Option            | Type    | Description                                                                                                   | Default                           |
 | ----------------- | ------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `tb_server_url` | String  | Base URL of the TestBench REST API server.                                                                    | `"https://localhost:9443/api/"` |
-| `host`          | String  | Host address to bind to.                                                                                      | `"127.0.0.1"`                   |
-| `port`          | Integer | Port number to listen on.                                                                                     | `8010`                          |
-| `debug`         | Boolean | Enable debug mode (verbose logging, auto-reload).                                                             | `false`                         |
-| `language`      | String  | Default language for prompt resolution and localization (`"en"` or `"de"`).                               | `"de"`                          |
-| `prompts_dir`   | String  | Directory containing prompt YAML files. Relative paths in prompt configs are resolved against this directory. | Built-in prompts directory        |
+| `tb_server_url`    | String  | Base URL of the TestBench REST API server.                                                                    | `"https://localhost:9443/api/"` |
+| `tb_ssl_verify`    | Boolean | Verify the SSL/TLS certificate of the TestBench server. Set to `false` to disable (insecure).                | `true`                          |
+| `tb_ssl_ca_bundle` | String  | Path to a CA bundle file for verifying the TestBench server certificate. Takes precedence over `tb_ssl_verify` when set. | —                   |
+| `host`             | String  | Host address to bind to.                                                                                      | `"127.0.0.1"`                   |
+| `port`             | Integer | Port number to listen on.                                                                                     | `8010`                          |
+| `debug`            | Boolean | Enable debug mode (verbose logging, auto-reload).                                                             | `false`                         |
+| `language`         | String  | Default language for prompt resolution and localization (`"en"` or `"de"`).                               | `"de"`                          |
+| `prompts_dir`      | String  | Directory containing prompt YAML files. Relative paths in prompt configs are resolved against this directory. | Built-in prompts directory        |
 
 **Example:**
 
@@ -237,6 +238,7 @@ provider = "openai"
 **Anthropic example:**
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "anthropic"
 ```
@@ -244,6 +246,7 @@ provider = "anthropic"
 **Azure OpenAI example:**
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"
@@ -309,6 +312,7 @@ In prompt variants you always use your Azure **deployment name** (as configured 
 If your deployment names don't match any known canonical model name, add a `deployment_mapping` that maps each deployment name to the canonical model it represents:
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"
@@ -323,25 +327,28 @@ When the deployment name from a prompt variant matches a key in `deployment_mapp
 
 ### Custom LLM provider
 
-To use a custom LLM provider, implement the `LLMClient` abstract class and point the config to your implementation:
+To use a custom LLM provider, set `provider = "custom"` and specify the fully-qualified class path to your `LLMClient` implementation:
 
 ```toml
 # config.toml
 [testbench-ai-service.llm_config]
 provider = "custom"
 class_path = "my_module.MyCustomLLMClient"
-...
 ```
 
-Your class must implement:
+Your class must extend `LLMClient` from `testbench_ai_service.llm.base` and implement three methods:
 
-- `__init__(self, api_key, *args, **kwargs)`
-- `async query_llm(self, model, messages, *args, **kwargs) -> str`
-- `async close(self)`
+| Method | Description |
+|---|---|
+| `__init__(self, api_key, **kwargs)` | Called once at startup. `api_key` is always `None` for custom providers. Receives `timeout`, `max_retries`, and `_strict_response_validation` from `llm_config` via `**kwargs` if set. |
+| `async query_llm(self, model, messages, *args, **kwargs) -> str` | Sends messages to the model and returns the plain-text response. |
+| `async close(self)` | Releases connections and resources (called on service shutdown). |
 
 :::tip
-The module must be importable from the working directory where the service is started. Place your custom client file in the same directory or add its location to `PYTHONPATH`.
+The module must be importable from the working directory where the service is started. Place your implementation file in the same directory or add its location to `PYTHONPATH`.
 :::
+
+For a complete implementation guide, examples, and troubleshooting reference, see [Custom LLM Client](llm-providers/custom-client.md).
 
 ---
 
@@ -356,15 +363,16 @@ Each agent is configured under its own key. The three built-in Agents are `test_
 | `enabled`       | Boolean | Whether this agent is active.                               | Yes      |
 | `endpoint_path` | String  | The HTTP endpoint path (e.g.,`"/test-case-set-reviews"`). | Yes      |
 | `class_path`    | String  | Full Python class path to the agent service implementation. | Yes      |
-| `summary`       | String  | Short summary shown in OpenAPI docs.                        | No       |
-| `description`   | String  | Detailed description shown in OpenAPI docs.                 | No       |
+
+:::note
+The `name`, `summary`, and `description` shown in the OpenAPI UI and in TestBench as the agent name, summary, and description are read from the prompt YAML file (`name`, `summary`, `description` fields at the root of the YAML).
+:::
 
 **`[testbench-ai-service.agents.<agent_key>.prompt]`**
 
 | Option      | Type   | Description                                                                                          | Required |
 | ----------- | ------ | ---------------------------------------------------------------------------------------------------- | -------- |
 | `file`    | String | Path to the prompt YAML file (relative to `prompts_dir/<language>/`).                              | Yes      |
-| `name`    | String | Name of the prompt definition within the YAML file.                                                  | Yes      |
 | `variant` | String | Prompt variant to use (falls back to `default_variant` in the YAML file).                          | No       |
 | `vars`    | Table  | Key-value pairs for user-provided variables, accessible as `{{ vars.<key> }}` in prompt templates. | No       |
 
@@ -378,12 +386,9 @@ For details on how prompts work, see the [Prompts](prompts.md) page.
 enabled = true
 endpoint_path = "/test-case-set-reviews"
 class_path = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
-summary = "Trigger test case set reviews"
-description = "This endpoint triggers asynchronous reviews for the specified test case sets."
 
 [testbench-ai-service.agents.test_case_set_reviewer.prompt]
 file = "test_case_set_reviewer/prompt.yaml"
-name = "TestCaseSetReviewer"
 ...
 ```
 
@@ -401,7 +406,6 @@ Any global setting can be overridden per TestBench project. The project name mus
 | `llm_config`                  | Table   | Override the LLM provider configuration.        |
 | `agents.<key>.enabled`        | Boolean | Enable or disable a specific agent.             |
 | `agents.<key>.prompt.file`    | String  | Override the prompt file.                       |
-| `agents.<key>.prompt.name`    | String  | Override the prompt definition name.            |
 | `agents.<key>.prompt.variant` | String  | Override the prompt variant.                    |
 | `agents.<key>.prompt.vars`    | Table   | Override prompt variables.                      |
 
@@ -424,8 +428,7 @@ enabled = false
 # Use a different prompt variant for this project
 [testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer.prompt]
 file = "CarConfigurator_reviews_prompt/prompt.yaml"
-name = "TestCaseSetReviewer"
-variant = "Separated Roles"
+variant = "Full Review"
 ```
 
 ---

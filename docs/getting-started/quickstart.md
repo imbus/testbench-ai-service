@@ -31,6 +31,7 @@ testbench-ai-service init
 This creates a default `config.toml` and copies the built-in prompt YAML files to a `./prompts` directory. For most setups, the only setting you need to verify is `tb_server_url`:
 
 ```toml
+# config.toml
 [testbench-ai-service]
 tb_server_url = "https://localhost:9443/api/"
 ```
@@ -40,6 +41,7 @@ Make sure `tb_server_url` points to your TestBench REST API Server.
 If you want to use Azure OpenAI, configure the provider in `config.toml`:
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"

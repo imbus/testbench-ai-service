@@ -5,7 +5,14 @@ title: Custom LLM Client
 
 # Custom LLM Client
 
-If none of the built-in providers fit your needs you can implement your own LLM client and plug it in via configuration.
+If none of the built-in providers fit your needs, you can implement your own LLM client and plug it in via configuration.
+
+---
+
+## Requirements
+
+- The TestBench AI Service installed and a `config.toml` present
+- A Python package containing your client implementation, importable from the service's working directory
 
 ---
 
@@ -25,11 +32,12 @@ class LLMClient(ABC):
         api_key is always None for custom providers (the service does not load
         a CUSTOM_API_KEY environment variable). Read your own key from the
         environment inside __init__ if authentication is required.
-        Additional kwargs from llm_config (e.g. timeout, max_retries) are forwarded here.
+        Additional kwargs from llm_config (timeout, max_retries,
+        _strict_response_validation) are forwarded here if set.
         """
 
     @abstractmethod
-    async def query_llm(self, model: str, messages: list[Message], **kwargs) -> str:
+    async def query_llm(self, model: str, messages: list[Message], *args, **kwargs) -> str:
         """
         Send messages to the model and return the plain-text response.
         """
@@ -46,11 +54,11 @@ The `Message` model has two fields:
 | Field | Type | Description |
 |---|---|---|
 | `role` | `"system"` \| `"user"` \| `"assistant"` | Message role |
-| `content` | `str` | Message text |
+| `content` | String | Message text |
 
 ---
 
-## Minimal example
+## 1. Implement the client
 
 ```python
 # my_llm/client.py
@@ -81,11 +89,7 @@ class MyCustomLLMClient(LLMClient):
         await self.http.aclose()
 ```
 
----
-
-## Register the client
-
-### 1. Make the module importable
+## 2. Make the module importable
 
 Place your file so it is importable from the directory where the service is started. For example, put `my_llm/client.py` next to `config.toml`, or add its parent directory to `PYTHONPATH`:
 
@@ -97,26 +101,30 @@ $env:PYTHONPATH = "C:\path\to\my_llm_parent"
 export PYTHONPATH="/path/to/my_llm_parent"
 ```
 
-### 2. Update `config.toml`
+## 3. Register in `config.toml`
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "custom"
 class_path = "my_llm.client.MyCustomLLMClient"
 ```
 
-`class_path` must be the fully qualified Python class path (dotted module path + class name).
+`class_path` must be the fully-qualified Python class path (dotted module path + class name).
 
-### 3. Optional — pass extra configuration
+## 4. Optional: pass extra configuration
 
-Any extra keys in `llm_config` that are listed in the allowed set (`timeout`, `max_retries`, `_strict_response_validation`) are forwarded as `**kwargs` to `__init__`. Add your own keys to `config.toml` and read them from `**kwargs` in `__init__` if needed:
+The service forwards three specific keys from `llm_config` as `**kwargs` to `__init__`: `timeout`, `max_retries`, and `_strict_response_validation`. Add any of these to your `config.toml` to configure them:
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "custom"
 class_path = "my_llm.client.MyCustomLLMClient"
 timeout = 60
 ```
+
+For any other configuration your client needs (for example, base URLs or custom credentials), read the values from environment variables directly inside `__init__`.
 
 ---
 

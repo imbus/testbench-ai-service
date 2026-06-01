@@ -28,7 +28,7 @@ This guide walks you through connecting the TestBench AI Service to an Azure Ope
 
 1. In your Azure OpenAI resource, navigate to **Azure OpenAI Studio** → **Deployments** → **Deploy model**.
 2. Select a base model (e.g. `gpt-4o` or `gpt-4.1-mini`) and give it a deployment name (e.g. `my-gpt4o`).
-3. Note down the **deployment name** — this is what you will reference in prompt variants and in `config.toml`.
+3. Note down the **deployment name**. This is what you will reference in prompt variants and in `config.toml`.
 
 ## 3. Set the API key
 
@@ -50,6 +50,7 @@ Never commit API keys to version control. Add `.env` to your `.gitignore`.
 Update the `[testbench-ai-service.llm_config]` section in your `config.toml`:
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"
@@ -69,6 +70,7 @@ In prompt YAML files you reference your Azure **deployment name**. The service n
 If your deployment name is identical to a known canonical model name no mapping is required. Otherwise, add a `deployment_mapping` table:
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "azure_openai"
 azure_endpoint = "https://your-resource.openai.azure.com"
@@ -88,31 +90,45 @@ The key is the deployment name you use in prompt variants; the value is the cano
 | ----------------- | ------------- |
 | `gpt-4o`        | Chat          |
 | `gpt-4o-mini`   | Chat          |
+| `gpt-4o-search-preview` | Chat |
+| `gpt-4o-mini-search-preview` | Chat |
 | `gpt-4.1`       | Chat          |
 | `gpt-4.1-mini`  | Chat          |
 | `gpt-4.1-nano`  | Chat          |
+| `gpt-4-turbo`   | Chat          |
+| `gpt-4`         | Chat          |
+| `gpt-3.5-turbo` | Chat          |
+| `gpt-3.5-turbo-16k` | Chat      |
+| `gpt-3.5-turbo-instruct` | Chat  |
 
 ### Known canonical reasoning models
 
-| Canonical name  | Type      |
-| --------------- | --------- |
-| `gpt-5`       | Reasoning |
-| `gpt-5-mini`  | Reasoning |
-| `gpt-5-nano`  | Reasoning |
-| `gpt-5-pro`   | Reasoning |
-| `gpt-5.1`     | Reasoning |
-| `gpt-5.2`     | Reasoning |
-| `gpt-5.2-pro` | Reasoning |
-| `gpt-5.4`     | Reasoning |
-| `gpt-5.4-mini`| Reasoning |
-| `gpt-5.4-pro` | Reasoning |
-| `o1`          | Reasoning |
-| `o1-mini`     | Reasoning |
-| `o1-pro`      | Reasoning |
-| `o3`          | Reasoning |
-| `o3-mini`     | Reasoning |
-| `o3-pro`      | Reasoning |
-| `o4-mini`     | Reasoning |
+| Canonical name           | Type      |
+| ------------------------ | --------- |
+| `gpt-5`                | Reasoning |
+| `gpt-5-mini`           | Reasoning |
+| `gpt-5-nano`           | Reasoning |
+| `gpt-5-codex`          | Reasoning |
+| `gpt-5-pro`            | Reasoning |
+| `gpt-5.1`              | Reasoning |
+| `gpt-5.1-codex`        | Reasoning |
+| `gpt-5.1-codex-max`    | Reasoning |
+| `gpt-5.1-codex-mini`   | Reasoning |
+| `gpt-5.2`              | Reasoning |
+| `gpt-5.2-codex`        | Reasoning |
+| `gpt-5.2-pro`          | Reasoning |
+| `gpt-5.3-codex`        | Reasoning |
+| `gpt-5.4`              | Reasoning |
+| `gpt-5.4-mini`         | Reasoning |
+| `gpt-5.4-nano`         | Reasoning |
+| `gpt-5.4-pro`          | Reasoning |
+| `gpt-5.5`              | Reasoning |
+| `gpt-5.5-pro`          | Reasoning |
+| `o1`                   | Reasoning |
+| `o1-pro`               | Reasoning |
+| `o3`                   | Reasoning |
+| `o3-mini`              | Reasoning |
+| `o4-mini`              | Reasoning |
 
 ## 6. Reference the deployment in a prompt variant
 
@@ -142,6 +158,7 @@ AZURE_OPENAI_API_KEY=abc123yourkey
 **`config.toml`**
 
 ```toml
+# config.toml
 [testbench-ai-service]
 tb_server_url = "https://localhost:9443/api/"
 host = "127.0.0.1"
@@ -179,6 +196,7 @@ You can override the Azure OpenAI settings per TestBench project. This is useful
 **`config.toml`**
 
 ```toml
+# config.toml
 # Global Azure OpenAI configuration
 [testbench-ai-service.llm_config]
 provider = "azure_openai"

@@ -21,6 +21,7 @@ At its core the service:
 ## Features
 
 - **Multiple Agents**: test case set reviews, test case set description generation, and defect explanations, each configurable independently.
+- **Custom Agents**: extend the service with your own AI workflows by implementing the `Agent` base class — no service source code changes required.
 - **Pluggable LLM providers**: ships with OpenAI, Azure OpenAI, and Anthropic support; bring your own provider by implementing a custom `LLMClient`.
 - **Automatic provider routing**: model names starting with `gpt-*` and o-series models (`o1`, `o3`, `o4-mini`, …) are automatically routed to OpenAI, `claude-*` to Anthropic — without changing the global config.
 - **Configurable prompts**: YAML-based prompt definitions with variants, Jinja2 variables, and per-project overrides.
@@ -73,6 +74,7 @@ Built on [FastAPI](https://fastapi.tiangolo.com/) and [Uvicorn](https://www.uvic
 - **New here?** Start with the [Installation](getting-started/installation.md) and [Quickstart](getting-started/quickstart.md) guides.
 - **Configuring the service?** See the [Configuration](configuration.md) page.
 - **Learning about Agents?** Check the [Agents overview](agents/index.md).
+- **Building a custom Agent?** See the [Custom Agent](agents/custom-agent.md) guide.
 - **Customizing prompts?** See the [Prompts](prompts.md) guide.
 - **Connecting TestBench?** See [TestBench Integration](testbench-integration.md).
 - **CLI reference?** See the [CLI Commands](cli.md) page.

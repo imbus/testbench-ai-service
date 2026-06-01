@@ -20,7 +20,7 @@ This guide walks you through connecting the TestBench AI Service to the Anthropi
 
 1. Log in to the [Anthropic Console](https://console.anthropic.com).
 2. Navigate to **API Keys** in the left sidebar.
-3. Click **Create Key**, give it a name, and copy the key immediately — it is only shown once.
+3. Click **Create Key**, give it a name, and copy the key immediately. It is only shown once.
 
 ## 2. Set the API key
 
@@ -42,6 +42,7 @@ Never commit API keys to version control. Add `.env` to your `.gitignore`.
 Set the provider in the `[testbench-ai-service.llm_config]` section:
 
 ```toml
+# config.toml
 [testbench-ai-service.llm_config]
 provider = "anthropic"
 ```
@@ -81,12 +82,14 @@ These models support extended thinking with a configurable token budget. The `re
 
 | Model | Notes |
 |---|---|
-| `claude-3-7-sonnet-20250219` | Claude 3.7 Sonnet with extended thinking |
-| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 (dated version) |
 | `claude-haiku-4-5` | Claude Haiku 4.5 |
+| `claude-haiku-4-5-20251001` | Claude Haiku 4.5 (dated version) |
 | `claude-sonnet-4-5` | Claude Sonnet 4.5 |
+| `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (dated version) |
 | `claude-opus-4-1` | Claude Opus 4.1 |
+| `claude-opus-4-1-20250805` | Claude Opus 4.1 (dated version) |
 | `claude-opus-4-5` | Claude Opus 4.5 |
+| `claude-opus-4-5-20251101` | Claude Opus 4.5 (dated version) |
 
 ### Adaptive thinking models
 
@@ -94,9 +97,10 @@ These models use a streaming-based thinking approach with adaptive budgets. `rea
 
 | Model | Notes |
 |---|---|
-| `claude-sonnet-4-6` | Claude Sonnet 4.6 — current adaptive model |
+| `claude-sonnet-4-6` | Claude Sonnet 4.6 |
 | `claude-opus-4-6` | Claude Opus 4.6 |
 | `claude-opus-4-7` | Claude Opus 4.7 |
+| `claude-opus-4-8` | Claude Opus 4.8 |
 
 
 :::note
@@ -124,6 +128,7 @@ ANTHROPIC_API_KEY=sk-ant-...your_anthropic_api_key
 **`config.toml`**
 
 ```toml
+# config.toml
 [testbench-ai-service]
 tb_server_url = "https://localhost:9443/api/"
 host = "127.0.0.1"
