@@ -258,7 +258,7 @@ The following utilities are available to custom agents. They are the same helper
 
 | Function | Description |
 |---|---|
-| `get_parameter_combinations_as_string(test_case_set)` | Formats the parameter combination table of a `TestCaseSet` as a Markdown table string. |
+| `parameter_combinations_as_str(test_case_set)` | Formats the parameter combination table of a `TestCaseSet` as a Markdown table string. |
 
 #### `testbench_ai_service.utils.html_utils`
 
@@ -353,7 +353,7 @@ from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
 from testbench_ai_service.utils.agent import get_test_case_set_nodes
 from testbench_ai_service.utils.prompt_utils import build_prompt
 from testbench_ai_service.utils.testbench import get_test_case_set_catalog
-from testbench_ai_service.utils.testbench_helpers import get_parameter_combinations_as_string
+from testbench_ai_service.utils.testbench_helpers import parameter_combinations_as_str
 
 
 class RiskAssessorAgentData(AgentData, total=False):
@@ -425,7 +425,7 @@ class RiskAssessor(Agent):
                 f"{i + 1}. {step.name}"
                 for i, step in enumerate(tcs.testCases[0].testSteps)
             ) if tcs.testCases else "",
-            "parameter_combinations": get_parameter_combinations_as_string(tcs),
+            "parameter_combinations": parameter_combinations_as_str(tcs),
         }
 
         prompt = build_prompt(context.prompt_config, agent_data=agent_data)
