@@ -10,31 +10,24 @@ from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import Message
 
-CHAT_MODELS: frozenset[str] = frozenset(
-    {
-        "claude-3-5-sonnet-20241022",
-        "claude-3-5-haiku-20241022",
-        "claude-3-opus-20240229",
-        "claude-3-sonnet-20240229",
-        "claude-3-haiku-20240307",
-    }
-)
-
 BUDGET_THINKING_MODELS: frozenset[str] = frozenset(
     {
-        "claude-3-7-sonnet-20250219",
-        "claude-haiku-4-5-20251001",
         "claude-haiku-4-5",
-        "claude-sonnet-4-5",
+        "claude-haiku-4-5-20251001",
         "claude-opus-4-1",
+        "claude-opus-4-1-20250805",
         "claude-opus-4-5",
+        "claude-opus-4-5-20251101",
+        "claude-sonnet-4-5",
+        "claude-sonnet-4-5-20250929",
     }
 )
 
 ADAPTIVE_THINKING_MODELS: frozenset[str] = frozenset(
     {
-        "claude-opus-4-7",
         "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
         "claude-sonnet-4-6",
     }
 )
@@ -67,9 +60,6 @@ class AnthropicClient(LLMClient):
             {"role": msg.role, "content": msg.content} for msg in messages if msg.role != "system"
         ]
 
-        if model in CHAT_MODELS:
-            return await self._query_chat_model(model, anthropic_messages, system_prompt, **kwargs)
-
         if model in BUDGET_THINKING_MODELS:
             return await self._query_budget_thinking_model(
                 model=model,
@@ -89,21 +79,6 @@ class AnthropicClient(LLMClient):
             )
 
         return await self._query_fallback_model(model, anthropic_messages, system_prompt, **kwargs)
-
-    async def _query_chat_model(
-        self,
-        model: str,
-        input_messages: list[MessageParam],
-        system_prompt: str | NotGiven,
-        **kwargs: Any,
-    ) -> str:
-        return await self._create_response(
-            model=model,
-            messages=input_messages,
-            system=system_prompt,
-            temperature=0,
-            **kwargs,
-        )
 
     async def _query_budget_thinking_model(
         self,

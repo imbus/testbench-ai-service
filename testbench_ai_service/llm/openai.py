@@ -17,56 +17,79 @@ from testbench_ai_service.models.prompt import Message
 
 CHAT_MODELS: frozenset[str] = frozenset(
     {
-        # Legacy GPT-3.5 (noch verfügbar, aber deprecated)
         "gpt-3.5-turbo",
         "gpt-3.5-turbo-0125",
         "gpt-3.5-turbo-1106",
         "gpt-3.5-turbo-16k",
         "gpt-3.5-turbo-instruct",
         "gpt-3.5-turbo-instruct-0914",
-        # Legacy/Current GPT-4 (API verfügbar, ChatGPT retired)
         "gpt-4",
+        "gpt-4-0613",
         "gpt-4-turbo",
-        "gpt-4o",
-        "gpt-4o-mini",
-        # GPT-4.1 Familie (neu/current, 1M context)
+        "gpt-4-turbo-2024-04-09",
         "gpt-4.1",
+        "gpt-4.1-2025-04-14",
         "gpt-4.1-mini",
+        "gpt-4.1-mini-2025-04-14",
         "gpt-4.1-nano",
+        "gpt-4.1-nano-2025-04-14",
+        "gpt-4o",
+        "gpt-4o-2024-05-13",
+        "gpt-4o-2024-08-06",
+        "gpt-4o-2024-11-20",
+        "gpt-4o-mini",
+        "gpt-4o-mini-2024-07-18",
+        "gpt-4o-mini-search-preview",
+        "gpt-4o-mini-search-preview-2025-03-11",
+        "gpt-4o-search-preview",
+        "gpt-4o-search-preview-2025-03-11",
     }
 )
 
 REASONING_MODELS: frozenset[str] = frozenset(
     {
-        # GPT-5 Reasoning/Codex (current)
         "gpt-5",
-        "gpt-5-mini",
-        "gpt-5-nano",
+        "gpt-5-2025-08-07",
         "gpt-5-codex",
+        "gpt-5-mini",
+        "gpt-5-mini-2025-08-07",
+        "gpt-5-nano",
+        "gpt-5-nano-2025-08-07",
         "gpt-5-pro",
+        "gpt-5-pro-2025-10-06",
         "gpt-5.1",
+        "gpt-5.1-2025-11-13",
         "gpt-5.1-codex",
         "gpt-5.1-codex-max",
         "gpt-5.1-codex-mini",
         "gpt-5.2",
+        "gpt-5.2-2025-12-11",
         "gpt-5.2-codex",
         "gpt-5.2-pro",
-        "gpt-5.3-chat-latest",
+        "gpt-5.2-pro-2025-12-11",
         "gpt-5.3-codex",
         "gpt-5.4",
-        "gpt-5.4-pro",
+        "gpt-5.4-2026-03-05",
         "gpt-5.4-mini",
-        # o-Serie (dedicated reasoning, deep research)
+        "gpt-5.4-mini-2026-03-17",
+        "gpt-5.4-nano",
+        "gpt-5.4-nano-2026-03-17",
+        "gpt-5.4-pro",
+        "gpt-5.4-pro-2026-03-05",
+        "gpt-5.5",
+        "gpt-5.5-2026-04-23",
+        "gpt-5.5-pro",
+        "gpt-5.5-pro-2026-04-23",
         "o1",
-        "o1-mini",
-        "o1-preview",
+        "o1-2024-12-17",
         "o1-pro",
+        "o1-pro-2025-03-19",
         "o3",
+        "o3-2025-04-16",
         "o3-mini",
-        "o3-pro",
-        "o3-deep-research",
+        "o3-mini-2025-01-31",
         "o4-mini",
-        "o4-mini-deep-research",
+        "o4-mini-2025-04-16",
     }
 )
 
@@ -184,24 +207,18 @@ class AzureOpenAIClient(OpenAIClient):
             max_retries=max_retries,
             _strict_response_validation=_strict_response_validation,
         )
-        # Store the mapping. If none provided, default to an empty dict.
         self.deployment_mapping = deployment_mapping or {}
 
     async def query_llm(
         self,
-        model: str,  # will be the Azure Deployment Name
+        model: str,
         messages: list[Message],
         **kwargs: Any,
     ) -> str:
-        # 1. Look up the base model using the deployment name.
         canonical_model = self.deployment_mapping.get(model, model)
-
         input_messages = cast(ResponseInputParam, [message.model_dump() for message in messages])
-
-        # Remove internal config keys that must not be forwarded to the API.
         kwargs.pop("deployment_mapping", None)
 
-        # 2. Route the logic based on the CANONICAL model string...
         if canonical_model in CHAT_MODELS:
             return await self._query_chat_model(model, input_messages)
 
