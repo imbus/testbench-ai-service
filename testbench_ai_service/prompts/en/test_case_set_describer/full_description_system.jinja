@@ -19,16 +19,16 @@ Step structure:
 ```
 {TestCaseSetName}
     {Step Name}                              step_type:flow
-    {Step Name}    param=${placeholder}      step_type:flow
-    {Step Name}    'literal_value'           step_type:flow
-    {Step Name}    param=${placeholder}      step_type:check
+    {Step Name}    param_name=${ParameterName}      step_type:flow
+    {Step Name}    param_name='literal_value'        step_type:flow
+    {Step Name}    param_name=${ParameterName}      step_type:check
 ```
 
 Key:
-- `param=${placeholder}` - abstract parameter resolved in the parameter table; treat it as a variable, not an error
+- `param_name=${ParameterName}` - abstract parameter resolved in the parameter table; treat it as a variable, not an error
+- `param_name='literal_value'` - parameter with a literal string value (resolved at design time, not from the parameter table)
 - `step_type:flow` - action step
 - `step_type:check` - validation step
-- `'value'` - literal Python string value
 - `"-"` - null value
 - Multiple variables in one parameter = a list
 

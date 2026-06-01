@@ -17,11 +17,11 @@ Step structure:
 ```
 {TestCaseSetName}
     {Step Name}    step_type:flow
-    {Step Name}    param=${placeholder}    step_type:check
+    {Step Name}    param_name=${ParameterName}    step_type:check
 ```
 - `step_type:flow` = action step
 - `step_type:check` = validation step
-- `${placeholder}` is resolved in the parameter table and remains abstract in the step sequence
+- `param_name=${ParameterName}` is an abstract parameter resolved in the parameter table; treat it as a variable, not an error
 
 # Task
 Write exactly one sentence that describes the overall test objective of this test case set.

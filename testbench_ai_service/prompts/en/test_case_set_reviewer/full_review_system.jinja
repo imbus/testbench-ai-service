@@ -22,24 +22,25 @@ A test case set consists of:
 - **Test case set name** - short identifier for the test objective
 - **Abstract test steps** - one per line, each with:
   - Step name (keyword)
-  - Optional parameters: `param_name=${param_val}` (key=value pairs)
-  - Optional literal values: `'value'` (Python string representation)
+  - Optional parameters: `param_name=${ParameterName}` (abstract, resolved from the parameter table) or `param_name='literal_value'` (hardcoded at design time)
   - Step type: `step_type:flow` (action) or `step_type:check` (validation)
 - **Parameter combinations** - table resolving abstract parameter placeholders into concrete values per test case
 
 ## Example
 ```
 LoginWithValidCredentials
-    Open Login Page                          step_type:flow
-    Enter Credentials    username=${user}    step_type:flow
-    Submit Login Form                        step_type:flow
-    Verify Dashboard Displayed               step_type:check
+    Open Login Page                                     step_type:flow
+    Enter Credentials    username=${Username}           step_type:flow
+    Set Timeout          timeout='30'                   step_type:flow
+    Submit Login Form                                   step_type:flow
+    Verify Dashboard Displayed                          step_type:check
 ```
 
 ## Parsing Rules
-- `${param_val}` is a placeholder - its value is in the parameter combinations table. Do NOT flag the placeholder as missing.
-- `"-"` in parameter values means null - this is valid.
-- A parameter accepting multiple variables is treated as a list.
+- `param_name=${ParameterName}`: abstract parameter; its concrete values are in the parameter combinations table. Do NOT flag missing values as an error.
+- `param_name='literal_value'`: hardcoded value resolved at design time, not from the parameter table.
+- `"-"` in the parameter combinations table means null - this is valid.
+- A parameter accepting multiple values is treated as a list.
 - Concrete parameter values in the table are out of scope for this review.
 
 # Review Criteria

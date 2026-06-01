@@ -17,11 +17,11 @@ Schrittstruktur:
 ```
 {Testfallsatzname}
     {Schrittname}    step_type:flow
-    {Schrittname}    param=${Platzhalter}    step_type:check
+    {Schrittname}    param_name=${Parametername}    step_type:check
 ```
 - `step_type:flow` = Aktionsschritt
 - `step_type:check` = Validierungsschritt
-- `${Platzhalter}` wird in der Parametertabelle aufgelöst und bleibt in der Schrittfolge abstrakt
+- `param_name=${Parametername}` ist ein abstrakter Parameter, der in der Parametertabelle aufgelöst wird; als Variable behandeln, nicht als Fehler
 
 # Aufgabe
 Schreibe genau einen Satz, der das übergeordnete Testziel dieses Testfallsatzes beschreibt.

@@ -24,11 +24,13 @@ Gib keine Befunde zurück, wenn das Artefakt akzeptabel ist.
 # Artefaktformat
 ```
 {Testfallsatzname}
-    {Schrittname}                              step_type:flow
-    {Schrittname}    param=${Platzhalter}      step_type:flow
-    {Schrittname}    param=${Platzhalter}      step_type:check
+    {Schrittname}                                            step_type:flow
+    {Schrittname}    param_name=${Parametername}             step_type:flow
+    {Schrittname}    param_name='Literalwert'                step_type:flow
+    {Schrittname}    param_name=${Parametername}             step_type:check
 ```
-- `${Platzhalter}`: abstrakter Parameter, wird in der Parametertabelle aufgelöst; kein Fehler.
+- `param_name=${Parametername}`: abstrakter Parameter; konkrete Werte stehen in der Parametertabelle; kein Fehler.
+- `param_name='Literalwert'`: zur Entwurfszeit fest kodierter Wert; kein Fehler.
 - `step_type:check` = Validierungsschritt.
 - `step_type:flow` = Aktionsschritt.
 

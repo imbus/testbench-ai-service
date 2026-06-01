@@ -19,16 +19,16 @@ Schrittstruktur:
 ```
 {Testfallsatzname}
     {Schrittname}                              step_type:flow
-    {Schrittname}    param=${Platzhalter}      step_type:flow
-    {Schrittname}    'Literalwert'             step_type:flow
-    {Schrittname}    param=${Platzhalter}      step_type:check
+    {Schrittname}    param_name=${Parametername}      step_type:flow
+    {Schrittname}    param_name='Literalwert'          step_type:flow
+    {Schrittname}    param_name=${Parametername}      step_type:check
 ```
 
 Legende:
-- `param=${Platzhalter}` - abstrakter Parameter, wird in der Parametertabelle aufgelöst; als Variable behandeln, nicht als Fehler
+- `param_name=${Parametername}` - abstrakter Parameter, wird in der Parametertabelle aufgelöst; als Variable behandeln, nicht als Fehler
+- `param_name='Literalwert'` - Parameter mit Stringliteralwert (zur Entwurfszeit aufgelöst, nicht aus der Parametertabelle)
 - `step_type:flow` - Aktionsschritt
 - `step_type:check` - Validierungsschritt
-- `'Wert'` - Python-Stringliteral
 - `"-"` - Nullwert
 - Mehrere Variablen in einem Parameter = Liste
 

@@ -24,11 +24,13 @@ Return no findings when the artifact is acceptable.
 # Artifact Format
 ```
 {TestCaseSetName}
-    {Step Name}                              step_type:flow
-    {Step Name}    param=${placeholder}      step_type:flow
-    {Step Name}    param=${placeholder}      step_type:check
+    {Step Name}                                          step_type:flow
+    {Step Name}    param_name=${ParameterName}           step_type:flow
+    {Step Name}    param_name='literal_value'            step_type:flow
+    {Step Name}    param_name=${ParameterName}           step_type:check
 ```
-- `${placeholder}`: abstract parameter resolved in the parameter table; not an error.
+- `param_name=${ParameterName}`: abstract parameter; its concrete values are in the parameter table; not an error.
+- `param_name='literal_value'`: hardcoded value resolved at design time; not an error.
 - `step_type:check` = validation step.
 - `step_type:flow` = action step.
 

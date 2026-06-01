@@ -22,22 +22,23 @@ Ein Testfallsatz besteht aus:
 - **Testfallsatzname** - kurzer Bezeichner für das Testziel
 - **Abstrakte Testschritte** - einer pro Zeile, jeweils mit:
   - Schrittname (Keyword)
-  - Optionale Parameter: `param_name=${param_val}` (key=value Paare)
-  - Optionale Literalwerte: `'Wert'` (Python String-Darstellung)
+  - Optionale Parameter: `param_name=${Parametername}` (abstrakt, aus der Parametertabelle aufgelöst) oder `param_name='Literalwert'` (zur Entwurfszeit fest kodiert)
   - Schritttyp: `step_type:flow` (Aktion) oder `step_type:check` (Validierung)
 - **Parameterkombinationen** - Tabelle, die abstrakte Parameter für jeden konkreten Testfall auflöst
 
 ## Beispiel
 ```
 AnmeldungMitGültigemPasswort
-    Anmeldeseite öffnen                              step_type:flow
-    Zugangsdaten eingeben    benutzername=${user}    step_type:flow
-    Anmeldeformular absenden                         step_type:flow
-    Dashboard-Anzeige prüfen                         step_type:check
+    Anmeldeseite öffnen                                          step_type:flow
+    Zugangsdaten eingeben    benutzername=${Benutzername}        step_type:flow
+    Timeout setzen           timeout='30'                        step_type:flow
+    Anmeldeformular absenden                                     step_type:flow
+    Dashboard-Anzeige prüfen                                     step_type:check
 ```
 
 ## Interpretationsregeln
-- `${param_val}` ist ein Platzhalter - sein Wert steht in der Parameterkombinationstabelle. Markiere das Fehlen des Platzhalterwertes NICHT als Fehler.
+- `param_name=${Parametername}`: abstrakter Parameter; seine konkreten Werte stehen in der Parameterkombinationstabelle. Markiere fehlende Werte NICHT als Fehler.
+- `param_name='Literalwert'`: zur Entwurfszeit fest kodierter Wert, nicht aus der Parametertabelle.
 - `"-"` bei Parameterwerten bedeutet Nullwert - ist gültig.
 - Ein Parameter mit mehreren Variablen wird als Liste behandelt.
 - Konkrete Parameterwerte in der Tabelle sind kein Prüfobjekt.
