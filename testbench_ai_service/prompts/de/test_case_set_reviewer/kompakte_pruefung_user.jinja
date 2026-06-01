@@ -1,38 +1,5 @@
-# Rolle
-Du bist ein Software-Testqualitätsprüfer und führst einen schnellen Strukturscan eines Testfallsatzes durch.
+# Zu prüfender Testfallsatz
 
-# Prüfumfang - Ausschließlich diese Punkte prüfen
-1. **Validierungsabdeckung**: Enthält der Testfallsatz mindestens einen `step_type:check`-Schritt?
-2. **Namensqualität**: Ist der Testfallsatzname aussagekräftig und beschreibend? Nur klar generische Namen markieren (z.B. `Test1`, `TC_001`, `2DT1923x-2`, `Case_ABC`).
-3. **Schrittformulierung**: Sind Testschrittnamen im Infinitiv formuliert ("Seite öffnen", "Wert eingeben")? Nur klar falsche Formen markieren (Passiv oder Subjekt-Verb-Konstruktion).
-{% if vars.glossary %}
-4. **Glossar-Compliance**: Verwenden Testschrittnamen exakt die Begriffe aus dem Projektglossar? (Gilt nur für Schrittnamen, nicht für Name oder Beschreibung.)
-{% endif %}
-
-# Nicht prüfen
-- Parameterwerte oder Parameterkombinationen
-- Vollständigkeit der Beschreibung
-- Konsistenz außer bei offensichtlichem Widerspruch zwischen Name und Schritten
-- Probleme, die nur aus fehlendem Kontext oder Annahmen entstehen
-- Rein stilistische Formulierungsunterschiede, Unterschiede nur in der Groß-/Kleinschreibung oder kleine Rechtschreibvarianten ohne Bedeutungsänderung
-- Keine Verbesserungsvorschläge
-
-# Artefaktformat
-```
-{Testfallsatzname}
-    {Schrittname}                              step_type:flow
-    {Schrittname}    param=${Platzhalter}      step_type:flow
-    {Schrittname}    param=${Platzhalter}      step_type:check
-```
-- `${Platzhalter}`: abstrakter Parameter, wird in der Parametertabelle aufgelöst - kein Fehler.
-- `step_type:check` = Validierungsschritt; `step_type:flow` = Aktionsschritt.
-
-{% if vars.glossary %}
-# Projektglossar
-{{ vars.glossary }}
-{% endif %}
-
-# Testfallsatz
 ## Name und Schritte
 ```
 {{ agent.test_case }}
@@ -43,17 +10,11 @@ Du bist ein Software-Testqualitätsprüfer und führst einen schnellen Strukturs
 ```
 {{ agent.parameter_combinations }}
 ```
+{% else %}
+Keine Parameterkombinationen vorhanden.
 {% endif %}
 
-# Ausgabe
-Wenn keine Probleme gefunden wurden:
-```
-Review erfolgreich! Keine Befunde.
-```
-
-Bei Problemen:
-```
-<Ein Satz.>
-- <Problem>
-```
-Maximal 4 Stichpunkte. Wichtigste Probleme zuerst. Nur klare Probleme markieren. Prägnant formulieren.
+# Anweisung
+Nur die abgegrenzten Prüfpunkte anwenden.
+Die Ausgabe im vorgegebenen Format zurückgeben.
+Nur bewerten - keine Verbesserungsvorschläge oder Umformulierungen.

@@ -1,66 +1,19 @@
-<input_format>
-A test case set consists of:
-- An abstract step sequence defining the test procedure
-- A parameter combinations table providing concrete values for each derived test case
+# Test Case Set to Describe
 
-Step structure:
-```
-{TestCaseSetName}
-    {Step Name}                              step_type:flow
-    {Step Name}    param=${placeholder}      step_type:flow
-    {Step Name}    'literal_value'           step_type:flow
-    {Step Name}    param=${placeholder}      step_type:check
-```
-
-Key:
-- `param=${placeholder}` — abstract parameter resolved in the parameter table; treat as a variable, not an error
-- `step_type:flow` — action step
-- `step_type:check` — validation step
-- `'value'` — literal Python string value
-- `"-"` — null value
-- Multiple variables in one parameter = a list
-</input_format>
-
-<test_case_set>
+## Abstract Step Sequence
 ```
 {{ agent.step_sequence }}
 ```
-</test_case_set>
 
-<parameter_combinations>
+## Parameter Combinations
+{% if agent.parameter_combinations %}
 The header row names the parameters. Each subsequent row is one distinct, concrete test case.
 ```
 {{ agent.parameter_combinations }}
 ```
-</parameter_combinations>
+{% else %}
+No parameter combinations provided.
+{% endif %}
 
-<task>
-Write a description for this test case set with three sections:
-
-1. **Test objective** — One sentence starting with "This test case set verifies..." that summarises the overall purpose of the abstract test sequence.
-
-2. **Verifications** — A concise list of the key validations performed (derived from `step_type:check` steps and the overall test flow).
-
-3. **Test cases** — One line per row in the parameter combinations table. Describe what each concrete test case tests, using the parameter values to clearly differentiate each case.
-</task>
-
-<output_format>
-Plain text, exactly this structure:
-```
-This test case set verifies [objective].
-
-Verifications:
-- [verification 1]
-- [verification 2]
-
-Test cases:
-- [Test case 1 description using its specific parameter values]
-- [Test case 2 description using its specific parameter values]
-```
-
-Rules:
-- No leading whitespace or blank lines before the first sentence.
-- Do not alter any identifiers from the input.
-- Use parameter values verbatim when describing individual test cases.
-- Do not invent preconditions, expected results, or domain details not present in the artifact.
-</output_format>
+# Instruction
+Create the full description now in the specified format.

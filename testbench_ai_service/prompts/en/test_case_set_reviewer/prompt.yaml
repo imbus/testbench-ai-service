@@ -5,12 +5,12 @@ summary: "Review test case sets"
 description: >
   This agent reviews the specified test case sets.
   The review results are added to the review comments field of the corresponding test case set specifications.
-default_model: "gpt-5.4"
+default_model: "gpt-5.5"
 default_variant: "Full Review"
 variants:
   - name: "Full Review"
-    description: "Comprehensive ISTQB/ISO 29119 quality review. Examines naming, description, step formulation, validation coverage, and consistency. Uses system+user message structure for best results with GPT chat models."
-    model: "gpt-5.4"
+    description: "Comprehensive ISTQB/ISO 29119 quality review. Examines naming, description, step formulation, validation coverage, and consistency."
+    model: "gpt-5.5"
     vars:
       glossary:
         name: "Glossary"
@@ -23,8 +23,8 @@ variants:
       - role: "user"
         file: "full_review_user.jinja"
   - name: "Quick Review"
-    description: "Lightweight structural review focused on missing validation steps, generic names, incorrect step form, and glossary mismatches when a glossary is provided. Fast and cost-efficient; suitable for high-volume batch processing."
-    model: "gpt-5.4-mini"
+    description: "Lightweight structural review focused on missing validation steps, generic names, incorrect step form, and glossary mismatches when a glossary is provided."
+    model: "gpt-5.5"
     vars:
       glossary:
         name: "Glossary"
@@ -32,5 +32,7 @@ variants:
         value_type: "text"
         required: false
     messages:
+      - role: "system"
+        file: "quick_review_system.jinja"
       - role: "user"
         file: "quick_review_user.jinja"

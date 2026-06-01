@@ -6,12 +6,12 @@ description: >
   Dieser Agent generiert Fehlererklärungen für die angegebenen Testfallsätze.
   Die generierten Erklärungen werden in das Bemerkungsfeld der jeweiligen
   Testfallsatz-Durchführungsübersicht eingetragen.
-default_model: "gpt-5.4"
+default_model: "gpt-5.5"
 default_variant: "Detaillierte Erklärung"
 variants:
   - name: "Detaillierte Erklärung"
-    description: "Strukturierte Fehleranalyse mit fokussierter Schritt-für-Schritt-Untersuchung. Erzeugt eine fachlich verständliche Ein-Satz-Zusammenfassung. Nutzt die Trennung in System- und Nutzernachricht für beste Ergebnisse mit GPT-Chat-Modellen."
-    model: "gpt-5.4"
+    description: "Strukturierte Fehleranalyse mit fokussierter Schritt-für-Schritt-Untersuchung. Erzeugt eine fachlich verständliche Ein-Satz-Zusammenfassung."
+    model: "gpt-5.5"
     vars:
       validate_output:
         name: "Output Validierung"
@@ -24,8 +24,10 @@ variants:
       - role: "user"
         file: "detaillierte_erklaerung_user.jinja"
   - name: "Kurzzusammenfassung"
-    description: "Schnelle Ein-Satz-Erklärung des Fehlers basierend auf dem übergeordneten fehlgeschlagenen Schritt. Kosteneffizient; geeignet für hohe Verarbeitungsvolumen."
-    model: "gpt-5.4-mini"
+    description: "Schnelle Ein-Satz-Erklärung des Fehlers basierend auf dem übergeordneten fehlgeschlagenen Schritt."
+    model: "gpt-5.5"
     messages:
+      - role: "system"
+        file: "kurzzusammenfassung_system.jinja"
       - role: "user"
         file: "kurzzusammenfassung_user.jinja"

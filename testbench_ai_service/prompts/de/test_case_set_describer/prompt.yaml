@@ -6,22 +6,22 @@ description: >
   Dieser Agent generiert Beschreibungen für die angegebenen Testfallsätze.
   Die generierten Beschreibungen werden in das Beschreibungsfeld der jeweiligen
   Testfallsatz-Spezifikationen eingefügt.
-default_model: "gpt-5.4"
+default_model: "gpt-5.5"
 default_variant: "Vollständige Beschreibung"
 variants:
   - name: "Vollständige Beschreibung"
     description: "Erstellt eine strukturierte Beschreibung mit drei Abschnitten: Testziel, wichtigste Überprüfungen und eine Zusammenfassung jedes konkreten Testfalls. Empfohlen für vollständige Dokumentation."
-    model: "gpt-5.4"
+    model: "gpt-5.5"
     messages:
       - role: "system"
-        file: "beschreibung_system.jinja"
+        file: "vollstaendige_beschreibung_system.jinja"
       - role: "user"
         file: "vollstaendige_beschreibung_user.jinja"
   - name: "Kurzbeschreibung"
-    description: "Erstellt ausschließlich das Testziel als einzelner Satz. Schnell und kosteneffizient; ideal wenn eine kurze Beschriftung benötigt wird."
-    model: "gpt-5.4-mini"
+    description: "Erstellt eine Kurzbeschreibung, die ausschließlich das Testziel in einem einzelnen Satz enthält."
+    model: "gpt-5.5"
     messages:
       - role: "system"
-        file: "beschreibung_system.jinja"
+        file: "kurzbeschreibung_system.jinja"
       - role: "user"
         file: "kurzbeschreibung_user.jinja"

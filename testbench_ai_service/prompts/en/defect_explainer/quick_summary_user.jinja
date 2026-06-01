@@ -1,23 +1,13 @@
-You are a test automation engineer. Produce a one-sentence plain-language explanation of this Robot Framework test failure for a business audience.
-
-Rules:
-- Exactly 1 sentence. Plain text only.
-- No technical terms (no "assertion", "timeout", "locator", "XPath", "selector", "element", "DOM").
-- Base the explanation on the highest-level `▼[Fail]` step for business context, and the error message for the observed deviation.
-- Quote all identifiers (keyword names, parameter values) with single backticks (`).
-- No speculation. No recommendations. No multi-sentence output.
-- If the business context is unclear, use the highest reliable step and describe only the observable deviation.
-
-Step notation:
-- `▼` = high-level business step; `►` = atomic technical step
-- `[Fail]` = failed; `[Skip]` = skipped due to earlier failure (ignore as independent cause)
-- Higher steps = business layer; deeper steps = technical layer
-
 # Test Case
+```
 {{ agent.failed_test_case }}
+```
 
 # Error Message
+```
 {{ agent.error_message }}
+```
 
-# Output
-One sentence. Plain text. Focus on what business activity could not be completed and what deviation was observed. If that cannot be determined reliably, say only that the test case could not be completed and the deviation could not be determined from the available information.
+# Instruction
+Analyse the failure.
+Return the one-sentence summary in the specified format.

@@ -6,12 +6,12 @@ description: >
   Dieser Agent führt Reviews für die angegebenen Testfallsätze durch.
   Die Review-Ergebnisse werden als Review-Anmerkungen in das entsprechende Feld
   der jeweiligen Testfallsatz-Spezifikationen eingetragen.
-default_model: "gpt-5.4"
+default_model: "gpt-5.5"
 default_variant: "Umfassende Prüfung"
 variants:
   - name: "Umfassende Prüfung"
-    description: "Umfassende ISTQB/ISO 29119-Qualitätsprüfung. Prüft Benennung, Beschreibung, Schrittformulierung, Validierungsabdeckung und Konsistenz. Nutzt die Trennung in System- und Nutzernachricht für beste Ergebnisse mit GPT-Chat-Modellen."
-    model: "gpt-5.4"
+    description: "Umfassende ISTQB/ISO 29119-Qualitätsprüfung. Prüft Benennung, Beschreibung, Schrittformulierung, Validierungsabdeckung und Konsistenz."
+    model: "gpt-5.5"
     vars:
       glossary:
         name: "Glossar"
@@ -24,8 +24,8 @@ variants:
       - role: "user"
         file: "umfassende_pruefung_user.jinja"
   - name: "Kompakte Prüfung"
-    description: "Kompakte Strukturprüfung mit Fokus auf fehlende Validierungsschritte, generische Namen, falsche Schrittform und Glossarabweichungen, wenn ein Glossar vorliegt. Schnell und kosteneffizient; geeignet für hohe Verarbeitungslast."
-    model: "gpt-5.4-mini"
+    description: "Kompakte Strukturprüfung mit Fokus auf fehlende Validierungsschritte, generische Namen, falsche Schrittform und Glossarabweichungen, wenn ein Glossar vorliegt."
+    model: "gpt-5.5"
     vars:
       glossary:
         name: "Glossar"
@@ -33,5 +33,7 @@ variants:
         value_type: "text"
         required: false
     messages:
+      - role: "system"
+        file: "kompakte_pruefung_system.jinja"
       - role: "user"
         file: "kompakte_pruefung_user.jinja"

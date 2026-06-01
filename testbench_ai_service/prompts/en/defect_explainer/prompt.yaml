@@ -6,12 +6,12 @@ description: >
   This agent generates defect explanations for the specified test case sets.
   The generated explanations are added to the comment section of the corresponding
   test case set execution overview.
-default_model: "gpt-5.4"
+default_model: "gpt-5.5"
 default_variant: "Detailed Explanation"
 variants:
   - name: "Detailed Explanation"
-    description: "Structured failure analysis with focused step-by-step examination. Produces a business-readable one-sentence summary. Uses system+user message structure for best results with GPT chat models."
-    model: "gpt-5.4"
+    description: "Structured failure analysis with focused step-by-step examination. Produces a business-readable one-sentence summary."
+    model: "gpt-5.5"
     vars:
       validate_output:
         name: "Validate Output"
@@ -24,8 +24,10 @@ variants:
       - role: "user"
         file: "detailed_explanation_user.jinja"
   - name: "Quick Summary"
-    description: "Fast one-sentence business explanation of the failure based on the highest-level failing step. Cost-efficient; suitable for high-volume runs where speed matters."
-    model: "gpt-5.4-mini"
+    description: "Fast one-sentence business explanation of the failure based on the highest-level failing step."
+    model: "gpt-5.5"
     messages:
+      - role: "system"
+        file: "quick_summary_system.jinja"
       - role: "user"
         file: "quick_summary_user.jinja"
