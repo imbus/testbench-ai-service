@@ -1,15 +1,18 @@
 from abc import ABC, abstractmethod
-from typing import TypedDict
 
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.auth import AuthInfo
+from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMClient
-from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
-
-
-class AgentData(TypedDict, total=False):
-    """Agent-generated variables available as ``{{ agent.<key> }}`` in templates."""
+from testbench_ai_service.log import logger
+from testbench_ai_service.models.agent import (
+    AgentData,
+    AgentResult,
+    ExecutionContext,
+    PrecheckResult,
+)
+from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 
 
 class Agent(ABC):
@@ -61,3 +64,27 @@ class Agent(ABC):
             llm_client: Initialised LLM client ready to accept queries.
             item_ids:   The validated item IDs returned by ``precheck()``.
         """
+
+    async def get_ai_response(
+        self,
+        llm_client: LLMClient,
+        llm_config: LLMConfig,
+        prompt_config: PromptConfig,
+        agent_data: AgentData | None = None,
+    ) -> AgentResult:
+        """Sends the prompt to the LLM and returns the result."""
+        prompt = build_prompt(prompt_config, agent_data=agent_data)
+
+        model = llm_config.model if llm_config.model is not None else prompt.model_name
+        messages = prompt.messages
+
+        logger.debug("Using model '%s'.", model)
+        logger.debug(
+            "Sending the following messages to the LLM: %s",
+            pretty_messages(messages),
+        )
+        result = await llm_client.query_llm(
+            model=model, messages=messages, **(llm_config.model_extra or {})
+        )
+
+        return AgentResult(result=result)
