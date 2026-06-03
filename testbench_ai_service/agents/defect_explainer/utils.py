@@ -23,6 +23,7 @@ from testbench_ai_service.agents.defect_explainer.model import (
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.utils.html_utils import escape_html
 from testbench_ai_service.utils.i18n import get_translation
 
 _SEPARATOR = "    "
@@ -60,8 +61,8 @@ async def update_description(
 
 
 def clean_up_comment(comment: str) -> str:
-    pattern = "/table><div.*</div>"
-    return re.sub(pattern, "/table>", comment)
+    pattern = r"</table><div.*</div>"
+    return re.sub(pattern, "</table>", comment, flags=re.DOTALL)
 
 
 async def import_data(conn: TBConnection, context: ExecutionContext, path: Path):
@@ -308,7 +309,7 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
                     + "<div class='ai'><b>"
                     + explainer_result_heading_message
                     + ":</b><br>"
-                    + explanation
+                    + escape_html(explanation)
                     + "</div></pre>"
                 )
             else:
@@ -318,7 +319,7 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
                     + "<div class='ai'><b>"
                     + explainer_result_heading_message
                     + ":</b><br>"
-                    + explanation
+                    + escape_html(explanation)
                     + "</div></pre>"
                 )
 
@@ -447,7 +448,7 @@ def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> st
 
     lines = [test_case_set.details.name]
     last_top_level_verdict = ""
-    print(test_case_details.testSequence)
+
     for call in test_case_details.testSequence:
         level = len(call.numbering.split(".")) - 1
         verdict = call.exec.verdict.name
