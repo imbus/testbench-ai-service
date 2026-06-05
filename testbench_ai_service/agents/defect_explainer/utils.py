@@ -311,14 +311,13 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
                 message = error_msg.split("<div class='ai'>", 1)
                 error_base_message = message[0] if len(message) > 0 else error_msg
                 base_message = (
-                    error_base_message
-                    + "<div class='ai'><b>"
+                    +"<div class='ai'><b>"
                     + explainer_result_heading_message
                     + ":</b><br>"
                     + explanation
                     + "</div></pre>"
                 )
-                replacement = r"\1" + base_message
+                replacement = r"\1" + error_base_message + base_message
             else:
                 replacement = r"\1" + error_msg + base_message
 
