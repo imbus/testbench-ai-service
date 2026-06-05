@@ -1,4 +1,6 @@
+from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+from zoneinfo import ZoneInfo
 
 from testbench2robotframework.model import (
     KeywordCallType,
@@ -120,6 +122,71 @@ class TestPatchReviewStarted:
         spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
         assert previous in spec_update.reviewComment.html
 
+    async def test_full_html_structure_with_previous_content(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                return_value="Review started",
+            ),
+            patch("testbench_ai_service.utils.time_utils.datetime") as mock_datetime,
+        ):
+            mock_datetime.now.return_value = datetime(
+                2025, 9, 16, 12, 34, 56, tzinfo=ZoneInfo("Europe/Berlin")
+            )
+            await patch_review_started_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "<p>Previous</p>", LanguageOption.ENGLISH, "user1"
+            )
+        expected_html = (
+            "<html><body>2025-09-16 12:34:56 - Review started"
+            "<br/><br/><p>Previous</p></body></html>"
+        )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert spec_update.reviewComment.html == expected_html
+
+    async def test_empty_previous_omits_separator(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                return_value="Review started",
+            ),
+        ):
+            await patch_review_started_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "", LanguageOption.ENGLISH, "user1"
+            )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert "<br/>" not in spec_update.reviewComment.html
+        assert "Review started" in spec_update.reviewComment.html
+
+    async def test_locker_and_reviewer_metadata(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                return_value="Review started",
+            ),
+        ):
+            await patch_review_started_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "", LanguageOption.ENGLISH, "user42"
+            )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert spec_update.locker.optional == "user42"
+        assert spec_update.reviewer.optional == "user42"
+        assert spec_update.reviewComment.images == []
+
 
 class TestPatchReviewResult:
     """Tests for ``patch_review_result_for_test_structure_element``."""
@@ -165,6 +232,102 @@ class TestPatchReviewResult:
         spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
         assert "No notes available" in spec_update.reviewComment.html
 
+    async def test_full_html_structure_with_previous_content(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                side_effect=lambda key, lang: key,
+            ),
+            patch("testbench_ai_service.utils.time_utils.datetime") as mock_datetime,
+        ):
+            mock_datetime.now.return_value = datetime(
+                2025, 9, 16, 12, 34, 56, tzinfo=ZoneInfo("Europe/Berlin")
+            )
+            await patch_review_result_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "Review note", "<p>Old</p>", LanguageOption.ENGLISH, "user1"
+            )
+        expected_html = (
+            "<html><body>"
+            "<b>test_case_set_reviewer.run.result_heading - 2025-09-16 12:34:56</b>"
+            "<br/>Review note"
+            "<div style='padding-top: 5px;'><div style='border-top: 1px solid black;"
+            " width: 218px; font-size: 10px;'>shared.run.disclaimer</div></div>"
+            "<br/><p>Old</p>"
+            "</body></html>"
+        )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert spec_update.reviewComment.html == expected_html
+
+    async def test_empty_previous_omits_previous_block(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                side_effect=lambda key, lang: key,
+            ),
+        ):
+            await patch_review_result_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "notes", "", LanguageOption.ENGLISH, "user1"
+            )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert spec_update.reviewComment.html.endswith("</div></div></body></html>")
+        assert "notes" in spec_update.reviewComment.html
+
+    async def test_html_escaping_in_notes(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                side_effect=lambda key, lang: key,
+            ),
+        ):
+            await patch_review_result_for_test_structure_element(
+                conn,
+                "PROJ1",
+                "SPEC1",
+                "<script>alert('xss')</script> & safer",
+                "",
+                LanguageOption.ENGLISH,
+                "user1",
+            )
+        html = mock_patch.call_args[0][3].reviewComment.html
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+        assert "&amp;" in html
+
+    async def test_locker_cleared_and_reviewer_set(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                side_effect=lambda key, lang: key,
+            ),
+        ):
+            await patch_review_result_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "notes", "", LanguageOption.ENGLISH, "user42"
+            )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert spec_update.locker.optional is None
+        assert spec_update.reviewer.optional == "user42"
+        assert spec_update.reviewComment.images == []
+
 
 class TestPatchPreviousReviewComment:
     """Tests for ``patch_previous_review_comment_for_test_structure_element``."""
@@ -187,3 +350,70 @@ class TestPatchPreviousReviewComment:
             )
 
         mock_patch.assert_awaited_once()
+
+    async def test_full_html_structure_with_previous_content(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                side_effect=lambda key, lang: key,
+            ),
+            patch("testbench_ai_service.utils.time_utils.datetime") as mock_datetime,
+        ):
+            mock_datetime.now.return_value = datetime(
+                2025, 9, 16, 12, 34, 56, tzinfo=ZoneInfo("Europe/Berlin")
+            )
+            await patch_previous_review_comment_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "<p>Previous</p>", LanguageOption.ENGLISH, "user1"
+            )
+        expected_html = (
+            "<html><body>"
+            "<b>test_case_set_reviewer.run.failed_heading - 2025-09-16 12:34:56</b>"
+            "<br/>shared.run.error_message"
+            "<br/><p>Previous</p>"
+            "</body></html>"
+        )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert spec_update.reviewComment.html == expected_html
+
+    async def test_empty_previous_omits_previous_block(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                side_effect=lambda key, lang: key,
+            ),
+        ):
+            await patch_previous_review_comment_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "", LanguageOption.ENGLISH, "user1"
+            )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert "<br/></body></html>" not in spec_update.reviewComment.html
+
+    async def test_locker_cleared_and_reviewer_set(self):
+        conn = MagicMock()
+        with (
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.patch_test_structure_element_spec",
+                new_callable=AsyncMock,
+            ) as mock_patch,
+            patch(
+                "testbench_ai_service.agents.test_case_set_reviewer.utils.get_translation",
+                side_effect=lambda key, lang: key,
+            ),
+        ):
+            await patch_previous_review_comment_for_test_structure_element(
+                conn, "PROJ1", "SPEC1", "", LanguageOption.ENGLISH, "user42"
+            )
+        spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]
+        assert spec_update.locker.optional is None
+        assert spec_update.reviewer.optional == "user42"
+        assert spec_update.reviewComment.images == []

@@ -4,19 +4,18 @@ import requests
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.base import Agent, AgentData
+from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.agents.test_case_set_describer.utils import (
     patch_description_generation_started_for_test_structure_element,
     patch_generated_description_for_test_structure_element,
     patch_previous_description_for_test_structure_element,
 )
 from testbench_ai_service.auth import AuthInfo, AuthType
-from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
-    AgentResult,
+    AgentData,
     ExecutionContext,
     PrecheckResult,
 )
@@ -30,7 +29,6 @@ from testbench_ai_service.utils.agent import (
 )
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
 from testbench_ai_service.utils.i18n import get_translation
-from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.testbench import (
     get_project_roles,
     get_test_case_set_catalog,
@@ -192,7 +190,7 @@ class TestCaseSetDescriber(Agent):
                     list(agent_data.keys()),
                 )
 
-                description_response = await self._get_ai_response(
+                description_response = await self.get_ai_response(
                     llm_client, context.llm_config, context.prompt_config, agent_data
                 )
                 logger.debug(
@@ -259,28 +257,3 @@ class TestCaseSetDescriber(Agent):
             "parameter_combinations": parameter_combinations_as_str(test_case_set),
             "test_case_set_obj": test_case_set,
         }
-
-    async def _get_ai_response(
-        self,
-        llm_client: LLMClient,
-        llm_config: LLMConfig,
-        prompt_config: PromptConfig,
-        agent_data: TestCaseSetDescriberAgentData | None = None,
-    ) -> AgentResult:
-        """Sends the prompt to the LLM and returns the generated description."""
-        prompt = build_prompt(prompt_config=prompt_config, agent_data=agent_data)
-
-        model = llm_config.model if llm_config.model is not None else prompt.model_name
-        messages = prompt.messages
-
-        logger.debug("Using model '%s' for the test case set description generation", model)
-        logger.debug(
-            "Sending the following messages to the LLM for the test case set description generation:\n%s",
-            pretty_messages(messages),
-        )
-
-        description = await llm_client.query_llm(
-            model=model, messages=messages, **(llm_config.model_extra or {})
-        )
-
-        return AgentResult(result=description)

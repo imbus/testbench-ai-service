@@ -106,6 +106,31 @@ class TestPatchDescriptionGenerationStarted:
         assert called_spec.description.images == []
         assert result == "patched_result"
 
+    @patch(
+        "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
+        new_callable=AsyncMock,
+    )
+    @patch("testbench_ai_service.agents.test_case_set_describer.utils.get_translation")
+    @patch("testbench_ai_service.utils.time_utils.datetime")
+    async def test_empty_previous_description_omits_separator(
+        self, mock_datetime, mock_translate, mock_patch_spec
+    ):
+        mock_datetime.now.return_value = datetime(
+            2025, 9, 16, 12, 34, 56, tzinfo=ZoneInfo("Europe/Berlin")
+        )
+        mock_translate.return_value = "Generation started"
+        await patch_description_generation_started_for_test_structure_element(
+            MagicMock(),
+            "PROJ1",
+            "SPEC1",
+            "",
+            LanguageOption.ENGLISH,
+            "user123",
+        )
+        expected_html = "<html><body>2025-09-16 12:34:56 - Generation started</body></html>"
+        called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
+        assert called_spec.description.html == expected_html
+
 
 class TestPatchGeneratedDescription:
     """Tests for ``patch_generated_description_for_test_structure_element``."""
@@ -173,9 +198,39 @@ class TestPatchGeneratedDescription:
         called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
         expected_html = (
             "<html><body><b>Result Heading - 2025-09-16 12:34:56</b><br/>"
-            "Line1<br/>Line2</body></html>"
+            "Line1<br/>Line2"
+            "<div style='padding-top: 5px;'>"
+            "<div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>"
+            "Result Heading</div></div></body></html>"
         )
         assert called_spec.description.html == expected_html
+
+    @patch(
+        "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
+        new_callable=AsyncMock,
+    )
+    @patch("testbench_ai_service.agents.test_case_set_describer.utils.get_translation")
+    @patch("testbench_ai_service.utils.time_utils.datetime")
+    async def test_html_special_characters_in_description_are_escaped(
+        self, mock_datetime, mock_translate, mock_patch_spec
+    ):
+        mock_datetime.now.return_value = datetime(
+            2025, 9, 16, 12, 34, 56, tzinfo=ZoneInfo("Europe/Berlin")
+        )
+        mock_translate.return_value = "Result Heading"
+        await patch_generated_description_for_test_structure_element(
+            MagicMock(),
+            "PROJ",
+            "SPEC",
+            "<script>alert('xss')</script> & safer",
+            "",
+            LanguageOption.ENGLISH,
+            "user123",
+        )
+        html = mock_patch_spec.call_args[0][3].description.html
+        assert "<script>" not in html
+        assert "&lt;script&gt;" in html
+        assert "&amp;" in html
 
 
 class TestPatchPreviousDescription:
@@ -205,3 +260,48 @@ class TestPatchPreviousDescription:
         assert called_spec.description.images == []
         assert called_spec.reviewer.optional == "user123"
         assert called_spec.locker.optional is None
+
+    @patch(
+        "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
+        new_callable=AsyncMock,
+    )
+    @patch("testbench_ai_service.agents.test_case_set_describer.utils.get_translation")
+    @patch("testbench_ai_service.utils.time_utils.datetime")
+    async def test_full_html_structure_with_previous_content(
+        self, mock_datetime, mock_translate, mock_patch_spec
+    ):
+        mock_datetime.now.return_value = datetime(
+            2025, 9, 16, 12, 34, 56, tzinfo=ZoneInfo("Europe/Berlin")
+        )
+        mock_translate.side_effect = lambda key, lang: key
+        await patch_previous_description_for_test_structure_element(
+            MagicMock(),
+            "PROJ1",
+            "SPEC1",
+            "<p>Old desc</p>",
+            LanguageOption.ENGLISH,
+            "user123",
+        )
+        expected_html = (
+            "<html><body><p>Old desc</p><br/><br/>"
+            "<b>test_case_set_describer.run.failed_heading - 2025-09-16 12:34:56</b>"
+            "<br/>shared.run.error_message</body></html>"
+        )
+        called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
+        assert called_spec.description.html == expected_html
+
+    @patch(
+        "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
+        new_callable=AsyncMock,
+    )
+    async def test_empty_previous_description_omits_separator(self, mock_patch_spec):
+        await patch_previous_description_for_test_structure_element(
+            MagicMock(),
+            "PROJ1",
+            "SPEC1",
+            "",
+            LanguageOption.ENGLISH,
+            "user123",
+        )
+        called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
+        assert "<br/><br/>" not in called_spec.description.html

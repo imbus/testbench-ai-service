@@ -20,6 +20,7 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     add_explanations_to_comment,
     build_protocol_json,
     build_update_test_case_set,
+    clean_up_comment,
     create_import_zip,
     custom_serializer,
     get_error_message,
@@ -117,6 +118,41 @@ def _make_tcs_ns(set_name, test_sequence, test_case_key="tc1"):
     )
 
 
+class TestCleanUpComment:
+    """Tests for ``clean_up_comment``."""
+
+    _TABLE_ONLY = "<table><tr><td>data</td></tr></table>"
+    _WITH_DISCLAIMER = (
+        "<table><tr><td>data</td></tr></table>"
+        "<div style='padding-top: 5px;'>"
+        "<div style='border-top: 1px solid black;'>Disclaimer text</div>"
+        "</div>"
+    )
+    _WITH_MULTILINE_DISCLAIMER = (
+        "<table><tr><td>data</td></tr></table>"
+        "<div style='padding-top: 5px;'>\n"
+        "<div style='border-top: 1px solid black;'>\nDisclaimer text\n</div>\n"
+        "</div>"
+    )
+
+    def test_no_disclaimer_returns_unchanged(self):
+        assert clean_up_comment(self._TABLE_ONLY) == self._TABLE_ONLY
+
+    def test_removes_disclaimer_div_after_table(self):
+        result = clean_up_comment(self._WITH_DISCLAIMER)
+        assert result == self._TABLE_ONLY
+
+    def test_removes_multiline_disclaimer_div(self):
+        result = clean_up_comment(self._WITH_MULTILINE_DISCLAIMER)
+        assert result == self._TABLE_ONLY
+
+    def test_empty_string_returns_empty(self):
+        assert clean_up_comment("") == ""
+
+    def test_plain_text_returns_unchanged(self):
+        assert clean_up_comment("no html here") == "no html here"
+
+
 class TestAddExplanationsToComment:
     """Tests for ``add_explanations_to_comment``."""
 
@@ -168,6 +204,49 @@ class TestAddExplanationsToComment:
         )
         assert "something went wrong" in result
         assert "nothing went wrong" not in result
+
+    @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
+    def test_replaces_existing_ai_div_on_second_run(self, mock_get_translation):
+        """On a second run the <div class='ai'> wrapper produced by the first run is replaced."""
+        comment_with_ai_div = (
+            "<pre>Start Time:   2025-08-27 07:44:13.781 "
+            "End Time:     2025-08-27 07:44:19.889 </pre>"
+            "<table style='font-family: monospace; border: none; table-layout: auto;'>"
+            "<tr><td>iTB-TC-20021-PC-30037</td><td></td>"
+            "<td style='background-color: #ce3e01; color: #fff;'><b>FAIL</b></td>"
+            "<td><pre>Example Domain != AKShgdl"
+            "<div class='ai'><b>KI-Erklärung:</b><br>old explanation</div></pre></td></tr></table>"
+        )
+        mock_get_translation.return_value = "KI-Erklärung"
+        result = add_explanations_to_comment(
+            comment=comment_with_ai_div,
+            errors=self._ERRORS,
+            language=LanguageOption.GERMAN,
+        )
+        assert "something went wrong" in result
+        assert "old explanation" not in result
+        assert result.count("<div class='ai'>") == 1
+
+    @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
+    def test_explanation_html_special_chars_are_escaped(self, mock_get_translation):
+        """AI-generated explanation with HTML-special characters must be escaped."""
+        mock_get_translation.return_value = "KI-Erklärung"
+        errors_with_html = [
+            {
+                "failed_test_case": "iTB-TC-20021-PC-30037",
+                "error": "Example Domain != AKShgdl",
+                "explanation": "Got <Error> instead of <Success> & retry failed",
+            }
+        ]
+        result = add_explanations_to_comment(
+            comment=self._FAIL_COMMENT,
+            errors=errors_with_html,
+            language=LanguageOption.GERMAN,
+        )
+        assert "&lt;Error&gt;" in result
+        assert "&lt;Success&gt;" in result
+        assert "&amp;" in result
+        assert "<Error>" not in result
 
     @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
     def test_empty_comment_returns_empty_string(self, mock_get_translation):

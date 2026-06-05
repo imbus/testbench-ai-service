@@ -1,6 +1,7 @@
 import json
 from enum import Enum
 from pathlib import Path
+from typing import TypedDict
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
@@ -102,3 +103,7 @@ class AgentDetailsResponse(BaseModel):
     name: str
     summary: str | None = None
     description: str | None = None
+
+
+class AgentData(TypedDict, total=False):
+    """Agent-generated variables available as ``{{ agent.<key> }}`` in templates."""

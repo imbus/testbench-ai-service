@@ -24,7 +24,7 @@ from testbench_ai_service.models.testbench import (
 )
 from testbench_ai_service.tasks import run_agent
 from testbench_ai_service.utils.config import get_llm_config
-from testbench_ai_service.utils.html_utils import strip_html_body_tags
+from testbench_ai_service.utils.html_utils import has_visible_text, strip_html_body_tags
 from testbench_ai_service.utils.i18n import get_translation, load_translations
 from testbench_ai_service.utils.testbench_helpers import test_case_set_as_str as _tcs_as_str
 from tests.unit.helpers.data import get_test_data_path
@@ -152,10 +152,15 @@ class TestRunAgentReviewTask:
                 "test_case_set_reviewer.run.started", self.context.language
             )
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
-            expected_started_html = (
-                f"<html><body>{current_time} - {review_started_msg}"
-                f"<br/><br/>{previous_comment}</body></html>"
-            )
+            if has_visible_text(previous_comment):
+                expected_started_html = (
+                    f"<html><body>{current_time} - {review_started_msg}"
+                    f"<br/><br/>{previous_comment}</body></html>"
+                )
+            else:
+                expected_started_html = (
+                    f"<html><body>{current_time} - {review_started_msg}</body></html>"
+                )
             started_payload = SpecificationDetailsForUpdate(
                 locker=OptionalUser(optional=self.user_key),
                 reviewer=OptionalUser(optional=self.user_key),
@@ -173,11 +178,20 @@ class TestRunAgentReviewTask:
             )
             disclaimer = get_translation("shared.run.disclaimer", self.context.language)
             notes_html = notes.replace("\n", "<br/>")
-            expected_result_html = (
-                f"<html><body><b>{heading} - {current_time}</b><br/>{notes_html}"
-                f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{disclaimer}</div></div>"
-                f"<br/>{previous_comment}</body></html>"
+            disclaimer_html = (
+                f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; "
+                f"width: 218px; font-size: 10px;'>{disclaimer}</div></div>"
             )
+            if has_visible_text(previous_comment):
+                expected_result_html = (
+                    f"<html><body><b>{heading} - {current_time}</b><br/>{notes_html}"
+                    f"{disclaimer_html}<br/>{previous_comment}</body></html>"
+                )
+            else:
+                expected_result_html = (
+                    f"<html><body><b>{heading} - {current_time}</b><br/>{notes_html}"
+                    f"{disclaimer_html}</body></html>"
+                )
             result_payload = SpecificationDetailsForUpdate(
                 locker=OptionalUser(optional=None),
                 reviewer=OptionalUser(optional=self.user_key),
@@ -213,16 +227,20 @@ class TestRunAgentReviewTask:
             )
             error_message = get_translation("shared.run.error_message", self.context.language)
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
+            if has_visible_text(previous_comment):
+                failed_html = (
+                    f"<html><body><b>{heading} - {current_time}</b>"
+                    f"<br/>{error_message}<br/>{previous_comment}</body></html>"
+                )
+            else:
+                failed_html = (
+                    f"<html><body><b>{heading} - {current_time}</b>"
+                    f"<br/>{error_message}</body></html>"
+                )
             failed_payload = SpecificationDetailsForUpdate(
                 locker=OptionalUser(optional=None),
                 reviewer=OptionalUser(optional=self.user_key),
-                reviewComment=RichTextInfo(
-                    html=(
-                        f"<html><body><b>{heading} - {current_time}</b>"
-                        f"<br/>{error_message}<br/><br/>{previous_comment}</body></html>"
-                    ),
-                    images=[],
-                ),
+                reviewComment=RichTextInfo(html=failed_html, images=[]),
             ).model_dump(exclude_unset=True)
             self.mock_tb_connection.session.patch.assert_any_call(
                 f"{self.patch_url_prefix}{tcs.details.spec.key}", json=failed_payload
@@ -256,16 +274,20 @@ class TestRunAgentReviewTask:
             )
             error_message = get_translation("shared.run.error_message", self.context.language)
             previous_comment = strip_html_body_tags(tcs.details.spec.reviewComment)
+            if has_visible_text(previous_comment):
+                failed_html = (
+                    f"<html><body><b>{heading} - {current_time}</b>"
+                    f"<br/>{error_message}<br/>{previous_comment}</body></html>"
+                )
+            else:
+                failed_html = (
+                    f"<html><body><b>{heading} - {current_time}</b>"
+                    f"<br/>{error_message}</body></html>"
+                )
             failed_payload = SpecificationDetailsForUpdate(
                 locker=OptionalUser(optional=None),
                 reviewer=OptionalUser(optional=self.user_key),
-                reviewComment=RichTextInfo(
-                    html=(
-                        f"<html><body><b>{heading} - {current_time}</b>"
-                        f"<br/>{error_message}<br/><br/>{previous_comment}</body></html>"
-                    ),
-                    images=[],
-                ),
+                reviewComment=RichTextInfo(html=failed_html, images=[]),
             ).model_dump(exclude_unset=True)
             self.mock_tb_connection.session.patch.assert_any_call(
                 f"{self.patch_url_prefix}{tcs.details.spec.key}", json=failed_payload
