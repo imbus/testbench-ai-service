@@ -75,6 +75,11 @@ class DefectExplainer(Agent):
         """
         warnings = []
 
+        if not ExecutionContext.cycle_key:
+            msg = get_translation("shared.precheck.missing_cycle_key", context.language)
+            warnings.append(msg)
+            return PrecheckResult(passed=False, warnings=warnings)
+
         if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
             auth_info.token, self.REQUIRED_PERMISSIONS
         ):

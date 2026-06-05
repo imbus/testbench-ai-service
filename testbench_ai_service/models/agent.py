@@ -40,7 +40,7 @@ class TreeType(str, Enum):
 
 class TriggerAgentRequest(BaseModel):
     project_key: str
-    tov_key: str
+    tov_key: str | None = None
     cycle_key: str | None = None
     root_uid: str | None = None
     root_key: str | None = None

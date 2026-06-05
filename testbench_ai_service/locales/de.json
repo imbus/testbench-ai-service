@@ -20,6 +20,8 @@
     "defect_explainer.precheck.insufficient_role": "Unzureichende Projektrolle zum Erstellen einer KI-Erklärung.",
     "shared.run.disclaimer": "KI-generierte Antworten können ungenau sein.",
     "shared.run.error_message": "Bitte kontaktieren Sie den Systemadministrator für weitere Details.",
+    "shared.precheck.missing_cycle_key": "Testzyklusschlüssel fehlt. Bitte wählen Sie einen Zyklus aus, um fortzufahren.",
+    "shared.precheck.missing_tov_key": "Der Schlüssel der Testobjektversion fehlt. Bitte wählen Sie eine Version aus, um fortzufahren.",
     "shared.precheck.insufficient_permissions": "Unzureichende Berechtigungen zum Ausführen des KI-Agenten.",
     "shared.precheck.insufficient_role": "Unzureichende Projektrolle zum Ausführen des KI-Agenten.",
     "shared.precheck.spec_locked": "Die Spezifikation ist zurzeit gesperrt (UID: {uid}).",
