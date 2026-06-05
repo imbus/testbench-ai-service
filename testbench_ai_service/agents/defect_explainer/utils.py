@@ -8,7 +8,7 @@ from enum import Enum
 from pathlib import Path
 
 from testbench2robotframework.json_reader import TestCaseSet, TestCaseSetDetails
-from testbench2robotframework.model import KeywordType, TestCaseDetails
+from testbench2robotframework.model import KeywordType, TestCaseDetails, VerdictStatus
 from testbench_cli_reporter.actions import ImportJSONExecutionResults
 from testbench_cli_reporter.config_model import ImportJsonParameters
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -24,6 +24,7 @@ from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.utils.i18n import get_translation
+from testbench_ai_service.utils.time_utils import current_time
 
 _SEPARATOR = "    "
 _VERDICT_WIDTH = 10  # fixed width for verdict padding, e.g. "[Pass]    " or "[Fail]    "
@@ -278,9 +279,14 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
         "defect_explainer.run.result_heading", language
     )
     updated_html = comment
+    not_rf_comment = False
+    non_rf_comment = f"<div class='ai-explainer'><br/><b>{explainer_result_heading_message} - {current_time()}</b></div>"
     for details in errors:
         try:
-            error_msg = details.get("error", "")
+            match = re.search(
+                r"Message:\s*.*?<pre>(.*?)</pre>", details.get("error", ""), re.DOTALL
+            )
+            error_msg = match.group(1) if match else ""
             if not error_msg:
                 logger.warning(
                     f"No error message found for error ID: {details['failed_test_case']}"
@@ -292,6 +298,8 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
 
             if not matches:
                 logger.warning(f"No matches found for error ID: {details['failed_test_case']}")
+                not_rf_comment = True
+                non_rf_comment = add_explanation(non_rf_comment, details)
                 continue
 
             explanation = details.get("explanation", "")
@@ -300,8 +308,8 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
                 continue
 
             if "<div class='ai'>" in matches[0][1]:
-                message = details["error"].split("<div class='ai'>", 1)
-                base_message = message[0] if len(message) > 0 else details["error"]
+                message = error_msg.split("<div class='ai'>", 1)
+                base_message = message[0] if len(message) > 0 else error_msg
                 replacement = (
                     r"\1"
                     + base_message
@@ -314,7 +322,7 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
             else:
                 replacement = (
                     r"\1"
-                    + details["error"]
+                    + error_msg
                     + "<div class='ai'><b>"
                     + explainer_result_heading_message
                     + ":</b><br>"
@@ -327,7 +335,41 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
             logger.error(f"Error processing error ID {details['failed_test_case']}: {e}")
             continue
 
+    if not_rf_comment:
+        return add_disclaimer_no_rf_comment(updated_html, non_rf_comment, language)
     return add_disclaimer(updated_html, language)
+
+
+def add_explanation(comment: str, error: dict) -> str:
+    comment = comment.replace("\n", "<br/>")
+    return f"{comment}<br/><b>{error['failed_test_case']}</b>: {error['explanation']}"
+
+
+def add_disclaimer_no_rf_comment(comment: str, explanation: str, language: LanguageOption) -> str:
+    ai_disclaimer = get_translation("shared.run.disclaimer", language)
+    disclaimer = f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{ai_disclaimer}</div></div>"
+
+    content_to_insert = f'<div class="ai-explainer">\n{explanation}\n{disclaimer}\n</div>'
+
+    print(explanation)
+    print(comment)
+
+    if '<div class="ai-explainer">' in comment:
+        print("here")
+
+        if "</body>" in comment:
+            return re.sub(
+                r'<div class="ai-explainer">.*?(?=</body>)',
+                content_to_insert + "\n",
+                comment,
+                flags=re.DOTALL,
+            )
+        return re.sub(r'<div class="ai-explainer">.*', content_to_insert, comment, flags=re.DOTALL)
+
+    if "<body>" in comment:
+        return comment.replace("</body>", f"{content_to_insert}\n</body>", 1)
+
+    return comment + content_to_insert
 
 
 def add_disclaimer(comment: str, language: LanguageOption) -> str:
@@ -343,63 +385,20 @@ def add_error_message(comment: str, language: LanguageOption) -> str:
     return comment.replace("</table>", "</table>" + error_message, 1)
 
 
-def get_error_message(comment: str) -> dict[str, dict[str, str]]:
-    """
-    Extracts error messages from the comments of a TestCaseSet object.
+def extract_failed_test_cases(test_case_set):
+    failed_test_cases = {}
+    for test_case in test_case_set.details.testCases:
+        if test_case.exec.verdict in (VerdictStatus.ToVerify, VerdictStatus.Fail):
+            failed_test_cases.update(
+                {
+                    test_case.uniqueID: {
+                        "status": test_case.exec.verdict,
+                        "error": test_case.exec.comments,
+                    }
+                }
+            )
 
-    The function searches the `comments` field for an embedded HTML table.
-    From the first `<table>...</table>` block found, it parses rows (`<tr>`)
-    and cells (`<td>`). Each row with at least three cells
-    is interpreted as:
-
-        1. Error ID
-        2. Status (e.g., "PASS" or "FAIL")
-        3. Error message
-
-    Only rows with status `"FAIL"` are included in the result.
-
-    Args:
-        comment (comment): A collection of test cases whose comments are parsed.
-
-    Returns:
-        dict[str, dict[str, str]]:
-            A dictionary where the keys are error IDs and the values are dictionaries
-            of the form `{"status": <status>, "error": <message>}`.
-            Returns an empty dictionary if no table or no failures are found.
-
-    Example:
-        >>> errors = get_error_message(test_case_set)
-        >>> {
-        ...   "iTB-TC-001": {"status": "FAIL", "error": "Expected value X but got Y"},
-        ...   "iTB-TC-003": {"status": "FAIL", "error": "Timeout occurred"}
-        ... }
-    """
-    # Extract only the first <table>...</table> block
-    if "<table" not in comment or "</table>" not in comment:
-        return {}
-
-    table_content = comment.rsplit("<table", maxsplit=1)[-1].split("</table>", maxsplit=1)[0]
-    rows = table_content.split("<tr>")
-
-    errors = {}
-    for row in rows:
-        # Extract cells
-        cells = []
-        for cell in row.split("<td"):
-            _, sep, tail = cell.partition(">")
-            text = tail if sep else cell
-            clean_text = re.sub(r"^(<[^>]+>)*", "", text).strip()
-            clean_text = re.sub(r"(<[^>]+>|\n)*$", "", clean_text).strip()
-            if clean_text:
-                cells.append(clean_text)
-
-        # Ensure we have at least three cells before adding
-        if len(cells) >= 3:  # noqa: PLR2004
-            error_id, status, message = cells[:3]
-            if status == "FAIL":
-                errors[error_id] = {"status": status, "error": message}
-
-    return errors
+    return failed_test_cases
 
 
 def _strip_param_prefix(name: str) -> str:
@@ -447,7 +446,6 @@ def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> st
 
     lines = [test_case_set.details.name]
     last_top_level_verdict = ""
-    print(test_case_details.testSequence)
     for call in test_case_details.testSequence:
         level = len(call.numbering.split(".")) - 1
         verdict = call.exec.verdict.name
