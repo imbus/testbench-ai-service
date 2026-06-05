@@ -279,8 +279,8 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
         "defect_explainer.run.result_heading", language
     )
     updated_html = comment
-    not_rf_comment = False
-    non_rf_comment = f"<div class='ai-explainer'><br/><b>{explainer_result_heading_message} - {current_time()}</b></div>"
+    has_fallback_errors = False
+    fallback_html_buffer = f"<div class='ai-explainer'><br/><b>{explainer_result_heading_message} - {current_time()}</b></div>"
     for details in errors:
         try:
             match = re.search(
@@ -298,8 +298,8 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
 
             if not matches:
                 logger.warning(f"No matches found for error ID: {details['failed_test_case']}")
-                not_rf_comment = True
-                non_rf_comment = add_explanation(non_rf_comment, details)
+                has_fallback_errors = True
+                fallback_html_buffer = add_explanation(fallback_html_buffer, details)
                 continue
 
             explanation = details.get("explanation", "")
@@ -309,34 +309,26 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
 
             if "<div class='ai'>" in matches[0][1]:
                 message = error_msg.split("<div class='ai'>", 1)
-                base_message = message[0] if len(message) > 0 else error_msg
-                replacement = (
-                    r"\1"
-                    + base_message
+                error_base_message = message[0] if len(message) > 0 else error_msg
+                base_message = (
+                    error_base_message
                     + "<div class='ai'><b>"
                     + explainer_result_heading_message
                     + ":</b><br>"
                     + explanation
                     + "</div></pre>"
                 )
+                replacement = r"\1" + base_message
             else:
-                replacement = (
-                    r"\1"
-                    + error_msg
-                    + "<div class='ai'><b>"
-                    + explainer_result_heading_message
-                    + ":</b><br>"
-                    + explanation
-                    + "</div></pre>"
-                )
+                replacement = r"\1" + error_msg + base_message
 
             updated_html = re.sub(pattern, replacement, updated_html, flags=re.DOTALL)
         except (KeyError, IndexError, AttributeError) as e:
             logger.error(f"Error processing error ID {details['failed_test_case']}: {e}")
             continue
 
-    if not_rf_comment:
-        return add_disclaimer_no_rf_comment(updated_html, non_rf_comment, language)
+    if has_fallback_errors:
+        return add_disclaimer_no_rf_comment(updated_html, fallback_html_buffer, language)
     return add_disclaimer(updated_html, language)
 
 
@@ -351,12 +343,7 @@ def add_disclaimer_no_rf_comment(comment: str, explanation: str, language: Langu
 
     content_to_insert = f'<div class="ai-explainer">\n{explanation}\n{disclaimer}\n</div>'
 
-    print(explanation)
-    print(comment)
-
     if '<div class="ai-explainer">' in comment:
-        print("here")
-
         if "</body>" in comment:
             return re.sub(
                 r'<div class="ai-explainer">.*?(?=</body>)',
