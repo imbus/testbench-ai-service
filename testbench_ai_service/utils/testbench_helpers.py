@@ -38,11 +38,11 @@ def parameter_combinations_as_str(test_case_set: TestCaseSet) -> str:
 
     ## Example output:
     ```
-    | Fahrzeug | Sondermodell |
-    | --- | --- |
-    | January | $250 |
-    | February | $80 |
-    | March | $420 |
+    | unique ID | ${Fahrzeug} | ${Sondermodell} |
+    | --------- | ----------- | --------------- |
+    | iTB-TC-1-PC-1 | Rolo | Luxus |
+    | iTB-TC-1-PC-2 | Rassant Family | Jazz |
+    | iTB-TC-1-PC-3 | Rassant | Gomera |
     ```
     """
     rows = [
@@ -61,7 +61,7 @@ def parameter_combinations_as_str(test_case_set: TestCaseSet) -> str:
 def _to_markdown_table(rows: list[_TestCaseRow]) -> str:
     all_keys = sorted({key for row in rows for key in row.values})
 
-    header = "| uniqueID | " + " | ".join(all_keys) + " |"
+    header = "| uniqueID | " + " | ".join(f"${{{key}}}" for key in all_keys) + " |"
     separator = "|-----------|" + "|".join(["-" * (len(k) + 2) for k in all_keys]) + "|"
 
     table_rows = [
