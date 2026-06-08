@@ -13,7 +13,6 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     test_case_execution_as_str,
     update_description,
 )
-from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
@@ -27,11 +26,9 @@ from testbench_ai_service.models.testbench import (
 )
 from testbench_ai_service.utils.agent import (
     get_test_case_set_nodes,
-    has_required_permissions,
 )
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
-    get_project_roles,
     get_test_case_set_catalog,
 )
 
@@ -43,7 +40,7 @@ class DefectExplainerAgentData(AgentData):
 
 
 class DefectExplainer(Agent):
-    REQUIRED_PERMISSIONS: frozenset[PermissionWithCode] = frozenset(
+    REQUIRED_PERMISSIONS = frozenset(
         {
             PermissionWithCode.ReadOwnUserDetails,
             PermissionWithCode.ReadProjectDetails,
@@ -57,7 +54,7 @@ class DefectExplainer(Agent):
             PermissionWithCode.ReadExecutionImportingJobDetails,
         }
     )
-    ALLOWED_ROLES: frozenset[ProjectRole] = frozenset(
+    ALLOWED_ROLES = frozenset(
         {
             ProjectRole.TestManager,
             ProjectRole.Tester,
@@ -68,30 +65,14 @@ class DefectExplainer(Agent):
         self,
         context: ExecutionContext,
         conn: TBConnection,
-        auth_info: AuthInfo,
     ) -> PrecheckResult:
         """
         Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
         warnings = []
 
-        if not ExecutionContext.cycle_key:
+        if not context.cycle_key:
             msg = get_translation("shared.precheck.missing_cycle_key", context.language)
-            warnings.append(msg)
-            return PrecheckResult(passed=False, warnings=warnings)
-
-        if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
-            auth_info.token, self.REQUIRED_PERMISSIONS
-        ):
-            msg = get_translation(
-                "defect_explainer.precheck.insufficient_permissions", context.language
-            )
-            warnings.append(msg)
-            return PrecheckResult(passed=False, warnings=warnings)
-
-        project_roles = set(get_project_roles(conn, context.project_key))
-        if project_roles.isdisjoint(self.ALLOWED_ROLES):
-            msg = get_translation("defect_explainer.precheck.insufficient_role", context.language)
             warnings.append(msg)
             return PrecheckResult(passed=False, warnings=warnings)
 
@@ -154,6 +135,10 @@ class DefectExplainer(Agent):
     ) -> None:
         """Generates defect explanations for all test case sets concurrently."""
         if not item_ids:
+            logger.debug("No test case sets to explain defects for, skipping run execution.")
+            return
+        if not context.tov_key or not context.cycle_key:
+            logger.debug("Missing tov_key or cycle_key in context, skipping run execution.")
             return
 
         test_case_set_catalog = {}

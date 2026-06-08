@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
+from typing import ClassVar
 
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.auth import AuthInfo
 from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
@@ -12,16 +12,19 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
+from testbench_ai_service.models.testbench import GlobalHumanRole, PermissionWithCode, ProjectRole
 from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 
 
 class Agent(ABC):
+    REQUIRED_PERMISSIONS: ClassVar[frozenset[PermissionWithCode]] = frozenset()
+    ALLOWED_ROLES: ClassVar[frozenset[GlobalHumanRole | ProjectRole] | None] = None
+
     @abstractmethod
     async def precheck(
         self,
         context: ExecutionContext,
         conn: TBConnection,
-        auth_info: AuthInfo,
     ) -> PrecheckResult:
         """
         Validates prerequisites and collects the items ready for processing.

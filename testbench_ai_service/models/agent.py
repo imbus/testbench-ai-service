@@ -70,7 +70,7 @@ class ExecutionContext(BaseModel):
     user_key: str
     project_name: str
     project_key: str
-    tov_key: str
+    tov_key: str | None = None
     cycle_key: str | None = None
     root_uid: str | None = None
     root_key: str | None = None
