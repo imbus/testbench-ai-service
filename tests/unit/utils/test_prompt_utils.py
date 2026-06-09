@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 
 from testbench_ai_service.models.config import PromptConfig
-from testbench_ai_service.utils.prompt_utils import build_prompt, get_prompt_definition
+from testbench_ai_service.utils.build_prompt_utils import build_prompt
+from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 
 _DATA_DIR = Path(__file__).parent / "data"
 _DUMMY_PROMPT_PATH = _DATA_DIR / "dummy_prompt.yaml"

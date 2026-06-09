@@ -13,10 +13,12 @@ from testbench_ai_service.models.agent import (
 )
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.testbench import GlobalHumanRole, PermissionWithCode, ProjectRole
-from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
+from testbench_ai_service.utils.build_prompt_utils import build_prompt
+from testbench_ai_service.utils.prompt_utils import pretty_messages
 
 
 class Agent(ABC):
+    AGENT_DATA_CLASS: ClassVar[type[AgentData]]
     REQUIRED_PERMISSIONS: ClassVar[frozenset[PermissionWithCode]] = frozenset()
     ALLOWED_ROLES: ClassVar[frozenset[GlobalHumanRole | ProjectRole] | None] = None
 

@@ -1,5 +1,7 @@
+import importlib
+import inspect
 from pathlib import Path
-from typing import Any
+from typing import Any, get_type_hints
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -11,6 +13,7 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
+from testbench_ai_service.utils.prompt_utils import template_variables, validate_template
 from testbench_ai_service.validators import (
     raise_field_validation_error,
     validate_prompt_file,
@@ -161,4 +164,36 @@ class AppConfig(BaseModel):
                         ("projects", proj_key, "agents", agent_key, "prompt", "file"),
                         e,
                     )
+        return self
+
+    @model_validator(mode="after")
+    def validate_config(self):
+        for _, agent in self.agents.items():
+            if not agent.class_path:
+                raise ValueError("'class_path' must be set.")
+
+            try:
+                module_path, class_name = agent.class_path.rsplit(".", 1)
+            except ValueError as e:
+                raise ValueError(
+                    "'class_path' must be a valid import path, e.g. 'package.module.ClassName'."
+                ) from e
+
+            try:
+                module = importlib.import_module(module_path)
+                getattr(module, class_name)
+            except (ImportError, AttributeError) as e:
+                raise ValueError(f"cannot import '{class_name}' from '{module_path}': {e}") from e
+
+            user_variables = template_variables(
+                prompt_file=Path(self.prompts_dir, self.language.value, agent.prompt.file),
+                prompt_variant=agent.prompt.variant,
+            )
+            agent_data = {}
+            for _, obj in inspect.getmembers(module):
+                if inspect.isclass(obj) and hasattr(obj, "AGENT_DATA_CLASS"):
+                    agent_data = get_type_hints(obj.AGENT_DATA_CLASS)
+
+            if not validate_template(user_variables, agent_data):
+                raise Exception
         return self

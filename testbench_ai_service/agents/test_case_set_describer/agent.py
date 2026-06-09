@@ -41,6 +41,7 @@ class TestCaseSetDescriberAgentData(AgentData):
 
 
 class TestCaseSetDescriber(Agent):
+    AGENT_DATA_CLASS = TestCaseSetDescriberAgentData
     REQUIRED_PERMISSIONS = frozenset(
         {
             PermissionWithCode.ReadOwnUserDetails,

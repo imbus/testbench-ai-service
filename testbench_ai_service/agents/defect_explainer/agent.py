@@ -38,6 +38,7 @@ class DefectExplainerAgentData(AgentData):
 
 
 class DefectExplainer(Agent):
+    AGENT_DATA_CLASS = DefectExplainerAgentData
     REQUIRED_PERMISSIONS = frozenset(
         {
             PermissionWithCode.ReadOwnUserDetails,

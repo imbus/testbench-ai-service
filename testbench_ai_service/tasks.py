@@ -6,7 +6,7 @@ from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
-from testbench_ai_service.utils.prompt_utils import get_prompt_model
+from testbench_ai_service.utils.build_prompt_utils import get_prompt_model
 
 
 async def run_agent(
