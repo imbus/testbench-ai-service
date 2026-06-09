@@ -187,7 +187,6 @@ class AppConfig(BaseModel):
 
             user_variables = template_variables(
                 prompt_file=Path(self.prompts_dir, self.language.value, agent.prompt.file),
-                prompt_variant=agent.prompt.variant,
             )
             agent_data = {}
             for _, obj in inspect.getmembers(module):

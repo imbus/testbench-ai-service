@@ -81,27 +81,24 @@ def _build_ast_path(node: nodes.Node) -> str | None:
     return None
 
 
-def template_variables(prompt_file: Path, prompt_variant: str) -> set[str]:
+def template_variables(prompt_file: Path) -> set[str]:
     prompt_definition = get_prompt_definition(prompt_file)
-    prompt_variant = get_prompt_variant(prompt_definition, prompt_variant)
     base_path = Path(prompt_file).parent
-
     extracted_paths: set[str] = set()
-
     env = Environment()
+    for variant in prompt_definition.variants:
+        for msg_template in variant.messages:
+            try:
+                content = msg_template.get_content(base_path)
+                ast = env.parse(content)
 
-    for msg_template in prompt_variant.messages:
-        try:
-            content = msg_template.get_content(base_path)
-            ast = env.parse(content)
+                for node in ast.find_all(nodes.Getattr):
+                    path = _build_ast_path(node)
+                    if path:
+                        extracted_paths.add(path)
 
-            for node in ast.find_all(nodes.Getattr):
-                path = _build_ast_path(node)
-                if path:
-                    extracted_paths.add(path)
-
-        except Exception as e:
-            logger.warning("Failed to parse template variables: %s", e)
+            except Exception as e:
+                logger.warning("Failed to parse template variables: %s", e)
 
     return extracted_paths
 
@@ -113,7 +110,7 @@ def validate_template(
     if not template_variables:
         return True
 
-    allowed_variables = set()
+    allowed_variables: set[str] = set()
 
     if agent_variables:
         allowed_variables.update(f"agent.{var}" for var in agent_variables)
