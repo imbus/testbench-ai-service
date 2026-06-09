@@ -5,6 +5,7 @@ from typing import Any, get_type_hints
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
     AgentConfig,
     LLMConfig,
@@ -194,5 +195,11 @@ class AppConfig(BaseModel):
                     agent_data = get_type_hints(obj.AGENT_DATA_CLASS)
 
             if not validate_template(user_variables, agent_data):
-                raise Exception
+                logger.error(
+                    "Template validation failed. User variables: %s do not match agent data requirements.",
+                    user_variables,
+                )
+                raise ValueError(
+                    "Failed to validate template: variables are incompatible with the agent."
+                )
         return self
