@@ -4,7 +4,7 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
-from testbench_ai_service.config import AgentConfig, AppConfig
+from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import (
     get_app_config,
     get_llm_factory,
@@ -17,6 +17,7 @@ from testbench_ai_service.models.agent import (
     TriggerAgentRequest,
     TriggerAgentResponse,
 )
+from testbench_ai_service.models.config import AgentConfig
 from testbench_ai_service.models.prompt import PromptDefinition
 from testbench_ai_service.tasks import run_agent
 from testbench_ai_service.utils.agent import build_execution_context, has_required_permissions

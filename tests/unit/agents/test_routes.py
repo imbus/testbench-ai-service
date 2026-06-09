@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
-from testbench_ai_service.config import AppConfig, ProjectAgentConfig, ProjectConfig
+from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
 from testbench_ai_service.main import create_app
 from testbench_ai_service.models.agent import (
@@ -17,6 +17,7 @@ from testbench_ai_service.models.agent import (
     PrecheckResult,
     TriggerAgentRequest,
 )
+from testbench_ai_service.models.config import ProjectAgentConfig, ProjectConfig
 from testbench_ai_service.models.testbench import ProjectMember, ProjectRole
 from tests.unit.helpers.data import get_test_data_path
 

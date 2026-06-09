@@ -22,13 +22,11 @@ from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     ProjectRole,
 )
-from testbench_ai_service.utils.agent import (
-    get_test_case_set_nodes,
-)
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
+    get_test_case_set_nodes,
 )
 from testbench_ai_service.utils.testbench_helpers import (
     parameter_combinations_as_str,

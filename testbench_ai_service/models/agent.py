@@ -5,7 +5,7 @@ from typing import TypedDict
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from testbench_ai_service.config import LLMConfig, PromptConfig
+from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import FilteringOptions
 

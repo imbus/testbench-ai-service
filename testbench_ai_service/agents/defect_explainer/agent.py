@@ -13,23 +13,21 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     test_case_execution_as_str,
     update_description,
 )
-from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData, ExecutionContext, PrecheckResult
+from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.testbench import (
     ActivityStatus,
     PermissionWithCode,
     ProjectRole,
     VerdictStatus,
 )
-from testbench_ai_service.utils.agent import (
-    get_test_case_set_nodes,
-)
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
+    get_test_case_set_nodes,
 )
 
 

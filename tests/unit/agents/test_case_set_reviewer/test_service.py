@@ -5,9 +5,9 @@ import requests
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
 from testbench_ai_service.auth import AuthInfo, AuthType
-from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
+from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import ProjectRole
 

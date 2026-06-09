@@ -8,9 +8,9 @@ from jinja2 import (
     UndefinedError,
 )
 
-from testbench_ai_service.config import PromptConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData
+from testbench_ai_service.models.config import PromptConfig
 from testbench_ai_service.models.prompt import (
     Message,
     MessageTemplate,

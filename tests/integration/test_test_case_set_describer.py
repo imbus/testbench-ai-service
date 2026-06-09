@@ -6,7 +6,8 @@ import pytest
 from fastapi import status
 
 from testbench_ai_service.auth import validate_auth_token
-from testbench_ai_service.config import AppConfig, ProjectAgentConfig, ProjectConfig
+from testbench_ai_service.config import AppConfig
+from testbench_ai_service.models.config import ProjectAgentConfig, ProjectConfig
 from testbench_ai_service.models.testbench import ProjectRole
 from tests.integration.conftest import CYCLE_KEY, PROJECT_KEY, PROJECT_NAME, TOV_KEY
 from tests.integration.helpers import (
