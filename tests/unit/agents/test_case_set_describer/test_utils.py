@@ -35,14 +35,14 @@ class TestParameterCombinationsAsStr:
     def test_single_test_case_single_param_produces_correct_headers_and_row(self):
         tc = _DummyTestCase("TC1", [_DummyParameter("ParamA", "ValueA")])
         result = parameter_combinations_as_str(_DummyTestCaseSet({"tc1": tc}))
-        assert "| uniqueID | ParamA |" in result
+        assert "| uniqueID | ${ParamA} |" in result
         assert "| TC1 | ValueA |" in result
 
     def test_multiple_test_cases_multiple_params(self):
         tc1 = _DummyTestCase("TC1", [_DummyParameter("A", "1"), _DummyParameter("B", "2")])
         tc2 = _DummyTestCase("TC2", [_DummyParameter("A", "3"), _DummyParameter("B", "4")])
         result = parameter_combinations_as_str(_DummyTestCaseSet({"tc1": tc1, "tc2": tc2}))
-        assert "| uniqueID | A | B |" in result
+        assert "| uniqueID | ${A} | ${B} |" in result
         assert "| TC1 | 1 | 2 |" in result
         assert "| TC2 | 3 | 4 |" in result
 
@@ -50,7 +50,7 @@ class TestParameterCombinationsAsStr:
         tc1 = _DummyTestCase("TC1", [_DummyParameter("A", "1")])
         tc2 = _DummyTestCase("TC2", [_DummyParameter("B", "2")])
         result = parameter_combinations_as_str(_DummyTestCaseSet({"tc1": tc1, "tc2": tc2}))
-        assert "| uniqueID | A | B |" in result
+        assert "| uniqueID | ${A} | ${B} |" in result
         assert "| TC1 | 1 |  |" in result
         assert "| TC2 |  | 2 |" in result
 

@@ -374,7 +374,7 @@ class TestPatchPreviousReviewComment:
             "<html><body>"
             "<b>test_case_set_reviewer.run.failed_heading - 2025-09-16 12:34:56</b>"
             "<br/>shared.run.error_message"
-            "<br/><p>Previous</p>"
+            "<br/><br/><p>Previous</p>"
             "</body></html>"
         )
         spec_update: SpecificationDetailsForUpdate = mock_patch.call_args[0][3]

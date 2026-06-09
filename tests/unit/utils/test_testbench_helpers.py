@@ -33,11 +33,12 @@ def _make_call(
     return call
 
 
-def _make_param(name: str, value: str | None = None, param_value=None):
+def _make_param(name: str, value: str | None = None, param_value=None, repr_value=None):
     p = MagicMock()
     p.name = name
     p.value = value
     p.parameterValue = param_value
+    p.representativeValue = repr_value
     return p
 
 
@@ -49,11 +50,11 @@ def _make_tc(sequence: list):
     return tc
 
 
-def _make_tcs(name: str, test_cases: dict):
+def _make_tcs(name: str, testSequence: list):
     tcs = MagicMock()
     tcs.details = MagicMock()
     tcs.details.name = name
-    tcs.test_cases = test_cases
+    tcs.details.testSequence = testSequence
     return tcs
 
 
@@ -97,52 +98,41 @@ class TestTestCaseSetAsStr:
     """Tests for ``test_case_set_as_str``."""
 
     def test_first_line_is_test_case_set_name(self):
-        tc = _make_tc([_make_call("Step")])
-        tcs = _make_tcs("MySet", {"tc1": tc})
+        tcs = _make_tcs("MySet", [_make_call("Step")])
         assert _tcs_as_str(tcs).startswith("MySet")
 
     def test_step_name_appears_in_output(self):
-        tc = _make_tc([_make_call("Do Something")])
-        tcs = _make_tcs("S", {"tc1": tc})
+        tcs = _make_tcs("S", [_make_call("Do Something")])
         assert "Do Something" in _tcs_as_str(tcs)
 
     def test_textual_step_has_no_step_type_annotation(self):
-        tc = _make_tc([_make_call("Text Step", keyword_type=KeywordType.Textual)])
-        tcs = _make_tcs("S", {"tc1": tc})
+        tcs = _make_tcs("S", [_make_call("Text Step", keyword_type=KeywordType.Textual)])
         assert "step_type:" not in _tcs_as_str(tcs)
 
     def test_atomic_flow_step_annotated(self):
-        tc = _make_tc(
-            [_make_call("Flow", keyword_type=KeywordType.Atomic, call_type=KeywordCallType.Flow)]
+        tcs = _make_tcs(
+            "S",
+            [_make_call("Flow", keyword_type=KeywordType.Atomic, call_type=KeywordCallType.Flow)],
         )
-        tcs = _make_tcs("S", {"tc1": tc})
         assert "step_type:flow" in _tcs_as_str(tcs)
 
     def test_atomic_check_step_annotated(self):
-        tc = _make_tc(
-            [_make_call("Check", keyword_type=KeywordType.Atomic, call_type=KeywordCallType.Check)]
+        tcs = _make_tcs(
+            "S",
+            [_make_call("Check", keyword_type=KeywordType.Atomic, call_type=KeywordCallType.Check)],
         )
-        tcs = _make_tcs("S", {"tc1": tc})
         assert "step_type:check" in _tcs_as_str(tcs)
 
-    def test_uses_first_test_case_only(self):
-        tc1 = _make_tc([_make_call("First Step")])
-        tc2 = _make_tc([_make_call("Second Step")])
-        tcs = _make_tcs("S", {"a": tc1, "b": tc2})
-        result = _tcs_as_str(tcs)
-        assert "First Step" in result
-        assert "Second Step" not in result
-
     def test_empty_test_sequence_returns_name_only(self):
-        tc = _make_tc([])
-        tcs = _make_tcs("OnlyName", {"tc1": tc})
+        tcs = _make_tcs("OnlyName", [])
         assert _tcs_as_str(tcs) == "OnlyName"
 
     def test_literal_param_rendered_with_repr(self):
-        param = _make_param("Speed", value="100", param_value=None)
+        rv = MagicMock()
+        rv.name = "100"
+        param = _make_param("Speed", repr_value=rv)
         step = _make_call("Drive", call_parameters=[param])
-        tc = _make_tc([step])
-        tcs = _make_tcs("S", {"tc1": tc})
+        tcs = _make_tcs("S", [step])
         assert "Speed='100'" in _tcs_as_str(tcs)
 
     def test_abstract_param_rendered_with_dollar_braces(self):
@@ -150,8 +140,7 @@ class TestTestCaseSetAsStr:
         pv.name = "SpeedParam"
         param = _make_param("Speed", param_value=pv)
         step = _make_call("Drive", call_parameters=[param])
-        tc = _make_tc([step])
-        tcs = _make_tcs("S", {"tc1": tc})
+        tcs = _make_tcs("S", [step])
         assert "Speed=${SpeedParam}" in _tcs_as_str(tcs)
 
     def test_consecutive_duplicate_steps_collapsed(self):
@@ -160,8 +149,7 @@ class TestTestCaseSetAsStr:
         param2 = _make_param("Val", value="b", param_value=None)
         call1 = _make_call("Do", key="same", call_parameters=[param1])
         call2 = _make_call("Do", key="same", call_parameters=[param2])
-        tc = _make_tc([call1, call2])
-        tcs = _make_tcs("S", {"tc1": tc})
+        tcs = _make_tcs("S", [call1, call2])
         result = _tcs_as_str(tcs)
         assert result.count("Do") == 1
 
@@ -170,14 +158,12 @@ class TestTestCaseSetAsStr:
         call1 = _make_call("Do", key="same")
         call2 = _make_call("Other", key="other")
         call3 = _make_call("Do", key="same")
-        tc = _make_tc([call1, call2, call3])
-        tcs = _make_tcs("S", {"tc1": tc})
+        tcs = _make_tcs("S", [call1, call2, call3])
         result = _tcs_as_str(tcs)
         assert result.count("Do") == 2
 
     def test_each_step_on_its_own_line(self):
-        tc = _make_tc([_make_call("Step A", key="k1"), _make_call("Step B", key="k2")])
-        tcs = _make_tcs("S", {"tc1": tc})
+        tcs = _make_tcs("S", [_make_call("Step A", key="k1"), _make_call("Step B", key="k2")])
         lines = _tcs_as_str(tcs).splitlines()
         assert any("Step A" in ln for ln in lines)
         assert any("Step B" in ln for ln in lines)

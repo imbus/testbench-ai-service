@@ -60,6 +60,7 @@ def _make_tcs_details(key="key", test_cases=None):
     return TestCaseSetDetails(
         key=key,
         numbering="1.1",
+        path="",
         uniqueID="iTB-TC-001",
         name="name",
         spec=TestCaseSetSpecificationSummary(
@@ -71,6 +72,7 @@ def _make_tcs_details(key="key", test_cases=None):
             preConditions=[],
             postConditions=[],
             udfs=[],
+            tags=[],
             keywords=[],
             references=[],
             requirements=[],
@@ -79,9 +81,12 @@ def _make_tcs_details(key="key", test_cases=None):
             key="execKey",
             comments="comment",
             udfs=[],
-            keywords=[],
+            tags=[],
         ),
         testCases=test_cases or [],
+        testSequence=[],
+        parameters=[],
+        keywords=[],
     )
 
 

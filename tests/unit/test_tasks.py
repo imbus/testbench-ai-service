@@ -48,7 +48,7 @@ class TestRunAgentReviewTask:
         )
         self.mock_reviewer_class = reviewer_patcher.start()
         self.mock_reviewer = TestCaseSetReviewer()
-        self.mock_reviewer._get_ai_response = AsyncMock(
+        self.mock_reviewer.get_ai_response = AsyncMock(
             side_effect=self._reviewer_get_ai_response_side_effect
         )
         self.mock_reviewer_class.return_value = self.mock_reviewer
@@ -246,7 +246,7 @@ class TestRunAgentReviewTask:
 
     async def test_reviewer_failure_is_logged_as_error(self, caplog):
         """When the AI reviewer raises, run_agent logs the error and patches failure."""
-        self.mock_reviewer._get_ai_response = AsyncMock(side_effect=Exception("service error"))
+        self.mock_reviewer.get_ai_response = AsyncMock(side_effect=Exception("service error"))
 
         fake_now = datetime.datetime(2025, 1, 1, 12, 0, 0, tzinfo=datetime.timezone.utc)
         with patch("testbench_ai_service.utils.time_utils.datetime") as mock_datetime:

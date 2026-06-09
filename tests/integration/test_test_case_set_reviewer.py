@@ -20,15 +20,12 @@ from tests.integration.helpers import (
 
 _ENDPOINT = "/test-case-set-reviews"
 
-# Patch targets — these are the real functions that touch external systems.
 _PATCH_GET_PROJECT_NAME = "testbench_ai_service.utils.agent.get_project_name"
 _PATCH_GET_CATALOG = (
     "testbench_ai_service.agents.test_case_set_reviewer.agent.get_test_case_set_catalog"
 )
-_PATCH_GET_TREE = "testbench_ai_service.utils.agent.get_test_structure_tree"
-_PATCH_GET_PROJECT_ROLES = (
-    "testbench_ai_service.agents.test_case_set_reviewer.agent.get_project_roles"
-)
+_PATCH_GET_TREE = "testbench_ai_service.utils.testbench.get_test_structure_tree"
+_PATCH_GET_PROJECT_ROLES = "testbench_ai_service.agents.routes.get_project_roles"
 _PATCH_PATCH_STARTED = "testbench_ai_service.agents.test_case_set_reviewer.agent.patch_review_started_for_test_structure_element"
 _PATCH_PATCH_RESULT = "testbench_ai_service.agents.test_case_set_reviewer.agent.patch_review_result_for_test_structure_element"
 
@@ -103,10 +100,10 @@ class TestErrorPaths:
 
         assert post(_ENDPOINT, cycle_key=CYCLE_KEY).status_code == status.HTTP_409_CONFLICT
 
-    def test_insufficient_role_returns_409(self, post, patches):
+    def test_insufficient_role_returns_403(self, post, patches):
         patches.get_project_roles.return_value = []
 
-        assert post(_ENDPOINT, cycle_key=CYCLE_KEY).status_code == status.HTTP_409_CONFLICT
+        assert post(_ENDPOINT, cycle_key=CYCLE_KEY).status_code == status.HTTP_403_FORBIDDEN
 
     def test_disabled_agent_returns_404(self, app, post):
         """Use case disabled for this project → 404 Not Found."""

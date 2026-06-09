@@ -100,12 +100,35 @@ class VerdictStatus(str, Enum):
     Pass = "Pass"
 
 
+class GlobalHumanRole(str, Enum):
+    Administrator = "Administrator"
+    ProjectAdministrator = "ProjectAdministrator"
+    ProjectUser = "ProjectUser"
+
+
+class ProjectRole(str, Enum):
+    TestManager = "TestManager"
+    TestDesigner = "TestDesigner"
+    TestProgrammer = "TestProgrammer"
+    Tester = "Tester"
+    ReadOnlyDesigner = "ReadOnlyDesigner"
+    ReadOnlyImplementer = "ReadOnlyImplementer"
+    ReadOnlyTester = "ReadOnlyTester"
+
+
+class ExecutionMode(str, Enum):
+    execute = "execute"
+    continue_ = "continue"
+    view = "view"
+    simulate = "simulate"
+
+
 class OptionalUser(BaseModel):
     optional: str | None = None
 
 
-class OptionalLocalDateTime(BaseModel):
-    optional: str | None = Field(None, examples=["2025-03-13T00:00:00"])
+class OptionalLocalDate(BaseModel):
+    optional: str | None = Field(None, examples=["2025-03-13"])
 
 
 class ImageDetails(BaseModel):
@@ -137,7 +160,7 @@ class SpecificationDetailsForUpdate(BaseModel):
     reviewer: OptionalUser | None = None
     locker: OptionalUser | None = None
     priority: Priority | None = None
-    dueDate: OptionalLocalDateTime | None = None
+    dueDate: OptionalLocalDate | None = None
     description: RichTextInfo | None = None
     reviewComment: RichTextInfo | None = None
 
@@ -162,39 +185,37 @@ class UserDefinedField(BaseModel):
     udfType: UDFType
 
 
-class Keyword(BaseModel):
-    key: str
-    name: str
-    isVariantsMarker: bool
-
-
 class RequirementReference(BaseModel):
     key: str
     edited: bool
 
 
-class TestCaseSetSpecificationSummary(BaseModel):
+class Tag(BaseModel):
+    key: str
+    name: str
+    isVariantsMarker: bool
+
+
+class TestThemeSpecification(BaseModel):
     key: str
     description: str
     reviewComment: str
-    responsible: UserReference | None = None
     status: SpecStatus
     priority: Priority
-    preConditions: list[ConditionSummary]
-    postConditions: list[ConditionSummary]
     dueDate: str | None = None
     reviewer: UserReference | None = None
+    responsible: UserReference | None = None
     udfs: list[UserDefinedField]
-    keywords: list[Keyword] = []
-    references: list[str]
+    tags: list[Tag]
     requirements: list[RequirementReference]
+    references: list[str]
 
 
 class TestCaseSetExecutionSummary(BaseModel):
     key: str
     comments: str
     udfs: list[UserDefinedField]
-    keywords: list[Keyword] = []
+    tags: list[Tag]
 
 
 class TestCaseSpecificationSummary(BaseModel):
@@ -220,14 +241,220 @@ class TestCaseSummary(BaseModel):
     exec: TestCaseExecutionSummary | None = None
 
 
+class SequencePhase(str, Enum):
+    Setup = "Setup"
+    TestStep = "TestStep"
+    Teardown = "Teardown"
+
+
+class KeywordCallType(str, Enum):
+    Flow = "Flow"
+    Check = "Check"
+
+
+class KeywordType(str, Enum):
+    Atomic = "Atomic"
+    Compound = "Compound"
+    Textual = "Textual"
+
+
+class KindOfDataType(str, Enum):
+    Regular = "Regular"
+    Reference = "Reference"
+    Global = "Global"
+    AcceptingGlobal = "AcceptingGlobal"
+
+
+class DataTypeSummary(BaseModel):
+    key: str
+    kind: KindOfDataType
+    name: str
+    path: str
+    uniqueID: str
+    version: str | None = None
+
+
+class ParameterDefinitionType(str, Enum):
+    DetailedInstance = "DetailedInstance"
+    InstanceTable = "InstanceTable"
+    AtomicInstance = "AtomicInstance"
+
+
+class ParameterValue(BaseModel):
+    name: str
+    key: str
+    dtSequenceKeys: list[str]
+
+
+class InstanceArrayValue(BaseModel):
+    name: str
+    isDefaultValue: bool
+
+
+class ParameterEvaluationType(str, Enum):
+    CallByValue = "CallByValue"
+    CallByReference = "CallByReference"
+    CallByReferenceMandatory = "CallByReferenceMandatory"
+
+
+class RepresentativeType(str, Enum):
+    Text = "Text"
+    Placeholder = "Placeholder"
+    Attachment = "Attachment"
+    Hyperlink = "Hyperlink"
+    Reference = "Reference"
+
+
+class RepresentativeValue(BaseModel):
+    name: str
+    valueType: RepresentativeType
+    isDefaultValue: bool
+
+
+class ParameterSummary(BaseModel):
+    dataType: DataTypeSummary | None = None
+    definitionType: ParameterDefinitionType
+    key: str
+    name: str
+    evaluationType: ParameterEvaluationType
+    value: str | None = None
+    valueType: RepresentativeType | None = None
+    representativeValue: RepresentativeValue | None = None
+    parameterValue: ParameterValue | None = None
+    instanceArrayValue: InstanceArrayValue | None = None
+    parentAlias: str | None = None
+    rootAlias: str | None = None
+    usesCount: int | None = None
+
+
+class KeywordCallSpecification(BaseModel):
+    key: str
+    keywordType: KeywordType | None = None
+    name: str
+    sequencePhase: SequencePhase
+    callType: KeywordCallType
+    description: str | None = None
+    comments: str
+    keywordKey: str | None = None
+    callParameters: list[ParameterSummary]
+    callingKeywordKey: str | None = None
+
+
+class KeywordVerdict(str, Enum):
+    Pass = "Pass"
+    Fail = "Fail"
+    Skipped = "Skipped"
+    ToVerify = "ToVerify"
+    Warn = "Warn"
+    Undefined = "Undefined"
+    Blocked = "Blocked"
+
+
+class KeywordCallExecution(BaseModel):
+    verdict: KeywordVerdict
+    time: str | None = None
+    duration: int
+    currentUser: UserReference
+    tester: UserReference | None = None
+    comments: str
+    references: list[str]
+    defects: list[str]
+
+
+class KeywordCall(BaseModel):
+    sequenceID: str
+    parentID: str | None = None
+    numbering: str
+    spec: KeywordCallSpecification
+    exec: KeywordCallExecution | None = None
+
+
+class ArgumentValueType(str, Enum):
+    EquivalenceClass = "EquivalenceClass"
+    Representative = "Representative"
+    InstancesArray = "InstancesArray"
+    CBRRepresentative = "CBRRepresentative"
+
+
+class DefaultValue(BaseModel):
+    name: str
+    valueType: ArgumentValueType
+
+
+class ParameterDetails(BaseModel):
+    key: str
+    name: str
+    definitionType: ParameterDefinitionType
+    evaluationType: ParameterEvaluationType
+    dataTypeKey: str | None = None
+    defaultValue: DefaultValue | None = None
+    signatureID: str | None = None
+
+
+class TestElementStatus(str, Enum):
+    InProgress = "InProgress"
+    Released = "Released"
+
+
+class ContentType(str, Enum):
+    txt = "txt"
+    xml = "xml"
+
+
+class AdvancedContent(BaseModel):
+    contentType: ContentType | None = None
+    contentExtID: str | None = None
+    content: str | None = None
+
+
+class KeywordDetails(BaseModel):
+    key: str
+    name: str
+    uniqueID: str
+    status: TestElementStatus
+    defaultCallType: KeywordCallType
+    locker: UserReference | None = None
+    description: str
+    version: str | None = None
+    parentUniqueID: str | None = None
+    libraryKey: str | None = None
+    advancedContent: AdvancedContent | None = None
+    path: str
+    parameters: list[ParameterDetails]
+    preConditions: list[ConditionSummary]
+    postConditions: list[ConditionSummary]
+    references: list[str]
+
+
+class TestCaseSetSpecificationSummary(BaseModel):
+    key: str
+    description: str
+    reviewComment: str
+    responsible: UserReference | None = None
+    status: SpecStatus
+    priority: Priority
+    preConditions: list[ConditionSummary]
+    postConditions: list[ConditionSummary]
+    dueDate: str | None = None
+    reviewer: UserReference | None = None
+    udfs: list[UserDefinedField]
+    tags: list[Tag]
+    references: list[str]
+    requirements: list[RequirementReference]
+
+
 class TestCaseSetDetails(BaseModel):
     key: str
     numbering: str
+    path: str
     uniqueID: str
     name: str
     spec: TestCaseSetSpecificationSummary
     exec: TestCaseSetExecutionSummary | None = None
     testCases: list[TestCaseSummary]
+    testSequence: list[KeywordCall]
+    parameters: list[ParameterDetails]
+    keywords: list[KeywordDetails]
 
 
 class TestStructureElementType(str, Enum):
@@ -240,6 +467,7 @@ class TestStructureElementType(str, Enum):
 class TestStructureItemBaseInformation(BaseModel):
     key: str
     numbering: str
+    path: str
     parentKey: str
     name: str
     uniqueID: str
@@ -289,10 +517,6 @@ class TestStructureItemExecution(TestStructureExecution):
     locker: UserReference | None = None
 
 
-class TestStructureTreeNode(BaseModel):
-    pass
-
-
 class TestFilterType(str, Enum):
     TestTheme = "TestTheme"
     TestCaseSet = "TestCaseSet"
@@ -304,6 +528,10 @@ class AttachedFilter(BaseModel):
     name: str
     filterType: TestFilterType
     content: str
+
+
+class TestStructureTreeNode(BaseModel):
+    elementType: TestStructureElementType
 
 
 class RootNode(TestStructureTreeNode):
@@ -361,7 +589,11 @@ class FilteringOptions(BaseModel):
     labelFilter: str | None = None
 
 
-class TovStructureOptions(BaseModel):
+class ReportExportOptions(BaseModel):
+    pass
+
+
+class TovStructureOptions(ReportExportOptions):
     treeRootUID: str | None = None
     suppressFilteredData: bool | None = Field(None, examples=[False])
     suppressEmptyTestThemes: bool | None = Field(None, examples=[False])
@@ -377,20 +609,13 @@ class CycleStructureOptions(BaseModel):
     filters: list[FilterInfo] | None = None
 
 
-class GlobalHumanRole(str, Enum):
-    Administrator = "Administrator"
-    ProjectAdministrator = "Project Administrator"
-    ProjectUser = "Project User"
-
-
-class ProjectRole(str, Enum):
-    TestManager = "TestManager"
-    TestDesigner = "TestDesigner"
-    TestProgrammer = "TestProgrammer"
-    Tester = "Tester"
-    ReadOnlyDesigner = "ReadOnlyDesigner"
-    ReadOnlyImplementer = "ReadOnlyImplementer"
-    ReadOnlyTester = "ReadOnlyTester"
+class CycleReportOptions(ReportExportOptions):
+    treeRootUID: str | None = None
+    executionMode: ExecutionMode | None = None
+    suppressFilteredData: bool | None = Field(None, examples=[False])
+    suppressNotExecutable: bool | None = Field(None, examples=[False])
+    suppressEmptyTestThemes: bool | None = Field(None, examples=[False])
+    filters: list[FilterInfo] | None = None
 
 
 class ProjectMember(BaseModel):
