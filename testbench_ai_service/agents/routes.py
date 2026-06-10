@@ -1,3 +1,5 @@
+from typing import get_type_hints
+
 import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -24,7 +26,13 @@ from testbench_ai_service.utils.agent import build_execution_context, has_requir
 from testbench_ai_service.utils.config import agent_enabled, get_agent_config, get_prompt_config
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.import_utils import load_class_from_path
-from testbench_ai_service.utils.prompt_utils import get_prompt_definition
+from testbench_ai_service.utils.prompt_utils import (
+    get_prompt_definition,
+    get_prompt_variant,
+    template_variables,
+    validate_agent_variable,
+    validate_template_placeholders,
+)
 from testbench_ai_service.utils.testbench import get_project_roles
 
 TRIGGER_AGENT_ROUTE_KWARGS: dict = {
@@ -148,6 +156,7 @@ async def trigger_agent_execution(
             )
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
 
+    validate_template_and_agent_vars(context, agent)
     try:
         precheck_result = await agent.precheck(context, conn)
     except requests.exceptions.HTTPError as e:
@@ -184,6 +193,44 @@ async def trigger_agent_execution(
     logger.debug("Scheduled background task for agent '%s'", agent_key)
 
     return TriggerAgentResponse(status="accepted", warnings=precheck_result.warnings)
+
+
+def validate_template_and_agent_vars(context, agent):
+    prompt_file = context.prompt_config.file
+    prompt_template_variables = template_variables(prompt_file=prompt_file)
+    agent_variables = get_type_hints(agent.AGENT_DATA_CLASS).keys()
+    variant = get_prompt_variant(get_prompt_definition(prompt_file), context.prompt_config.variant)
+
+    variant_variables: set[str] = set(variant.vars.keys())
+    required_variant_variables: set[str] = {
+        var for var, content in variant.vars.items() if content.required
+    }
+
+    template_var_keys = set(prompt_template_variables)
+
+    is_valid_agent = validate_agent_variable(template_var_keys, agent_variables)
+
+    if not is_valid_agent:
+        error_detail = ""
+        error_msg = f"Agent variable validation failed for '{prompt_file}'. Details: {error_detail}"
+
+        logger.error(error_msg)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=error_msg)
+
+    is_valid_template, template_errors = validate_template_placeholders(
+        template_variables=template_var_keys,
+        variant_variables=variant_variables,
+        required_variables=required_variant_variables,
+    )
+
+    if not is_valid_template:
+        error_detail = " | ".join(template_errors)
+        error_msg = (
+            f"Template placeholder validation failed for '{prompt_file}'. Details: {error_detail}"
+        )
+
+        logger.error(error_msg)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=error_msg)
 
 
 def create_agent_router(

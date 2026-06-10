@@ -103,10 +103,50 @@ def template_variables(prompt_file: Path) -> set[str]:
     return extracted_paths
 
 
-def validate_template(
+def validate_template_placeholders(
     template_variables: set[str] | None,
-    agent_variables: dict[str, type] | None,
-) -> bool:
+    variant_variables: set[str] | None,
+    required_variables: set[str] | None,
+) -> tuple[bool, list[str]]:
+    logger.debug("Starting template placeholder validation.")
+
+    safe_template_vars = template_variables or set()
+    variant_vars = variant_variables or set()
+    required_vars = required_variables or set()
+    template_vars = {var for var in safe_template_vars if var.startswith("vars.")} or set()
+    errors = []
+
+    if not template_vars and not required_vars:
+        logger.info("No template or required variables provided. Validation passed.")
+        return True, errors
+
+    allowed_variables: set[str] = {f"vars.{var}" for var in variant_vars}
+    required_vars_set: set[str] = {f"vars.{var}" for var in required_vars}
+
+    if not template_vars.issubset(allowed_variables):
+        unallowed_used = template_vars - allowed_variables
+        logger.warning(f"Validation failed: Template uses unauthorized variables: {unallowed_used}")
+        errors.append(f"Unauthorized variables used: {list(unallowed_used)}")
+
+    if not required_vars_set.issubset(template_vars):
+        missing_required = required_vars_set - template_vars
+        logger.warning(
+            f"Validation failed: Template is missing required variables: {missing_required}"
+        )
+        errors.append(f"Missing required variables: {list(missing_required)}")
+
+    if errors:
+        logger.info("Template placeholder validation failed.")
+        return False, errors
+
+    logger.info("Template placeholder validation passed successfully.")
+    return True, errors
+
+
+def validate_agent_variable(
+    template_variables: set[str] | None,
+    agent_variables: list[str] | None,
+) -> tuple[bool, list[str]]:
     if not template_variables:
         return True
 

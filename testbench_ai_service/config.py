@@ -14,7 +14,10 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
-from testbench_ai_service.utils.prompt_utils import template_variables, validate_template
+from testbench_ai_service.utils.prompt_utils import (
+    template_variables,
+    validate_agent_variable,
+)
 from testbench_ai_service.validators import (
     raise_field_validation_error,
     validate_prompt_file,
@@ -192,9 +195,9 @@ class AppConfig(BaseModel):
             agent_data = {}
             for _, obj in inspect.getmembers(module):
                 if inspect.isclass(obj) and hasattr(obj, "AGENT_DATA_CLASS"):
-                    agent_data = get_type_hints(obj.AGENT_DATA_CLASS)
+                    agent_data = get_type_hints(obj.AGENT_DATA_CLASS).keys()
 
-            if not validate_template(user_variables, agent_data):
+            if not validate_agent_variable(user_variables, agent_data):
                 logger.error(
                     "Template validation failed. User variables: %s do not match agent data requirements.",
                     user_variables,
