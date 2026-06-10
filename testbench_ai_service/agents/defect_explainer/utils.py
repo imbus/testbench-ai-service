@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import re
 import tempfile
@@ -289,6 +290,10 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
                 logger.warning(
                     f"No error message found for error ID: {details['failed_test_case']}"
                 )
+                explanation = details.get("explanation", "")
+                if explanation:
+                    has_fallback_errors = True
+                    fallback_html_buffer = add_explanation(fallback_html_buffer, details)
                 continue
 
             pattern = rf"({re.escape(details['failed_test_case'])}.*?<pre>)(.*?{re.escape(error_msg)}.*?)(</pre>)"
@@ -390,67 +395,37 @@ def _strip_param_prefix(name: str) -> str:
     return name.replace("*", "").strip()
 
 
-def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> str:
-    """Formats the execution trace of a specific test case as a human-readable string.
+def _collect_fail_levels_by_top_call(test_sequence) -> dict[int, set[int]]:
+    """Map each top-level call index to nested levels that contain at least one failure."""
+    fail_levels_by_top_call: dict[int, set[int]] = {}
+    top_call_index: int | None = None
 
-    Each step is rendered with its execution verdict, indented by nesting level.
-    Children of a compound step are only included when that compound step failed —
-    this focuses the output on the failing execution path.
-
-    Parameters of each step are rendered as ``param_name=param_value``.
-    Leading ``*`` markers (TestBench required-parameter convention) are stripped
-    from parameter names.
-
-    Args:
-        test_case_set: The test case set containing the target test case.
-        test_case: The unique ID of the test case to format.
-
-    Raises:
-        ValueError: If ``test_case`` is not found in the test case set.
-
-    Returns:
-        Multi-line string with the test case set name on the first line, followed
-        by one indented line per step.
-
-    ## Example output
-    ```
-    Login Test Set
-        ►[Pass]      Open Browser
-        ►[Pass]      Navigate To Login    url=https://example.com
-        ▼[Fail]      Login    username=admin    password=secret
-            ►[Pass]  Enter Username    username=admin
-            ►[Fail]  Enter Password    password=secret
-    ```
-    """
-    test_case_details: TestCaseDetails = test_case_set.test_cases.get(test_case)
-    if test_case_details is None:
-        raise ValueError(
-            f"Test case '{test_case}' not found in test case set '{test_case_set.details.name}'."
-        )
-
-    lines = [test_case_set.details.name]
-    last_top_level_verdict = ""
-    for call in test_case_details.testSequence:
-        level = len(call.numbering.split(".")) - 1
-        verdict = call.exec.verdict.name
-
+    for idx, call in enumerate(test_sequence):
         if call.parentID is None:
-            last_top_level_verdict = verdict
-        elif last_top_level_verdict != "Fail":
+            top_call_index = idx
             continue
 
-        is_compound_fail = call.spec.keywordType == KeywordType.Compound and verdict == "Fail"
-        prefix = "▼" if is_compound_fail else "►"
-        verdict_label = f"[{verdict}]{' ' * (_VERDICT_WIDTH - len(verdict))}"
-        indent = _SEPARATOR * (level + 1)
-        params = [f"{_strip_param_prefix(p.name)}={p.value}" for p in call.spec.callParameters]
+        if top_call_index is None or call.exec.verdict.name != "Fail":
+            continue
 
-        line = f"{indent}{prefix}{verdict_label}{_SEPARATOR}{call.spec.name}"
-        if params:
-            line += f"{_SEPARATOR}{_SEPARATOR.join(params)}"
-        lines.append(line)
+        level = len(call.numbering.split(".")) - 1
+        fail_levels_by_top_call.setdefault(top_call_index, set()).add(level)
 
-    return "\n".join(lines)
+    return fail_levels_by_top_call
+
+
+def _should_render_nested_call(
+    level: int,
+    top_call_index: int | None,
+    top_call_verdict: str,
+    fail_levels_by_top_call: dict[int, set[int]],
+) -> bool:
+    """Return whether a nested call should be rendered in the execution tree."""
+    if top_call_verdict != "Fail":
+        return False
+    if top_call_index is None:
+        return False
+    return level in fail_levels_by_top_call.get(top_call_index, set())
 
 
 def test_case_fail_comment(test_case_set: TestCaseSet, test_case: str) -> str:
@@ -475,3 +450,113 @@ def test_case_fail_comment(test_case_set: TestCaseSet, test_case: str) -> str:
             error_message = call.exec.comments
 
     return error_message
+
+
+def _format_html_comment(comment: str) -> str:
+    """Convert HTML fragments to readable plain text for trace output."""
+    if not comment:
+        return ""
+
+    text = re.sub(r"<\s*br\s*/?\s*>", "\n", comment, flags=re.IGNORECASE)
+    text = re.sub(r"</\s*(p|div|li|tr|table|h[1-6])\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\s*li[^>]*>", "- ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<[^>]+>", "", text)
+
+    text = html.unescape(text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    lines = [line.strip() for line in text.split("\n")]
+    normalized_lines = []
+    prev_empty = False
+    for line in lines:
+        is_empty = line == ""
+        if is_empty and prev_empty:
+            continue
+        normalized_lines.append(line)
+        prev_empty = is_empty
+
+    return "\n".join(normalized_lines).strip()
+
+
+def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> str:
+    """Formats the execution trace of a specific test case as a human-readable string.
+
+    Top-level steps are rendered with their execution verdict, indented by nesting level.
+    For nested steps under a failed top-level step, all calls on levels that contain
+    at least one failure are included. This keeps the output focused while still
+    showing sibling context around failures.
+
+    Parameters of each step are rendered as ``param_name=param_value``.
+    Leading ``*`` markers (TestBench required-parameter convention) are stripped
+    from parameter names.
+
+    Args:
+        test_case_set: The test case set containing the target test case.
+        test_case: The unique ID of the test case to format.
+
+    Raises:
+        ValueError: If ``test_case`` is not found in the test case set.
+
+    Returns:
+        Multi-line string with the test case set name on the first line, followed
+        by one indented line per rendered step.
+
+    ## Example output
+    ```
+    Login Test Set
+        ►[Pass]      Open Browser
+        ►[Pass]      Navigate To Login    url=https://example.com
+        ▼[Fail]      Login    username=admin    password=secret
+            ►[Pass]  Enter Username    username=admin
+            ►[Fail]  Enter Password    password=secret
+    ```
+    """
+    test_case_details: TestCaseDetails = test_case_set.test_cases.get(test_case)
+    if test_case_details is None:
+        raise ValueError(
+            f"Test case '{test_case}' not found in test case set '{test_case_set.details.name}'."
+        )
+
+    lines = [test_case_set.details.name]
+
+    fail_levels_by_top_call = _collect_fail_levels_by_top_call(test_case_details.testSequence)
+
+    top_call_index = None
+    top_call_verdict = ""
+    for idx, call in enumerate(test_case_details.testSequence):
+        level = len(call.numbering.split(".")) - 1
+        verdict = call.exec.verdict.name
+
+        if call.parentID is None:
+            top_call_index = idx
+            top_call_verdict = verdict
+        elif not _should_render_nested_call(
+            level=level,
+            top_call_index=top_call_index,
+            top_call_verdict=top_call_verdict,
+            fail_levels_by_top_call=fail_levels_by_top_call,
+        ):
+            continue
+
+        is_compound_fail = call.spec.keywordType == KeywordType.Compound and verdict == "Fail"
+        if call.spec.keywordType == KeywordType.Compound:
+            prefix = "▼" if is_compound_fail else "►"
+        else:
+            prefix = " "
+        verdict_label = f"[{verdict}]{' ' * (_VERDICT_WIDTH - len(verdict))}"
+        indent = _SEPARATOR * (level + 1)
+        params = [f"{_strip_param_prefix(p.name)}={p.value}" for p in call.spec.callParameters]
+
+        line = f"{indent}{prefix}{verdict_label}{_SEPARATOR}{call.spec.name}"
+        if params:
+            line += f"{_SEPARATOR}{_SEPARATOR.join(params)}"
+        lines.append(line)
+
+        if not is_compound_fail and verdict == "Fail":
+            plain_comment = _format_html_comment(call.exec.comments)
+            if plain_comment:
+                for comment_line in plain_comment.splitlines():
+                    lines.append(f"{indent} | {comment_line}")
+
+    return "\n".join(lines)

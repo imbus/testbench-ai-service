@@ -14,10 +14,12 @@ Gib genau einen Satz zurück, der in verständlicher Fachsprache erklärt, welch
 
 # Artefaktstruktur
 ## Schritt-Notation
-- `▼` = übergeordneter Fachschritt
-- `►` = atomarer technischer Schritt
+- `▼` = übergeordneter Fachschritt, der mindestens einen fehlgeschlagenen Teilschritt enthält
+- `►` = übergeordneter Fachschritt, ohne fehlgeschlagene Unterelemente
+- ` ` = atomarer technischer Schritt
 - `[Fail]` = fehlgeschlagener Schritt
 - `[Skip]` = wegen eines früheren Fehlers übersprungen; nicht als unabhängige Ursache behandeln
+- `|` - enthält die Fehlermeldung des unmittelbar zuvor fehlgeschlagenen Schritts. 
 - Obere Schritte repräsentieren Fachkontext, tiefe Schritte technische Ausführung
 
 # Ausgabeformat
