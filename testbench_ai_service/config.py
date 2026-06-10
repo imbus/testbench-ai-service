@@ -27,6 +27,8 @@ from testbench_ai_service.validators import (
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8010
 PROMPTS_DIR = (Path(__file__).parent / "prompts").resolve()
+TEMPLATES_DIR = (Path(__file__).parent / "templates").resolve()
+
 DEFAULT_AGENTS: dict[str, AgentConfig] = {
     "test_case_set_reviewer": AgentConfig(
         enabled=True,
@@ -96,6 +98,10 @@ class AppConfig(BaseModel):
     prompts_dir: Path | None = Field(
         default=PROMPTS_DIR,
         description="Directory containing prompt YAML files. Relative paths in prompt configs are resolved against this base directory.",
+    )
+    template_dir: Path | None = Field(
+        default=TEMPLATES_DIR,
+        description="Directory containings jinja templates.",
     )
     language: LanguageOption = LanguageOption.GERMAN
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
