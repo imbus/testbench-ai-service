@@ -283,9 +283,7 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
     fallback_html_buffer = f"<div class='ai-explainer'><br/><b>{explainer_result_heading_message} - {current_time()}</b></div>"
     for details in errors:
         try:
-            match = re.search(
-                r"Message:\s*.*?<pre>(.*?)</pre>", details.get("error", ""), re.DOTALL
-            )
+            match = re.search(r"<b>FAIL</b></td><td><pre>([^<]+)</pre>", details.get("error", ""))
             error_msg = match.group(1) if match else ""
             if not error_msg:
                 logger.warning(
@@ -375,15 +373,15 @@ def extract_failed_test_cases(test_case_set):
     failed_test_cases = {}
     for test_case in test_case_set.details.testCases:
         if test_case.exec.verdict in (VerdictStatus.ToVerify, VerdictStatus.Fail):
+            error_message = test_case_fail_comment(test_case_set, test_case.uniqueID)
             failed_test_cases.update(
                 {
                     test_case.uniqueID: {
                         "status": test_case.exec.verdict,
-                        "error": test_case.exec.comments,
+                        "error": error_message,
                     }
                 }
             )
-
     return failed_test_cases
 
 
@@ -453,3 +451,27 @@ def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> st
         lines.append(line)
 
     return "\n".join(lines)
+
+
+def test_case_fail_comment(test_case_set: TestCaseSet, test_case: str) -> str:
+    test_case_details: TestCaseDetails = test_case_set.test_cases.get(test_case)
+    if test_case_details is None:
+        raise ValueError(
+            f"Test case '{test_case}' not found in test case set '{test_case_set.details.name}'."
+        )
+
+    error_message = ""
+    last_top_level_verdict = ""
+    for call in test_case_details.testSequence:
+        verdict = call.exec.verdict.name
+
+        if call.parentID is None:
+            last_top_level_verdict = verdict
+        elif last_top_level_verdict != "Fail":
+            continue
+
+        is_compound_fail = call.spec.keywordType == KeywordType.Compound and verdict == "Fail"
+        if not is_compound_fail and verdict == "Fail":
+            error_message = call.exec.comments
+
+    return error_message
