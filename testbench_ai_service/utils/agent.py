@@ -138,6 +138,7 @@ def build_execution_context(
         language=language,
         llm_config=llm_config,
         prompt_config=prompt_config,
+        template_dir=app_config.template_dir,
     )
 
 

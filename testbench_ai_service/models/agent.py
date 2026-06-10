@@ -80,6 +80,7 @@ class ExecutionContext(BaseModel):
     language: LanguageOption
     llm_config: LLMConfig
     prompt_config: PromptConfig
+    template_dir: Path
 
 
 class AgentResult(BaseModel):

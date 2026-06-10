@@ -164,6 +164,7 @@ class TestCaseSetDescriber(Agent):
                     previous_description=previous_description,
                     language=context.language,
                     user_key=context.user_key,
+                    template_dir=context.template_dir,
                 )
                 logger.debug(
                     "Patched description generation started for test case set '%s'",
@@ -198,6 +199,7 @@ class TestCaseSetDescriber(Agent):
                     previous_description=previous_description,
                     language=context.language,
                     user_key=context.user_key,
+                    template_dir=context.template_dir,
                 )
                 logger.debug(
                     "Patched generated description for test case set '%s'",
@@ -221,6 +223,7 @@ class TestCaseSetDescriber(Agent):
                     previous_description=previous_description,
                     language=context.language,
                     user_key=context.user_key,
+                    template_dir=context.template_dir,
                 )
                 logger.debug(
                     "Patched previous description for test case set '%s'",
