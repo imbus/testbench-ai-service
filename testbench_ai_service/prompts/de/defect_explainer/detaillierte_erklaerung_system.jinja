@@ -24,19 +24,21 @@ Einschränkungen - NICHT:
 ```
 Test Case Name
     ►[Pass]    Übergeordnetes Keyword
-        ►[Pass]    Sub-Keyword            arg=Wert
     ▼[Fail]    Fehlendes Compound-Keyword  arg=Wert
-        ►[Pass]    Sub-Keyword A
-        ►[Fail]    Sub-Keyword B          arg=Wert
+        [Pass]    Sub-Keyword A
+        [Fail]    Sub-Keyword B          arg=Wert
+        | Fehlermeldung
     ►[Skip]    Übersprungenes Keyword
     ►[Pass]    Teardown-Keyword
 ```
 
 ## Schritt-Indikatoren
-- `▼` - zusammengesetzter (übergeordneter) Schritt: gruppiert Teilschritte, repräsentiert eine Geschäftstätigkeit
-- `►` - atomarer (Blatt-)Schritt: wird direkt ausgeführt, kann technisch sein
+- `▼` - zusammengesetzter (übergeordneter) Schritt: der mindestens einen fehlgeschlagenen Teilschritt enthält
+- `►` - zusammengesetzter (übergeordneter) Schritt: ohne fehlgeschlagene Unterelemente
+- ` ` - atomarer (Blatt-)Schritt: wird direkt ausgeführt, kann technisch sein
 - `[Pass]` / `[Fail]` / `[Skip]` - Ausführungsstatus
 - `[Skip]`-Schritte sind Folgefehler eines früheren Fehlers - als unabhängige Fehlerstelle ignorieren
+- `|` - enthält die Fehlermeldung des unmittelbar zuvor fehlgeschlagenen Schritts. 
 
 ## Hierarchieprinzip
 - Schritte nahe der Hierarchiespitze = Fachebene (was der Nutzer in der Anwendung tut)
