@@ -9,7 +9,6 @@ from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
-from testbench_ai_service.models.testbench import ProjectRole
 
 
 def _make_context(**overrides):
@@ -26,10 +25,6 @@ def _make_context(**overrides):
     }
     defaults.update(overrides)
     return ExecutionContext(**defaults)
-
-
-def _make_auth_info(auth_type=AuthType.SESSION_TOKEN, token="tok", user_key="U1"):
-    return AuthInfo(auth_type=auth_type, token=token, user_key=user_key, conn=MagicMock())
 
 
 def _make_node(uid="TCS-1", key="K1"):
@@ -50,25 +45,20 @@ def _make_tcs(uid="TCS1", key="K1", spec_key="SK1"):
 
 
 _AGENT_MODULE = "testbench_ai_service.agents.test_case_set_reviewer.agent"
-_SUFFICIENT_ROLES = [ProjectRole.TestManager]
 
 
 class TestTestCaseSetReviewerPrecheck:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.service = TestCaseSetReviewer()
-        self.auth_info = _make_auth_info()
 
     async def test_returns_passed_true_for_unlocked_tcs(self):
         context = _make_context()
         conn = MagicMock()
         node = _make_node("TCS-1", "K1")  # node.spec = None → not locked
 
-        with (
-            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
-            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
-        ):
-            result = await self.service.precheck(context, conn, self.auth_info)
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
+            result = await self.service.precheck(context, conn)
 
         assert result.passed
         assert "TCS-1" in result.items
@@ -82,12 +72,8 @@ class TestTestCaseSetReviewerPrecheck:
         node.spec.locker = MagicMock()
         node.spec.locker.key = "OTHER_USER"  # != context.user_key ("U1")
 
-        with (
-            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]),
-            # Use a non-privileged writing role: Tester is blocked by locks
-            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=[ProjectRole.Tester]),
-        ):
-            result = await self.service.precheck(context, conn, self.auth_info)
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
+            result = await self.service.precheck(context, conn)
 
         assert not (result.passed)
         assert not (result.items)
@@ -97,11 +83,8 @@ class TestTestCaseSetReviewerPrecheck:
         context = _make_context()
         conn = MagicMock()
 
-        with (
-            patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[]),
-            patch(f"{_AGENT_MODULE}.get_project_roles", return_value=_SUFFICIENT_ROLES),
-        ):
-            result = await self.service.precheck(context, conn, self.auth_info)
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[]):
+            result = await self.service.precheck(context, conn)
 
         assert not (result.passed)
         assert result.items == []
@@ -232,15 +215,13 @@ class TestGetAiResponse:
         llm_config = LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o")
         prompt_config = PromptConfig(file="prompts/test.yaml")
 
-        with patch(
-            "testbench_ai_service.agents.test_case_set_reviewer.agent.build_prompt"
-        ) as mock_build:
+        with patch("testbench_ai_service.agents.base.build_prompt") as mock_build:
             mock_prompt = MagicMock()
             mock_prompt.model_name = "gpt-4o"
             mock_prompt.messages = []
             mock_build.return_value = mock_prompt
 
-            result = await self.service._get_ai_response(llm_client, llm_config, prompt_config)
+            result = await self.service.get_ai_response(llm_client, llm_config, prompt_config)
 
         assert isinstance(result, AgentResult)
         assert result.result == "- Review note"
@@ -251,15 +232,13 @@ class TestGetAiResponse:
         llm_config = LLMConfig(provider=LLMProvider.OPENAI, model=None)
         prompt_config = PromptConfig(file="prompts/test.yaml")
 
-        with patch(
-            "testbench_ai_service.agents.test_case_set_reviewer.agent.build_prompt"
-        ) as mock_build:
+        with patch("testbench_ai_service.agents.base.build_prompt") as mock_build:
             mock_prompt = MagicMock()
             mock_prompt.model_name = "gpt-4o-from-prompt"
             mock_prompt.messages = []
             mock_build.return_value = mock_prompt
 
-            await self.service._get_ai_response(llm_client, llm_config, prompt_config)
+            await self.service.get_ai_response(llm_client, llm_config, prompt_config)
 
         call_kwargs = llm_client.query_llm.call_args
         assert call_kwargs.kwargs.get("model") or call_kwargs.args[0] == "gpt-4o-from-prompt"

@@ -60,6 +60,7 @@ def _make_tcs_details(key="key", test_cases=None):
     return TestCaseSetDetails(
         key=key,
         numbering="1.1",
+        path="",
         uniqueID="iTB-TC-001",
         name="name",
         spec=TestCaseSetSpecificationSummary(
@@ -71,6 +72,7 @@ def _make_tcs_details(key="key", test_cases=None):
             preConditions=[],
             postConditions=[],
             udfs=[],
+            tags=[],
             keywords=[],
             references=[],
             requirements=[],
@@ -79,9 +81,12 @@ def _make_tcs_details(key="key", test_cases=None):
             key="execKey",
             comments="comment",
             udfs=[],
-            keywords=[],
+            tags=[],
         ),
         testCases=test_cases or [],
+        testSequence=[],
+        parameters=[],
+        keywords=[],
     )
 
 
@@ -256,6 +261,27 @@ class TestAddExplanationsToComment:
             comment="", errors=self._ERRORS, language=LanguageOption.GERMAN
         )
         assert result == ""
+
+    @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
+    def test_missing_error_message_adds_explanation_to_bottom_fallback(self, mock_get_translation):
+        mock_get_translation.side_effect = ["KI-Erklärung", "KI-Hinweis"]
+        errors_without_parseable_message = [
+            {
+                "failed_test_case": "iTB-TC-20021-PC-30037",
+                "error": "plain text without FAIL table row",
+                "explanation": "fallback explanation",
+            }
+        ]
+
+        result = add_explanations_to_comment(
+            comment=self._FAIL_COMMENT,
+            errors=errors_without_parseable_message,
+            language=LanguageOption.GERMAN,
+        )
+
+        assert 'class="ai-explainer"' in result
+        assert "fallback explanation" in result
+        assert "iTB-TC-20021-PC-30037" in result
 
 
 class TestGetErrorMessage:
@@ -531,7 +557,7 @@ class TestTestCaseExecutionAsStr:
 
     def test_keyword_params_are_rendered(self):
         params = [_make_param("Username", "admin"), _make_param("*Password", "secret")]
-        kw = _make_keyword_call("Login Step", verdict="Pass", params=params)
+        kw = _make_keyword_call("Login Step", verdict="Fail", params=params)
         tcs = _make_tcs_ns("LoginSet", [kw])
         result = _tce_as_str(tcs, "tc1")
         assert "Username=admin" in result
@@ -574,12 +600,28 @@ class TestTestCaseExecutionAsStr:
         parent = _make_keyword_call(
             "Compound", numbering="1", verdict="Fail", keyword_type=KeywordType.Compound
         )
-        child = _make_keyword_call("Child", numbering="1.1", verdict="Pass", parent_id="1")
+        child = _make_keyword_call("Child", numbering="1.1", verdict="Fail", parent_id="1")
         tcs = _make_tcs_ns("TestSet", [parent, child])
         lines = _tce_as_str(tcs, "tc1").splitlines()
         parent_indent = len(lines[1]) - len(lines[1].lstrip())
         child_indent = len(lines[2]) - len(lines[2].lstrip())
         assert child_indent > parent_indent
+
+    def test_passed_siblings_on_failed_level_are_shown(self):
+        parent = _make_keyword_call(
+            "Compound", numbering="1", verdict="Fail", keyword_type=KeywordType.Compound
+        )
+        pass_sibling = _make_keyword_call(
+            "PassChild", numbering="1.1", verdict="Pass", parent_id="1"
+        )
+        fail_sibling = _make_keyword_call(
+            "FailChild", numbering="1.2", verdict="Fail", parent_id="1"
+        )
+        tcs = _make_tcs_ns("TestSet", [parent, pass_sibling, fail_sibling])
+
+        result = _tce_as_str(tcs, "tc1")
+        assert "PassChild" in result
+        assert "FailChild" in result
 
     def test_children_hidden_after_passing_top_level_following_a_failed_one(self):
         fail_parent = _make_keyword_call(
@@ -594,3 +636,15 @@ class TestTestCaseExecutionAsStr:
         result = _tce_as_str(tcs, "tc1")
         assert "FailChild" in result
         assert "PassChild" not in result
+
+    def test_failed_step_comment_is_rendered_without_html_tags(self):
+        fail_step = _make_keyword_call("FailAtomic", numbering="1", verdict="Fail")
+        fail_step.exec.comments = "<div>Error&nbsp;line<br/>Details <b>here</b></div>"
+        tcs = _make_tcs_ns("TestSet", [fail_step])
+
+        result = _tce_as_str(tcs, "tc1")
+
+        assert "Error line" in result
+        assert "Details here" in result
+        assert "<div>" not in result
+        assert "<b>" not in result

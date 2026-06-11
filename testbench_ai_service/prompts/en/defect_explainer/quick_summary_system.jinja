@@ -14,10 +14,11 @@ Return exactly one sentence that explains, in plain business language, what acti
 
 # Artifact Structure
 ## Step Notation
-- `▼` = high-level business step
-- `►` = atomic technical step
+- `▼` = high-level business step containing at least one failed sub-step
+- `►` = high-level business step with no failed sub-elements
 - `[Fail]` = failed step
 - `[Skip]` = skipped because of an earlier failure; ignore it as an independent cause
+- `|` - contains the error message from the step that failed immediately prior.
 - Higher steps represent business context; deeper steps represent technical execution details
 
 # Output Format

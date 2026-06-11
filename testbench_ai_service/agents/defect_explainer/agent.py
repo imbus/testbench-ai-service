@@ -4,12 +4,12 @@ import requests
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.defect_explainer.utils import (
     add_error_message,
     add_explanations_to_comment,
     clean_up_comment,
-    get_error_message,
+    extract_failed_test_cases,
     test_case_execution_as_str,
     update_description,
 )
@@ -25,6 +25,7 @@ from testbench_ai_service.models.testbench import (
     VerdictStatus,
 )
 from testbench_ai_service.utils.i18n import get_translation
+from testbench_ai_service.utils.prompt_utils import build_prompt, pretty_messages
 from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
     get_test_case_set_nodes,
@@ -175,7 +176,7 @@ class DefectExplainer(Agent):
     ) -> None:
         """Generates explanations for all failed test cases in a single test case set."""
         try:
-            failed_test_cases = get_error_message(test_case_set.details.exec.comments)
+            failed_test_cases = extract_failed_test_cases(test_case_set)
             logger.debug(
                 "Extracted error messages of the failed test cases for test case set '%s'",
                 test_case_set.details.uniqueID,
@@ -269,13 +270,13 @@ class DefectExplainer(Agent):
             test_case_set.details.uniqueID,
             list(agent_data.keys()),
         )
-
-        explanation_response = await self.get_ai_response(
+        explanation_response = await self._get_ai_response(
             llm_client=llm_client,
             llm_config=llm_config,
             prompt_config=prompt_config,
             agent_data=agent_data,
         )
+
         logger.debug(
             "AI explanation response for failed test case '%s' of test case set '%s':\n\t%s",
             failed_test_case,
@@ -288,3 +289,27 @@ class DefectExplainer(Agent):
             "error": details["error"],
             "explanation": explanation_response.result,
         }
+
+    async def _get_ai_response(
+        self,
+        llm_client: LLMClient,
+        llm_config: LLMConfig,
+        prompt_config: PromptConfig,
+        agent_data: DefectExplainerAgentData | None = None,
+    ) -> AgentResult:
+        """Sends the prompt to the LLM and returns the defect explanation."""
+        prompt = build_prompt(prompt_config=prompt_config, agent_data=agent_data)
+
+        model = llm_config.model if llm_config.model is not None else prompt.model_name
+        messages = prompt.messages
+
+        logger.debug("Using model '%s' for the defect explanation", model)
+        logger.debug(
+            "Sending the following messages to the LLM for the defect explanation:\n %s",
+            pretty_messages(messages),
+        )
+        explanation = await llm_client.query_llm(
+            model=model, messages=messages, **(llm_config.model_extra or {})
+        )
+
+        return AgentResult(result=explanation)

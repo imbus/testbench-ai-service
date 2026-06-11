@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import re
 import tempfile
@@ -8,7 +9,7 @@ from enum import Enum
 from pathlib import Path
 
 from testbench2robotframework.json_reader import TestCaseSet, TestCaseSetDetails
-from testbench2robotframework.model import KeywordType, TestCaseDetails
+from testbench2robotframework.model import KeywordType, TestCaseDetails, VerdictStatus
 from testbench_cli_reporter.actions import ImportJSONExecutionResults
 from testbench_cli_reporter.config_model import ImportJsonParameters
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -23,8 +24,8 @@ from testbench_ai_service.agents.defect_explainer.model import (
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
 from testbench_ai_service.models.language import LanguageOption
-from testbench_ai_service.utils.html_utils import escape_html
 from testbench_ai_service.utils.i18n import get_translation
+from testbench_ai_service.utils.time_utils import current_time
 
 _SEPARATOR = "    "
 _VERDICT_WIDTH = 10  # fixed width for verdict padding, e.g. "[Pass]    " or "[Fail]    "
@@ -61,8 +62,8 @@ async def update_description(
 
 
 def clean_up_comment(comment: str) -> str:
-    pattern = r"</table><div.*</div>"
-    return re.sub(pattern, "</table>", comment, flags=re.DOTALL)
+    pattern = "/table><div.*</div>"
+    return re.sub(pattern, "/table>", comment)
 
 
 async def import_data(conn: TBConnection, context: ExecutionContext, path: Path):
@@ -279,13 +280,20 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
         "defect_explainer.run.result_heading", language
     )
     updated_html = comment
+    has_fallback_errors = False
+    fallback_html_buffer = f"<div class='ai-explainer'><br/><b>{explainer_result_heading_message} - {current_time()}</b></div>"
     for details in errors:
         try:
-            error_msg = details.get("error", "")
+            match = re.search(r"<b>FAIL</b></td><td><pre>([^<]+)</pre>", details.get("error", ""))
+            error_msg = match.group(1) if match else ""
             if not error_msg:
                 logger.warning(
                     f"No error message found for error ID: {details['failed_test_case']}"
                 )
+                explanation = details.get("explanation", "")
+                if explanation:
+                    has_fallback_errors = True
+                    fallback_html_buffer = add_explanation(fallback_html_buffer, details)
                 continue
 
             pattern = rf"({re.escape(details['failed_test_case'])}.*?<pre>)(.*?{re.escape(error_msg)}.*?)(</pre>)"
@@ -293,6 +301,8 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
 
             if not matches:
                 logger.warning(f"No matches found for error ID: {details['failed_test_case']}")
+                has_fallback_errors = True
+                fallback_html_buffer = add_explanation(fallback_html_buffer, details)
                 continue
 
             explanation = details.get("explanation", "")
@@ -300,35 +310,55 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
                 logger.warning(f"No explanation found for error ID: {details['failed_test_case']}")
                 continue
 
+            base_message = (
+                "<div class='ai'><b>"
+                + explainer_result_heading_message
+                + ":</b><br>"
+                + explanation
+                + "</div></pre>"
+            )
             if "<div class='ai'>" in matches[0][1]:
-                message = details["error"].split("<div class='ai'>", 1)
-                base_message = message[0] if len(message) > 0 else details["error"]
-                replacement = (
-                    r"\1"
-                    + base_message
-                    + "<div class='ai'><b>"
-                    + explainer_result_heading_message
-                    + ":</b><br>"
-                    + escape_html(explanation)
-                    + "</div></pre>"
-                )
+                message = error_msg.split("<div class='ai'>", 1)
+                error_base_message = message[0] if len(message) > 0 else error_msg
+                replacement = r"\1" + error_base_message + base_message
             else:
-                replacement = (
-                    r"\1"
-                    + details["error"]
-                    + "<div class='ai'><b>"
-                    + explainer_result_heading_message
-                    + ":</b><br>"
-                    + escape_html(explanation)
-                    + "</div></pre>"
-                )
+                replacement = r"\1" + error_msg + base_message
 
             updated_html = re.sub(pattern, replacement, updated_html, flags=re.DOTALL)
         except (KeyError, IndexError, AttributeError) as e:
             logger.error(f"Error processing error ID {details['failed_test_case']}: {e}")
             continue
 
+    if has_fallback_errors:
+        return add_disclaimer_no_rf_comment(updated_html, fallback_html_buffer, language)
     return add_disclaimer(updated_html, language)
+
+
+def add_explanation(comment: str, error: dict) -> str:
+    comment = comment.replace("\n", "<br/>")
+    return f"{comment}<br/><b>{error['failed_test_case']}</b>: {error['explanation']}"
+
+
+def add_disclaimer_no_rf_comment(comment: str, explanation: str, language: LanguageOption) -> str:
+    ai_disclaimer = get_translation("shared.run.disclaimer", language)
+    disclaimer = f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{ai_disclaimer}</div></div>"
+
+    content_to_insert = f'<div class="ai-explainer">\n{explanation}\n{disclaimer}\n</div>'
+
+    if '<div class="ai-explainer">' in comment:
+        if "</body>" in comment:
+            return re.sub(
+                r'<div class="ai-explainer">.*?(?=</body>)',
+                content_to_insert + "\n",
+                comment,
+                flags=re.DOTALL,
+            )
+        return re.sub(r'<div class="ai-explainer">.*', content_to_insert, comment, flags=re.DOTALL)
+
+    if "<body>" in comment:
+        return comment.replace("</body>", f"{content_to_insert}\n</body>", 1)
+
+    return comment + content_to_insert
 
 
 def add_disclaimer(comment: str, language: LanguageOption) -> str:
@@ -344,63 +374,20 @@ def add_error_message(comment: str, language: LanguageOption) -> str:
     return comment.replace("</table>", "</table>" + error_message, 1)
 
 
-def get_error_message(comment: str) -> dict[str, dict[str, str]]:
-    """
-    Extracts error messages from the comments of a TestCaseSet object.
-
-    The function searches the `comments` field for an embedded HTML table.
-    From the first `<table>...</table>` block found, it parses rows (`<tr>`)
-    and cells (`<td>`). Each row with at least three cells
-    is interpreted as:
-
-        1. Error ID
-        2. Status (e.g., "PASS" or "FAIL")
-        3. Error message
-
-    Only rows with status `"FAIL"` are included in the result.
-
-    Args:
-        comment (comment): A collection of test cases whose comments are parsed.
-
-    Returns:
-        dict[str, dict[str, str]]:
-            A dictionary where the keys are error IDs and the values are dictionaries
-            of the form `{"status": <status>, "error": <message>}`.
-            Returns an empty dictionary if no table or no failures are found.
-
-    Example:
-        >>> errors = get_error_message(test_case_set)
-        >>> {
-        ...   "iTB-TC-001": {"status": "FAIL", "error": "Expected value X but got Y"},
-        ...   "iTB-TC-003": {"status": "FAIL", "error": "Timeout occurred"}
-        ... }
-    """
-    # Extract only the first <table>...</table> block
-    if "<table" not in comment or "</table>" not in comment:
-        return {}
-
-    table_content = comment.rsplit("<table", maxsplit=1)[-1].split("</table>", maxsplit=1)[0]
-    rows = table_content.split("<tr>")
-
-    errors = {}
-    for row in rows:
-        # Extract cells
-        cells = []
-        for cell in row.split("<td"):
-            _, sep, tail = cell.partition(">")
-            text = tail if sep else cell
-            clean_text = re.sub(r"^(<[^>]+>)*", "", text).strip()
-            clean_text = re.sub(r"(<[^>]+>|\n)*$", "", clean_text).strip()
-            if clean_text:
-                cells.append(clean_text)
-
-        # Ensure we have at least three cells before adding
-        if len(cells) >= 3:  # noqa: PLR2004
-            error_id, status, message = cells[:3]
-            if status == "FAIL":
-                errors[error_id] = {"status": status, "error": message}
-
-    return errors
+def extract_failed_test_cases(test_case_set):
+    failed_test_cases = {}
+    for test_case in test_case_set.details.testCases:
+        if test_case.exec.verdict in (VerdictStatus.ToVerify, VerdictStatus.Fail):
+            error_message = test_case_fail_comment(test_case_set, test_case.uniqueID)
+            failed_test_cases.update(
+                {
+                    test_case.uniqueID: {
+                        "status": test_case.exec.verdict,
+                        "error": error_message,
+                    }
+                }
+            )
+    return failed_test_cases
 
 
 def _strip_param_prefix(name: str) -> str:
@@ -408,12 +395,97 @@ def _strip_param_prefix(name: str) -> str:
     return name.replace("*", "").strip()
 
 
+def _collect_fail_levels_by_top_call(test_sequence) -> dict[int, set[int]]:
+    """Map each top-level call index to nested levels that contain at least one failure."""
+    fail_levels_by_top_call: dict[int, set[int]] = {}
+    top_call_index: int | None = None
+
+    for idx, call in enumerate(test_sequence):
+        if call.parentID is None:
+            top_call_index = idx
+            continue
+
+        if top_call_index is None or call.exec.verdict.name != "Fail":
+            continue
+
+        level = len(call.numbering.split(".")) - 1
+        fail_levels_by_top_call.setdefault(top_call_index, set()).add(level)
+
+    return fail_levels_by_top_call
+
+
+def _should_render_nested_call(
+    level: int,
+    top_call_index: int | None,
+    top_call_verdict: str,
+    fail_levels_by_top_call: dict[int, set[int]],
+) -> bool:
+    """Return whether a nested call should be rendered in the execution tree."""
+    if top_call_verdict != "Fail":
+        return False
+    if top_call_index is None:
+        return False
+    return level in fail_levels_by_top_call.get(top_call_index, set())
+
+
+def test_case_fail_comment(test_case_set: TestCaseSet, test_case: str) -> str:
+    test_case_details: TestCaseDetails = test_case_set.test_cases.get(test_case)
+    if test_case_details is None:
+        raise ValueError(
+            f"Test case '{test_case}' not found in test case set '{test_case_set.details.name}'."
+        )
+
+    error_message = ""
+    last_top_level_verdict = ""
+    for call in test_case_details.testSequence:
+        verdict = call.exec.verdict.name
+
+        if call.parentID is None:
+            last_top_level_verdict = verdict
+        elif last_top_level_verdict != "Fail":
+            continue
+
+        is_compound_fail = call.spec.keywordType == KeywordType.Compound and verdict == "Fail"
+        if not is_compound_fail and verdict == "Fail":
+            error_message = call.exec.comments
+
+    return error_message
+
+
+def _format_html_comment(comment: str) -> str:
+    """Convert HTML fragments to readable plain text for trace output."""
+    if not comment:
+        return ""
+
+    text = re.sub(r"<\s*br\s*/?\s*>", "\n", comment, flags=re.IGNORECASE)
+    text = re.sub(r"</\s*(p|div|li|tr|table|h[1-6])\s*>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\s*li[^>]*>", "- ", text, flags=re.IGNORECASE)
+    text = re.sub(r"<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<[^>]+>", "", text)
+
+    text = html.unescape(text)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+
+    lines = [line.strip() for line in text.split("\n")]
+    normalized_lines = []
+    prev_empty = False
+    for line in lines:
+        is_empty = line == ""
+        if is_empty and prev_empty:
+            continue
+        normalized_lines.append(line)
+        prev_empty = is_empty
+
+    return "\n".join(normalized_lines).strip()
+
+
 def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> str:
     """Formats the execution trace of a specific test case as a human-readable string.
 
-    Each step is rendered with its execution verdict, indented by nesting level.
-    Children of a compound step are only included when that compound step failed —
-    this focuses the output on the failing execution path.
+    Top-level steps are rendered with their execution verdict, indented by nesting level.
+    For nested steps under a failed top-level step, all calls on levels that contain
+    at least one failure are included. This keeps the output focused while still
+    showing sibling context around failures.
 
     Parameters of each step are rendered as ``param_name=param_value``.
     Leading ``*`` markers (TestBench required-parameter convention) are stripped
@@ -428,7 +500,7 @@ def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> st
 
     Returns:
         Multi-line string with the test case set name on the first line, followed
-        by one indented line per step.
+        by one indented line per rendered step.
 
     ## Example output
     ```
@@ -447,19 +519,31 @@ def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> st
         )
 
     lines = [test_case_set.details.name]
-    last_top_level_verdict = ""
 
-    for call in test_case_details.testSequence:
+    fail_levels_by_top_call = _collect_fail_levels_by_top_call(test_case_details.testSequence)
+
+    top_call_index = None
+    top_call_verdict = ""
+    for idx, call in enumerate(test_case_details.testSequence):
         level = len(call.numbering.split(".")) - 1
         verdict = call.exec.verdict.name
 
         if call.parentID is None:
-            last_top_level_verdict = verdict
-        elif last_top_level_verdict != "Fail":
+            top_call_index = idx
+            top_call_verdict = verdict
+        elif not _should_render_nested_call(
+            level=level,
+            top_call_index=top_call_index,
+            top_call_verdict=top_call_verdict,
+            fail_levels_by_top_call=fail_levels_by_top_call,
+        ):
             continue
 
         is_compound_fail = call.spec.keywordType == KeywordType.Compound and verdict == "Fail"
-        prefix = "▼" if is_compound_fail else "►"
+        if call.spec.keywordType == KeywordType.Compound:
+            prefix = "▼" if is_compound_fail else "►"
+        else:
+            prefix = " "
         verdict_label = f"[{verdict}]{' ' * (_VERDICT_WIDTH - len(verdict))}"
         indent = _SEPARATOR * (level + 1)
         params = [f"{_strip_param_prefix(p.name)}={p.value}" for p in call.spec.callParameters]
@@ -468,5 +552,11 @@ def test_case_execution_as_str(test_case_set: TestCaseSet, test_case: str) -> st
         if params:
             line += f"{_SEPARATOR}{_SEPARATOR.join(params)}"
         lines.append(line)
+
+        if not is_compound_fail and verdict == "Fail":
+            plain_comment = _format_html_comment(call.exec.comments)
+            if plain_comment:
+                for comment_line in plain_comment.splitlines():
+                    lines.append(f"{indent} | {comment_line}")
 
     return "\n".join(lines)

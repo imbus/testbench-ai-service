@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
+from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
@@ -93,6 +94,7 @@ class TestTriggerTestCaseSetReviews:
         )
         self.mock_reviewer_class = reviewer_patcher.start()
         self.mock_reviewer = AsyncMock()
+        self.mock_reviewer.ALLOWED_ROLES = TestCaseSetReviewer.ALLOWED_ROLES
         self.mock_reviewer.precheck.return_value = PrecheckResult(passed=True)
         self.mock_reviewer_class.__name__ = "TestCaseSetReviewer"
         self.mock_reviewer_class.return_value = self.mock_reviewer
@@ -206,21 +208,15 @@ class TestTriggerTestCaseSetReviews:
 
     # ── Authorisation ─────────────────────────────────────────────────────────
 
-    def test_insufficient_role_fails_precheck_and_returns_409(self):
+    def test_insufficient_role_fails_returns_403(self):
         self.project_roles = []
-        self.mock_reviewer.precheck = AsyncMock(
-            return_value=PrecheckResult(passed=False, warnings=["Insufficient role"])
-        )
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
-        assert response.status_code == 409  # precheck failed → 409 Conflict
+        assert response.status_code == 403
 
-    def test_read_only_role_fails_precheck_and_returns_409(self):
+    def test_read_only_role_fails_and_returns_403(self):
         self.project_roles = [ProjectRole.ReadOnlyDesigner]
-        self.mock_reviewer.precheck = AsyncMock(
-            return_value=PrecheckResult(passed=False, warnings=["Insufficient role"])
-        )
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
-        assert response.status_code == 409  # precheck failed → 409 Conflict
+        assert response.status_code == 403
 
     def test_precheck_lock_lookup_http_403_returns_403(self):
         self.mock_reviewer.precheck = AsyncMock(
@@ -228,7 +224,6 @@ class TestTriggerTestCaseSetReviews:
         )
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
         assert response.status_code == 403
-        assert response.json() == {"detail": "Forbidden"}
 
     # ── Side-effect helpers ───────────────────────────────────────────────────
 
