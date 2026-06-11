@@ -99,7 +99,7 @@ class AppConfig(BaseModel):
         default=PROMPTS_DIR,
         description="Directory containing prompt YAML files. Relative paths in prompt configs are resolved against this base directory.",
     )
-    template_dir: Path | None = Field(
+    templates_dir: Path | None = Field(
         default=TEMPLATES_DIR,
         description="Directory containings jinja templates.",
     )

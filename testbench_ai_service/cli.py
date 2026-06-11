@@ -72,7 +72,15 @@ def register_init_command(subparsers):
         metavar="PATH",
         default="prompts",
         help="Copy default prompt files to PATH and set prompts_dir in the config. "
-        "Defaults to 'prompts' in the current directory. Pass an empty string to skip.",
+        "Defaults to 'prompts' in the current directory.",
+    )
+    init_parser.add_argument(
+        "--templates-dir",
+        type=str,
+        metavar="PATH",
+        default="templates",
+        help="Copy default template files to PATH and set templates_dir in the config. "
+        "Defaults to 'templates' in the current directory.",
     )
     init_parser.set_defaults(func=init_action)
 
@@ -109,7 +117,9 @@ def register_start_command(subparsers):
 
 
 def init_action(args):
-    create_default_config_file(args.path, force=args.force, prompts_dir=args.prompts_dir)
+    create_default_config_file(
+        args.path, force=args.force, prompts_dir=args.prompts_dir, templates_dir=args.templates_dir
+    )
 
 
 def start_action(args):

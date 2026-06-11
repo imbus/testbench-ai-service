@@ -25,9 +25,9 @@ async def patch_description_generation_started_for_test_structure_element(
     previous_description: str,
     language: LanguageOption,
     user_key: str,
-    template_dir: Path,
+    templates_dir: Path,
 ):
-    template_path = template_dir / language.value / "test_case_set_describer" / "started.jinja"
+    template_path = templates_dir / language.value / "test_case_set_describer" / "started.jinja"
     generation_started_info = load_template(template_path, {"current_time": current_time()})
     if has_visible_text(previous_description):
         description_html = add_html_body_tags(
@@ -52,9 +52,9 @@ async def patch_generated_description_for_test_structure_element(
     previous_description: str,
     language: LanguageOption,
     user_key: str,
-    template_dir: Path,
+    templates_dir: Path,
 ):
-    template_path = template_dir / language.value / "test_case_set_describer" / "template.jinja"
+    template_path = templates_dir / language.value / "test_case_set_describer" / "template.jinja"
     new_description = load_template(
         template_path,
         {
@@ -82,9 +82,9 @@ async def patch_previous_description_for_test_structure_element(
     previous_description: str,
     language: LanguageOption,
     user_key: str,
-    template_dir: Path,
+    templates_dir: Path,
 ):
-    template_path = template_dir / language.value / "test_case_set_describer" / "failed.jinja"
+    template_path = templates_dir / language.value / "test_case_set_describer" / "failed.jinja"
     error_html = load_template(template_path, {"current_time": current_time()})
     if has_visible_text(previous_description):
         description_html = add_html_body_tags(f"{previous_description}<br/><br/>{error_html}")

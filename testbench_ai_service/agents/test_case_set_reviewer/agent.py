@@ -169,6 +169,7 @@ class TestCaseSetReviewer(Agent):
                     previous_review_comment=previous_review_comment,
                     language=context.language,
                     user_key=context.user_key,
+                    templates_dir=context.templates_dir,
                 )
                 logger.debug(
                     "Patched review started for test case set '%s'",
@@ -203,6 +204,7 @@ class TestCaseSetReviewer(Agent):
                     previous_review_comment=previous_review_comment,
                     language=context.language,
                     user_key=context.user_key,
+                    templates_dir=context.templates_dir,
                 )
                 logger.debug(
                     "Patched review result for test case set '%s'",
@@ -226,6 +228,7 @@ class TestCaseSetReviewer(Agent):
                     previous_review_comment=previous_review_comment,
                     language=context.language,
                     user_key=context.user_key,
+                    templates_dir=context.templates_dir,
                 )
                 logger.debug(
                     "Patched previous review comment for test case set '%s'",

@@ -14,7 +14,7 @@ else:
 
 from pydantic import BaseModel, ValidationError
 
-from testbench_ai_service.config import PROMPTS_DIR, AppConfig
+from testbench_ai_service.config import PROMPTS_DIR, TEMPLATES_DIR, AppConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
     AgentConfig,
@@ -60,8 +60,32 @@ def copy_default_prompts(target_dir: Path, force: bool = False) -> None:
     print(f"Default prompts copied to '{target_dir.resolve()}'.")
 
 
+def copy_default_templates(target_dir: Path, force: bool = False) -> None:
+    """
+    Copy the built-in jinja templates from the package to a local directory.
+
+    Args:
+        target_dir: Destination directory for the copied templates.
+        force: Remove and recreate the directory if it already exists.
+    """
+    if target_dir.exists():
+        if not force:
+            print(
+                f"Prompts directory already exists at '{target_dir.resolve()}'. "
+                "Use --force to overwrite."
+            )
+            sys.exit(1)
+        shutil.rmtree(target_dir)
+
+    shutil.copytree(TEMPLATES_DIR, target_dir, ignore=_ignore_non_prompt_files)
+    print(f"Default prompts copied to '{target_dir.resolve()}'.")
+
+
 def create_default_config_file(
-    output_path: str, force: bool = False, prompts_dir: str | None = None
+    output_path: str,
+    force: bool = False,
+    prompts_dir: str | None = None,
+    templates_dir: str | None = None,
 ):
     """
     Write the default config to a TOML configuration file.
@@ -75,6 +99,8 @@ def create_default_config_file(
         force: Overwrite existing file if True.
         prompts_dir: If provided, copy default prompts to this directory and
             configure the service to load prompts from there.
+        templates_dir: If provided, copy default templates to this directory and
+            configure the service to load templates from there.
     """
     default_config_json = AppConfig().model_dump_json(exclude_none=True)
     default_config = json.loads(default_config_json)
@@ -83,6 +109,11 @@ def create_default_config_file(
         target = Path(prompts_dir).resolve()
         copy_default_prompts(target, force=force)
         default_config["prompts_dir"] = str(target)
+
+    if templates_dir is not None:
+        target = Path(templates_dir).resolve()
+        copy_default_templates(target, force=force)
+        default_config["templates_dir"] = str(target)
 
     create_config_file(config=default_config, output_path=output_path, force=force)
 
