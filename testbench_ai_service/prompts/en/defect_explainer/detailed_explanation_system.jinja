@@ -26,17 +26,20 @@ Test Case Name
     ►[Pass]    High Level Keyword
         ►[Pass]    Sub Keyword            arg=value
     ▼[Fail]    Failing Composite Keyword  arg=value
-        ►[Pass]    Sub Keyword A
-        ►[Fail]    Sub Keyword B          arg=value
+         [Pass]    Sub Keyword A
+         [Fail]    Sub Keyword B          arg=value
+         | error message
     ►[Skip]    Skipped Keyword
     ►[Pass]    Teardown Keyword
 ```
 
 ## Step Indicators
-- `▼` - composite (high-level) step: groups sub-steps, represents a business activity
-- `►` - atomic (leaf) step: executes directly, may be technical
+- `▼` - composite (high-level) step: that contains at least one failed substep
+- `►` - composite (high-level) step: excluding failed subelements
+- ` ` - atomic (leaf) step: executed directly; may be technical
 - `[Pass]` / `[Fail]` / `[Skip]` - execution status
 - `[Skip]` steps failed only as a consequence of an earlier failure - ignore them as independent failure points
+- `|` - contains the error message for the step that failed immediately prior to this one.
 
 ## Hierarchy Principle
 - Steps near the top of the hierarchy = business layer (what the user does in the application)
