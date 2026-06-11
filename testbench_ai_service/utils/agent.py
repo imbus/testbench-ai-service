@@ -1,4 +1,3 @@
-import re
 from collections.abc import Set as AbstractSet
 
 import jwt
@@ -9,10 +8,9 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.agent import ElementType, ExecutionContext, TriggerAgentRequest
+from testbench_ai_service.models.agent import ExecutionContext, TriggerAgentRequest
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
-    TestCaseSetNode,
 )
 from testbench_ai_service.utils.config import (
     get_language_from_config,
@@ -21,15 +19,14 @@ from testbench_ai_service.utils.config import (
 )
 from testbench_ai_service.utils.testbench import (
     get_project_name,
-    get_test_structure_tree,
 )
 
 
-def _extract_jwt_scope(token: str) -> tuple[str, str, str | None]:
+def _extract_jwt_scope(token: str) -> tuple[str, str | None, str | None]:
     """Decode a JWT and extract the TestBench project / TOV / cycle keys from its scope.
 
     Returns:
-        A ``(project_key, tov_key, cycle_key)`` tuple where ``cycle_key`` may
+        A ``(project_key, tov_key, cycle_key)`` tuple where ``tov_key`` and ``cycle_key`` may
         be ``None`` when the token was issued without one.
 
     Raises:
@@ -57,8 +54,8 @@ def _extract_jwt_scope(token: str) -> tuple[str, str, str | None]:
     tov_key: str | None = scope.get("tov")
     cycle_key: str | None = scope.get("ccl")
 
-    if not project_key or not tov_key:
-        logger.warning("Invalid JWT token scope: missing required project or test object keys")
+    if not project_key:
+        logger.warning("Invalid JWT token scope: missing required project key")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authorization token",
@@ -152,27 +149,3 @@ def has_required_permissions(
     token_info = jwt.decode(token, options={"verify_signature": False})
     token_perms = set(token_info.get("perms", []))
     return all(perm.value in token_perms for perm in required_permissions)
-
-
-def get_test_case_set_nodes(conn: TBConnection, context: ExecutionContext) -> list[TestCaseSetNode]:
-    """Return the TestCaseSetNodes to process for the given execution context."""
-    if context.element_type not in {ElementType.TESTCASESET, ElementType.TESTTHEME}:
-        return []
-
-    structure = get_test_structure_tree(
-        conn=conn,
-        project_key=context.project_key,
-        tov_key=context.tov_key,
-        cycle_key=context.cycle_key,
-        root_uid=context.root_uid,
-        filtering=context.filtering,
-    )
-
-    if context.element_type == ElementType.TESTCASESET:
-        return [structure.root] if isinstance(structure.root, TestCaseSetNode) else []
-
-    return [
-        node
-        for node in structure.nodes
-        if isinstance(node, TestCaseSetNode) and re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
-    ]

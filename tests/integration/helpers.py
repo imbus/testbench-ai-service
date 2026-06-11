@@ -50,6 +50,7 @@ def build_unlocked_structure_tree(tab: str) -> TestStructureTree:
         base=TestStructureItemBaseInformation(
             key="9",
             numbering="1.1",
+            path="",
             parentKey="1",
             name="Calculate final price",
             uniqueID="iTB-TC-66",
@@ -90,6 +91,7 @@ def build_two_node_structure_tree(tab: str, locker_key: str = "99") -> TestStruc
         base=TestStructureItemBaseInformation(
             key="9",
             numbering="1.1",
+            path="",
             parentKey="1",
             name="Calculate final price",
             uniqueID="iTB-TC-66",
@@ -104,6 +106,7 @@ def build_two_node_structure_tree(tab: str, locker_key: str = "99") -> TestStruc
         base=TestStructureItemBaseInformation(
             key="10",
             numbering="1.2",
+            path="",
             parentKey="1",
             name="Apply discount",
             uniqueID="iTB-TC-67",
@@ -139,6 +142,7 @@ def build_multi_unlocked_structure_tree(tab: str) -> TestStructureTree:
         base=TestStructureItemBaseInformation(
             key="9",
             numbering="1.1",
+            path="",
             parentKey="1",
             name="Calculate final price",
             uniqueID="iTB-TC-66",
@@ -153,6 +157,7 @@ def build_multi_unlocked_structure_tree(tab: str) -> TestStructureTree:
         base=TestStructureItemBaseInformation(
             key="10",
             numbering="1.2",
+            path="",
             parentKey="1",
             name="Apply discount",
             uniqueID="iTB-TC-67",
@@ -181,6 +186,7 @@ def build_locked_structure_tree(tab: str, locker_key: str = "99") -> TestStructu
         base=TestStructureItemBaseInformation(
             key="9",
             numbering="1.1",
+            path="",
             parentKey="1",
             name="Calculate final price",
             uniqueID="iTB-TC-66",
@@ -203,6 +209,7 @@ def build_tcs_catalog(
     details = TestCaseSetDetails(
         key="9",
         numbering="1.1",
+        path="",
         uniqueID=uid,
         name="Calculate final price",
         spec=TestCaseSetSpecificationSummary(
@@ -217,7 +224,7 @@ def build_tcs_catalog(
             dueDate=None,
             reviewer=None,
             udfs=[],
-            keywords=[],
+            tags=[],
             references=[],
             requirements=[],
         ),
@@ -225,7 +232,7 @@ def build_tcs_catalog(
             key=exec_key,
             comments="<html><body></body></html>",
             udfs=[],
-            keywords=[],
+            tags=[],
         ),
         testCases=[
             TestCaseSummary(
@@ -247,6 +254,9 @@ def build_tcs_catalog(
                 ),
             )
         ],
+        testSequence=[],
+        parameters=[],
+        keywords=[],
     )
     test_case = _make_test_case_details(uid)
     return {uid: TestCaseSet(details=details, test_cases={f"{uid}-PC-1": test_case})}

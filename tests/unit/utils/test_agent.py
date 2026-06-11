@@ -4,8 +4,8 @@ import pytest
 from fastapi import HTTPException, status
 
 from testbench_ai_service.auth import AuthInfo, AuthType
-from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.testbench import FilteringOptions
 from testbench_ai_service.utils.agent import build_execution_context
 

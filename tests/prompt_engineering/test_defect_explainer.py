@@ -6,8 +6,9 @@ import pytest
 from dotenv import load_dotenv
 
 from testbench_ai_service.agents.defect_explainer.agent import DefectExplainer
-from testbench_ai_service.config import DEFAULT_AGENTS, PROMPTS_DIR, LLMConfig, PromptConfig
+from testbench_ai_service.config import DEFAULT_AGENTS, PROMPTS_DIR
 from testbench_ai_service.llm.openai import OpenAIClient
+from testbench_ai_service.models.config import LLMConfig, PromptConfig
 
 load_dotenv()
 

@@ -9,7 +9,7 @@ from pydantic import BaseModel, ValidationError
 
 from testbench_ai_service.validators import (
     raise_field_validation_error,
-    validate_custom_class_path,
+    validate_class_path,
     validate_file,
     validate_tb_server_url,
     validate_yaml_to_schema,
@@ -54,17 +54,17 @@ class TestRaiseFieldValidationError:
 class TestValidateCustomClassPath:
     def test_empty_string_raises(self):
         with pytest.raises(ValueError, match="'class_path' must be set"):
-            validate_custom_class_path("")
+            validate_class_path("")
 
     def test_path_without_dot_raises(self):
         with pytest.raises(ValueError, match="'class_path' must be a valid import path"):
-            validate_custom_class_path("InvalidClassPath")
+            validate_class_path("InvalidClassPath")
 
     @patch("testbench_ai_service.validators.importlib.import_module")
     def test_missing_module_raises(self, mock_import):
         mock_import.side_effect = ImportError("No module named foo")
         with pytest.raises(ValueError, match=r"cannot import 'Baz' from 'foo\.bar'"):
-            validate_custom_class_path("foo.bar.Baz")
+            validate_class_path("foo.bar.Baz")
 
     @patch("testbench_ai_service.validators.importlib.import_module")
     def test_class_not_in_module_raises(self, mock_import):
@@ -72,7 +72,7 @@ class TestValidateCustomClassPath:
         del mock_module.MissingClass
         mock_import.return_value = mock_module
         with pytest.raises(ValueError, match=r"cannot import 'MissingClass' from 'some\.module'"):
-            validate_custom_class_path("some.module.MissingClass")
+            validate_class_path("some.module.MissingClass")
 
     @patch("testbench_ai_service.validators.importlib.import_module")
     def test_valid_path_returns_the_path_string(self, mock_import):
@@ -83,7 +83,7 @@ class TestValidateCustomClassPath:
         mock_module.ExistingClass = _Fake
         mock_import.return_value = mock_module
 
-        result = validate_custom_class_path("some.module.ExistingClass")
+        result = validate_class_path("some.module.ExistingClass")
         assert result == "some.module.ExistingClass"
 
 

@@ -14,15 +14,14 @@ else:
 
 from pydantic import BaseModel, ValidationError
 
-from testbench_ai_service.config import (
-    PROMPTS_DIR,
+from testbench_ai_service.config import PROMPTS_DIR, AppConfig
+from testbench_ai_service.log import logger
+from testbench_ai_service.models.config import (
     AgentConfig,
-    AppConfig,
     LLMConfig,
     ProjectPromptConfig,
     PromptConfig,
 )
-from testbench_ai_service.log import logger
 from testbench_ai_service.models.language import LanguageOption
 
 CONFIG_PREFIX = "testbench-ai-service"

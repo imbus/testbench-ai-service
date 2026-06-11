@@ -4,19 +4,16 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from testbench_ai_service.config import (
-    DEFAULT_HOST,
-    DEFAULT_PORT,
-    PROMPTS_DIR,
+from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT, PROMPTS_DIR, AppConfig
+from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.models.config import (
     AgentConfig,
-    AppConfig,
     LLMConfig,
     ProjectAgentConfig,
     ProjectConfig,
     ProjectPromptConfig,
     PromptConfig,
 )
-from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.language import LanguageOption
 
 

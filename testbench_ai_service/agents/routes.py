@@ -3,8 +3,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
-from testbench_ai_service.auth import AuthInfo, validate_auth_token
-from testbench_ai_service.config import AgentConfig, AppConfig
+from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
+from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import (
     get_app_config,
     get_llm_factory,
@@ -13,14 +13,19 @@ from testbench_ai_service.dependencies import (
 from testbench_ai_service.exceptions import HTTPError, handle_requests_http_error
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.agent import TriggerAgentRequest, TriggerAgentResponse
+from testbench_ai_service.models.agent import (
+    TriggerAgentRequest,
+    TriggerAgentResponse,
+)
+from testbench_ai_service.models.config import AgentConfig
 from testbench_ai_service.models.prompt import PromptDefinition
 from testbench_ai_service.tasks import run_agent
-from testbench_ai_service.utils.agent import build_execution_context
+from testbench_ai_service.utils.agent import build_execution_context, has_required_permissions
 from testbench_ai_service.utils.config import agent_enabled, get_agent_config, get_prompt_config
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
+from testbench_ai_service.utils.testbench import get_project_roles
 
 TRIGGER_AGENT_ROUTE_KWARGS: dict = {
     "response_model": TriggerAgentResponse,
@@ -123,8 +128,28 @@ async def trigger_agent_execution(
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
     agent = load_agent(agent_config)
 
+    if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
+        auth_info.token, agent.REQUIRED_PERMISSIONS
+    ):
+        msg = get_translation("routes.error.insufficient_permissions", context.language)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
+
+    if agent.ALLOWED_ROLES is not None:
+        project_roles = set(get_project_roles(conn, context.project_key))
+        if project_roles.isdisjoint(agent.ALLOWED_ROLES):
+            sorted_roles = sorted(agent.ALLOWED_ROLES, key=lambda r: (type(r).__name__, r.value))
+            translated_roles = [
+                get_translation(f"roles.{role.name}", context.language) for role in sorted_roles
+            ]
+            msg = get_translation(
+                "routes.error.insufficient_role",
+                context.language,
+                allowed_roles="\n".join([f"• {role}" for role in translated_roles]),
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
+
     try:
-        precheck_result = await agent.precheck(context, conn, auth_info)
+        precheck_result = await agent.precheck(context, conn)
     except requests.exceptions.HTTPError as e:
         handle_requests_http_error(e)
     except requests.exceptions.ConnectionError as e:

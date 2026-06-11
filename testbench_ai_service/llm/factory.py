@@ -2,10 +2,10 @@ import os
 import re
 from typing import Any
 
-from testbench_ai_service.config import LLMConfig
 from testbench_ai_service.llm.anthropic import AnthropicClient
 from testbench_ai_service.llm.base import LLMClient, LLMProvider
 from testbench_ai_service.llm.openai import AzureOpenAIClient, OpenAIClient
+from testbench_ai_service.models.config import LLMConfig
 from testbench_ai_service.utils.import_utils import load_class_from_path
 
 

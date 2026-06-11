@@ -1,4 +1,3 @@
-from testbench_ai_service.config import LLMConfig, PromptConfig
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import (
     ExecutionContext,
@@ -6,6 +5,7 @@ from testbench_ai_service.models.agent import (
     TriggerAgentRequest,
     TriggerAgentResponse,
 )
+from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
 
 

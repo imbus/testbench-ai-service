@@ -87,7 +87,7 @@ async def patch_previous_review_comment_for_test_structure_element(
     error_message = get_translation("shared.run.error_message", language)
     error_html = f"{failed_heading}<br/>{error_message}"
     if has_visible_text(previous_review_comment):
-        review_comment_html = add_html_body_tags(f"{error_html}<br/>{previous_review_comment}")
+        review_comment_html = add_html_body_tags(f"{error_html}<br/><br/>{previous_review_comment}")
     else:
         review_comment_html = add_html_body_tags(error_html)
 

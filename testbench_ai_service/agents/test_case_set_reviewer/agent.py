@@ -10,7 +10,6 @@ from testbench_ai_service.agents.test_case_set_reviewer.utils import (
     patch_review_result_for_test_structure_element,
     patch_review_started_for_test_structure_element,
 )
-from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.exceptions import handle_requests_http_error
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
@@ -23,18 +22,14 @@ from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     ProjectRole,
 )
-from testbench_ai_service.utils.agent import (
-    get_test_case_set_nodes,
-    has_required_permissions,
-)
 from testbench_ai_service.utils.html_utils import (
     extract_text_from_html_body,
     strip_html_body_tags,
 )
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
-    get_project_roles,
     get_test_case_set_catalog,
+    get_test_case_set_nodes,
 )
 from testbench_ai_service.utils.testbench_helpers import (
     parameter_combinations_as_str,
@@ -50,7 +45,7 @@ class TestCaseSetReviewerAgentData(AgentData, total=False):
 
 
 class TestCaseSetReviewer(Agent):
-    REQUIRED_PERMISSIONS: frozenset[PermissionWithCode] = frozenset(
+    REQUIRED_PERMISSIONS = frozenset(
         {
             PermissionWithCode.ReadOwnUserDetails,
             PermissionWithCode.ReadProjectDetails,
@@ -64,7 +59,7 @@ class TestCaseSetReviewer(Agent):
             PermissionWithCode.ModifySpecManagementInfo,
         }
     )
-    ALLOWED_ROLES: frozenset[ProjectRole] = frozenset(
+    ALLOWED_ROLES = frozenset(
         {
             ProjectRole.TestManager,
             ProjectRole.TestDesigner,
@@ -75,7 +70,6 @@ class TestCaseSetReviewer(Agent):
         self,
         context: ExecutionContext,
         conn: TBConnection,
-        auth_info: AuthInfo,
     ) -> PrecheckResult:
         """
         Precheck to determine which test case sets the agent should review,
@@ -83,25 +77,8 @@ class TestCaseSetReviewer(Agent):
         """
         warnings = []
 
-        if not ExecutionContext.tov_key:
+        if not context.tov_key:
             msg = get_translation("shared.precheck.missing_tov_key", context.language)
-            warnings.append(msg)
-            return PrecheckResult(passed=False, warnings=warnings)
-
-        if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
-            auth_info.token, self.REQUIRED_PERMISSIONS
-        ):
-            msg = get_translation(
-                "test_case_set_reviewer.precheck.insufficient_permissions", context.language
-            )
-            warnings.append(msg)
-            return PrecheckResult(passed=False, warnings=warnings)
-
-        project_roles = set(get_project_roles(conn, context.project_key))
-        if project_roles.isdisjoint(self.ALLOWED_ROLES):
-            msg = get_translation(
-                "test_case_set_reviewer.precheck.insufficient_role", context.language
-            )
             warnings.append(msg)
             return PrecheckResult(passed=False, warnings=warnings)
 
@@ -137,6 +114,10 @@ class TestCaseSetReviewer(Agent):
     ) -> None:
         """Reviews all test case sets concurrently."""
         if not item_ids:
+            logger.debug("No test case sets to review, skipping run execution.")
+            return
+        if not context.tov_key:
+            logger.debug("Missing tov_key in context, skipping run execution.")
             return
 
         test_case_set_catalog = {}

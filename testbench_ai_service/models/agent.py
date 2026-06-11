@@ -5,7 +5,7 @@ from typing import TypedDict
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from testbench_ai_service.config import LLMConfig, PromptConfig
+from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import FilteringOptions
 
@@ -70,7 +70,7 @@ class ExecutionContext(BaseModel):
     user_key: str
     project_name: str
     project_key: str
-    tov_key: str
+    tov_key: str | None = None
     cycle_key: str | None = None
     root_uid: str | None = None
     root_key: str | None = None

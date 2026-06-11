@@ -1,14 +1,18 @@
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.models.config import (
+    AgentConfig,
+    LLMConfig,
+    ProjectConfig,
+    PromptConfig,
+)
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
 from testbench_ai_service.validators import (
     raise_field_validation_error,
-    validate_custom_class_path,
     validate_prompt_file,
     validate_tb_server_url,
 )
@@ -16,78 +20,6 @@ from testbench_ai_service.validators import (
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8010
 PROMPTS_DIR = (Path(__file__).parent / "prompts").resolve()
-
-
-class LLMConfig(BaseModel):
-    provider: LLMProvider = LLMProvider.OPENAI
-    model: str | None = None
-    azure_endpoint: str | None = None
-    api_version: str | None = None
-    class_path: str | None = None
-
-    model_config = ConfigDict(extra="allow")
-
-    @model_validator(mode="after")
-    def validate_config(self):
-        if self.provider == LLMProvider.CUSTOM:
-            try:
-                validate_custom_class_path(self.class_path)
-            except ValueError as e:
-                raise_field_validation_error(self, "class_path", e)
-
-        if self.provider == LLMProvider.AZURE_OPENAI:
-            if not self.azure_endpoint:
-                raise_field_validation_error(
-                    self,
-                    "azure_endpoint",
-                    ValueError("'azure_endpoint' must be set for provider 'azure_openai'."),
-                )
-            if not self.api_version:
-                raise_field_validation_error(
-                    self,
-                    "api_version",
-                    ValueError("'api_version' must be set for provider 'azure_openai'."),
-                )
-        return self
-
-
-class PromptConfig(BaseModel):
-    file: Path
-    variant: str | None = None
-    vars: dict[str, str] | None = None
-
-    model_config = ConfigDict(extra="allow")
-
-
-class ProjectPromptConfig(BaseModel):
-    file: Path | None = None
-    variant: str | None = None
-    vars: dict[str, str] | None = None
-
-
-class AgentConfig(BaseModel):
-    enabled: bool
-    endpoint_path: str
-    class_path: str
-    prompt: PromptConfig
-
-    # @field_validator("class_path", mode="after")
-    # @classmethod
-    # def validate_config(cls, value: str):
-    #     return validate_custom_class_path(value)
-
-
-class ProjectAgentConfig(BaseModel):
-    enabled: bool | None = None
-    prompt: ProjectPromptConfig | None = None
-
-
-class ProjectConfig(BaseModel):
-    language: LanguageOption | None = None
-    llm_config: LLMConfig | None = None
-    agents: dict[str, ProjectAgentConfig] | None = None
-
-
 DEFAULT_AGENTS: dict[str, AgentConfig] = {
     "test_case_set_reviewer": AgentConfig(
         enabled=True,

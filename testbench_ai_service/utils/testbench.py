@@ -1,4 +1,5 @@
 import asyncio
+import re
 import tempfile
 import zipfile
 from io import BytesIO
@@ -12,6 +13,7 @@ from testbench_cli_reporter.config_model import (
 )
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
+from testbench_ai_service.models.agent import ElementType, ExecutionContext
 from testbench_ai_service.models.testbench import (
     CycleStructureOptions,
     FilteringOptions,
@@ -20,6 +22,7 @@ from testbench_ai_service.models.testbench import (
     ProjectRole,
     SpecificationDetailsForUpdate,
     TestCaseSetDetails,
+    TestCaseSetNode,
     TestStructureTree,
     TovStructureOptions,
 )
@@ -211,3 +214,30 @@ def has_any_allowed_role(
     project_roles = get_project_roles(conn, project)
     all_roles = global_roles + project_roles
     return bool(set(all_roles) & set(allowed_roles))
+
+
+def get_test_case_set_nodes(conn: TBConnection, context: ExecutionContext) -> list[TestCaseSetNode]:
+    """Return the TestCaseSetNodes to process for the given execution context."""
+    if not context.tov_key or context.element_type not in {
+        ElementType.TESTCASESET,
+        ElementType.TESTTHEME,
+    }:
+        return []
+
+    structure = get_test_structure_tree(
+        conn=conn,
+        project_key=context.project_key,
+        tov_key=context.tov_key,
+        cycle_key=context.cycle_key,
+        root_uid=context.root_uid,
+        filtering=context.filtering,
+    )
+
+    if context.element_type == ElementType.TESTCASESET:
+        return [structure.root] if isinstance(structure.root, TestCaseSetNode) else []
+
+    return [
+        node
+        for node in structure.nodes
+        if isinstance(node, TestCaseSetNode) and re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
+    ]

@@ -8,9 +8,9 @@ from jinja2 import (
     UndefinedError,
 )
 
-from testbench_ai_service.config import PromptConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData
+from testbench_ai_service.models.config import PromptConfig
 from testbench_ai_service.models.prompt import (
     Message,
     MessageTemplate,
@@ -158,6 +158,6 @@ def get_prompt_model(prompt_config: PromptConfig) -> str:
 def pretty_messages(messages: list[Message]) -> str:
     pretty = []
     for msg in messages:
-        indented_content = "\n".join(f"\t{line}" for line in msg.content.splitlines())
-        pretty.append(f"Role: {msg.role}\nContent:\n{indented_content}\n")
-    return "\n---\n".join(pretty)
+        pretty.append(f"\nRole: {msg.role}\nContent:\n{msg.content}\n")
+    separator = "-" * 100
+    return separator.join(pretty)

@@ -5,7 +5,8 @@ import pytest
 from fastapi import status
 
 from testbench_ai_service.auth import validate_auth_token
-from testbench_ai_service.config import AppConfig, ProjectAgentConfig, ProjectConfig
+from testbench_ai_service.config import AppConfig
+from testbench_ai_service.models.config import ProjectAgentConfig, ProjectConfig
 from testbench_ai_service.models.testbench import ProjectRole
 from tests.integration.conftest import CYCLE_KEY, PROJECT_KEY, PROJECT_NAME, TOV_KEY
 from tests.integration.helpers import (
@@ -18,11 +19,10 @@ from tests.integration.helpers import (
 
 _ENDPOINT = "/defect-explanations"
 
-# Patch targets — these are the real functions that touch external systems.
 _PATCH_GET_PROJECT_NAME = "testbench_ai_service.utils.agent.get_project_name"
 _PATCH_GET_CATALOG = "testbench_ai_service.agents.defect_explainer.agent.get_test_case_set_catalog"
-_PATCH_GET_TREE = "testbench_ai_service.utils.agent.get_test_structure_tree"
-_PATCH_GET_PROJECT_ROLES = "testbench_ai_service.agents.defect_explainer.agent.get_project_roles"
+_PATCH_GET_TREE = "testbench_ai_service.utils.testbench.get_test_structure_tree"
+_PATCH_GET_PROJECT_ROLES = "testbench_ai_service.agents.routes.get_project_roles"
 _PATCH_GET_ERROR_MSG = "testbench_ai_service.agents.defect_explainer.agent.get_error_message"
 _PATCH_CLEAN_UP = "testbench_ai_service.agents.defect_explainer.agent.clean_up_comment"
 _PATCH_ADD_EXPLANATIONS = (
@@ -105,10 +105,10 @@ class TestErrorPaths:
 
         assert post(_ENDPOINT, cycle_key=CYCLE_KEY).status_code == status.HTTP_409_CONFLICT
 
-    def test_insufficient_role_returns_409(self, post, patches):
+    def test_insufficient_role_returns_403(self, post, patches):
         patches.get_project_roles.return_value = []
 
-        assert post(_ENDPOINT, cycle_key=CYCLE_KEY).status_code == status.HTTP_409_CONFLICT
+        assert post(_ENDPOINT, cycle_key=CYCLE_KEY).status_code == status.HTTP_403_FORBIDDEN
 
     def test_disabled_agent_returns_404(self, app, post):
         with mock_patch("testbench_ai_service.config.validate_tb_server_url"):

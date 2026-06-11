@@ -38,11 +38,11 @@ def parameter_combinations_as_str(test_case_set: TestCaseSet) -> str:
 
     ## Example output:
     ```
-    | Fahrzeug | Sondermodell |
-    | --- | --- |
-    | January | $250 |
-    | February | $80 |
-    | March | $420 |
+    | unique ID | ${Fahrzeug} | ${Sondermodell} |
+    | --------- | ----------- | --------------- |
+    | iTB-TC-1-PC-1 | Rolo | Luxus |
+    | iTB-TC-1-PC-2 | Rassant Family | Jazz |
+    | iTB-TC-1-PC-3 | Rassant | Gomera |
     ```
     """
     rows = [
@@ -61,7 +61,7 @@ def parameter_combinations_as_str(test_case_set: TestCaseSet) -> str:
 def _to_markdown_table(rows: list[_TestCaseRow]) -> str:
     all_keys = sorted({key for row in rows for key in row.values})
 
-    header = "| uniqueID | " + " | ".join(all_keys) + " |"
+    header = "| uniqueID | " + " | ".join(f"${{{key}}}" for key in all_keys) + " |"
     separator = "|-----------|" + "|".join(["-" * (len(k) + 2) for k in all_keys]) + "|"
 
     table_rows = [
@@ -83,7 +83,9 @@ def _param_value_string(param: ParameterSummary) -> str:
     """Return the string representation for a single call parameter."""
     if param.parameterValue is not None:
         return f"${{{param.parameterValue.name}}}"
-    return param.value if param.value is not None else "-"
+    if param.representativeValue is not None:
+        return param.representativeValue.name  # type: ignore[no-any-return]
+    return "-"
 
 
 def _make_step_data(call: KeywordCall) -> _StepData:
@@ -149,7 +151,7 @@ def _render_step(step: _StepData) -> str:
 
 def test_case_set_as_str(test_case_set: TestCaseSet) -> str:
     """
-    Converts a test case set to a formatted string using the first test case in the set.
+    Converts a test case set to a formatted string.
 
     The output is structured as:
     - The test case set name on the first line
@@ -161,9 +163,6 @@ def test_case_set_as_str(test_case_set: TestCaseSet) -> str:
 
     Consecutive steps with the same ``spec.key`` are collapsed into one step;
     their literal parameter values are accumulated into a list.
-
-    Note: Since test cases in a set differ only in their actual arguments,
-    the first test case is representative for formatting purposes.
 
     Args:
         test_case_set: A test case set object
@@ -182,9 +181,7 @@ def test_case_set_as_str(test_case_set: TestCaseSet) -> str:
     ```
     """
     lines = [test_case_set.details.name]
-    first_test_case = next(iter(test_case_set.test_cases.values()))
-    keyword_calls = get_keyword_calls_for_test_case(first_test_case)
-    steps = _collect_steps(keyword_calls)
+    steps = _collect_steps(test_case_set.details.testSequence)
     for step in steps:
         lines.append(_render_step(step))
     return "\n".join(lines)

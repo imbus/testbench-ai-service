@@ -76,9 +76,9 @@ def raise_field_validation_error(
     ) from error
 
 
-def validate_custom_class_path(class_path: str) -> str:
+def validate_class_path(class_path: str) -> str:
     """
-    Check that custom class_path is valid and importable.
+    Check that class_path is valid and importable.
 
     Returns:
         The class_path if valid.
