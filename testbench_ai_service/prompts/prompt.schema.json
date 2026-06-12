@@ -1,0 +1,98 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": [
+    "name",
+    "default_model",
+    "default_variant",
+    "variants"
+  ],
+  "properties": {
+    "name": { "type": "string" },
+    "summary": { "type": "string" },
+    "description": { "type": "string" },
+    "default_model": { "type": "string" },
+    "default_variant": { "type": "string" },
+    "variants": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "messages"],
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "model": { "type": "string" },
+          "vars": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["name", "value_type"],
+              "properties": {
+                "name": { "type": "string" },
+                "description": { "type": "string" },
+                "value_type": {
+                  "type": "string",
+                  "enum": ["string", "text", "boolean", "number", "enum"]
+                },
+                "choices": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "minItems": 1,
+                  "description": "Required when value_type is 'enum'. Lists the allowed values."
+                },
+                "default_value": {},
+                "required": { "type": "boolean", "default": false }
+              },
+              "if": {
+                "properties": { "value_type": { "const": "enum" } },
+                "required": ["value_type"]
+              },
+              "then": { "required": ["choices"] },
+              "else": {
+                "properties": { "choices": false }
+              },
+              "additionalProperties": false
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "oneOf": [
+                {
+                  "required": ["text"],
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": ["system", "user", "assistant"],
+                      "default": "user"
+                    },
+                    "text": { "type": "string" }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "required": ["file"],
+                  "properties": {
+                    "role": {
+                      "type": "string",
+                      "enum": ["system", "user", "assistant"],
+                      "default": "user"
+                    },
+                    "file": {
+                      "type": "string",
+                      "description": "Path to an external template file (.jinja, .j2, or .md). Relative paths are resolved from the directory of this YAML file. Absolute paths are used as-is."
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              ]
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

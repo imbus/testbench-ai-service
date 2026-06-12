@@ -1,0 +1,20 @@
+# Test Case Set to Review
+
+## Name and Steps
+```
+{{ agent.test_case_set }}
+```
+
+{% if agent.parameter_combinations %}
+## Parameter Combinations
+```
+{{ agent.parameter_combinations }}
+```
+{% else %}
+No parameter combinations provided.
+{% endif %}
+
+# Instruction
+Apply only the scoped checks.
+Return the output in the specified format.
+Evaluate only - do not suggest improvements or rewrites.

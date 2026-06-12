@@ -1,0 +1,14 @@
+<html>
+  <body>
+    {% if previous_description %}
+    {{ previous_description }}<br/><br/>
+    {% endif %}
+    <b>AI Description - {{ current_time }}</b><br/>
+    {{ description }}
+    <div style='padding-top: 5px;'>
+      <div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>
+        AI-generated responses may be inaccurate.
+      </div>
+    </div>
+  </body>
+</html>

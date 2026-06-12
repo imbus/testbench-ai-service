@@ -1,0 +1,9 @@
+<html>
+  <body>
+    <b>AI Review failed - {{ current_time }}</b><br/>Please contact the system administrator for further details.
+    {% if previous_review_comment %}
+    <br/><br/>
+    {{ previous_review_comment }}
+    {% endif %}
+  </body>
+</html>

@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Test Case Set Describer"
+summary: "Generate test case set descriptions"
+description: >
+  This agent generates descriptions for the specified test case sets.
+  The generated descriptions are added to the description field of the respective test case set specifications.
+default_model: "gpt-5.5"
+default_variant: "Full Description"
+variants:
+  - name: "Full Description"
+    description: "Generates a structured description with three sections: test objective, key verifications performed, and a summary of each concrete test case. Recommended for full documentation."
+    model: "gpt-5.5"
+    messages:
+      - role: "system"
+        file: "full_description_system.jinja"
+      - role: "user"
+        file: "full_description_user.jinja"
+  - name: "Short Description"
+    description: "Generates a short description with a single-sentence test objective only."
+    model: "gpt-5.5"
+    messages:
+      - role: "system"
+        file: "short_description_system.jinja"
+      - role: "user"
+        file: "short_description_user.jinja"

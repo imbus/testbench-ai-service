@@ -1,0 +1,152 @@
+from collections.abc import Set as AbstractSet
+
+import jwt
+from fastapi import HTTPException, status
+from jwt import DecodeError
+from testbench_cli_reporter.testbench import Connection as TBConnection
+
+from testbench_ai_service.auth import AuthInfo, AuthType
+from testbench_ai_service.config import AppConfig
+from testbench_ai_service.log import logger
+from testbench_ai_service.models.agent import ExecutionContext, TriggerAgentRequest
+from testbench_ai_service.models.testbench import (
+    PermissionWithCode,
+)
+from testbench_ai_service.utils.config import (
+    get_language_from_config,
+    get_llm_config,
+    get_prompt_config,
+)
+from testbench_ai_service.utils.testbench import (
+    get_project_name,
+)
+
+
+def _extract_jwt_scope(token: str) -> tuple[str, str | None, str | None]:
+    """Decode a JWT and extract the TestBench project / TOV / cycle keys from its scope.
+
+    Returns:
+        A ``(project_key, tov_key, cycle_key)`` tuple where ``tov_key`` and ``cycle_key`` may
+        be ``None`` when the token was issued without one.
+
+    Raises:
+        HTTPException 401: If the token cannot be decoded or the scope payload
+            is missing or does not contain the required keys.
+    """
+    try:
+        token_info = jwt.decode(token, options={"verify_signature": False})
+    except DecodeError as e:
+        logger.warning("Invalid JWT token: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization token",
+        ) from e
+
+    scope = token_info.get("scope")
+    if not isinstance(scope, dict):
+        logger.warning("Invalid JWT token scope: missing or malformed scope payload")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization token",
+        )
+
+    project_key: str | None = scope.get("proj")
+    tov_key: str | None = scope.get("tov")
+    cycle_key: str | None = scope.get("ccl")
+
+    if not project_key:
+        logger.warning("Invalid JWT token scope: missing required project key")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authorization token",
+        )
+
+    return project_key, tov_key, cycle_key
+
+
+def build_execution_context(
+    agent_key: str,
+    trigger_request: TriggerAgentRequest,
+    conn: TBConnection,
+    app_config: AppConfig,
+    auth_info: AuthInfo,
+) -> ExecutionContext:
+    """Build a fully-resolved ``ExecutionContext`` from a trigger request and auth context.
+
+    For JWT-authenticated requests the project / TOV / cycle keys are extracted
+    from the token's scope claim; for session-token requests they are taken from
+    the request body.  In both cases ``filtering`` is forwarded from the request.
+
+    The ``user_key`` is taken directly from ``auth_info`` — it was already
+    fetched during token validation and cached there, so no additional
+    TestBench API call is needed here.
+
+    Args:
+        agent_key:       Agent key (e.g. ``"test_case_set_reviewer"``).
+        trigger_request: Incoming trigger request body.
+        conn:            Active TestBench connection for project-name lookup.
+        app_config:      Application configuration.
+        auth_info:       Validated auth context produced by ``get_auth_info``.
+
+    Returns:
+        A fully-populated ``ExecutionContext`` ready for use by the agent
+        and background tasks.
+
+    Raises:
+        HTTPException 401: JWT scope is missing or malformed.
+        HTTPException 404: Project key does not resolve to a known project.
+    """
+    if auth_info.auth_type == AuthType.JWT_TOKEN:
+        project_key, tov_key, cycle_key = _extract_jwt_scope(auth_info.token)
+    else:
+        project_key = trigger_request.project_key
+        tov_key = trigger_request.tov_key
+        cycle_key = trigger_request.cycle_key
+
+    try:
+        project_name = get_project_name(conn, project_key)
+    except Exception as e:
+        logger.info("Resource not found in TestBench Server: %s", e)
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+
+    language = trigger_request.language or get_language_from_config(app_config, project_name)
+
+    llm_config = get_llm_config(
+        config=app_config,
+        project_name=project_name,
+        request_config=trigger_request.llm_config,
+    )
+    prompt_config = get_prompt_config(
+        agent_key=agent_key,
+        config=app_config,
+        project_name=project_name,
+        request_config=trigger_request.prompt_config,  # type: ignore[arg-type]
+        language=language,
+    )
+
+    return ExecutionContext(
+        user_key=auth_info.user_key,
+        project_name=project_name,
+        project_key=project_key,
+        tov_key=tov_key,
+        cycle_key=cycle_key,
+        root_uid=trigger_request.root_uid,
+        root_key=trigger_request.root_key,
+        element_type=trigger_request.element_type,
+        tree_type=trigger_request.tree_type,
+        filtering=trigger_request.filtering,
+        language=language,
+        llm_config=llm_config,
+        prompt_config=prompt_config,
+        templates_dir=app_config.templates_dir,
+    )
+
+
+def has_required_permissions(
+    token: str,
+    required_permissions: AbstractSet[PermissionWithCode],
+) -> bool:
+    """Check if the JWT token contains all required permissions in its scope."""
+    token_info = jwt.decode(token, options={"verify_signature": False})
+    token_perms = set(token_info.get("perms", []))
+    return all(perm.value in token_perms for perm in required_permissions)

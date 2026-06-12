@@ -1,0 +1,76 @@
+[testbench-ai-service]
+tb_server_url = "https://localhost:9443/api/"
+host = "127.0.0.1"
+port = 8010
+debug = false
+prompts_dir = "C:\\TestBenchAIService\\prompts"
+# tb_ssl_verify = true
+# tb_ssl_ca_bundle = "/path/to/ca-bundle.pem"
+language = "de"
+
+# Global llm configuration
+[testbench-ai-service.llm_config]
+provider = "openai"
+
+# Global logging configuration for console logging
+[testbench-ai-service.logging.console]
+log_level = "INFO"
+log_format = "%(levelname)s: %(message)s"
+
+# Global logging configuration for file logging
+[testbench-ai-service.logging.file]
+file_name = "testbench-ai-service.log"
+log_level = "DEBUG"
+log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
+
+
+# Global agent configurations
+
+# Global agent configuration for test case set reviewer
+[testbench-ai-service.agents.test_case_set_reviewer]
+enabled = true
+endpoint_path = "/test-case-set-reviews"
+class_path = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
+
+# Global prompt configuration for test case set reviewer
+[testbench-ai-service.agents.test_case_set_reviewer.prompt]
+file = "test_case_set_reviewer/prompt.yaml"
+
+# Optional: supply user-provided variables for prompt templates (accessible as {{ vars.<key> }})
+# [testbench-ai-service.agents.test_case_set_reviewer.prompt.vars]
+# glossary = "ABS = Anti-lock Braking System\nESC = Electronic Stability Control"
+
+# Global agent configuration for test case set describer
+[testbench-ai-service.agents.test_case_set_describer]
+enabled = true
+endpoint_path = "/test-case-set-descriptions"
+class_path = "testbench_ai_service.agents.test_case_set_describer.agent.TestCaseSetDescriber"
+
+# Global prompt configuration for test case set describer
+[testbench-ai-service.agents.test_case_set_describer.prompt]
+file = "test_case_set_describer/prompt.yaml"
+
+# Global agent configuration for defect explainer
+[testbench-ai-service.agents.defect_explainer]
+enabled = true
+endpoint_path = "/defect-explanations"
+class_path = "testbench_ai_service.agents.defect_explainer.agent.DefectExplainer"
+
+# Global prompt configuration for defect explainer
+[testbench-ai-service.agents.defect_explainer.prompt]
+file = "defect_explainer/prompt.yaml"
+
+
+# Project-specific configurations (override global configurations)
+
+[testbench-ai-service.projects."Car Configurator"]
+language = "en"
+
+# Project-specific agent configuration for test case set reviewer (override global reviewer agent configuration)
+[testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer]
+enabled = false
+
+# Project-specific prompt configuration for test case set reviewer (override global reviewer prompt configuration)
+[testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer.prompt]
+file = "CarConfigurator_reviews_prompt.yaml"
+name = "TestCaseSetReviewer"

@@ -1,0 +1,13 @@
+<html>
+  <body>
+    <b>AI Review - {{ current_time }}</b><br/>
+    {{ review_notes }}
+    <div style='padding-top: 5px;'>
+      <div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>AI-generated responses may be inaccurate.</div>
+    </div>
+    {% if previous_review_comment %}
+    <br/>
+    {{ previous_review_comment }}
+    {% endif %}
+  </body>
+</html>

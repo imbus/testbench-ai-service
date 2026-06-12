@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Test Case Set Reviewer"
+summary: "Review test case sets"
+description: >
+  This agent reviews the specified test case sets.
+  The review results are added to the review comments field of the corresponding test case set specifications.
+default_model: "gpt-5.5"
+default_variant: "Full Review"
+variants:
+  - name: "Full Review"
+    description: "Comprehensive ISTQB/ISO 29119 quality review. Examines naming, description, step formulation, validation coverage, and consistency."
+    model: "gpt-5.5"
+    vars:
+      glossary:
+        name: "Glossary"
+        description: "Optional glossary of project-specific keyword terms. When provided, test step names are checked for compliance."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "system"
+        file: "full_review_system.jinja"
+      - role: "user"
+        file: "full_review_user.jinja"
+  - name: "Quick Review"
+    description: "Lightweight structural review focused on missing validation steps, generic names, incorrect step form, and glossary mismatches when a glossary is provided."
+    model: "gpt-5.5"
+    vars:
+      glossary:
+        name: "Glossary"
+        description: "Optional glossary of project-specific keyword terms. When provided, test step names are checked for compliance."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "system"
+        file: "quick_review_system.jinja"
+      - role: "user"
+        file: "quick_review_user.jinja"

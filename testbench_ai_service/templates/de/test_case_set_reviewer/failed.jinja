@@ -1,0 +1,10 @@
+<html>
+  <body>
+    <b>KI-Review fehlgeschlagen - {{ current_time }}</b><br/>
+    Bitte kontaktieren Sie den Systemadministrator für weitere Details.
+    {% if previous_review_comment %}
+    <br/><br/>
+    {{ previous_review_comment }}
+    {% endif %}
+  </body>
+</html>

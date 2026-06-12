@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Defect Explainer"
+summary: "Generate defect explanations"
+description: >
+  This agent generates defect explanations for the specified test case sets.
+  The generated explanations are added to the comment section of the corresponding
+  test case set execution overview.
+default_model: "gpt-5.5"
+default_variant: "Detailed Explanation"
+variants:
+  - name: "Detailed Explanation"
+    description: "Structured failure analysis with focused step-by-step examination. Produces a business-readable one-sentence summary."
+    model: "gpt-5.5"
+    vars:
+      validate_output:
+        name: "Validate Output"
+        description: "When enabled, the model performs a self-check before returning the result to ensure the output is exactly one plain-text sentence without technical terms."
+        value_type: "boolean"
+        required: false
+    messages:
+      - role: "system"
+        file: "detailed_explanation_system.jinja"
+      - role: "user"
+        file: "detailed_explanation_user.jinja"

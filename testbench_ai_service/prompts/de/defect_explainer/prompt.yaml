@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Fehler-Erklärer"
+summary: "Fehlererklärungen generieren"
+description: >
+  Dieser Agent generiert Fehlererklärungen für die angegebenen Testfallsätze.
+  Die generierten Erklärungen werden in das Bemerkungsfeld der jeweiligen
+  Testfallsatz-Durchführungsübersicht eingetragen.
+default_model: "gpt-5.5"
+default_variant: "Detaillierte Erklärung"
+variants:
+  - name: "Detaillierte Erklärung"
+    description: "Strukturierte Fehleranalyse mit fokussierter Schritt-für-Schritt-Untersuchung. Erzeugt eine fachlich verständliche Ein-Satz-Zusammenfassung."
+    model: "gpt-5.5"
+    vars:
+      validate_output:
+        name: "Output Validierung"
+        description: "Wenn aktiviert, führt das Modell vor der Ausgabe eine Selbstprüfung durch, um sicherzustellen, dass die Ausgabe genau ein Klartext-Satz ohne technische Begriffe ist."
+        value_type: "boolean"
+        required: false
+    messages:
+      - role: "system"
+        file: "detaillierte_erklaerung_system.jinja"
+      - role: "user"
+        file: "detaillierte_erklaerung_user.jinja"

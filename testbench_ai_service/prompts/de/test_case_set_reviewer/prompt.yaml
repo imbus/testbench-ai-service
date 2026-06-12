@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Testfallsatz-Reviewer"
+summary: "Testfallsätze reviewen"
+description: >
+  Dieser Agent führt Reviews für die angegebenen Testfallsätze durch.
+  Die Review-Ergebnisse werden als Review-Anmerkungen in das entsprechende Feld
+  der jeweiligen Testfallsatz-Spezifikationen eingetragen.
+default_model: "gpt-5.5"
+default_variant: "Umfassende Prüfung"
+variants:
+  - name: "Umfassende Prüfung"
+    description: "Umfassende ISTQB/ISO 29119-Qualitätsprüfung. Prüft Benennung, Beschreibung, Schrittformulierung, Validierungsabdeckung und Konsistenz."
+    model: "gpt-5.5"
+    vars:
+      glossary:
+        name: "Glossar"
+        description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschrittnamen auf Compliance geprüft."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "system"
+        file: "umfassende_pruefung_system.jinja"
+      - role: "user"
+        file: "umfassende_pruefung_user.jinja"
+  - name: "Kompakte Prüfung"
+    description: "Kompakte Strukturprüfung mit Fokus auf fehlende Validierungsschritte, generische Namen, falsche Schrittform und Glossarabweichungen, wenn ein Glossar vorliegt."
+    model: "gpt-5.5"
+    vars:
+      glossary:
+        name: "Glossar"
+        description: "Optionales Glossar projektspezifischer Schlüsselwörter. Bei Angabe werden Testschrittnamen auf Compliance geprüft."
+        value_type: "text"
+        required: false
+    messages:
+      - role: "system"
+        file: "kompakte_pruefung_system.jinja"
+      - role: "user"
+        file: "kompakte_pruefung_user.jinja"

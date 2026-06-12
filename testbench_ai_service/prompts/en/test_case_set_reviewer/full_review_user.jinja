@@ -1,0 +1,29 @@
+# Test Case Set to Review
+
+## Description (HTML)
+{% if agent.test_case_set_description %}
+```
+{{ agent.test_case_set_description }}
+```
+{% else %}
+No test case set description provided.
+{% endif %}
+
+## Test Case Set Name and Steps
+```
+{{ agent.test_case_set }}
+```
+
+## Parameter Combinations
+{% if agent.parameter_combinations %}
+```
+{{ agent.parameter_combinations }}
+```
+{% else %}
+No parameter combinations provided.
+{% endif %}
+
+# Instruction
+Apply all review criteria systematically.
+Return the output in the specified format.
+Evaluate only - do not suggest improvements or rewrites.
