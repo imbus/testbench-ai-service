@@ -26,6 +26,7 @@ from testbench_ai_service.utils.html_utils import strip_html_body_tags
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
+    get_test_case_set_details,
     get_test_case_set_nodes,
 )
 from testbench_ai_service.utils.testbench_helpers import (
@@ -151,16 +152,21 @@ class TestCaseSetDescriber(Agent):
     ) -> None:
         """Generates a description for a single test case set."""
         try:
-            previous_description = strip_html_body_tags(test_case_set.details.spec.description)
+            test_case = get_test_case_set_details(
+                conn, context.project_key, test_case_set.details.key
+            )
+            current_spec_key = test_case.spec.key
+            previous_description = strip_html_body_tags(test_case.spec.description)
             try:
                 logger.debug(
                     "Sending PATCH request to mark description generation started for test case set '%s'",
                     test_case_set.details.uniqueID,
                 )
+
                 await patch_description_generation_started_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=test_case_set.details.spec.key,
+                    spec_key=current_spec_key,
                     previous_description=previous_description,
                     language=context.language,
                     user_key=context.user_key,
@@ -194,7 +200,7 @@ class TestCaseSetDescriber(Agent):
                 await patch_generated_description_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=test_case_set.details.spec.key,
+                    spec_key=current_spec_key,
                     description=description_response.result,
                     previous_description=previous_description,
                     language=context.language,
@@ -219,7 +225,7 @@ class TestCaseSetDescriber(Agent):
                 await patch_previous_description_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=test_case_set.details.spec.key,
+                    spec_key=current_spec_key,
                     previous_description=previous_description,
                     language=context.language,
                     user_key=context.user_key,
