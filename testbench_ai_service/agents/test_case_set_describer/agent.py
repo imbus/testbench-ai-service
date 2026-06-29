@@ -152,9 +152,9 @@ class TestCaseSetDescriber(Agent):
     ) -> None:
         """Generates a description for a single test case set."""
         try:
-            test_case = get_test_case_set_details(
-                conn, context.project_key, test_case_set.details.key
-            )
+test_case = await asyncio.to_thread(
+    get_test_case_set_details, conn, context.project_key, test_case_set.details.key
+)
             current_spec_key = test_case.spec.key
             previous_description = strip_html_body_tags(test_case.spec.description)
             try:
