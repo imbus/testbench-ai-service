@@ -29,6 +29,7 @@ from testbench_ai_service.utils.html_utils import (
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
+    get_test_case_set_details,
     get_test_case_set_nodes,
 )
 from testbench_ai_service.utils.testbench_helpers import (
@@ -156,7 +157,11 @@ class TestCaseSetReviewer(Agent):
     ) -> None:
         """Performs a review for a single test case set."""
         try:
-            previous_review_comment = strip_html_body_tags(test_case_set.details.spec.reviewComment)
+            test_case = get_test_case_set_details(
+                conn, context.project_key, test_case_set.details.key
+            )
+            current_spec_key = test_case.spec.key
+            previous_review_comment = strip_html_body_tags(test_case.spec.reviewComment)
             try:
                 logger.debug(
                     "Sending PATCH request to mark review started for test case set '%s'",
@@ -165,7 +170,7 @@ class TestCaseSetReviewer(Agent):
                 await patch_review_started_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=test_case_set.details.spec.key,
+                    spec_key=current_spec_key,
                     previous_review_comment=previous_review_comment,
                     language=context.language,
                     user_key=context.user_key,
@@ -199,7 +204,7 @@ class TestCaseSetReviewer(Agent):
                 await patch_review_result_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=test_case_set.details.spec.key,
+                    spec_key=current_spec_key,
                     review_notes=review_response.result,
                     previous_review_comment=previous_review_comment,
                     language=context.language,
@@ -224,7 +229,7 @@ class TestCaseSetReviewer(Agent):
                 await patch_previous_review_comment_for_test_structure_element(
                     conn=conn,
                     project_key=context.project_key,
-                    spec_key=test_case_set.details.spec.key,
+                    spec_key=current_spec_key,
                     previous_review_comment=previous_review_comment,
                     language=context.language,
                     user_key=context.user_key,

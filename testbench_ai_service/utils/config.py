@@ -71,14 +71,14 @@ def copy_default_templates(target_dir: Path, force: bool = False) -> None:
     if target_dir.exists():
         if not force:
             print(
-                f"Prompts directory already exists at '{target_dir.resolve()}'. "
+                f"Templates directory already exists at '{target_dir.resolve()}'. "
                 "Use --force to overwrite."
             )
             sys.exit(1)
         shutil.rmtree(target_dir)
 
     shutil.copytree(TEMPLATES_DIR, target_dir, ignore=_ignore_non_prompt_files)
-    print(f"Default prompts copied to '{target_dir.resolve()}'.")
+    print(f"Default templates copied to '{target_dir.resolve()}'.")
 
 
 def create_default_config_file(
