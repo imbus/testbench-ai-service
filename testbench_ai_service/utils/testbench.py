@@ -125,14 +125,15 @@ def post_project_cycle_structure(
     project_key: str,
     cycle_key: str,
     root_uid: str | None = None,
+    based_on_execution: bool = False,
     filtering: FilteringOptions | None = None,
 ) -> TestStructureTree:
     filters = filtering.appliedFilters if filtering else None
     structure_dict = conn.session.post(
         f"{conn.server_url}2/projects/{project_key}/cycles/{cycle_key}/structure",
-        json=CycleStructureOptions(treeRootUID=root_uid, filters=filters).model_dump(
-            exclude_unset=True
-        ),
+        json=CycleStructureOptions(
+            treeRootUID=root_uid, basedOnExecution=based_on_execution, filters=filters
+        ).model_dump(exclude_unset=True),
     ).json()
     return TestStructureTree(**structure_dict)
 
@@ -163,7 +164,9 @@ def get_test_structure_tree(
     filtering: FilteringOptions | None = None,
 ) -> TestStructureTree:
     if cycle_key is not None:
-        return post_project_cycle_structure(conn, project_key, cycle_key, root_uid, filtering)
+        return post_project_cycle_structure(
+            conn, project_key, cycle_key, root_uid=root_uid, filtering=filtering
+        )
     return post_project_tov_structure(conn, project_key, tov_key, root_uid, filtering)
 
 
