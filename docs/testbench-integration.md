@@ -37,6 +37,50 @@ If you configured HTTPS, use `https://` instead and ensure the TestBench host tr
 
 ---
 
+## AI service plugins in TestBench
+
+This section explains how to enable and run AI service plugins in the TestBench Client.
+
+### Enable plugins for your user
+
+Before using AI features, enable the required plugins for your user profile:
+
+1. Open **Report and Report Management**.
+2. Locate the AI plugins you want to use.
+3. Select **Used by me** for each plugin.
+
+:::note
+If the AI plugins are not visible, contact your TestBench administrator.
+:::
+
+### Open a plugin
+
+You can start AI plugins in two ways.
+
+**Option A: Context menu (standard)**
+
+1. Navigate to the item you want to process (for example, a *Test Case Set*).
+2. Right-click the item and select **Export**.
+3. Select the desired AI plugin.
+
+**Option B: Plugin Quick Access (recommended)**
+
+Add frequently used plugins to **Plugin Quick Access** in **Project Management** for faster access.
+
+### Run the plugin
+
+After opening the plugin, the configuration window appears.
+
+1. Select a variant in **Variant** (for example, *Detailed Explanation*).
+2. If required, expand **Prompt Variables** and provide additional input.
+3. Select **Start**.
+
+**Precheck and errors**
+
+When you select **Start**, TestBench AI Service runs a precheck. If it passes, the AI service generates the result. If it fails, an error message explains what must be corrected.
+
+---
+
 ## Authentication flow
 
 ```
@@ -91,18 +135,19 @@ No separate username/password configuration is needed. The AI Service uses the J
 2. Open [http://127.0.0.1:8010/docs](http://127.0.0.1:8010/docs) in a browser. The Swagger UI should load.
 3. Trigger an AI agent from TestBench. Check the AI Service logs for incoming requests.
 
+
 ---
 
 ## Troubleshooting
 
-| Symptom                | Likely Cause                                | Fix                                                                                                                      |
-| ---------------------- | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `Connection refused` | Service is not running or port mismatch.    | Start the service; verify `host` and `port` in config.                                                               |
-| `401 Unauthorized`   | Missing or invalid JWT token.               | Re-login to TestBench and retry.                                                                                         |
-| `502 Bad Gateway`    | AI Service cannot reach TestBench REST API. | Verify `tb_server_url` in `config.toml` is correct and reachable.                                                    |
-| `404 Not Found`      | Agent disabled for the project.             | Check `enabled = true` in the agent config; check project-specific overrides.                                          |
-| `409 Conflict`       | Precheck failed (e.g., all items locked).   | Unlock the test structure elements in TestBench and retry.                                                               |
-| LLM errors in logs     | Missing or invalid API key.                 | Verify your provider key is set in `.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
+| Symptom                | Likely Cause                                | Fix                                                                                                                     |
+| ---------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `Connection refused` | Service is not running or port mismatch.    | Start the service; verify`host` and `port` in config.                                                               |
+| `401 Unauthorized`   | Missing or invalid JWT token.               | Re-login to TestBench and retry.                                                                                        |
+| `502 Bad Gateway`    | AI Service cannot reach TestBench REST API. | Verify`tb_server_url` in `config.toml` is correct and reachable.                                                    |
+| `404 Not Found`      | Agent disabled for the project.             | Check`enabled = true` in the agent config; check project-specific overrides.                                          |
+| `409 Conflict`       | Precheck failed (e.g., all items locked).   | Unlock the test structure elements in TestBench and retry.                                                              |
+| LLM errors in logs     | Missing or invalid API key.                 | Verify your provider key is set in`.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
 
 ---
 
@@ -111,3 +156,4 @@ No separate username/password configuration is needed. The AI Service uses the J
 - By default the service listens on `127.0.0.1` (loopback only). To accept connections from another machine (e.g., TestBench running on a different host), set `host = "0.0.0.0"` in `config.toml`.
 - If a firewall is in place, open the configured port (default `8010`).
 - For production deployments, consider enabling HTTPS — see [Configuration](configuration.md#https--tls).
+
