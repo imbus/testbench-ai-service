@@ -26,6 +26,7 @@ from testbench_ai_service.models.testbench import (
 )
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
+    fetch_tov_details,
     get_test_case_set_catalog,
     get_test_case_set_nodes,
 )
@@ -69,7 +70,15 @@ class DefectExplainer(Agent):
         Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
         warnings = []
-
+        fetch_test_object_versions = fetch_tov_details(conn, context.project_key, context.tov_key)
+        if fetch_test_object_versions.exchangeFormat != "JSON":
+            msg = get_translation(
+                "defect_explainer.precheck.unsupported_tov_format",
+                context.language,
+                format=fetch_test_object_versions.exchangeFormat,
+            )
+            warnings.append(msg)
+            return PrecheckResult(passed=False, warnings=warnings)
         if not context.cycle_key:
             msg = get_translation("shared.precheck.missing_cycle_key", context.language)
             warnings.append(msg)

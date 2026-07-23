@@ -24,6 +24,7 @@ from testbench_ai_service.models.testbench import (
     TestCaseSetDetails,
     TestCaseSetNode,
     TestStructureTree,
+    TOVDetails,
     TovStructureOptions,
 )
 
@@ -136,6 +137,13 @@ def post_project_cycle_structure(
         ).model_dump(exclude_unset=True),
     ).json()
     return TestStructureTree(**structure_dict)
+
+
+def fetch_tov_details(conn: TBConnection, project_key: str, tov_key: str) -> TOVDetails:
+    tovs = conn.session.get(
+        f"{conn.server_url}2/projects/{project_key}/tovs/{tov_key}",
+    ).json()
+    return TOVDetails(**tovs)
 
 
 def post_project_tov_structure(

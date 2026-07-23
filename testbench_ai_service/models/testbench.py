@@ -123,6 +123,19 @@ class ExecutionMode(str, Enum):
     simulate = "simulate"
 
 
+class ProjectStatus(str, Enum):
+    Planned = "Planned"
+    InProgress = "InProgress"
+    Finished = "Finished"
+    Closed = "Closed"
+
+
+class TOVExchangeFormat(str, Enum):
+    xml = "xml"
+    json = "json"
+    inherit = "inherit"
+
+
 class OptionalUser(BaseModel):
     optional: str | None = None
 
@@ -625,3 +638,17 @@ class ProjectMember(BaseModel):
     projectKey: str
     projectName: str
     roles: list[ProjectRole]
+
+
+class TOVDetails(BaseModel):
+    key: str
+    creationTime: str
+    name: str
+    status: ProjectStatus
+    visibility: bool
+    cyclesCount: int
+    description: str
+    lockerKey: str | None
+    startDate: str | None
+    endDate: str | None
+    exchangeFormat: TOVExchangeFormat
