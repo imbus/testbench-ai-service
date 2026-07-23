@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any, cast
 
 from httpx import Timeout
@@ -174,11 +175,21 @@ class OpenAIClient(LLMClient):
     async def _create_response(
         self, model: str, input_data: str | ResponseInputParam, **kwargs: Any
     ) -> str:
-        response = await self.client.responses.create(
-            model=model,
-            input=input_data,
-            **kwargs,
-        )
+        start_time = time.perf_counter()
+        logger.debug("LLM request: OpenAI model '%s'", model)
+        try:
+            response = await self.client.responses.create(
+                model=model,
+                input=input_data,
+                **kwargs,
+            )
+        except Exception:
+            duration = time.perf_counter() - start_time
+            logger.debug("LLM request failed: OpenAI model '%s' in %.3f seconds", model, duration)
+            raise
+
+        duration = time.perf_counter() - start_time
+        logger.debug("LLM response: OpenAI model '%s' completed in %.3f seconds", model, duration)
         output_text = response.output_text
         if not output_text:
             raise RuntimeError(f"Model '{model}' returned an empty response.")

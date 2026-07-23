@@ -6,6 +6,7 @@ import pytest
 
 from testbench_ai_service.log import (
     ColoredFormatter,
+    RequestIdFilter,
     get_log_config_dict,
     get_log_level_int,
     setup_logging,
@@ -67,6 +68,21 @@ class TestColoredFormatter:
         assert output.endswith("original message")
 
 
+class TestRequestIdFilter:
+    def test_uses_placeholder_when_request_id_is_missing(self):
+        record = logging.LogRecord("test", logging.INFO, "", 0, "message", (), None)
+
+        assert RequestIdFilter().filter(record) is True
+        assert record.request_id == "-"
+
+    def test_preserves_existing_request_id(self):
+        record = logging.LogRecord("test", logging.INFO, "", 0, "message", (), None)
+        record.request_id = "request-123"
+
+        assert RequestIdFilter().filter(record) is True
+        assert record.request_id == "request-123"
+
+
 class TestGetLogLevelInt:
     """get_log_level_int converts string level names to logging integer constants."""
 
@@ -103,7 +119,14 @@ class TestGetLogConfigDict:
         self.result = get_log_config_dict(self.config)
 
     def test_required_top_level_keys_are_present(self):
-        for key in ("version", "disable_existing_loggers", "formatters", "handlers", "loggers"):
+        for key in (
+            "version",
+            "disable_existing_loggers",
+            "filters",
+            "formatters",
+            "handlers",
+            "loggers",
+        ):
             assert key in self.result
 
     def test_console_formatter_uses_colored_formatter_class(self):
@@ -113,6 +136,7 @@ class TestGetLogConfigDict:
 
     def test_file_handler_is_configured_correctly(self):
         file_handler = self.result["handlers"]["file"]
+        assert file_handler["filters"] == ["request_id"]
         assert file_handler["filename"] == self.config.file.file_name
         assert file_handler["encoding"] == "utf_8"
         assert file_handler["maxBytes"] == 1 * 1024 * 1024

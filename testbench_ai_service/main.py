@@ -12,7 +12,7 @@ from testbench_ai_service.agents.routes import get_agent_routers
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import http_exception_handler
 from testbench_ai_service.llm.factory import LLMFactory
-from testbench_ai_service.middlewares import LoggingMiddleware
+from testbench_ai_service.middlewares import LoggingMiddleware, OutboundRequestLoggingMiddleware
 from testbench_ai_service.routes import router
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import load_translations
@@ -55,6 +55,7 @@ def init_middlewares(app: FastAPI):
     """Initialization of app middlewares"""
 
     app.add_middleware(LoggingMiddleware)
+    OutboundRequestLoggingMiddleware.install(app.state.config.tb_server_url)
 
 
 # Define startup and shutdown procedure

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from anthropic import DEFAULT_MAX_RETRIES, NOT_GIVEN, AsyncAnthropic, NotGiven
@@ -156,10 +157,24 @@ class AnthropicClient(LLMClient):
         if "max_tokens" not in kwargs and "thinking" not in kwargs:
             kwargs["max_tokens"] = 4096
 
-        response = await self.client.messages.create(
-            model=model,
-            messages=messages,
-            **kwargs,
+        start_time = time.perf_counter()
+        logger.debug("LLM request: Anthropic model '%s'", model)
+        try:
+            response = await self.client.messages.create(
+                model=model,
+                messages=messages,
+                **kwargs,
+            )
+        except Exception:
+            duration = time.perf_counter() - start_time
+            logger.debug(
+                "LLM request failed: Anthropic model '%s' in %.3f seconds", model, duration
+            )
+            raise
+
+        duration = time.perf_counter() - start_time
+        logger.debug(
+            "LLM response: Anthropic model '%s' completed in %.3f seconds", model, duration
         )
 
         for block in response.content:

@@ -62,6 +62,19 @@ class TestOpenAIClientQueryLlm:
         assert result == "Reasoning response"
         client.client.responses.create.assert_awaited_once()
 
+    @patch("testbench_ai_service.llm.openai.logger")
+    async def test_logs_llm_response_duration(self, mock_logger):
+        client = self._make_client()
+        mock_response = AsyncMock()
+        mock_response.output_text = "Chat response"
+        client.client.responses.create = AsyncMock(return_value=mock_response)
+
+        await client.query_llm("gpt-4o", [Message(role="user", content="Hello")])
+
+        log_messages = [call.args[0] for call in mock_logger.debug.call_args_list]
+        assert any("LLM request: OpenAI" in message for message in log_messages)
+        assert any("LLM response: OpenAI" in message for message in log_messages)
+
 
 class TestAzureOpenAIClientQueryLlm:
     """Tests for ``AzureOpenAIClient``."""
