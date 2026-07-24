@@ -133,7 +133,7 @@ class ProjectStatus(str, Enum):
 class TOVExchangeFormat(str, Enum):
     xml = "xml"
     json = "json"
-    inherit = "inherit"
+    inherited = "inherited"
 
 
 class OptionalUser(BaseModel):
@@ -652,3 +652,30 @@ class TOVDetails(BaseModel):
     startDate: str | None
     endDate: str | None
     exchangeFormat: TOVExchangeFormat
+
+
+class ProjectExchangeFormat(str, Enum):
+    default_xml = "default_xml"
+    default_json = "default_json"
+
+
+class ProjectContext(BaseModel):
+    tovName: str
+    cycleName: str | None = None
+    executionMode: ExecutionMode | None = None
+
+
+class ProjectDetails(BaseModel):
+    key: str
+    creationTime: str
+    name: str
+    status: ProjectStatus
+    visibility: bool
+    tovsCount: int
+    cyclesCount: int
+    description: str
+    lockerKey: str | None
+    startDate: str | None
+    endDate: str | None
+    projectContext: ProjectContext | None
+    exchangeFormat: ProjectExchangeFormat

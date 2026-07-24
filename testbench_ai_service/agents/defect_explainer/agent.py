@@ -1,5 +1,6 @@
 import asyncio
 
+from jwt import warnings
 import requests
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -21,14 +22,18 @@ from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.testbench import (
     ActivityStatus,
     PermissionWithCode,
+    ProjectExchangeFormat,
     ProjectRole,
+    TOVExchangeFormat,
     VerdictStatus,
 )
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
-    fetch_tov_details,
+    get_project_details,
+    get_tov_details,
     get_test_case_set_catalog,
     get_test_case_set_nodes,
+    is_json_based_tov,
 )
 
 
@@ -69,9 +74,9 @@ class DefectExplainer(Agent):
         """
         Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
-        warnings = []
-        fetch_test_object_versions = fetch_tov_details(conn, context.project_key, context.tov_key)
-        if fetch_test_object_versions.exchangeFormat != "json":
+        warnings = []  # noqa: F811
+        fetch_test_object_versions = get_tov_details(conn, context.project_key, context.tov_key)
+        if not is_json_based_tov(conn, context.project_key, context.tov_key):
             msg = get_translation(
                 "defect_explainer.precheck.unsupported_tov_format",
                 context.language,
@@ -79,6 +84,7 @@ class DefectExplainer(Agent):
             )
             warnings.append(msg)
             return PrecheckResult(passed=False, warnings=warnings)
+
         if not context.cycle_key:
             msg = get_translation("shared.precheck.missing_cycle_key", context.language)
             warnings.append(msg)
