@@ -71,7 +71,7 @@ class DefectExplainer(Agent):
         """
         warnings = []
         fetch_test_object_versions = fetch_tov_details(conn, context.project_key, context.tov_key)
-        if fetch_test_object_versions.exchangeFormat != "JSON":
+        if fetch_test_object_versions.exchangeFormat != "json":
             msg = get_translation(
                 "defect_explainer.precheck.unsupported_tov_format",
                 context.language,
