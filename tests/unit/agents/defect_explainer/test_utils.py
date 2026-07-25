@@ -1,3 +1,4 @@
+import re
 import json
 import tempfile
 import zipfile
@@ -18,6 +19,8 @@ from testbench_ai_service.agents.defect_explainer.model import (
 )
 from testbench_ai_service.agents.defect_explainer.utils import (
     add_explanations_to_comment,
+    extract_error_message,
+    message_cell_pattern,
     build_protocol_json,
     build_update_test_case_set,
     clean_up_comment,
@@ -581,3 +584,75 @@ class TestTestCaseExecutionAsStr:
         assert "Details here" in result
         assert "<div>" not in result
         assert "<b>" not in result
+
+
+class TestTb2rfAnchors:
+    """tb2rf >= 1.2 marks its comment cells with 'data-tb-*' attributes."""
+
+    _KEYWORD_COMMENT = (
+        "<table>"
+        "<tr data-tb-role='structure'>"
+        "<td data-tb-role='status'><span>FAIL</span></td>"
+        "<td data-tb-role='level'></td>"
+        "<td data-tb-role='text'><b>BuiltIn.Should Be Equal</b>&nbsp;&nbsp;a&nbsp;&nbsp;b</td>"
+        "<td></td><td>10:00:00.000</td></tr>"
+        "<tr data-tb-role='message' data-tb-level='FAIL'>"
+        "<td data-tb-role='status'></td>"
+        "<td data-tb-role='level'><span>FAIL</span></td>"
+        "<td data-tb-role='text'><span>Example Domain != AKShgdl</span></td>"
+        "<td></td><td>10:00:00.000</td></tr></table>"
+    )
+    _SET_COMMENT = (
+        "<div data-tb-role='test-case-set-execution'><table>"
+        "<tr data-tb-test-case='iTB-TC-20021-PC-30037' data-tb-status='FAIL'>"
+        "<td><b>iTB-TC-20021-PC-30037</b></td>"
+        "<td><span>FAIL</span></td>"
+        "<td data-tb-role='message'><pre>Example Domain != AKShgdl</pre></td>"
+        "</tr></table></div>"
+    )
+
+    def test_error_message_comes_from_the_fail_row(self):
+        assert extract_error_message(self._KEYWORD_COMMENT) == "Example Domain != AKShgdl"
+
+    def test_error_message_falls_back_to_the_legacy_table(self):
+        legacy = "<tr><td><b>FAIL</b></td><td><pre>Example Domain != AKShgdl</pre></td></tr>"
+
+        assert extract_error_message(legacy) == "Example Domain != AKShgdl"
+
+    def test_plain_error_message_is_taken_as_is(self):
+        assert extract_error_message("Example Domain != AKShgdl") == "Example Domain != AKShgdl"
+
+    def test_no_fail_row_yields_no_message(self):
+        assert extract_error_message("<table><tr><td>all good</td></tr></table>") == ""
+
+    def test_message_cell_is_found_by_its_anchor(self):
+        pattern = message_cell_pattern("iTB-TC-20021-PC-30037", "Example Domain != AKShgdl")
+        match = pattern.search(self._SET_COMMENT)
+
+        assert match is not None
+        assert match.group(2) == "Example Domain != AKShgdl"
+
+    def test_a_different_test_case_is_not_matched(self):
+        pattern = message_cell_pattern("iTB-TC-99999-PC-11111", "Example Domain != AKShgdl")
+
+        assert pattern.search(self._SET_COMMENT) is None
+
+    @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
+    def test_explanation_lands_in_the_message_cell(self, mock_get_translation):
+        mock_get_translation.return_value = "KI-Erklärung"
+        errors = [
+            {
+                "failed_test_case": "iTB-TC-20021-PC-30037",
+                "error": self._KEYWORD_COMMENT,
+                "explanation": "The card number is wrong.",
+            }
+        ]
+
+        result = add_explanations_to_comment(
+            comment=self._SET_COMMENT, errors=errors, language=LanguageOption.GERMAN
+        )
+
+        assert "The card number is wrong." in result
+        assert re.search(
+            r"data-tb-role='message'.*?The card number is wrong\.", result, re.DOTALL
+        )
