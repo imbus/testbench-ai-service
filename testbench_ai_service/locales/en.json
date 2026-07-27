@@ -8,6 +8,8 @@
     "test_case_set_describer.run.failed_heading": "AI Description failed",
     "defect_explainer.run.result_heading": "AI Explanation",
     "defect_explainer.run.failed_heading": "AI Explanation failed",
+    "defect_explainer.run.failed_message": "Please contact the system administrator for further details.",
+    "defect_explainer.run.disclaimer": "AI-generated responses may be inaccurate.",
     "defect_explainer.precheck.no_execution_data": "The test case set has no execution data (UID: {uid}).",
     "defect_explainer.precheck.unsupported_verdict": "The execution verdict must be 'To Verify' or 'Fail' (UID: {uid}).",
     "defect_explainer.precheck.execution_not_performed": "The execution status must be 'Performed' (UID: {uid}).",

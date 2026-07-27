@@ -6,10 +6,10 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent, AgentData
 from testbench_ai_service.agents.defect_explainer.utils import (
-    AGENT_KEY,
     add_explanations_to_comment,
     clean_up_comment,
     extract_failed_test_cases,
+    generate_failed_template,
     test_case_execution_as_str,
     update_description,
 )
@@ -25,12 +25,10 @@ from testbench_ai_service.models.testbench import (
     VerdictStatus,
 )
 from testbench_ai_service.utils.i18n import get_translation
-from testbench_ai_service.utils.template_utils import render_template, resolve_template_path
 from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
     get_test_case_set_nodes,
 )
-from testbench_ai_service.utils.time_utils import current_time
 
 
 class DefectExplainerAgentData(AgentData):
@@ -230,33 +228,12 @@ class DefectExplainer(Agent):
                     "Built updated comment with defect explanations for test case set '%s'",
                     test_case_set.details.uniqueID,
                 )
-                template_path = resolve_template_path(
-                    "template.jinja",
-                    templates_dir=context.templates_dir,
-                    language=context.language,
-                    agent_key=AGENT_KEY,
-                )
-                updated_comment = render_template(
-                    template_path,
-                    {
-                        "current_time": current_time(),
-                        "explanation": updated_comment,
-                    },
-                )
+
                 await update_description(updated_comment, test_case_set, conn, context)
 
         except Exception as e:
             comment = clean_up_comment(test_case_set.details.exec.comments)
-            failed_template_path = resolve_template_path(
-                "failed.jinja",
-                templates_dir=context.templates_dir,
-                language=context.language,
-                agent_key=AGENT_KEY,
-            )
-            comment = render_template(
-                failed_template_path,
-                {"current_time": current_time(), "previous_comment": comment},
-            )
+            comment = generate_failed_template(comment, context.language, context.templates_dir)
             await update_description(comment, test_case_set, conn, context)
             logger.error(
                 "generate_defect_explanations_task failed | test_case_set='%s' | data=%s | error=%r",
@@ -301,7 +278,7 @@ class DefectExplainer(Agent):
         #     prompt_config=prompt_config,
         #     agent_data=agent_data,
         # )
-        explanation_response = AgentResult(result="Hello")
+        explanation_response = AgentResult(result="Hello2")
 
         logger.debug(
             "AI explanation response for failed test case '%s' of test case set '%s':\n\t%s",

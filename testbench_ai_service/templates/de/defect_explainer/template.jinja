@@ -1,16 +1,8 @@
-<html>
-  <body>
-    {% if previous_comment %}
-    {{ previous_comment }}<br/><br/>
-    {% endif %}
-    <b>KI-Erklärung - {{ current_time }}</b><br/>
-    {{ explanation }}
-    {% if show_disclaimer %}
-    <div style='padding-top: 5px;'>
-      <div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>
-        KI-generierte Antworten können ungenau sein.
-      </div>
+<div class="ai-explainer">
+  {% if explanation %}{{ explanation }}<br/>{% endif %}
+  <div style='padding-top: 5px;'>
+    <div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>
+      {{ disclaimer }}
     </div>
-    {% endif %}
-  </body>
-</html>
+  </div>
+</div>

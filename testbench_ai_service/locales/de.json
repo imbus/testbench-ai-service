@@ -8,6 +8,8 @@
     "test_case_set_describer.run.failed_heading": "KI-Beschreibung fehlgeschlagen",
     "defect_explainer.run.result_heading": "KI-Erklärung",
     "defect_explainer.run.failed_heading": "KI-Erklärung fehlgeschlagen",
+    "defect_explainer.run.failed_message": "Bitte kontaktieren Sie den Systemadministrator für weitere Details.",
+    "defect_explainer.run.disclaimer": "KI-generierte Antworten können ungenau sein.",
     "defect_explainer.precheck.no_execution_data": "Der Testfallsatz hat keine Ausführungsdaten (UID: {uid}).",
     "defect_explainer.precheck.unsupported_verdict": "Das Durchführungsergebnis muss 'Zu Prüfen' oder 'Fail' sein (UID: {uid}).",
     "defect_explainer.precheck.execution_not_performed": "Der Durchführungsstatus muss 'Durchgeführt' sein (UID: {uid}).",

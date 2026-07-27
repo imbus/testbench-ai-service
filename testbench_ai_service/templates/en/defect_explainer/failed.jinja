@@ -1,8 +1,3 @@
-<html>
-  <body>
-    {% if previous_comment %}
-    {{ previous_comment }}<br/><br/>
-    {% endif %}
-    <b>AI Explanation failed - {{ current_time }}</b><br/>Please contact the system administrator for further details.
-  </body>
-</html>
+<div class="ai-explainer-failed">
+  <b>{{ heading }} - {{ current_time }}</b><br/>{{ message }}
+</div>

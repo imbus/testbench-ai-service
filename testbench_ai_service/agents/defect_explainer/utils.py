@@ -28,6 +28,7 @@ from testbench_ai_service.models.agent import ExecutionContext
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.template_utils import render_template, resolve_template_path
+from testbench_ai_service.utils.time_utils import current_time
 
 AGENT_KEY = "defect_explainer"
 
@@ -305,11 +306,16 @@ def add_explanations_to_comment(
 
     result = str(soup) if matched_any else comment
 
-    for error in unmatched:
-        result = _append_fallback_explanation(result, error, heading, language, templates_dir)
+    # Errors with no matching row are rendered into the single ``ai-explainer`` block
+    # instead of inline; generate_explanation_template makes that block idempotent.
+    fallback_body = "".join(_render_fallback_block(error, heading) for error in unmatched)
+    result = generate_explanation_template(
+        result, language, templates_dir, explanation=fallback_body
+    )
 
-    # BeautifulSoup normalizes attribute quoting to double quotes on output; the
-    # rest of the tooling (and the existing tests) expect the single-quoted marker.
+    # BeautifulSoup (here and inside generate_explanation_template) normalizes attribute
+    # quoting to double quotes on output; the rest of the tooling (and the existing
+    # tests) expect the single-quoted marker.
     return result.replace('<div class="ai">', "<div class='ai'>")
 
 
@@ -398,56 +404,152 @@ def _build_explanation_div(soup: BeautifulSoup, heading: str, explanation: str) 
     return div
 
 
-def _append_fallback_explanation(
-    comment: str,
-    error: dict,
-    heading: str,
-    language: LanguageOption,
-    templates_dir: Path | None = None,
-) -> str:
-    """Append an explanation to the end of the comment when no matching row is found."""
+def _render_fallback_block(error: dict, heading: str) -> str:
+    """Render a fallback explanation block for a failed test case with no matching row.
+
+    Used when an error message cannot be located in the HTML comment. The block is
+    placed inside the single ``ai-explainer`` wrapper by :func:`generate_explanation_template`
+    rather than attached inline.
+    """
     test_case_id = html.escape(error.get("failed_test_case", ""))
     explanation = html.escape(error.get("explanation", ""))
-    content = f"<div class='ai'><b>{heading} ({test_case_id}):</b><br/>{explanation}</div>"
-    return add_disclaimer_no_rf_comment(comment, content, language, templates_dir)
+    return f"<div class='ai'><b>{heading} ({test_case_id}):</b><br/>{explanation}</div>"
 
 
-def add_explanation(comment: str, error: dict) -> str:
-    comment = comment.replace("\n", "<br/>")
-    return f"{comment}<br/><b>{error['failed_test_case']}</b>: {error['explanation']}"
+def _remove_ai_blocks(soup: BeautifulSoup, text_anchors: list[str]) -> None:
+    """Remove AI blocks a previous run inserted, so re-runs don't stack them.
+
+    Covers both the success block (``ai-explainer``) and the failure notice
+    (``ai-explainer-failed``). This is what lets a successful run overwrite a stale
+    "explanation failed" notice, and a failed run overwrite a stale explanation.
+
+    TestBench stores comments as ``<html><body>...</body></html>`` and re-serialises
+    them through an HTML sanitiser that can drop ``class`` attributes. So we match on
+    two kinds of anchor: the marker classes (intact within our own pipeline) and, as a
+    fallback, the block's distinctive sentence (disclaimer / failure message) — plain
+    text content always survives the round trip.
+
+    The text fallback is scoped to the direct children of ``<body>`` (where blocks are
+    always appended), so per-test-case explanations nested inside the result tables are
+    never mistaken for a block.
+    """
+    for block in soup.select("div.ai-explainer, div.ai-explainer-failed"):
+        block.decompose()
+
+    anchors = [anchor for anchor in text_anchors if anchor]
+    if not anchors:
+        return
+    container = soup.body or soup
+    for child in list(container.children):
+        if isinstance(child, Tag) and any(anchor in child.get_text() for anchor in anchors):
+            child.decompose()
 
 
-def add_disclaimer_no_rf_comment(
+def _insert_ai_block(comment: str, block_html: str, text_anchors: list[str]) -> str:
+    """Replace any prior AI block(s) in ``comment`` with ``block_html``, kept well-formed.
+
+    The block is appended inside the comment's ``<body>`` (TestBench wraps comments in
+    ``<html><body>...</body></html>``; appending after ``</html>`` is what caused earlier
+    markup to be mangled on re-import).
+    """
+    soup = BeautifulSoup(comment or "", "html.parser")
+    _remove_ai_blocks(soup, text_anchors)
+
+    block = BeautifulSoup(block_html, "html.parser")
+    container = soup.body or soup
+    container.append(block)
+    return str(soup)
+
+
+def generate_explanation_template(
     comment: str,
-    explanation: str,
     language: LanguageOption,
     templates_dir: Path | None = None,
+    explanation: str | None = None,
 ) -> str:
+    """Insert a single AI block into an HTML comment, replacing any block from a prior run.
+
+    The block (heading, optional fallback explanation, disclaimer) is rendered from
+    ``template.jinja`` and appended inside the comment's ``<body>`` so the result stays
+    well-formed — TestBench wraps comments in ``<html><body>...</body></html>``, and
+    appending after ``</html>`` is what caused earlier markup to be mangled on re-import.
+
+    Re-runs stay idempotent via :func:`_remove_ai_blocks`, which strips the old block by
+    class and, as a fallback, by text (robust against TestBench dropping the ``class``
+    attribute). A prior "explanation failed" notice is removed as well, so a successful
+    run overwrites it.
+
+    Args:
+        comment: The current HTML comment; all non-AI content is preserved.
+        language: Language used to resolve the template and localized strings.
+        templates_dir: Base directory for template resolution; defaults to the built-in
+            templates when not provided.
+        explanation: Optional extra HTML rendered inside the block, used for fallback
+            explanations that could not be attached inline.
+
+    Returns:
+        The comment containing exactly one AI block.
+    """
+    disclaimer = get_translation("defect_explainer.run.disclaimer", language)
+    failed_message = get_translation("defect_explainer.run.failed_message", language)
+
     template_path = resolve_template_path(
-        "fallback.jinja",
+        "template.jinja",
         templates_dir=templates_dir or TEMPLATES_DIR,
         language=language,
         agent_key=AGENT_KEY,
     )
-    content_to_insert = render_template(
+    block_html = render_template(
         template_path,
-        {"explanation": explanation},
-    ).strip()
+        {
+            "disclaimer": disclaimer,
+            "explanation": explanation or "",
+        },
+    )
 
-    if '<div class="ai-explainer">' in comment:
-        if "</body>" in comment:
-            return re.sub(
-                r'<div class="ai-explainer">.*?(?=</body>)',
-                content_to_insert + "\n",
-                comment,
-                flags=re.DOTALL,
-            )
-        return re.sub(r'<div class="ai-explainer">.*', content_to_insert, comment, flags=re.DOTALL)
+    return _insert_ai_block(comment, block_html, text_anchors=[disclaimer, failed_message])
 
-    if "<body>" in comment:
-        return comment.replace("</body>", f"{content_to_insert}\n</body>", 1)
 
-    return comment + content_to_insert
+def generate_failed_template(
+    comment: str,
+    language: LanguageOption,
+    templates_dir: Path | None = None,
+) -> str:
+    """Insert a single "explanation failed" notice, replacing any block from a prior run.
+
+    Mirrors :func:`generate_explanation_template` for the error path: it removes both a
+    prior success block and a prior failure notice before appending a fresh notice inside
+    ``<body>``, so notices never stack and a new failure overwrites a stale explanation.
+
+    Args:
+        comment: The current HTML comment; all non-AI content is preserved.
+        language: Language used to resolve the template and localized strings.
+        templates_dir: Base directory for template resolution; defaults to the built-in
+            templates when not provided.
+
+    Returns:
+        The comment containing exactly one failure notice.
+    """
+    heading = get_translation("defect_explainer.run.failed_heading", language)
+    message = get_translation("defect_explainer.run.failed_message", language)
+    disclaimer = get_translation("defect_explainer.run.disclaimer", language)
+
+    template_path = resolve_template_path(
+        "failed.jinja",
+        templates_dir=templates_dir or TEMPLATES_DIR,
+        language=language,
+        agent_key=AGENT_KEY,
+    )
+    block_html = render_template(
+        template_path,
+        {
+            "current_time": current_time(),
+            "heading": heading,
+            "message": message,
+        },
+    )
+
+    return _insert_ai_block(comment, block_html, text_anchors=[disclaimer, message])
 
 
 def extract_failed_test_cases(test_case_set):

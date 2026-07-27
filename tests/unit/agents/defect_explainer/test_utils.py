@@ -23,11 +23,14 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     clean_up_comment,
     create_import_zip,
     custom_serializer,
+    generate_explanation_template,
+    generate_failed_template,
     import_data,
 )
 from testbench_ai_service.agents.defect_explainer.utils import (
     test_case_execution_as_str as _tce_as_str,
 )
+from testbench_ai_service.config import TEMPLATES_DIR
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
     ActivityStatus,
@@ -42,6 +45,21 @@ from testbench_ai_service.models.testbench import (
     TestCaseSummary,
     VerdictStatus,
 )
+from testbench_ai_service.utils.i18n import get_translation as _real_get_translation
+from testbench_ai_service.utils.i18n import load_translations
+
+# Real localized strings, keyed by translation key, so the disclaimer stays distinct
+# from the heading (mirrors production and avoids false text matches during removal).
+_FAKE_TRANSLATIONS = {
+    "defect_explainer.run.result_heading": "KI-Erklärung",
+    "defect_explainer.run.failed_heading": "KI-Erklärung fehlgeschlagen",
+    "defect_explainer.run.failed_message": "Bitte kontaktieren Sie den Systemadministrator für weitere Details.",
+    "defect_explainer.run.disclaimer": "KI-generierte Antworten können ungenau sein.",
+}
+
+
+def _fake_translation(key, language=None, **kwargs):
+    return _FAKE_TRANSLATIONS.get(key, key)
 
 
 @dataclass
@@ -179,7 +197,7 @@ class TestAddExplanationsToComment:
 
     @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
     def test_appends_explanation_heading_and_text(self, mock_get_translation):
-        mock_get_translation.return_value = "KI-Erklärung"
+        mock_get_translation.side_effect = _fake_translation
         result = add_explanations_to_comment(
             comment=self._FAIL_COMMENT,
             errors=self._ERRORS,
@@ -200,7 +218,7 @@ class TestAddExplanationsToComment:
             "<td><pre>Example Domain != AKShgdl"
             "<b>KI-Erklärung:</b><br>nothing went wrong</div></pre></td></tr></table>"
         )
-        mock_get_translation.return_value = "KI-Erklärung"
+        mock_get_translation.side_effect = _fake_translation
         result = add_explanations_to_comment(
             comment=comment_with_old_explanation,
             errors=self._ERRORS,
@@ -221,7 +239,7 @@ class TestAddExplanationsToComment:
             "<td><pre>Example Domain != AKShgdl"
             "<div class='ai'><b>KI-Erklärung:</b><br>old explanation</div></pre></td></tr></table>"
         )
-        mock_get_translation.return_value = "KI-Erklärung"
+        mock_get_translation.side_effect = _fake_translation
         result = add_explanations_to_comment(
             comment=comment_with_ai_div,
             errors=self._ERRORS,
@@ -234,7 +252,7 @@ class TestAddExplanationsToComment:
     @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
     def test_explanation_html_special_chars_are_escaped(self, mock_get_translation):
         """AI-generated explanation with HTML-special characters must be escaped."""
-        mock_get_translation.return_value = "KI-Erklärung"
+        mock_get_translation.side_effect = _fake_translation
         errors_with_html = [
             {
                 "failed_test_case": "iTB-TC-20021-PC-30037",
@@ -255,7 +273,7 @@ class TestAddExplanationsToComment:
     @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
     def test_empty_comment_returns_empty_string(self, mock_get_translation):
         """An empty comment (no HTML table) should be returned unchanged."""
-        mock_get_translation.return_value = "KI-Erklärung"
+        mock_get_translation.side_effect = _fake_translation
         result = add_explanations_to_comment(
             comment="", errors=self._ERRORS, language=LanguageOption.GERMAN
         )
@@ -263,7 +281,7 @@ class TestAddExplanationsToComment:
 
     @patch("testbench_ai_service.agents.defect_explainer.utils.get_translation")
     def test_missing_error_message_adds_explanation_to_bottom_fallback(self, mock_get_translation):
-        mock_get_translation.side_effect = ["KI-Erklärung", "KI-Hinweis"]
+        mock_get_translation.side_effect = _fake_translation
         errors_without_parseable_message = [
             {
                 "failed_test_case": "iTB-TC-20021-PC-30037",
@@ -281,6 +299,160 @@ class TestAddExplanationsToComment:
         assert 'class="ai-explainer"' in result
         assert "fallback explanation" in result
         assert "iTB-TC-20021-PC-30037" in result
+
+
+class TestGenerateExplanationTemplate:
+    """Tests for ``generate_explanation_template``."""
+
+    _DISCLAIMER_STYLE = "border-top: 1px solid black; width: 218px; font-size: 10px;"
+    # A TestBench-stored comment: a full HTML document (comments always come back
+    # wrapped in <html><body>...</body></html>).
+    _TB_COMMENT = "<html><body><table>results</table></body></html>"
+
+    @pytest.fixture(autouse=True)
+    def _load_translations(self):
+        """Populate the real de/en strings so the disclaimer is localized."""
+        load_translations()
+
+    @staticmethod
+    def _disclaimer_text(language):
+        return _real_get_translation("defect_explainer.run.disclaimer", language)
+
+    @pytest.mark.parametrize("language", [LanguageOption.GERMAN, LanguageOption.ENGLISH])
+    def test_first_run_renders_single_block_inside_body(self, language):
+        result = generate_explanation_template(self._TB_COMMENT, language, TEMPLATES_DIR)
+        assert result.count(self._DISCLAIMER_STYLE) == 1
+        assert result.count('<div class="ai-explainer">') == 1
+        assert "<table>results</table>" in result
+        # the block must live inside <body>, not trail after </html>
+        assert result.rstrip().endswith("</html>")
+        assert 'ai-explainer">' not in result.split("</body>")[-1]
+
+    @pytest.mark.parametrize("language", [LanguageOption.GERMAN, LanguageOption.ENGLISH])
+    def test_rerun_does_not_stack_disclaimer_or_wrapper(self, language):
+        """Feeding a previously rendered comment back in keeps exactly one AI block."""
+        first = generate_explanation_template(self._TB_COMMENT, language, TEMPLATES_DIR)
+        second = generate_explanation_template(first, language, TEMPLATES_DIR)
+        assert second.count(self._DISCLAIMER_STYLE) == 1
+        assert second.count('<div class="ai-explainer">') == 1
+        assert "<table>results</table>" in second
+
+    @pytest.mark.parametrize("language", [LanguageOption.GERMAN, LanguageOption.ENGLISH])
+    def test_fallback_explanation_is_rendered_into_the_block(self, language):
+        result = generate_explanation_template(
+            self._TB_COMMENT, language, TEMPLATES_DIR, explanation="<div class='ai'>boom</div>"
+        )
+        assert "boom" in result
+
+    @pytest.mark.parametrize("language", [LanguageOption.GERMAN, LanguageOption.ENGLISH])
+    def test_rerun_dedupes_even_when_class_attribute_was_stripped(self, language):
+        """The real failure mode: TestBench drops ``class`` on the round trip.
+
+        The prior block must still be recognized by its disclaimer text and replaced,
+        so the disclaimer is not duplicated.
+        """
+        disclaimer = self._disclaimer_text(language)
+        # simulate what TestBench returns: our block, but with class="ai-explainer"
+        # sanitised away, nested inside <body>
+        sanitized = (
+            "<html><body><table>results</table>"
+            "<div>"
+            "<div style='padding-top: 5px;'>"
+            f"<div style='{self._DISCLAIMER_STYLE}'>{disclaimer}</div>"
+            "</div></div></body></html>"
+        )
+        result = generate_explanation_template(sanitized, language, TEMPLATES_DIR)
+        assert result.count(disclaimer) == 1
+        assert result.count(self._DISCLAIMER_STYLE) == 1
+        assert "<table>results</table>" in result
+
+    def test_fallback_explanation_is_carried_inside_the_single_block(self):
+        first = generate_explanation_template(
+            self._TB_COMMENT,
+            LanguageOption.ENGLISH,
+            TEMPLATES_DIR,
+            explanation="<div class='ai'>fallback text</div>",
+        )
+        # re-running with a fresh fallback body must not leave the old one behind
+        second = generate_explanation_template(
+            first,
+            LanguageOption.ENGLISH,
+            TEMPLATES_DIR,
+            explanation="<div class='ai'>new fallback</div>",
+        )
+        assert "new fallback" in second
+        assert "fallback text" not in second
+        assert second.count('<div class="ai-explainer">') == 1
+
+    def test_defaults_to_builtin_templates_when_dir_is_none(self):
+        """A missing templates_dir falls back to the packaged templates instead of failing."""
+        result = generate_explanation_template(self._TB_COMMENT, LanguageOption.ENGLISH)
+        assert result.count(self._DISCLAIMER_STYLE) == 1
+
+    @pytest.mark.parametrize("language", [LanguageOption.GERMAN, LanguageOption.ENGLISH])
+    def test_success_overwrites_a_previous_failure_notice(self, language):
+        """A successful run removes a stale 'explanation failed' notice from the comment."""
+        failed_comment = generate_failed_template(self._TB_COMMENT, language, TEMPLATES_DIR)
+        failed_msg = _real_get_translation("defect_explainer.run.failed_message", language)
+        assert failed_msg in failed_comment  # sanity: the notice is present first
+
+        success = generate_explanation_template(failed_comment, language, TEMPLATES_DIR)
+        assert failed_msg not in success
+        assert success.count(self._DISCLAIMER_STYLE) == 1
+        assert "<table>results</table>" in success
+
+
+class TestGenerateFailedTemplate:
+    """Tests for ``generate_failed_template``."""
+
+    _TB_COMMENT = "<html><body><table>results</table></body></html>"
+
+    @pytest.fixture(autouse=True)
+    def _load_translations(self):
+        load_translations()
+
+    @staticmethod
+    def _failed_message(language):
+        return _real_get_translation("defect_explainer.run.failed_message", language)
+
+    @pytest.mark.parametrize("language", [LanguageOption.GERMAN, LanguageOption.ENGLISH])
+    def test_inserts_failure_notice_inside_body(self, language):
+        result = generate_failed_template(self._TB_COMMENT, language, TEMPLATES_DIR)
+        assert self._failed_message(language) in result
+        assert result.count('<div class="ai-explainer-failed">') == 1
+        assert "<table>results</table>" in result
+        assert result.rstrip().endswith("</html>")
+        assert "ai-explainer-failed" not in result.split("</body>")[-1]
+
+    @pytest.mark.parametrize("language", [LanguageOption.GERMAN, LanguageOption.ENGLISH])
+    def test_repeated_failures_do_not_stack(self, language):
+        first = generate_failed_template(self._TB_COMMENT, language, TEMPLATES_DIR)
+        second = generate_failed_template(first, language, TEMPLATES_DIR)
+        assert second.count(self._failed_message(language)) == 1
+        assert second.count('<div class="ai-explainer-failed">') == 1
+
+    @pytest.mark.parametrize("language", [LanguageOption.GERMAN, LanguageOption.ENGLISH])
+    def test_failure_overwrites_a_previous_success_block(self, language):
+        success = generate_explanation_template(self._TB_COMMENT, language, TEMPLATES_DIR)
+        disclaimer = _real_get_translation("defect_explainer.run.disclaimer", language)
+        assert disclaimer in success  # sanity
+
+        failed = generate_failed_template(success, language, TEMPLATES_DIR)
+        assert disclaimer not in failed
+        assert self._failed_message(language) in failed
+
+    def test_success_dedupes_failure_even_when_class_stripped(self):
+        """TestBench may drop ``class``; the notice must still be found by its message text."""
+        language = LanguageOption.ENGLISH
+        message = self._failed_message(language)
+        sanitized = (
+            "<html><body><table>results</table>"
+            f"<div><b>AI Explanation failed - 2026-07-27</b><br/>{message}</div>"
+            "</body></html>"
+        )
+        result = generate_explanation_template(sanitized, language, TEMPLATES_DIR)
+        assert message not in result
+        assert "<table>results</table>" in result
 
 
 class TestBuildUpdateTestCaseSet:
