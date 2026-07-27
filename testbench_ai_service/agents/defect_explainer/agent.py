@@ -272,13 +272,12 @@ class DefectExplainer(Agent):
             test_case_set.details.uniqueID,
             list(agent_data.keys()),
         )
-        # explanation_response = await self.get_ai_response(
-        #     llm_client=llm_client,
-        #     llm_config=llm_config,
-        #     prompt_config=prompt_config,
-        #     agent_data=agent_data,
-        # )
-        explanation_response = AgentResult(result="Hello2")
+        explanation_response = await self.get_ai_response(
+            llm_client=llm_client,
+            llm_config=llm_config,
+            prompt_config=prompt_config,
+            agent_data=agent_data,
+        )
 
         logger.debug(
             "AI explanation response for failed test case '%s' of test case set '%s':\n\t%s",

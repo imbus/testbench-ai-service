@@ -309,6 +309,7 @@ def add_explanations_to_comment(
     # Errors with no matching row are rendered into the single ``ai-explainer`` block
     # instead of inline; generate_explanation_template makes that block idempotent.
     fallback_body = "".join(_render_fallback_block(error, heading) for error in unmatched)
+    print(f"Fallback body for unmatched errors: {fallback_body}")
     result = generate_explanation_template(
         result, language, templates_dir, explanation=fallback_body
     )
