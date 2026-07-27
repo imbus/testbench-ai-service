@@ -12,8 +12,6 @@
     "defect_explainer.precheck.unsupported_verdict": "The execution verdict must be 'To Verify' or 'Fail' (UID: {uid}).",
     "defect_explainer.precheck.execution_not_performed": "The execution status must be 'Performed' (UID: {uid}).",
     "defect_explainer.precheck.execution_locked": "The execution is currently locked (UID: {uid}).",
-    "shared.run.disclaimer": "AI-generated responses may be inaccurate.",
-    "shared.run.error_message": "Please contact the system administrator for further details.",
     "shared.precheck.missing_cycle_key": "Missing cycle key. Please select a cycle to continue.",
     "shared.precheck.missing_tov_key": "Missing test object version key. Please select a version to continue.",
     "shared.precheck.spec_locked": "The specification is currently locked (UID: {uid}).",

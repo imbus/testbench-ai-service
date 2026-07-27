@@ -1,0 +1,16 @@
+<html>
+  <body>
+    {% if previous_comment %}
+    {{ previous_comment }}<br/><br/>
+    {% endif %}
+    <b>AI Explanation - {{ current_time }}</b><br/>
+    {{ explanation }}
+    {% if show_disclaimer %}
+    <div style='padding-top: 5px;'>
+      <div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>
+        AI-generated responses may be inaccurate.
+      </div>
+    </div>
+    {% endif %}
+  </body>
+</html>

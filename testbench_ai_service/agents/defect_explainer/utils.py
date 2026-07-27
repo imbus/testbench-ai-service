@@ -8,6 +8,7 @@ from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
 
+from bs4 import BeautifulSoup, NavigableString, Tag
 from testbench2robotframework.json_reader import TestCaseSet, TestCaseSetDetails
 from testbench2robotframework.model import KeywordType, TestCaseDetails, VerdictStatus
 from testbench_cli_reporter.actions import ImportJSONExecutionResults
@@ -21,11 +22,14 @@ from testbench_ai_service.agents.defect_explainer.model import (
     TestCase,
     TestCaseSetProtocol,
 )
+from testbench_ai_service.config import TEMPLATES_DIR
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.utils.i18n import get_translation
-from testbench_ai_service.utils.time_utils import current_time
+from testbench_ai_service.utils.template_utils import render_template, resolve_template_path
+
+AGENT_KEY = "defect_explainer"
 
 _SEPARATOR = "    "
 _VERDICT_WIDTH = 10  # fixed width for verdict padding, e.g. "[Pass]    " or "[Fail]    "
@@ -247,7 +251,12 @@ def build_update_test_case_set(
     return updated_test_case_set_details
 
 
-def add_explanations_to_comment(comment: str, errors: list[dict], language: LanguageOption) -> str:
+def add_explanations_to_comment(
+    comment: str,
+    errors: list[dict],
+    language: LanguageOption,
+    templates_dir: Path | None = None,
+) -> str:
     """Insert AI-generated defect explanations into an HTML test execution comment.
 
     For each entry in ``errors``, the function locates the matching ``<pre>`` block
@@ -262,6 +271,8 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
             - ``"error"`` - the raw error message string used to locate the ``<pre>`` block.
             - ``"explanation"`` - the AI-generated explanation to insert.
         language: The language used for the explanation heading label.
+        templates_dir: Directory to resolve the fallback template from. Defaults to the
+            built-in templates directory when not provided.
 
     Returns:
         The updated HTML string with explanations inserted or replaced.
@@ -276,62 +287,129 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
         ... ]
         >>> add_explanations_to_comment(comment, errors, LanguageOption.ENGLISH)
     """
-    explainer_result_heading_message = get_translation(
-        "defect_explainer.run.result_heading", language
-    )
-    updated_html = comment
-    has_fallback_errors = False
-    fallback_html_buffer = f"<div class='ai-explainer'><br/><b>{explainer_result_heading_message} - {current_time()}</b></div>"
-    for details in errors:
-        try:
-            match = re.search(r"<b>FAIL</b></td><td><pre>([^<]+)</pre>", details.get("error", ""))
-            error_msg = match.group(1) if match else ""
-            if not error_msg:
-                logger.warning(
-                    f"No error message found for error ID: {details['failed_test_case']}"
-                )
-                explanation = details.get("explanation", "")
-                if explanation:
-                    has_fallback_errors = True
-                    fallback_html_buffer = add_explanation(fallback_html_buffer, details)
-                continue
+    if not comment or not comment.strip():
+        return comment
 
-            pattern = rf"({re.escape(details['failed_test_case'])}.*?<pre>)(.*?{re.escape(error_msg)}.*?)(</pre>)"
-            matches = re.findall(pattern, updated_html, flags=re.DOTALL)
+    heading = get_translation("defect_explainer.run.result_heading", language)
+    soup = BeautifulSoup(comment, "html.parser")
 
-            if not matches:
-                logger.warning(f"No matches found for error ID: {details['failed_test_case']}")
-                has_fallback_errors = True
-                fallback_html_buffer = add_explanation(fallback_html_buffer, details)
-                continue
-
-            explanation = details.get("explanation", "")
-            if not explanation:
-                logger.warning(f"No explanation found for error ID: {details['failed_test_case']}")
-                continue
-
-            base_message = (
-                "<div class='ai'><b>"
-                + explainer_result_heading_message
-                + ":</b><br>"
-                + explanation
-                + "</div></pre>"
-            )
-            if "<div class='ai'>" in matches[0][1]:
-                message = error_msg.split("<div class='ai'>", 1)
-                error_base_message = message[0] if len(message) > 0 else error_msg
-                replacement = r"\1" + error_base_message + base_message
-            else:
-                replacement = r"\1" + error_msg + base_message
-
-            updated_html = re.sub(pattern, replacement, updated_html, flags=re.DOTALL)
-        except (KeyError, IndexError, AttributeError) as e:
-            logger.error(f"Error processing error ID {details['failed_test_case']}: {e}")
+    unmatched: list[dict] = []
+    matched_any = False
+    for error in errors:
+        message_pre = _find_message_pre(soup, error)
+        if message_pre is None:
+            unmatched.append(error)
             continue
+        _insert_explanation_into_pre(soup, message_pre, error, heading)
+        matched_any = True
 
-    if has_fallback_errors:
-        return add_disclaimer_no_rf_comment(updated_html, fallback_html_buffer, language)
-    return add_disclaimer(updated_html, language)
+    result = str(soup) if matched_any else comment
+
+    for error in unmatched:
+        result = _append_fallback_explanation(result, error, heading, language, templates_dir)
+
+    # BeautifulSoup normalizes attribute quoting to double quotes on output; the
+    # rest of the tooling (and the existing tests) expect the single-quoted marker.
+    return result.replace('<div class="ai">', "<div class='ai'>")
+
+
+def _find_message_pre(soup: BeautifulSoup, error: dict) -> Tag | None:
+    """Locate the ``<pre>`` message block belonging to a failed test case.
+
+    A row is considered a match when its ``data-tb-test-case`` attribute equals the
+    error's test case ID, or when the ID appears in the row's text. Within a matching
+    row the explicit ``data-tb-role="message"`` cell is preferred; otherwise any
+    ``<pre>`` whose text contains the raw error message is used.
+    """
+    test_case_id = error.get("failed_test_case", "")
+    error_message = error.get("error", "")
+
+    for row in soup.find_all("tr"):
+        if not _row_matches_test_case(row, test_case_id):
+            continue
+        message_pre = _message_pre_in_row(row, error_message)
+        if message_pre is not None:
+            return message_pre
+    return None
+
+
+def _row_matches_test_case(row: Tag, test_case_id: str) -> bool:
+    if not test_case_id:
+        return False
+    if row.get("data-tb-test-case") == test_case_id:
+        return True
+    return test_case_id in row.get_text()
+
+
+def _message_pre_in_row(row: Tag, error_message: str) -> Tag | None:
+    message_cell = row.find(attrs={"data-tb-role": "message"})
+    if isinstance(message_cell, Tag):
+        pre = message_cell.find("pre")
+        if isinstance(pre, Tag):
+            return pre
+
+    for pre in row.find_all("pre"):
+        if error_message and error_message in pre.get_text():
+            return pre
+    return None
+
+
+def _insert_explanation_into_pre(
+    soup: BeautifulSoup, message_pre: Tag, error: dict, heading: str
+) -> None:
+    """Insert (or replace) the AI explanation inside a message ``<pre>`` block."""
+    _remove_existing_explanation(message_pre, heading)
+    message_pre.append(_build_explanation_div(soup, heading, error.get("explanation", "")))
+
+
+def _remove_existing_explanation(message_pre: Tag, heading: str) -> None:
+    """Strip any previously inserted explanation from a ``<pre>`` block.
+
+    Both the current ``<div class='ai'>`` wrapper and the older un-wrapped
+    ``<b>{heading}:</b>...`` format are removed so re-runs replace rather than
+    accumulate explanations.
+    """
+    for ai_div in message_pre.find_all("div", class_="ai"):
+        ai_div.decompose()
+
+    for bold in message_pre.find_all("b"):
+        if heading not in bold.get_text():
+            continue
+        for sibling in list(bold.next_siblings):
+            if isinstance(sibling, Tag):
+                sibling.decompose()
+            else:
+                sibling.extract()
+        bold.decompose()
+
+
+def _build_explanation_div(soup: BeautifulSoup, heading: str, explanation: str) -> Tag:
+    """Build a ``<div class='ai'>`` node holding the heading and the explanation.
+
+    The explanation text is added as a :class:`NavigableString`, so BeautifulSoup
+    escapes any HTML-special characters on output.
+    """
+    div = soup.new_tag("div", attrs={"class": "ai"})
+    bold = soup.new_tag("b")
+    bold.string = f"{heading}:"
+    div.append(bold)
+    div.append(soup.new_tag("br"))
+    div.append(NavigableString(explanation))
+    return div
+
+
+def _append_fallback_explanation(
+    comment: str,
+    error: dict,
+    heading: str,
+    language: LanguageOption,
+    templates_dir: Path | None = None,
+) -> str:
+    """Append an explanation to the end of the comment when no matching row is found."""
+    test_case_id = html.escape(error.get("failed_test_case", ""))
+    explanation = html.escape(error.get("explanation", ""))
+    content = f"<div class='ai'><b>{heading} ({test_case_id}):</b><br/>{explanation}</div>"
+    return add_disclaimer_no_rf_comment(comment, content, language, templates_dir)
 
 
 def add_explanation(comment: str, error: dict) -> str:
@@ -339,11 +417,22 @@ def add_explanation(comment: str, error: dict) -> str:
     return f"{comment}<br/><b>{error['failed_test_case']}</b>: {error['explanation']}"
 
 
-def add_disclaimer_no_rf_comment(comment: str, explanation: str, language: LanguageOption) -> str:
-    ai_disclaimer = get_translation("shared.run.disclaimer", language)
-    disclaimer = f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{ai_disclaimer}</div></div>"
-
-    content_to_insert = f'<div class="ai-explainer">\n{explanation}\n{disclaimer}\n</div>'
+def add_disclaimer_no_rf_comment(
+    comment: str,
+    explanation: str,
+    language: LanguageOption,
+    templates_dir: Path | None = None,
+) -> str:
+    template_path = resolve_template_path(
+        "fallback.jinja",
+        templates_dir=templates_dir or TEMPLATES_DIR,
+        language=language,
+        agent_key=AGENT_KEY,
+    )
+    content_to_insert = render_template(
+        template_path,
+        {"explanation": explanation},
+    ).strip()
 
     if '<div class="ai-explainer">' in comment:
         if "</body>" in comment:
@@ -359,19 +448,6 @@ def add_disclaimer_no_rf_comment(comment: str, explanation: str, language: Langu
         return comment.replace("</body>", f"{content_to_insert}\n</body>", 1)
 
     return comment + content_to_insert
-
-
-def add_disclaimer(comment: str, language: LanguageOption) -> str:
-    ai_disclaimer = get_translation("shared.run.disclaimer", language)
-    disclaimer = f"<div style='padding-top: 5px;'><div style='border-top: 1px solid black; width: 218px; font-size: 10px;'>{ai_disclaimer}</div></div>"
-    return comment.replace("</table>", "</table>" + disclaimer, 1)
-
-
-def add_error_message(comment: str, language: LanguageOption) -> str:
-    error_message = get_translation("shared.run.error_message", language)
-    failed_heading = get_translation("defect_explainer.run.failed_heading", language)
-    error_message = f"<div><b>{failed_heading}:</b><br/>{error_message}</div>"
-    return comment.replace("</table>", "</table>" + error_message, 1)
 
 
 def extract_failed_test_cases(test_case_set):
