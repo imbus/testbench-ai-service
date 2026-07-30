@@ -6,8 +6,10 @@ from fastapi import HTTPException, status
 from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
-from testbench_ai_service.models.testbench import FilteringOptions
-from testbench_ai_service.utils.agent import build_execution_context
+from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.testbench import MIN_TESTBENCH_VERSION, FilteringOptions
+from testbench_ai_service.utils.agent import build_execution_context, check_min_testbench_version
+from testbench_ai_service.utils.i18n import load_translations
 
 
 def _session_auth(user_key: str = "U1") -> AuthInfo:
@@ -147,3 +149,57 @@ class TestBuildExecutionContextJwtToken:
                 "uc", base_request, MagicMock(), MagicMock(), _jwt_auth(bad_jwt)
             )
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+class TestCheckMinTestbenchVersion:
+    """Tests for ``check_min_testbench_version``."""
+
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        load_translations()
+
+    @staticmethod
+    def _conn(server_version: list[int]) -> MagicMock:
+        conn = MagicMock()
+        conn.server_version = server_version
+        return conn
+
+    @staticmethod
+    def _context() -> MagicMock:
+        context = MagicMock()
+        context.language = LanguageOption.ENGLISH
+        return context
+
+    def test_exact_minimum_version_is_supported(self):
+        conn = self._conn(list(MIN_TESTBENCH_VERSION))
+        assert check_min_testbench_version(self._context(), conn) is None
+
+    def test_newer_version_is_supported(self):
+        conn = self._conn([*MIN_TESTBENCH_VERSION, 7])
+        assert check_min_testbench_version(self._context(), conn) is None
+
+    def test_double_digit_minor_version_is_supported(self):
+        major, minor = MIN_TESTBENCH_VERSION[0], MIN_TESTBENCH_VERSION[1]
+        conn = self._conn([major, minor + 9, 0])
+        assert check_min_testbench_version(self._context(), conn) is None
+
+    def test_outdated_version_returns_failed_precheck_result(self):
+        major, minor = MIN_TESTBENCH_VERSION[0], MIN_TESTBENCH_VERSION[1]
+        conn = self._conn([major, minor - 1, 9])
+
+        result = check_min_testbench_version(self._context(), conn)
+
+        assert result is not None
+        assert result.passed is False
+        assert result.items == []
+        assert len(result.warnings) == 1
+
+    def test_warning_names_both_the_current_and_required_version(self):
+        conn = self._conn([3, 9, 1])
+
+        result = check_min_testbench_version(self._context(), conn)
+
+        assert result is not None
+        warning = result.warnings[0]
+        assert "3.9.1" in warning
+        assert ".".join(map(str, MIN_TESTBENCH_VERSION)) in warning
