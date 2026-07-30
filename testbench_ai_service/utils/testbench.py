@@ -18,12 +18,16 @@ from testbench_ai_service.models.testbench import (
     CycleStructureOptions,
     FilteringOptions,
     GlobalHumanRole,
+    ProjectDetails,
+    ProjectExchangeFormat,
     ProjectMember,
     ProjectRole,
     SpecificationDetailsForUpdate,
+    TOVExchangeFormat,
     TestCaseSetDetails,
     TestCaseSetNode,
     TestStructureTree,
+    TOVDetails,
     TovStructureOptions,
 )
 
@@ -138,6 +142,20 @@ def post_project_cycle_structure(
     return TestStructureTree(**structure_dict)
 
 
+def get_tov_details(conn: TBConnection, project_key: str, tov_key: str) -> TOVDetails:
+    tov_details = conn.session.get(
+        f"{conn.server_url}2/projects/{project_key}/tovs/{tov_key}",
+    ).json()
+    return TOVDetails(**tov_details)
+
+
+def get_project_details(conn: TBConnection, project_key: str) -> ProjectDetails:
+    project_details = conn.session.get(
+        f"{conn.server_url}2/projects/{project_key}",
+    ).json()
+    return ProjectDetails(**project_details)
+
+
 def post_project_tov_structure(
     conn: TBConnection,
     project_key: str,
@@ -244,3 +262,14 @@ def get_test_case_set_nodes(conn: TBConnection, context: ExecutionContext) -> li
         for node in structure.nodes
         if isinstance(node, TestCaseSetNode) and re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
     ]
+
+
+def is_json_based_tov(conn: TBConnection, project_key: str, tov_key: str) -> bool:
+    fetch_test_object_versions = get_tov_details(conn, project_key, tov_key)
+    if fetch_test_object_versions.exchangeFormat == TOVExchangeFormat.json:
+        return True
+    return bool(
+        fetch_test_object_versions.exchangeFormat == TOVExchangeFormat.inherited
+        and get_project_details(conn, project_key).exchangeFormat
+        == ProjectExchangeFormat.default_json
+    )

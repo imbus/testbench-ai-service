@@ -2,7 +2,6 @@
 sidebar_position: 1
 title: Agents
 ---
-
 # Agents
 
 An **agent** is a self-contained AI-driven workflow that the service exposes as an HTTP endpoint. Each agent follows the same lifecycle:
@@ -13,13 +12,19 @@ An **agent** is a self-contained AI-driven workflow that the service exposes as 
 
 ---
 
+:::warning
+Execution-level agents, such as the Defect Explainer, do not support XML-based test-object versions (TOVs).
+:::
+
+---
+
 ## Built-in Agents
 
-| Agent key | Description |
-|-----------|-------------|
-| [`test_case_set_reviewer`](test-case-set-reviewer.md) | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification. |
+| Agent key                                                | Description                                                                                                                                |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| [`test_case_set_reviewer`](test-case-set-reviewer.md)   | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification.                  |
 | [`test_case_set_describer`](test-case-set-describer.md) | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
-| [`defect_explainer`](defect-explainer.md) | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview. |
+| [`defect_explainer`](defect-explainer.md)               | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview.     |
 
 ---
 
@@ -35,23 +40,23 @@ See the [Custom Agent](custom-agent.md) guide for step-by-step instructions.
 
 In addition to the dedicated trigger endpoints, the service exposes a set of generic endpoints that work with any agent by key:
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/agents` | List all configured agents. |
-| `GET` | `/agents/{agent_key}` | Get details for a specific agent. |
-| `GET` | `/agents/{agent_key}/prompt` | Inspect the configured prompt and its variants. |
+| Method   | Endpoint                        | Description                                                          |
+| -------- | ------------------------------- | -------------------------------------------------------------------- |
+| `GET`  | `/agents`                     | List all configured agents.                                          |
+| `GET`  | `/agents/{agent_key}`         | Get details for a specific agent.                                    |
+| `GET`  | `/agents/{agent_key}/prompt`  | Inspect the configured prompt and its variants.                      |
 | `POST` | `/agents/{agent_key}/trigger` | Trigger any agent by key (same request body as dedicated endpoints). |
 
 ### Query parameters
 
 The `GET` endpoints accept the following optional query parameters:
 
-| Parameter | Applies to | Type | Description |
-|-----------|------------|------|-------------|
-| `keys` | `GET /agents` | String (repeatable) | Filter the list by one or more agent keys. |
-| `project_key` | All `GET` endpoints | String | Resolve the agent's effective configuration for the given project key. |
-| `language` | All `GET` endpoints | String | Override language for prompt resolution (`en` or `de`). |
-| `enabled` | `GET /agents` | Boolean | Filter by enabled status. |
+| Parameter       | Applies to           | Type                | Description                                                            |
+| --------------- | -------------------- | ------------------- | ---------------------------------------------------------------------- |
+| `keys`        | `GET /agents`      | String (repeatable) | Filter the list by one or more agent keys.                             |
+| `project_key` | All`GET` endpoints | String              | Resolve the agent's effective configuration for the given project key. |
+| `language`    | All`GET` endpoints | String              | Override language for prompt resolution (`en` or `de`).            |
+| `enabled`     | `GET /agents`      | Boolean             | Filter by enabled status.                                              |
 
 For example, to trigger the Test Case Set Reviewer via the generic endpoint:
 
@@ -89,19 +94,19 @@ All agent trigger endpoints accept the same request body:
 }
 ```
 
-| Field | Type | Description | Required |
-|-------|------|----------|-------------|
-| `project_key` | String | TestBench project key. | Yes |
-| `tov_key` | String | Test-object-version key. | Yes |
-| `cycle_key` | String | Test cycle key (required for defect explanations). | No |
-| `root_uid` | String | Unique ID of the element in TestBench on which the agent was triggered. Limits processing to the subtree rooted at this element. | No |
-| `root_key` | String | Key of the element in TestBench on which the agent was triggered. Alternative to `root_uid` for subtree scoping. | No |
-| `element_type` | String | Type of the element the agent was triggered on (e.g. `"TESTCASESET"`, `"TESTTHEME"`, `"ROOT"`). Provided by the TestBench plugin as part of the execution context. | No |
-| `tree_type` | String | Tree the element belongs to in TestBench (e.g. `"TESTTHEMES"`, `"TESTELEMENTS"`, `"REQUIREMENTS"`). Provided by the TestBench plugin as part of the execution context. | No |
-| `filtering` | Object | Active UI filter state from TestBench at the time of triggering: `appliedFilters` (list of named filters), `excludedTestThemes` (UIDs of collapsed/excluded themes), and `labelFilter` (active label filter string). | No |
-| `language` | String | Override language (`"en"` or `"de"`). | No |
-| `prompt_config` | Object | Override prompt configuration for this request. | No |
-| `llm_config` | Object | Override LLM configuration for this request. | No |
+| Field             | Type   | Description                                                                                                                                                                                                               | Required |
+| ----------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| `project_key`   | String | TestBench project key.                                                                                                                                                                                                    | Yes      |
+| `tov_key`       | String | Test-object-version key.                                                                                                                                                                                                  | Yes      |
+| `cycle_key`     | String | Test cycle key (required for defect explanations).                                                                                                                                                                        | No       |
+| `root_uid`      | String | Unique ID of the element in TestBench on which the agent was triggered. Limits processing to the subtree rooted at this element.                                                                                          | No       |
+| `root_key`      | String | Key of the element in TestBench on which the agent was triggered. Alternative to`root_uid` for subtree scoping.                                                                                                         | No       |
+| `element_type`  | String | Type of the element the agent was triggered on (e.g.`"TESTCASESET"`, `"TESTTHEME"`, `"ROOT"`). Provided by the TestBench plugin as part of the execution context.                                                   | No       |
+| `tree_type`     | String | Tree the element belongs to in TestBench (e.g.`"TESTTHEMES"`, `"TESTELEMENTS"`, `"REQUIREMENTS"`). Provided by the TestBench plugin as part of the execution context.                                               | No       |
+| `filtering`     | Object | Active UI filter state from TestBench at the time of triggering:`appliedFilters` (list of named filters), `excludedTestThemes` (UIDs of collapsed/excluded themes), and `labelFilter` (active label filter string). | No       |
+| `language`      | String | Override language (`"en"` or `"de"`).                                                                                                                                                                                 | No       |
+| `prompt_config` | Object | Override prompt configuration for this request.                                                                                                                                                                           | No       |
+| `llm_config`    | Object | Override LLM configuration for this request.                                                                                                                                                                              | No       |
 
 ### Response
 
@@ -116,14 +121,14 @@ On success, `202 Accepted`:
 
 ### Error responses
 
-| Status | Meaning |
-|--------|---------|
-| `401` | Missing or invalid authorization token. |
+| Status  | Meaning                                                                                     |
+| ------- | ------------------------------------------------------------------------------------------- |
+| `401` | Missing or invalid authorization token.                                                     |
 | `403` | Insufficient permissions or project role. See each agent's page for the exact requirements. |
-| `404` | Agent not found, project not found, or agent is disabled for the project. |
-| `409` | Precheck failed. No items passed validation. |
-| `422` | Invalid request body. The request failed schema validation. |
-| `502` | The service could not reach the TestBench REST API server. |
+| `404` | Agent not found, project not found, or agent is disabled for the project.                   |
+| `409` | Precheck failed. No items passed validation.                                                |
+| `422` | Invalid request body. The request failed schema validation.                                 |
+| `502` | The service could not reach the TestBench REST API server.                                  |
 
 ---
 

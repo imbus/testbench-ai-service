@@ -12,6 +12,7 @@
     "defect_explainer.precheck.unsupported_verdict": "The execution verdict must be 'To Verify' or 'Fail' (UID: {uid}).",
     "defect_explainer.precheck.execution_not_performed": "The execution status must be 'Performed' (UID: {uid}).",
     "defect_explainer.precheck.execution_locked": "The execution is currently locked (UID: {uid}).",
+    "defect_explainer.precheck.unsupported_tov_format": "The AI agent does not support XML-based test object versions. Please use a JSON-based TOV.",
     "shared.run.disclaimer": "AI-generated responses may be inaccurate.",
     "shared.run.error_message": "Please contact the system administrator for further details.",
     "shared.precheck.missing_cycle_key": "Missing cycle key. Please select a cycle to continue.",
