@@ -221,14 +221,14 @@ class TestTriggerTestCaseSetReviews:
         assert response.status_code == 403
 
     def test_unsupported_testbench_version_returns_426(self):
-        self.mock_tb_connection.server_version = [4, 1, 3]
+        self.mock_tb_connection.server_version = [4, 0, 3]
 
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
 
         assert response.status_code == 426
         assert response.json()["detail"] == (
-            "Der KI-Agent erfordert TestBench 4.2 oder neuer. "
-            "Der verbundene TestBench-Server hat die Version 4.1.3. "
+            "Der KI-Agent erfordert TestBench 4.1 oder neuer. "
+            "Der verbundene TestBench-Server hat die Version 4.0.3. "
             "Aktualisieren Sie TestBench und versuchen Sie es erneut."
         )
 

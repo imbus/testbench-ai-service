@@ -9,7 +9,6 @@ from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
-    MIN_TESTBENCH_VERSION,
     ActivityStatus,
     ExecStatus,
     TestCaseSetNode,
@@ -18,6 +17,7 @@ from testbench_ai_service.models.testbench import (
     UserReference,
     VerdictStatus,
 )
+from testbench_ai_service.utils.agent import MIN_TESTBENCH_VERSION
 from testbench_ai_service.utils.i18n import load_translations
 
 
