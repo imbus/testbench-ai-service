@@ -22,6 +22,7 @@ from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     ProjectRole,
 )
+from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.html_utils import (
     extract_text_from_html_body,
     strip_html_body_tags,
@@ -78,6 +79,8 @@ class TestCaseSetReviewer(Agent):
         based on the user's permissions and roles.
         """
         warnings = []
+        if unsupported_version := check_min_testbench_version(context, conn):
+            return unsupported_version
 
         if not context.tov_key:
             msg = get_translation("shared.precheck.missing_tov_key", context.language)

@@ -9,6 +9,10 @@ Automatic generation of descriptive summaries for test case sets. The service an
 
 **Endpoint:** `POST /test-case-set-descriptions`
 
+:::warning
+This agent requires **TestBench 4.1 or newer**. Against an older TestBench server the precheck fails immediately with a `409 Conflict` and an unsupported-version message.
+:::
+
 ## Authorization
 
 The triggering user must hold at least one of the following **project roles**:
@@ -37,9 +41,10 @@ When authenticating with a **JWT token**, the token must also grant all of the f
 
 ## How it works
 
-1. The service retrieves all test case sets from the specified test-object-version (and optional cycle / subtree).
-2. For each test case set, it checks that the **specification tab** is not locked by another user.
-3. Items that pass the precheck are processed concurrently in the background:
+1. The service checks the connected TestBench server version. **TestBench 4.1** is required; against an older server the precheck fails immediately.
+2. The service retrieves all test case sets from the specified test-object-version (and optional cycle / subtree).
+3. For each test case set, it checks that the **specification tab** is not locked by another user.
+4. Items that pass the precheck are processed concurrently in the background:
    - The current description is saved as a backup.
    - A "generation started" marker is written.
    - Test case data (steps, parameters, parameter combinations) is rendered into the prompt template.

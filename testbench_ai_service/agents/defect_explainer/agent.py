@@ -24,6 +24,7 @@ from testbench_ai_service.models.testbench import (
     ProjectRole,
     VerdictStatus,
 )
+from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
@@ -69,6 +70,8 @@ class DefectExplainer(Agent):
         Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
         warnings = []
+        if unsupported_version := check_min_testbench_version(context, conn):
+            return unsupported_version
 
         if not context.cycle_key:
             msg = get_translation("shared.precheck.missing_cycle_key", context.language)
