@@ -31,6 +31,58 @@ _SEPARATOR = "    "
 _VERDICT_WIDTH = 10  # fixed width for verdict padding, e.g. "[Pass]    " or "[Fail]    "
 
 
+# --- Anchors written by testbench2robotframework -----------------------------
+# tb2rf marks the interesting cells of its execution comments with 'data-tb-*'
+# attributes, so they can be found without parsing the styling. The legacy
+# patterns below still read comments written by tb2rf <= 1.1.
+_FAIL_MESSAGE_BY_ANCHOR = re.compile(
+    r"<tr[^>]*data-tb-level=['\"]FAIL['\"][^>]*>.*?"
+    r"<td[^>]*data-tb-role=['\"]text['\"][^>]*>(.*?)</td>",
+    re.DOTALL,
+)
+_FAIL_MESSAGE_LEGACY = re.compile(r"<b>FAIL</b></td><td><pre>([^<]+)</pre>")
+_TAG = re.compile(r"<[^>]+>")
+
+
+def extract_error_message(keyword_comment: str) -> str:
+    """The failure message out of a keyword execution comment written by tb2rf.
+
+    Prefers the 'data-tb-level=\"FAIL\"' row of the structured keyword comment
+    and falls back to the flat table of older tb2rf versions.
+    """
+    comment = keyword_comment or ""
+    match = _FAIL_MESSAGE_BY_ANCHOR.search(comment)
+    if match:
+        return html.unescape(_TAG.sub("", match.group(1))).strip()
+    legacy = _FAIL_MESSAGE_LEGACY.search(comment)
+    if legacy:
+        return legacy.group(1).strip()
+    # A caller may hand over the bare message instead of a comment.
+    return "" if "<" in comment else comment.strip()
+
+
+def message_cell_pattern(test_case_id: str, error_message: str) -> re.Pattern:
+    """Matches the message cell of one test case in a test case set comment.
+
+    Group 1 is everything up to and including the opening '<pre>', group 2 the
+    current content and group 3 the closing tag, so an explanation can be put in
+    place of group 2.
+    """
+    return re.compile(
+        rf"(<tr[^>]*data-tb-test-case=['\"]{re.escape(test_case_id)}['\"][^>]*>.*?"
+        rf"<td[^>]*data-tb-role=['\"]message['\"][^>]*>\s*<pre[^>]*>)(.*?)(</pre>)",
+        re.DOTALL,
+    )
+
+
+def legacy_message_cell_pattern(test_case_id: str, error_message: str) -> re.Pattern:
+    """The pre-1.2 layout, where only the test case ID and a <pre> could be matched."""
+    return re.compile(
+        rf"({re.escape(test_case_id)}.*?<pre[^>]*>)(.*?{re.escape(error_message)}.*?)(</pre>)",
+        re.DOTALL,
+    )
+
+
 async def update_description(
     updated_comment: str, test_case_set: TestCaseSet, conn: TBConnection, context: ExecutionContext
 ):
@@ -279,54 +331,50 @@ def add_explanations_to_comment(comment: str, errors: list[dict], language: Lang
     explainer_result_heading_message = get_translation(
         "defect_explainer.run.result_heading", language
     )
+    if not comment.strip():
+        # Nothing to annotate - do not turn an empty comment into a disclaimer.
+        return comment
     updated_html = comment
     has_fallback_errors = False
     fallback_html_buffer = f"<div class='ai-explainer'><br/><b>{explainer_result_heading_message} - {current_time()}</b></div>"
     for details in errors:
         try:
-            match = re.search(r"<b>FAIL</b></td><td><pre>([^<]+)</pre>", details.get("error", ""))
-            error_msg = match.group(1) if match else ""
-            if not error_msg:
-                logger.warning(
-                    f"No error message found for error ID: {details['failed_test_case']}"
-                )
-                explanation = details.get("explanation", "")
-                if explanation:
-                    has_fallback_errors = True
-                    fallback_html_buffer = add_explanation(fallback_html_buffer, details)
-                continue
-
-            pattern = rf"({re.escape(details['failed_test_case'])}.*?<pre>)(.*?{re.escape(error_msg)}.*?)(</pre>)"
-            matches = re.findall(pattern, updated_html, flags=re.DOTALL)
-
-            if not matches:
-                logger.warning(f"No matches found for error ID: {details['failed_test_case']}")
-                has_fallback_errors = True
-                fallback_html_buffer = add_explanation(fallback_html_buffer, details)
-                continue
-
+            test_case_id = details["failed_test_case"]
             explanation = details.get("explanation", "")
             if not explanation:
-                logger.warning(f"No explanation found for error ID: {details['failed_test_case']}")
+                logger.warning(f"No explanation found for error ID: {test_case_id}")
                 continue
 
-            base_message = (
-                "<div class='ai'><b>"
-                + explainer_result_heading_message
-                + ":</b><br>"
-                + explanation
-                + "</div></pre>"
-            )
-            if "<div class='ai'>" in matches[0][1]:
-                message = error_msg.split("<div class='ai'>", 1)
-                error_base_message = message[0] if len(message) > 0 else error_msg
-                replacement = r"\1" + error_base_message + base_message
-            else:
-                replacement = r"\1" + error_msg + base_message
+            error_msg = extract_error_message(details.get("error", ""))
+            pattern = message_cell_pattern(test_case_id, error_msg)
+            if not pattern.search(updated_html):
+                # Comments written by tb2rf <= 1.1 have no anchors; there the
+                # message can only be found via the test case ID and the text.
+                if not error_msg:
+                    logger.warning(f"No error message found for error ID: {test_case_id}")
+                    has_fallback_errors = True
+                    fallback_html_buffer = add_explanation(fallback_html_buffer, details)
+                    continue
+                pattern = legacy_message_cell_pattern(test_case_id, error_msg)
+                if not pattern.search(updated_html):
+                    logger.warning(f"No matches found for error ID: {test_case_id}")
+                    has_fallback_errors = True
+                    fallback_html_buffer = add_explanation(fallback_html_buffer, details)
+                    continue
 
-            updated_html = re.sub(pattern, replacement, updated_html, flags=re.DOTALL)
+            heading = f"<b>{explainer_result_heading_message}:</b>"
+            # The explanation comes from a language model and may contain '<' or '&'.
+            explanation_block = f"<div class='ai'>{heading}<br>{html.escape(explanation)}</div>"
+
+            def insert(match: re.Match, block: str = explanation_block, mark: str = heading) -> str:
+                # An explanation of an earlier run is replaced, not appended - also
+                # when only its heading survived in the stored comment.
+                current = match.group(2).split("<div class='ai'>", 1)[0].split(mark, 1)[0]
+                return match.group(1) + current + block + match.group(3)
+
+            updated_html = pattern.sub(insert, updated_html, count=1)
         except (KeyError, IndexError, AttributeError) as e:
-            logger.error(f"Error processing error ID {details['failed_test_case']}: {e}")
+            logger.error(f"Error processing error ID {details.get('failed_test_case')}: {e}")
             continue
 
     if has_fallback_errors:
@@ -461,9 +509,14 @@ def _format_html_comment(comment: str) -> str:
     text = re.sub(r"</\s*(p|div|li|tr|table|h[1-6])\s*>", "\n", text, flags=re.IGNORECASE)
     text = re.sub(r"<\s*li[^>]*>", "- ", text, flags=re.IGNORECASE)
     text = re.sub(r"<\s*(script|style)[^>]*>.*?<\s*/\s*\1\s*>", "", text, flags=re.DOTALL)
+    # A table cell ends a column, not a line - keep its content on the same line.
+    text = re.sub(r"</\s*td\s*>", " ", text, flags=re.IGNORECASE)
     text = re.sub(r"<[^>]+>", "", text)
 
     text = html.unescape(text)
+    # tb2rf indents its comment tables with '&nbsp;', which unescapes to U+00A0.
+    # Turn those into ordinary spaces so the trace stays plain text.
+    text = text.replace("\xa0", " ")
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
     lines = [line.strip() for line in text.split("\n")]

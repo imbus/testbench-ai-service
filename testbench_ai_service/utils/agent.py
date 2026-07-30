@@ -8,7 +8,11 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 from testbench_ai_service.auth import AuthInfo, AuthType
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.agent import ExecutionContext, TriggerAgentRequest
+from testbench_ai_service.models.agent import (
+    ExecutionContext,
+    PrecheckResult,
+    TriggerAgentRequest,
+)
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
 )
@@ -17,9 +21,12 @@ from testbench_ai_service.utils.config import (
     get_llm_config,
     get_prompt_config,
 )
+from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_project_name,
 )
+
+MIN_TESTBENCH_VERSION: list[int] = [4, 1]
 
 
 def _extract_jwt_scope(token: str) -> tuple[str, str | None, str | None]:
@@ -140,6 +147,37 @@ def build_execution_context(
         prompt_config=prompt_config,
         templates_dir=app_config.templates_dir,
     )
+
+
+def check_min_testbench_version(
+    context: ExecutionContext,
+    conn: TBConnection,
+) -> PrecheckResult | None:
+    """Check the connected TestBench server against ``MIN_TESTBENCH_VERSION``.
+
+    Intended for use at the start of an agent's ``precheck()``::
+
+        if unsupported_version := check_min_testbench_version(context, conn):
+            return unsupported_version
+
+    Args:
+        context: Execution context; its ``language`` is used for the warning message.
+        conn:    Active TestBench connection whose ``server_version`` is checked.
+
+    Returns:
+        ``None`` if the server version is supported, otherwise a failed
+        ``PrecheckResult`` carrying the localized warning.
+    """
+    if conn.server_version >= MIN_TESTBENCH_VERSION:
+        return None
+
+    msg = get_translation(
+        "routes.error.unsupported_testbench_version",
+        context.language,
+        server_version=".".join(map(str, conn.server_version)),
+        required_version=".".join(map(str, MIN_TESTBENCH_VERSION)),
+    )
+    return PrecheckResult(passed=False, warnings=[msg])
 
 
 def has_required_permissions(

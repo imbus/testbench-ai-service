@@ -20,6 +20,7 @@
     "shared.precheck.spec_locked": "The specification is currently locked (UID: {uid}).",
     "routes.error.insufficient_permissions": "Insufficient permissions to execute the AI agent.",
     "routes.error.insufficient_role": "Insufficient role to execute the AI agent.\nYou need one of the following roles:\n{allowed_roles}",
+    "routes.error.unsupported_testbench_version": "Your current TestBench version {server_version} is not supported. The AI Agent requires version {required_version}.",
     "routes.error.precheck_failed": "The precheck failed.",
     "roles.Administrator": "Administrator",
     "roles.ProjectAdministrator": "Project Administrator",

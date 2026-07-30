@@ -9,6 +9,7 @@ AI-generated explanations for defects found during test execution. The service a
 **Endpoint:** `POST /defect-explanations`
 
 :::warning
+This agent requires **TestBench 4.1 or newer**. Against an older TestBench server the precheck fails immediately with a `409 Conflict` and an unsupported-version message.
 The Defect Explainer does not support XML-based test-object versions (TOVs).
 :::
 
@@ -40,13 +41,14 @@ When authenticating with a **JWT token**, the token must also grant all of the f
 
 ## How it works
 
-1. The service retrieves all test case sets from the specified test-object-version and **cycle** (a `cycle_key` is required).
-2. For each test case set, it applies the following precheck filters. A test case set is included only if **all** conditions are met:
+1. The service checks the connected TestBench server version. **TestBench 4.1** is required; against an older server the precheck fails immediately.
+2. The service retrieves all test case sets from the specified test-object-version and **cycle** (a `cycle_key` is required).
+3. For each test case set, it applies the following precheck filters. A test case set is included only if **all** conditions are met:
    - The **execution tab** is not locked by another user.
    - Execution data exists.
    - The execution **verdict** is `ToVerify`.
    - The execution **activity status** is `Performed`.
-3. Items that pass the precheck are processed concurrently in the background:
+4. Items that pass the precheck are processed concurrently in the background:
    - Failed test cases are extracted from the execution comments.
    - For each failed test case, the test data and error message are rendered into the prompt template.
    - Each prompt is sent to the configured LLM.

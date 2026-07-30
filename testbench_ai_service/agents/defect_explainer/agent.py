@@ -27,6 +27,7 @@ from testbench_ai_service.models.testbench import (
     TOVExchangeFormat,
     VerdictStatus,
 )
+from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_project_details,
@@ -75,6 +76,9 @@ class DefectExplainer(Agent):
         Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
         warnings = []  # noqa: F811
+        if unsupported_version := check_min_testbench_version(context, conn):
+            return unsupported_version
+          
         fetch_test_object_versions = get_tov_details(conn, context.project_key, context.tov_key)
         if not is_json_based_tov(conn, context.project_key, context.tov_key):
             msg = get_translation(

@@ -20,6 +20,7 @@
     "shared.precheck.spec_locked": "Die Spezifikation ist zurzeit gesperrt (UID: {uid}).",
     "routes.error.insufficient_permissions": "Unzureichende Berechtigungen zum Ausführen des KI-Agenten.",
     "routes.error.insufficient_role": "Unzureichende Rolle zum Ausführen des KI-Agenten.\nSie benötigen eine der folgenden Rollen:\n{allowed_roles}",
+    "routes.error.unsupported_testbench_version": "Ihre aktuelle TestBench-Version {server_version} wird nicht unterstützt. Für den KI-Agenten ist Version {required_version} erforderlich.",
     "routes.error.precheck_failed": "Die Vorabprüfung ist fehlgeschlagen.",
     "roles.Administrator": "Administrator",
     "roles.ProjectAdministrator": "Projektadministrator",

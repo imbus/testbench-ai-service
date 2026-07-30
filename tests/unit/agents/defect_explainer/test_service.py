@@ -17,6 +17,7 @@ from testbench_ai_service.models.testbench import (
     UserReference,
     VerdictStatus,
 )
+from testbench_ai_service.utils.agent import MIN_TESTBENCH_VERSION
 from testbench_ai_service.utils.i18n import load_translations
 
 
@@ -35,6 +36,13 @@ def _make_context(**overrides):
     }
     defaults.update(overrides)
     return ExecutionContext(**defaults)
+
+
+def _make_conn(server_version=None):
+    """TestBench connection mock reporting a supported server version by default."""
+    conn = MagicMock()
+    conn.server_version = list(server_version or MIN_TESTBENCH_VERSION)
+    return conn
 
 
 def _make_tc_node(
@@ -89,9 +97,20 @@ class TestDefectExplainerPrecheck:
         load_translations()
         self.service = DefectExplainer()
 
+    async def test_outdated_testbench_version_fails_before_any_lookup(self):
+        context = _make_context()
+        conn = _make_conn(server_version=[4, 0, 9])
+
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes") as mock_nodes:
+            result = await self.service.precheck(context, conn)
+
+        assert not result.passed
+        assert "4.0.9" in result.warnings[0]
+        mock_nodes.assert_not_called()
+
     async def test_returns_failed_when_no_nodes_found(self):
         context = _make_context()
-        conn = MagicMock()
+        conn = _make_conn()
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[]):
             result = await self.service.precheck(context, conn)
@@ -101,7 +120,7 @@ class TestDefectExplainerPrecheck:
 
     async def test_valid_node_passes_and_uid_is_included(self):
         context = _make_context()
-        conn = MagicMock()
+        conn = _make_conn()
         node = _make_tc_node("iTB-TC-1")
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
@@ -112,7 +131,7 @@ class TestDefectExplainerPrecheck:
 
     async def test_root_exec_is_none_adds_warning_and_excludes(self):
         context = _make_context()
-        conn = MagicMock()
+        conn = _make_conn()
         node = _make_tc_node("iTB-TC-1", exec_is_none=True)
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
@@ -124,7 +143,7 @@ class TestDefectExplainerPrecheck:
 
     async def test_verdict_not_to_verify_adds_warning_and_excludes(self):
         context = _make_context()
-        conn = MagicMock()
+        conn = _make_conn()
         node = _make_tc_node("iTB-TC-1", verdict=VerdictStatus.Fail)
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
@@ -136,7 +155,7 @@ class TestDefectExplainerPrecheck:
 
     async def test_status_not_performed_adds_warning_and_excludes(self):
         context = _make_context()
-        conn = MagicMock()
+        conn = _make_conn()
         node = _make_tc_node("iTB-TC-1", status=ActivityStatus.Running)
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
@@ -148,7 +167,7 @@ class TestDefectExplainerPrecheck:
 
     async def test_locked_node_adds_warning_and_is_excluded(self):
         context = _make_context(user_key="U1")
-        conn = MagicMock()
+        conn = _make_conn()
         node = _make_tc_node("iTB-TC-1", locker_key="OTHER_USER")
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):

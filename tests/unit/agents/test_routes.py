@@ -88,6 +88,8 @@ class TestTriggerTestCaseSetReviews:
         self.project_name = "Car Configurator"
 
         self.mock_tb_connection.get_project.return_value = {"name": self.project_name}
+        # The CLI reporter exposes the server version as a list[int], e.g. [4, 2, 1].
+        self.mock_tb_connection.server_version = [4, 2, 0]
 
         reviewer_patcher = patch(
             "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
@@ -217,6 +219,28 @@ class TestTriggerTestCaseSetReviews:
         self.project_roles = [ProjectRole.ReadOnlyDesigner]
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
         assert response.status_code == 403
+
+    def test_unsupported_testbench_version_returns_426(self):
+        self.mock_tb_connection.server_version = [4, 0, 3]
+
+        response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
+
+        assert response.status_code == 426
+        assert response.json()["detail"] == (
+            "Der KI-Agent erfordert TestBench 4.1 oder neuer. "
+            "Der verbundene TestBench-Server hat die Version 4.0.3. "
+            "Aktualisieren Sie TestBench und versuchen Sie es erneut."
+        )
+
+    def test_double_digit_minor_version_is_supported(self):
+        self.mock_tb_connection.server_version = [4, 10, 0]
+
+        with patch("fastapi.BackgroundTasks.add_task"):
+            response = self.client.post(
+                "/test-case-set-reviews", json=self.valid_request.model_dump()
+            )
+
+        assert response.status_code == 202
 
     def test_precheck_lock_lookup_http_403_returns_403(self):
         self.mock_reviewer.precheck = AsyncMock(
