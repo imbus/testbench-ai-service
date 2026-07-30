@@ -237,6 +237,7 @@ The following utilities are available to custom agents. They are the same helper
 |---|---|
 | `get_test_case_set_nodes(conn, context)` | Returns all `TestCaseSetNode` items in scope, respecting `root_uid`, `filtering`, and cycle. Use this in `precheck()` to enumerate the items to process. |
 | `has_required_permissions(token, required_permissions)` | Returns `True` if the JWT token grants all specified `PermissionWithCode` values. Use this in `precheck()` to enforce API token permissions for JWT-authenticated requests. |
+| `check_min_testbench_version(context, conn)` | Returns a failed `PrecheckResult` with a localized message if the connected TestBench server is older than `MIN_TESTBENCH_VERSION` (currently `4.1`), otherwise `None`. Call it at the start of `precheck()` — the built-in agents do the same. Custom agents that work with older servers may skip it or implement their own version check against `conn.server_version`. |
 
 #### `testbench_ai_service.utils.testbench`
 

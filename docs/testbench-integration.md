@@ -18,10 +18,14 @@ Authentication is handled via **JWT tokens**: TestBench passes the current user'
 
 ## Requirements
 
+- **TestBench 4.0 or newer** is required. Older TestBench versions do not provide the AI integration the service relies on.
 - TestBench AI Service is installed and running (see [Quickstart](getting-started/quickstart.md)).
 - The `tb_server_url` in the AI Service config points to the TestBench REST API.
 - The provider API key is set in the environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`).
-- The TestBench version supports the AI Service integration.
+
+:::warning
+TestBench 4.0 is the minimum for the integration as a whole — **individual agents can require a higher TestBench version**. All built-in agents (Test Case Set Reviewer, Test Case Set Describer, Defect Explainer) currently require **TestBench 4.1 or newer**. Each agent checks the connected server version in its precheck and fails with a `409 Conflict` if the server is too old. See the [agent pages](agents/index.md) for the version each agent requires.
+:::
 
 ---
 
@@ -147,6 +151,7 @@ No separate username/password configuration is needed. The AI Service uses the J
 | `502 Bad Gateway`    | AI Service cannot reach TestBench REST API. | Verify`tb_server_url` in `config.toml` is correct and reachable.                                                    |
 | `404 Not Found`      | Agent disabled for the project.             | Check`enabled = true` in the agent config; check project-specific overrides.                                          |
 | `409 Conflict`       | Precheck failed (e.g., all items locked).   | Unlock the test structure elements in TestBench and retry.                                                              |
+| `409 Conflict` with an unsupported-version message | TestBench server is older than the version the triggered agent requires (4.1 for all built-in agents). | Update the TestBench server to the required version or newer.                                                           |
 | LLM errors in logs     | Missing or invalid API key.                 | Verify your provider key is set in`.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
 
 ---
