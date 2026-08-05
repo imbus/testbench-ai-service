@@ -125,7 +125,7 @@ class ExecutionMode(str, Enum):
 
 class ProjectStatus(str, Enum):
     Planned = "Planned"
-    InProgress = "InProgress"
+    Active = "Active"
     Finished = "Finished"
     Closed = "Closed"
 
