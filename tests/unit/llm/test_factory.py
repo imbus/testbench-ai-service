@@ -116,6 +116,41 @@ class TestLLMFactoryCloseClients:
         client_b.close.assert_awaited_once()
 
 
+class TestLLMFactoryCreateClient:
+    @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
+    def test_creates_azure_openai_client(self, mock_azure_client_class):
+        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
+        config.azure_endpoint = "https://example.openai.azure.com"
+        config.api_version = "2024-10-21"
+        config.model_extra = {
+            "deployment_mapping": {"azure-gpt-4o-prod": "gpt-4o"},
+        }
+
+        factory = LLMFactory()
+        client = factory._create_client(LLMProvider.AZURE_OPENAI, config, "azure-key")
+
+        assert client is mock_azure_client_class.return_value
+        mock_azure_client_class.assert_called_once_with(
+            api_key="azure-key",
+            azure_endpoint="https://example.openai.azure.com",
+            api_version="2024-10-21",
+            deployment_mapping={"azure-gpt-4o-prod": "gpt-4o"},
+            azure_ad_token_provider=None,
+            credential=None,
+        )
+
+    def test_invalid_deployment_mapping_raises_value_error(self):
+        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
+        config.azure_endpoint = "https://example.openai.azure.com"
+        config.api_version = "2024-10-21"
+        config.model_extra = {"deployment_mapping": ["invalid"]}
+
+        factory = LLMFactory()
+
+        with pytest.raises(ValueError, match=r"'deployment_mapping' must be a dictionary"):
+            factory._create_client(LLMProvider.AZURE_OPENAI, config, "azure-key")
+
+
 class TestLLMFactoryResolveProvider:
     """Tests for ``LLMFactory._resolve_provider``."""
 
@@ -244,7 +279,7 @@ class TestLLMFactoryEntraIdDispatch:
         mock_api_key.assert_called_once()
 
 
-class TestLLMFactoryCreateClient:
+class TestLLMFactoryCreateAzureClient:
     @patch("testbench_ai_service.llm.factory.create_token_provider")
     @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
     def test_entra_credentials_produce_a_token_provider_client(
