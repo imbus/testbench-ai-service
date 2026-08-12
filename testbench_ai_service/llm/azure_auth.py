@@ -2,8 +2,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from testbench_ai_service.utils.naming import normalize_project_name
+
+if TYPE_CHECKING:
+    from azure.core.credentials_async import AsyncTokenCredential
+    from openai.lib.azure import AsyncAzureADTokenProvider
 
 AZURE_TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default"
 
@@ -73,3 +78,43 @@ def resolve_entra_credentials(project_name: str | None = None) -> EntraIdCredent
         f"Entra ID authentication for {scope} is incompletely configured. "
         f"Missing environment variable(s): {', '.join(missing)}."
     )
+
+
+def create_token_provider(
+    credentials: EntraIdCredentials,
+) -> tuple[AsyncTokenCredential, AsyncAzureADTokenProvider]:
+    """
+    Create an async Azure credential and a matching bearer token provider.
+
+    The credential holds an HTTP session and must be closed by the caller.
+
+    Args:
+        credentials: Entra ID service principal credentials.
+
+    Returns:
+        A tuple of the credential and the async token provider callable that
+        'AsyncAzureOpenAI' accepts as 'azure_ad_token_provider'.
+
+    Raises:
+        ValueError: If the 'azure-identity' package is not installed.
+    """
+    try:
+        # Imported lazily so azure-identity's import cost stays off the startup
+        # path for API-key installations; a missing package becomes this
+        # actionable ValueError instead of a crash at service start.
+        from azure.identity.aio import (  # noqa: PLC0415
+            ClientSecretCredential,
+            get_bearer_token_provider,
+        )
+    except ImportError as e:
+        raise ValueError(
+            "The 'azure-identity' package is required for auth_method = 'entra_id'. "
+            "Install it with 'pip install azure-identity'."
+        ) from e
+
+    credential = ClientSecretCredential(
+        tenant_id=credentials.tenant_id,
+        client_id=credentials.client_id,
+        client_secret=credentials.client_secret,
+    )
+    return credential, get_bearer_token_provider(credential, AZURE_TOKEN_SCOPE)

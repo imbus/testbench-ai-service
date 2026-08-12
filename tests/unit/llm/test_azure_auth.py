@@ -1,7 +1,13 @@
+import builtins
+import sys
+from unittest.mock import MagicMock
+
 import pytest
 
 from testbench_ai_service.llm.azure_auth import (
+    AZURE_TOKEN_SCOPE,
     EntraIdCredentials,
+    create_token_provider,
     resolve_entra_credentials,
 )
 
@@ -102,5 +108,78 @@ class TestResolveEntraCredentialsProject:
 
         with pytest.raises(ValueError, match="Missing environment variable") as exc_info:
             resolve_entra_credentials("Car Configurator")
+
+        assert "super-secret-value" not in str(exc_info.value)
+
+
+def _block_azure_identity_aio_import(monkeypatch):
+    """Make `import azure.identity.aio` fail with ImportError, as if the package were absent."""
+    real_import = builtins.__import__
+
+    def fake_import(name, *args, **kwargs):
+        if name == "azure.identity.aio":
+            raise ImportError("No module named 'azure'")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+
+class TestCreateTokenProvider:
+    def _fake_identity_module(self):
+        module = MagicMock()
+        module.ClientSecretCredential.return_value = MagicMock(name="credential")
+        module.get_bearer_token_provider.return_value = MagicMock(name="provider")
+        return module
+
+    def test_builds_credential_and_provider(self, monkeypatch):
+        module = self._fake_identity_module()
+        monkeypatch.setitem(sys.modules, "azure.identity.aio", module)
+
+        credentials = EntraIdCredentials(
+            tenant_id="tenant-1", client_id="client-1", client_secret="secret-1"
+        )
+        credential, provider = create_token_provider(credentials)
+
+        assert credential is module.ClientSecretCredential.return_value
+        assert provider is module.get_bearer_token_provider.return_value
+        module.ClientSecretCredential.assert_called_once_with(
+            tenant_id="tenant-1",
+            client_id="client-1",
+            client_secret="secret-1",
+        )
+
+    def test_uses_cognitive_services_scope(self, monkeypatch):
+        module = self._fake_identity_module()
+        monkeypatch.setitem(sys.modules, "azure.identity.aio", module)
+
+        create_token_provider(
+            EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s")
+        )
+
+        module.get_bearer_token_provider.assert_called_once_with(
+            module.ClientSecretCredential.return_value,
+            "https://cognitiveservices.azure.com/.default",
+        )
+
+    def test_scope_constant_matches_azure_documentation(self):
+        assert AZURE_TOKEN_SCOPE == "https://cognitiveservices.azure.com/.default"
+
+    def test_missing_azure_identity_raises_actionable_error(self, monkeypatch):
+        _block_azure_identity_aio_import(monkeypatch)
+
+        with pytest.raises(ValueError, match="azure-identity"):
+            create_token_provider(
+                EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s")
+            )
+
+    def test_secret_is_not_in_the_import_error_message(self, monkeypatch):
+        _block_azure_identity_aio_import(monkeypatch)
+
+        with pytest.raises(ValueError, match="azure-identity") as exc_info:
+            create_token_provider(
+                EntraIdCredentials(
+                    tenant_id="t", client_id="c", client_secret="super-secret-value"
+                )
+            )
 
         assert "super-secret-value" not in str(exc_info.value)

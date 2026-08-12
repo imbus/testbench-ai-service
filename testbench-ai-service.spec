@@ -32,6 +32,8 @@ hiddenimports = (
     + collect_submodules("testbench_ai_service")
     + collect_submodules("testbench_cli_reporter")
     + collect_submodules("testbench2robotframework")
+    + collect_submodules("azure.identity")
+    + collect_submodules("msal")
     + [
         # uvicorn server implementation modules loaded by string at runtime
         "uvicorn.lifespan.on",
