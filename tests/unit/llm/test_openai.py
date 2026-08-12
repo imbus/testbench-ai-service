@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from testbench_ai_service.llm.openai import (
     CHAT_MODELS,
@@ -98,3 +98,76 @@ class TestAzureOpenAIClientQueryLlm:
 
         assert result == "Azure chat response"
         client.client.responses.create.assert_awaited_once()
+
+
+class TestAzureOpenAIClientAuthentication:
+    """Tests for how ``AzureOpenAIClient`` passes credentials to the SDK."""
+
+    def test_api_key_mode_passes_key_and_no_token_provider(self):
+        with patch("testbench_ai_service.llm.openai.AsyncAzureOpenAI") as mock_sdk:
+            AzureOpenAIClient(
+                api_key="test-key",
+                azure_endpoint="https://example.openai.azure.com",
+                api_version="2024-10-21",
+            )
+
+        kwargs = mock_sdk.call_args.kwargs
+        assert kwargs["api_key"] == "test-key"
+        assert kwargs["azure_ad_token_provider"] is None
+
+    def test_entra_id_mode_passes_token_provider_and_no_api_key(self):
+        token_provider = MagicMock(name="token_provider")
+
+        with patch("testbench_ai_service.llm.openai.AsyncAzureOpenAI") as mock_sdk:
+            AzureOpenAIClient(
+                api_key=None,
+                azure_endpoint="https://example.openai.azure.com",
+                api_version="2024-10-21",
+                azure_ad_token_provider=token_provider,
+                credential=AsyncMock(),
+            )
+
+        kwargs = mock_sdk.call_args.kwargs
+        assert kwargs["api_key"] is None
+        assert kwargs["azure_ad_token_provider"] is token_provider
+
+    async def test_close_closes_client_and_credential(self):
+        credential = AsyncMock()
+
+        with patch("testbench_ai_service.llm.openai.AsyncAzureOpenAI"):
+            client = AzureOpenAIClient(
+                api_key=None,
+                azure_endpoint="https://example.openai.azure.com",
+                api_version="2024-10-21",
+                azure_ad_token_provider=MagicMock(),
+                credential=credential,
+            )
+        client.client.close = AsyncMock()
+
+        await client.close()
+
+        client.client.close.assert_awaited_once()
+        credential.close.assert_awaited_once()
+
+    async def test_close_without_credential_closes_only_the_client(self):
+        with patch("testbench_ai_service.llm.openai.AsyncAzureOpenAI"):
+            client = AzureOpenAIClient(
+                api_key="test-key",
+                azure_endpoint="https://example.openai.azure.com",
+                api_version="2024-10-21",
+            )
+        client.client.close = AsyncMock()
+
+        await client.close()
+
+        client.client.close.assert_awaited_once()
+
+    def test_deployment_mapping_still_defaults_to_empty_dict(self):
+        with patch("testbench_ai_service.llm.openai.AsyncAzureOpenAI"):
+            client = AzureOpenAIClient(
+                api_key="test-key",
+                azure_endpoint="https://example.openai.azure.com",
+                api_version="2024-10-21",
+            )
+
+        assert client.deployment_mapping == {}
