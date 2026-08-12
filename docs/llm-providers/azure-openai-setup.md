@@ -311,9 +311,18 @@ MY_PROJECT_AZURE_CLIENT_SECRET=project_specific_secret
 ```
 
 If none of the three are set, the project uses the global service principal. If
-only some are set, the service reports an error at startup rather than falling
-back — a partially configured project principal would otherwise authenticate
-silently as an unintended identity.
+only some are set, the service reports an error naming the missing variables
+rather than falling back — a partially configured project principal would
+otherwise authenticate silently as an unintended identity.
+
+:::warning
+This check does not run at service startup for project overrides. The global
+service principal is validated at startup, because the global Azure OpenAI
+client is created then. Project credentials are resolved lazily, the first
+time a request runs against that project — so the service starts cleanly even
+with a half-configured project override, and the error only surfaces on that
+project's first request.
+:::
 
 ---
 
