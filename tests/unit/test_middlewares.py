@@ -46,6 +46,22 @@ class TestLoggingMiddleware:
         calls = [str(c) for c in mock_logger.debug.call_args_list]
         assert any("Request Body" in c for c in calls)
 
+    @patch("testbench_ai_service.middlewares.logger")
+    def test_post_body_is_logged_with_the_api_key_redacted(self, mock_logger):
+        app = FastAPI()
+        app.add_middleware(LoggingMiddleware)
+
+        @app.post("/agent")
+        async def agent():
+            return {"ok": True}
+
+        client = TestClient(app)
+        client.post("/agent", json={"llm_config": {"model": "gpt-4o", "api_key": "sk-abc123"}})
+
+        messages = _rendered(mock_logger)
+        assert any('"api_key": "***"' in m for m in messages)
+        assert not any("sk-abc123" in m for m in messages)
+
 
 def _rendered(mock_logger):
     """Render each debug call the way the handler would, so assertions see the body."""

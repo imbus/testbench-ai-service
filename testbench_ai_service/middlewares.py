@@ -10,7 +10,11 @@ from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from testbench_ai_service.log import logger
-from testbench_ai_service.utils.log_sanitizer import format_body, redact_secrets
+from testbench_ai_service.utils.log_sanitizer import (
+    format_body,
+    format_body_text,
+    redact_secrets,
+)
 
 
 class OutboundRequestLoggingMiddleware:
@@ -105,8 +109,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         if request.method in ("POST", "PUT", "PATCH"):
             body_bytes = await request.body()
             body_text = body_bytes.decode("utf-8", errors="replace") if body_bytes else ""
-            # TODO: sanitize body_text to remove sensitive info
-            logger.debug(f"Request Body: {body_text}")
+            logger.debug("Request Body: %s", format_body_text(body_text))
 
         # Process request and get response
         response = await call_next(request)
