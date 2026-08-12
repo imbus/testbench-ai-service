@@ -1,18 +1,35 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 
-from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.llm.azure_auth import EntraIdCredentials
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.llm.factory import LLMFactory
 
 
-def _make_llm_config(provider=LLMProvider.OPENAI, model="gpt-4o"):
+def _make_llm_config(
+    provider=LLMProvider.OPENAI,
+    model="gpt-4o",
+    auth_method=AzureAuthMethod.API_KEY,
+):
     config = MagicMock()
     config.provider = provider
     config.model = model
     config.model_extra = {}
     config.azure_endpoint = None
     config.api_version = None
+    config.auth_method = auth_method
+    return config
+
+
+def _make_azure_entra_config():
+    config = _make_llm_config(
+        provider=LLMProvider.AZURE_OPENAI,
+        model="gpt-4o",
+        auth_method=AzureAuthMethod.ENTRA_ID,
+    )
+    config.azure_endpoint = "https://example.openai.azure.com"
+    config.api_version = "2024-10-21"
     return config
 
 
@@ -99,39 +116,6 @@ class TestLLMFactoryCloseClients:
         client_b.close.assert_awaited_once()
 
 
-class TestLLMFactoryCreateClient:
-    @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
-    def test_creates_azure_openai_client(self, mock_azure_client_class):
-        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
-        config.azure_endpoint = "https://example.openai.azure.com"
-        config.api_version = "2024-10-21"
-        config.model_extra = {
-            "deployment_mapping": {"azure-gpt-4o-prod": "gpt-4o"},
-        }
-
-        factory = LLMFactory()
-        client = factory._create_client(LLMProvider.AZURE_OPENAI, config, api_key="azure-key")
-
-        assert client is mock_azure_client_class.return_value
-        mock_azure_client_class.assert_called_once_with(
-            api_key="azure-key",
-            azure_endpoint="https://example.openai.azure.com",
-            api_version="2024-10-21",
-            deployment_mapping={"azure-gpt-4o-prod": "gpt-4o"},
-        )
-
-    def test_invalid_deployment_mapping_raises_value_error(self):
-        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
-        config.azure_endpoint = "https://example.openai.azure.com"
-        config.api_version = "2024-10-21"
-        config.model_extra = {"deployment_mapping": ["invalid"]}
-
-        factory = LLMFactory()
-
-        with pytest.raises(ValueError, match=r"'deployment_mapping' must be a dictionary"):
-            factory._create_client(LLMProvider.AZURE_OPENAI, config, api_key="azure-key")
-
-
 class TestLLMFactoryResolveProvider:
     """Tests for ``LLMFactory._resolve_provider``."""
 
@@ -181,3 +165,163 @@ class TestLLMFactoryResolveProvider:
     def test_non_openai_model_names_not_matched_as_openai(self, model):
         factory = LLMFactory()
         assert not factory._is_openai_model(model)
+
+
+class TestLLMFactoryEntraIdDispatch:
+    """Entra ID mode must bypass the API key lookup entirely."""
+
+    @patch.object(LLMFactory, "_create_client")
+    @patch(
+        "testbench_ai_service.llm.factory.resolve_entra_credentials",
+        return_value=EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s"),
+    )
+    @patch.object(LLMFactory, "_get_api_key", side_effect=AssertionError("must not be called"))
+    def test_global_entra_client_does_not_look_up_an_api_key(
+        self, mock_api_key, mock_resolve, mock_create
+    ):
+        factory = LLMFactory()
+        config = _make_azure_entra_config()
+
+        factory.get_client(config)
+
+        mock_api_key.assert_not_called()
+        mock_resolve.assert_called_once_with(None)
+        assert mock_create.call_args.args[2] == EntraIdCredentials(
+            tenant_id="t", client_id="c", client_secret="s"
+        )
+
+    @patch.object(LLMFactory, "_create_client")
+    @patch("testbench_ai_service.llm.factory.resolve_entra_credentials")
+    def test_project_principal_takes_precedence_over_global(self, mock_resolve, mock_create):
+        project_credentials = EntraIdCredentials(
+            tenant_id="tp", client_id="cp", client_secret="sp"
+        )
+        mock_resolve.return_value = project_credentials
+        project_client = MagicMock()
+        mock_create.return_value = project_client
+        factory = LLMFactory()
+        config = _make_azure_entra_config()
+
+        result = factory.get_client(config, project_name="Car Configurator")
+
+        assert result is project_client
+        mock_resolve.assert_called_once_with("Car Configurator")
+        assert mock_create.call_args.args[2] == project_credentials
+
+    @patch.object(LLMFactory, "_create_client")
+    @patch("testbench_ai_service.llm.factory.resolve_entra_credentials")
+    def test_project_without_principal_falls_back_to_global_client(
+        self, mock_resolve, mock_create
+    ):
+        global_credentials = EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s")
+        # First call is the project lookup (None), second is the global lookup.
+        mock_resolve.side_effect = [None, global_credentials]
+        global_client = MagicMock()
+        mock_create.return_value = global_client
+        factory = LLMFactory()
+        config = _make_azure_entra_config()
+
+        result = factory.get_client(config, project_name="Car Configurator")
+
+        assert result is global_client
+        assert mock_resolve.call_args_list == [call("Car Configurator"), call(None)]
+        mock_create.assert_called_once()
+
+    @patch.object(LLMFactory, "_create_client")
+    @patch.object(LLMFactory, "_get_api_key", return_value="azure-key")
+    @patch("testbench_ai_service.llm.factory.resolve_entra_credentials")
+    def test_api_key_mode_does_not_resolve_entra_credentials(
+        self, mock_resolve, mock_api_key, mock_create
+    ):
+        factory = LLMFactory()
+        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
+        config.azure_endpoint = "https://example.openai.azure.com"
+        config.api_version = "2024-10-21"
+
+        factory.get_client(config)
+
+        mock_resolve.assert_not_called()
+        mock_api_key.assert_called_once()
+
+
+class TestLLMFactoryCreateClient:
+    @patch("testbench_ai_service.llm.factory.create_token_provider")
+    @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
+    def test_entra_credentials_produce_a_token_provider_client(
+        self, mock_client_class, mock_token_provider
+    ):
+        credential = MagicMock(name="credential")
+        provider_callable = MagicMock(name="provider")
+        mock_token_provider.return_value = (credential, provider_callable)
+        factory = LLMFactory()
+        config = _make_azure_entra_config()
+
+        factory._create_client(
+            LLMProvider.AZURE_OPENAI,
+            config,
+            EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s"),
+        )
+
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["api_key"] is None
+        assert kwargs["azure_ad_token_provider"] is provider_callable
+        assert kwargs["credential"] is credential
+
+    @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
+    def test_string_credential_produces_an_api_key_client(self, mock_client_class):
+        factory = LLMFactory()
+        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
+        config.azure_endpoint = "https://example.openai.azure.com"
+        config.api_version = "2024-10-21"
+
+        factory._create_client(LLMProvider.AZURE_OPENAI, config, "azure-key")
+
+        kwargs = mock_client_class.call_args.kwargs
+        assert kwargs["api_key"] == "azure-key"
+        assert kwargs["azure_ad_token_provider"] is None
+        assert kwargs["credential"] is None
+
+    @patch("testbench_ai_service.llm.factory.AnthropicClient")
+    def test_claude_model_on_azure_config_creates_an_anthropic_client(self, mock_anthropic):
+        """Regression: the Azure branch must key off the resolved provider."""
+        factory = LLMFactory()
+        config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
+        config.azure_endpoint = "https://example.openai.azure.com"
+        config.api_version = "2024-10-21"
+
+        factory._create_client(LLMProvider.ANTHROPIC, config, "anthropic-key")
+
+        mock_anthropic.assert_called_once()
+
+    def test_entra_credentials_rejected_for_non_azure_provider(self):
+        factory = LLMFactory()
+        config = _make_llm_config(provider=LLMProvider.OPENAI)
+
+        with pytest.raises(ValueError, match="azure_openai"):
+            factory._create_client(
+                LLMProvider.OPENAI,
+                config,
+                EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s"),
+            )
+
+
+class TestLLMFactoryAuthLogging:
+    @patch("testbench_ai_service.llm.factory.create_token_provider")
+    @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
+    def test_logs_entra_id_without_the_secret(self, mock_client, mock_token, caplog):
+        mock_token.return_value = (MagicMock(), MagicMock())
+        factory = LLMFactory()
+        config = _make_azure_entra_config()
+
+        with caplog.at_level("INFO", logger="testbench_ai_service"):
+            factory._create_client(
+                LLMProvider.AZURE_OPENAI,
+                config,
+                EntraIdCredentials(
+                    tenant_id="tenant-1", client_id="client-1", client_secret="secret-value"
+                ),
+            )
+
+        messages = [record.getMessage() for record in caplog.records]
+        assert any("Entra ID" in message for message in messages)
+        assert not any("secret-value" in message for message in messages)
