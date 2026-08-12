@@ -964,7 +964,10 @@ class TestLLMFactoryEntraIdDispatch:
         mock_api_key.assert_called_once()
 
 
-class TestLLMFactoryCreateClient:
+class TestLLMFactoryCreateAzureClient:
+    # NOTE: this name must NOT collide with the pre-existing
+    # `TestLLMFactoryCreateClient` class already in this file. A collision
+    # silently shadows the older class so its tests stop being collected.
     @patch("testbench_ai_service.llm.factory.create_token_provider")
     @patch("testbench_ai_service.llm.factory.AzureOpenAIClient")
     def test_entra_credentials_produce_a_token_provider_client(
@@ -1351,9 +1354,15 @@ MY_PROJECT_AZURE_CLIENT_SECRET=project_specific_secret
 ```
 
 If none of the three are set, the project uses the global service principal. If
-only some are set, the service reports an error at startup rather than falling
-back — a partially configured project principal would otherwise authenticate
-silently as an unintended identity.
+only some are set, the service reports an error naming the missing variables
+rather than falling back — a partially configured project principal would
+otherwise authenticate silently as an unintended identity.
+
+Note the timing differs by scope. Global credentials are validated when the
+service starts, because the global client is created during startup. Project
+credentials are resolved lazily, on the first request against that project, so
+a partially configured project override does not stop the service from
+starting.
 ````
 
 - [ ] **Step 3: Add the troubleshooting rows**
