@@ -168,7 +168,7 @@ a project with its own API key does today.
 
 ### 5. Dependency and packaging
 
-`azure-identity>=1.26.0,<2.0.0` is added to `dependencies` in `pyproject.toml`
+`azure-identity>=1.25.0,<2.0.0` is added to `dependencies` in `pyproject.toml`
 as a hard dependency rather than an optional extra. The shipped artifact is a
 PyInstaller binary; an operator cannot install an extra into a frozen build, so
 an optional dependency would be unusable in practice. It transitively brings in

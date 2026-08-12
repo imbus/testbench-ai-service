@@ -14,7 +14,7 @@
 
 - Default behaviour must not change: `auth_method` defaults to `api_key`, and existing API-key installations keep working exactly as before.
 - The client secret is never logged and never included in an exception message.
-- New dependency floor: `azure-identity>=1.26.0,<2.0.0`.
+- New dependency floor: `azure-identity>=1.25.0,<2.0.0`.
 - Azure token scope, used verbatim: `https://cognitiveservices.azure.com/.default`.
 - Environment variable names, used verbatim: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`; project-scoped variants are prefixed `{NORMALIZED_PROJECT}_`.
 - `AsyncAzureOpenAI.azure_ad_token_provider` requires an **async** provider, so `azure.identity.aio` must be used, not the synchronous `azure.identity`.
@@ -488,13 +488,13 @@ git commit -m "feat: Resolve Entra ID credentials from environment"
 In `pyproject.toml`, add to the `dependencies` list, after the `anthropic` line:
 
 ```toml
-  "azure-identity>=1.26.0,<2.0.0",
+  "azure-identity>=1.25.0,<2.0.0",
 ```
 
 Install it:
 
 ```bash
-.venv/Scripts/python.exe -m pip install "azure-identity>=1.26.0,<2.0.0"
+.venv/Scripts/python.exe -m pip install "azure-identity>=1.25.0,<2.0.0"
 ```
 
 - [ ] **Step 2: Write the failing tests**
