@@ -50,6 +50,10 @@ dependencies = [
   "openai>=2.30.0,<3.0.0",
   "anthropic>=0.97.0,<1.0.0",
   "azure-identity>=1.25.0,<2.0.0",
+  # azure-identity depends on azure-core (not azure-core[aio]); the async
+  # ClientSecretCredential builds an AioHttpTransport pipeline in __init__ and
+  # fails without aiohttp. Declared explicitly so the PyInstaller build sees it.
+  "aiohttp>=3.9,<4.0.0",
   "PyYAML>=6.0.3,<7.0.0",
   "jinja2>=3.1.6,<4.0.0",
   "testbench-cli-reporter>=3.0.0,<4.0.0",

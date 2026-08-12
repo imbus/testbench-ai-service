@@ -3,6 +3,7 @@ import sys
 from unittest.mock import MagicMock
 
 import pytest
+from azure.identity.aio import ClientSecretCredential
 
 from testbench_ai_service.llm.azure_auth import (
     AZURE_TOKEN_SCOPE,
@@ -112,6 +113,34 @@ class TestResolveEntraCredentialsProject:
         assert "super-secret-value" not in str(exc_info.value)
 
 
+class TestEntraIdCredentialsRepr:
+    """The default string form must never carry the client secret."""
+
+    def test_repr_omits_the_client_secret(self):
+        credentials = EntraIdCredentials(
+            tenant_id="tenant-1", client_id="client-1", client_secret="SUPER-SECRET"
+        )
+
+        text = repr(credentials)
+
+        assert "SUPER-SECRET" not in text
+        assert "tenant-1" in text
+        assert "client-1" in text
+
+    def test_str_omits_the_client_secret(self):
+        credentials = EntraIdCredentials(
+            tenant_id="t", client_id="c", client_secret="SUPER-SECRET"
+        )
+
+        assert "SUPER-SECRET" not in str(credentials)
+
+    def test_equality_still_compares_the_client_secret(self):
+        base = EntraIdCredentials(tenant_id="t", client_id="c", client_secret="secret-1")
+
+        assert base == EntraIdCredentials(tenant_id="t", client_id="c", client_secret="secret-1")
+        assert base != EntraIdCredentials(tenant_id="t", client_id="c", client_secret="secret-2")
+
+
 def _block_azure_identity_aio_import(monkeypatch):
     """Make `import azure.identity.aio` fail with ImportError, as if the package were absent."""
     real_import = builtins.__import__
@@ -183,3 +212,54 @@ class TestCreateTokenProvider:
             )
 
         assert "super-secret-value" not in str(exc_info.value)
+
+    def test_import_error_from_credential_construction_is_actionable(self, monkeypatch):
+        """
+        A missing async HTTP transport only fails inside ClientSecretCredential.__init__,
+        so that call must be covered by the ImportError handling too.
+        """
+        module = self._fake_identity_module()
+        module.ClientSecretCredential.side_effect = ImportError(
+            "aiohttp package is not installed"
+        )
+        monkeypatch.setitem(sys.modules, "azure.identity.aio", module)
+
+        with pytest.raises(ValueError, match="azure-identity") as exc_info:
+            create_token_provider(
+                EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s")
+            )
+
+        message = str(exc_info.value)
+        assert "entra_id" in message
+        assert "aiohttp" in message
+
+    def test_non_import_errors_are_not_swallowed(self, monkeypatch):
+        module = self._fake_identity_module()
+        module.ClientSecretCredential.side_effect = RuntimeError("boom")
+        monkeypatch.setitem(sys.modules, "azure.identity.aio", module)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            create_token_provider(
+                EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s")
+            )
+
+
+class TestCreateTokenProviderAgainstRealAzureIdentity:
+    """
+    No mocking of 'azure.identity' at all.
+
+    'ClientSecretCredential.__init__' builds its async HTTP pipeline eagerly, which
+    is where a missing 'aiohttp' surfaces. Construction is fully offline - no token
+    is requested - so this stays a fast unit test, and it is the only shape of test
+    that can catch a missing transport dependency.
+    """
+
+    async def test_builds_a_real_credential_and_provider(self):
+        credential, provider = create_token_provider(
+            EntraIdCredentials(tenant_id="tenant-1", client_id="client-1", client_secret="s")
+        )
+        try:
+            assert isinstance(credential, ClientSecretCredential)
+            assert callable(provider)
+        finally:
+            await credential.close()
