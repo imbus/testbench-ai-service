@@ -1,5 +1,6 @@
 import pytest
 
+from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.utils.naming import normalize_project_name
 
 
@@ -18,8 +19,6 @@ def test_normalize_project_name(project_name, expected):
 
 def test_matches_factory_helper():
     """The factory helper must stay in lockstep with the shared function."""
-    from testbench_ai_service.llm.factory import LLMFactory
-
     factory = LLMFactory()
     assert factory._normalize_project_name("Car Configurator") == normalize_project_name(
         "Car Configurator"
