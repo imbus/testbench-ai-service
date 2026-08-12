@@ -10,6 +10,7 @@ from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from testbench_ai_service.log import logger
+from testbench_ai_service.utils.log_sanitizer import format_body, redact_secrets
 
 
 class OutboundRequestLoggingMiddleware:
@@ -48,6 +49,7 @@ class OutboundRequestLoggingMiddleware:
         sanitized_url = f"{request_url.scheme}://{request_url.netloc}{request_url.path}"
         start_time = time.perf_counter()
         logger.debug("Testbench request: %s %s", method.upper(), sanitized_url)
+        cls._log_request_body(kwargs)
         try:
             response = request(session, method, url, *args, **kwargs)
         except Exception:
@@ -69,6 +71,25 @@ class OutboundRequestLoggingMiddleware:
             duration,
         )
         return response
+
+    @classmethod
+    def _log_request_body(cls, kwargs: dict) -> None:
+        json_body = kwargs.get("json")
+        if json_body is not None:
+            logger.debug("Testbench request body: %s", format_body(redact_secrets(json_body)))
+            return
+
+        raw_body = kwargs.get("data")
+        if raw_body is None:
+            raw_body = kwargs.get("files")
+        if raw_body is None:
+            return
+
+        try:
+            size = f"{len(raw_body)} bytes"
+        except TypeError:
+            size = "size unknown"
+        logger.debug("Testbench request body: <non-JSON body, %s>", size)
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
