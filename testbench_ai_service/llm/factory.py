@@ -7,6 +7,7 @@ from testbench_ai_service.llm.base import LLMClient, LLMProvider
 from testbench_ai_service.llm.openai import AzureOpenAIClient, OpenAIClient
 from testbench_ai_service.models.config import LLMConfig
 from testbench_ai_service.utils.import_utils import load_class_from_path
+from testbench_ai_service.utils.naming import normalize_project_name
 
 
 class LLMFactory:
@@ -112,7 +113,7 @@ class LLMFactory:
         """
         Replace all non-alphanumeric characters with underscores, then uppercase
         """
-        return re.sub(r"\W+", "_", project_name).upper()
+        return normalize_project_name(project_name)
 
     def _get_project_api_key(self, project_name: str, provider: LLMProvider) -> str | None:
         """
