@@ -22,7 +22,10 @@ class LLMFactory:
     """
 
     def __init__(self) -> None:
-        self._clients: dict[LLMProvider, LLMClient] = {}
+        # Keyed by (provider, auth method): 'auth_method' is per-project
+        # overridable, so a provider alone would let a project configured for
+        # Entra ID get a cache hit on the API-key client built at startup.
+        self._clients: dict[tuple[LLMProvider, AzureAuthMethod], LLMClient] = {}
         self._project_clients: dict[tuple[str, LLMProvider], LLMClient] = {}
 
     def init_clients(self, configs: list[LLMConfig]):
@@ -63,12 +66,14 @@ class LLMFactory:
                 self._project_clients[key] = self._create_client(provider, config, credential)
                 return self._project_clients[key]
 
-        # If no global client for provider is found, retrieves the credential and creates the client
-        if provider not in self._clients:
+        # If no global client for provider/auth method is found, retrieve the
+        # credential and create the client
+        global_key = (provider, config.auth_method)
+        if global_key not in self._clients:
             credential = self._get_credential(provider, config)
-            self._clients[provider] = self._create_client(provider, config, credential)
+            self._clients[global_key] = self._create_client(provider, config, credential)
 
-        return self._clients[provider]
+        return self._clients[global_key]
 
     async def close_clients(self):
         """
@@ -206,6 +211,11 @@ class LLMFactory:
         """
         Create an Azure OpenAI client using either Entra ID or an API key.
         """
+        # Resolved before the credential is created: a malformed
+        # 'deployment_mapping' raises here, and doing that first means there is
+        # no open credential session to leak.
+        deployment_mapping = self._get_deployment_mapping(config)
+
         api_key: str | None = None
         azure_credential = None
         token_provider = None
@@ -232,7 +242,7 @@ class LLMFactory:
             api_key=api_key,
             azure_endpoint=config.azure_endpoint,
             api_version=config.api_version,
-            deployment_mapping=self._get_deployment_mapping(config),
+            deployment_mapping=deployment_mapping,
             azure_ad_token_provider=token_provider,
             credential=azure_credential,
             **common_kwargs,

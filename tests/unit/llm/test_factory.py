@@ -109,7 +109,7 @@ class TestLLMFactoryCloseClients:
         factory = LLMFactory()
         client_a = AsyncMock()
         client_b = AsyncMock()
-        factory._clients[LLMProvider.OPENAI] = client_a
+        factory._clients[(LLMProvider.OPENAI, AzureAuthMethod.API_KEY)] = client_a
         factory._project_clients[("ProjectA", LLMProvider.OPENAI)] = client_b
         await factory.close_clients()
         client_a.close.assert_awaited_once()
@@ -261,6 +261,41 @@ class TestLLMFactoryEntraIdDispatch:
         assert result is global_client
         assert mock_resolve.call_args_list == [call("Car Configurator"), call(None)]
         mock_create.assert_called_once()
+        assert mock_create.call_args.args[2] == global_credentials
+
+    @patch.object(LLMFactory, "_create_client")
+    @patch("testbench_ai_service.llm.factory.resolve_entra_credentials")
+    @patch.object(LLMFactory, "_get_api_key", return_value="azure-key")
+    def test_entra_project_does_not_reuse_the_global_api_key_client(
+        self, mock_api_key, mock_resolve, mock_create
+    ):
+        """
+        A project may override only 'auth_method'. Without the auth method in the
+        global cache key it would silently get the API-key client built at startup.
+        """
+        api_key_client = MagicMock(name="api-key-client")
+        entra_client = MagicMock(name="entra-client")
+        mock_create.side_effect = [api_key_client, entra_client]
+        # The project has no principal of its own, so it falls back to the global one.
+        mock_resolve.side_effect = [
+            None,
+            EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s"),
+        ]
+        factory = LLMFactory()
+
+        api_key_config = _make_llm_config(provider=LLMProvider.AZURE_OPENAI)
+        api_key_config.azure_endpoint = "https://example.openai.azure.com"
+        api_key_config.api_version = "2024-10-21"
+        factory.init_clients([api_key_config])
+
+        entra_config = _make_azure_entra_config()
+        result = factory.get_client(entra_config, project_name="Car Configurator")
+
+        assert result is not api_key_client
+        assert result is entra_client
+        assert mock_create.call_args.args[2] == EntraIdCredentials(
+            tenant_id="t", client_id="c", client_secret="s"
+        )
 
     @patch.object(LLMFactory, "_create_client")
     @patch.object(LLMFactory, "_get_api_key", return_value="azure-key")
@@ -327,6 +362,27 @@ class TestLLMFactoryCreateAzureClient:
         factory._create_client(LLMProvider.ANTHROPIC, config, "anthropic-key")
 
         mock_anthropic.assert_called_once()
+
+    @patch("testbench_ai_service.llm.factory.create_token_provider")
+    def test_malformed_deployment_mapping_raises_before_a_credential_is_created(
+        self, mock_token_provider
+    ):
+        """
+        The deployment mapping must be resolved first: a credential created before it
+        holds an open HTTP session that nothing would ever close.
+        """
+        factory = LLMFactory()
+        config = _make_azure_entra_config()
+        config.model_extra = {"deployment_mapping": ["invalid"]}
+
+        with pytest.raises(ValueError, match=r"'deployment_mapping' must be a dictionary"):
+            factory._create_client(
+                LLMProvider.AZURE_OPENAI,
+                config,
+                EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s"),
+            )
+
+        mock_token_provider.assert_not_called()
 
     def test_entra_credentials_rejected_for_non_azure_provider(self):
         factory = LLMFactory()
