@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- The body of every request sent to TestBench is now logged at `DEBUG` level. Values of secret-looking keys (`password`, `token`, `api_key`, `authorization` and similar) are replaced with `***`, bodies longer than 2000 characters are truncated, and non-JSON payloads such as execution-result uploads are logged as a size placeholder only.
+
+### Fixed
+
+- Secrets in incoming request bodies, such as an `api_key` supplied in `llm_config`, are no longer written to the log in plaintext when `DEBUG` logging is enabled.
+
 ## [1.0.1][1.0.1] - 2026-06-29
 
 ### Fixed
