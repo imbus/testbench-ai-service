@@ -11,6 +11,10 @@ language = "de"
 # Global llm configuration
 [testbench-ai-service.llm_config]
 provider = "openai"
+# Authentication method for provider "azure_openai": "api_key" (default) or "entra_id".
+# With "entra_id", set AZURE_TENANT_ID, AZURE_CLIENT_ID and AZURE_CLIENT_SECRET
+# instead of AZURE_OPENAI_API_KEY.
+# auth_method = "api_key"
 
 # Global logging configuration for console logging
 [testbench-ai-service.logging.console]

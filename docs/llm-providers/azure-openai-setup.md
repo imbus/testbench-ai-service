@@ -30,9 +30,23 @@ This guide walks you through connecting the TestBench AI Service to an Azure Ope
 2. Select a base model (e.g. `gpt-4o` or `gpt-4.1-mini`) and give it a deployment name (e.g. `my-gpt4o`).
 3. Note down the **deployment name**. This is what you will reference in prompt variants and in `config.toml`.
 
-## 3. Set the API key
+## 3. Choose an authentication method
 
-The service reads the Azure OpenAI API key from the environment variable `AZURE_OPENAI_API_KEY`.
+The service supports two ways to authenticate against Azure OpenAI:
+
+| Method | `auth_method` | When to use |
+| --- | --- | --- |
+| API key | `api_key` (default) | Direct integration scenarios where a key is explicitly required |
+| Microsoft Entra ID | `entra_id` | Application development, and wherever your security policy mandates Entra ID |
+
+Managed identity is not supported, because the service runs on-premise where no
+managed identity is available. Entra ID authentication therefore uses a service
+principal (app registration) with a client secret.
+
+### Option A: API key
+
+The service reads the Azure OpenAI API key from the environment variable
+`AZURE_OPENAI_API_KEY`.
 
 Create or update a `.env` file in the root of your installation directory:
 
@@ -43,6 +57,65 @@ AZURE_OPENAI_API_KEY=your_azure_openai_api_key
 
 :::tip
 Never commit API keys to version control. Add `.env` to your `.gitignore`.
+:::
+
+### Option B: Microsoft Entra ID
+
+#### Prepare the app registration in Azure
+
+These steps happen in your own Azure tenant and are your responsibility. The
+AI service does not perform them.
+
+1. In the [Azure portal](https://portal.azure.com), go to **Microsoft Entra ID**
+   → **App registrations** → **New registration**. Give the application a name
+   and register it.
+2. On the application's **Overview** page, note the
+   **Application (client) ID** and the **Directory (tenant) ID**.
+3. Go to **Certificates & secrets** → **New client secret**. Note the secret
+   **value** immediately; it is shown only once.
+4. Open your **Azure OpenAI resource** → **Access control (IAM)** →
+   **Add role assignment**. Assign the role
+   **Cognitive Services OpenAI User** to the application you registered.
+
+:::warning
+Step 4 is the one that is most often missed. Without the role assignment the
+configuration looks correct in every respect and every request still fails with
+`401 Unauthorized` or `403 Forbidden`.
+:::
+
+#### Configure the service
+
+Set `auth_method` in `config.toml`:
+
+```toml
+# config.toml
+[testbench-ai-service.llm_config]
+provider = "azure_openai"
+auth_method = "entra_id"
+azure_endpoint = "https://your-resource.openai.azure.com"
+api_version = "2025-04-01-preview"
+```
+
+Supply the service principal through environment variables:
+
+```bash
+# .env
+AZURE_TENANT_ID=your_directory_tenant_id
+AZURE_CLIENT_ID=your_application_client_id
+AZURE_CLIENT_SECRET=your_client_secret
+```
+
+| Variable | Azure portal name |
+| --- | --- |
+| `AZURE_TENANT_ID` | Directory (tenant) ID |
+| `AZURE_CLIENT_ID` | Application (client) ID |
+| `AZURE_CLIENT_SECRET` | Client secret **value** |
+
+`AZURE_OPENAI_API_KEY` is not read in this mode and does not need to be set.
+
+:::tip
+Client secrets expire. Note the expiry date from **Certificates & secrets** and
+plan the rotation — the service will start failing on the expiry date otherwise.
 :::
 
 ## 4. Configure `config.toml`
@@ -226,6 +299,22 @@ MY_PROJECT_AZURE_OPENAI_API_KEY=project-specific-azure-key
 
 If a project-specific key is present the service creates a dedicated client for that project; otherwise the global `AZURE_OPENAI_API_KEY` is used.
 
+When `auth_method = "entra_id"` is configured, a project can likewise use its
+own service principal. All three variables must be set together:
+
+```bash
+# .env
+# For a project named "My Project":
+MY_PROJECT_AZURE_TENANT_ID=project_specific_tenant_id
+MY_PROJECT_AZURE_CLIENT_ID=project_specific_client_id
+MY_PROJECT_AZURE_CLIENT_SECRET=project_specific_secret
+```
+
+If none of the three are set, the project uses the global service principal. If
+only some are set, the service reports an error at startup rather than falling
+back — a partially configured project principal would otherwise authenticate
+silently as an unintended identity.
+
 ---
 
 ## Troubleshooting
@@ -237,3 +326,9 @@ If a project-specific key is present the service creates a dedicated client for 
 | `'api_version' must be set for provider 'azure_openai'` | Missing API version in `config.toml` | Add `api_version` to `[testbench-ai-service.llm_config]` |
 | `DeploymentNotFound` from Azure API | Wrong deployment name in prompt variant | Verify the deployment name in Azure OpenAI Studio and update the prompt YAML |
 | Empty or unexpected response | Deployment mapped to wrong canonical model | Check and correct the `deployment_mapping` in `config.toml` |
+| `Entra ID authentication ... is incompletely configured` | One or two of the three service principal variables are missing | Set all of `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` (or all three project-prefixed variants) |
+| `'auth_method = entra_id' is only supported for provider 'azure_openai'` | `auth_method` set on a non-Azure provider | Remove `auth_method`, or set `provider = "azure_openai"` |
+| `The 'azure-identity' package is required` | Running from source without the dependency installed | Run `pip install azure-identity` |
+| `401 Unauthorized` / `403 Forbidden` with correct credentials | The app registration has no role on the Azure OpenAI resource | Assign the **Cognitive Services OpenAI User** role (step 4 above) |
+| `ClientAuthenticationError: AADSTS7000215` | Invalid client secret, or the secret value was confused with the secret ID | Copy the secret **value** from **Certificates & secrets** |
+| `ClientAuthenticationError` after months of working | The client secret expired | Create a new secret and update `AZURE_CLIENT_SECRET` |
