@@ -251,6 +251,6 @@ class AzureOpenAIClient(OpenAIClient):
         return await self._query_fallback_model(model, input_messages, **kwargs)
 
     async def close(self):
-        await self.client.close()
+        await super().close()
         if self.credential is not None:
             await self.credential.close()
