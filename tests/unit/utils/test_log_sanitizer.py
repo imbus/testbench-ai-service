@@ -74,6 +74,11 @@ class TestFormatBody:
         result = format_body({"description": "x" * (MAX_BODY_CHARS + 100)})
         assert "... (truncated," in result
 
+    def test_serialization_failure_yields_the_placeholder(self):
+        body = {"outer": {}}
+        body["outer"]["self"] = body  # circular reference
+        assert format_body(body) == "<unserializable body>"
+
 
 class TestFormatBodyText:
     def test_valid_json_is_redacted(self):
