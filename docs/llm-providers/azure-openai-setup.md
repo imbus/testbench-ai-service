@@ -14,6 +14,9 @@ This guide walks you through connecting the TestBench AI Service to an Azure Ope
 - An active [Azure subscription](https://azure.microsoft.com/free/)
 - An **Azure OpenAI resource** with at least one model deployment
 - The TestBench AI Service installed and a `config.toml` present
+- Enough permissions in Azure to configure the resource — see
+  [Required permissions](#required-permissions) if you intend to authenticate
+  with Microsoft Entra ID
 
 ---
 
@@ -60,6 +63,51 @@ Never commit API keys to version control. Add `.env` to your `.gitignore`.
 :::
 
 ### Option B: Microsoft Entra ID
+
+#### Required permissions
+
+Two different sets of permissions are involved, and they are easy to mix up: the
+permissions **you** need in order to set this up, and the permission the
+**service principal** needs in order to call the model.
+
+**1. Permissions you need to complete the setup**
+
+| Task | Required role |
+| --- | --- |
+| Create the app registration and a client secret | **Application Developer** in Microsoft Entra ID — or none at all, if your tenant leaves the default *Users can register applications* setting enabled |
+| Assign a role on the Azure OpenAI resource | **Owner**, **User Access Administrator** or **Role Based Access Control Administrator** on the resource, its resource group or the subscription |
+
+If you lack the second one, `Add role assignment` is visible but greyed out.
+In that case have a subscription owner perform step 4 for you — the app
+registration itself can still be created independently.
+
+**2. Permission the service principal needs**
+
+| Role | Scope | Purpose |
+| --- | --- | --- |
+| **Cognitive Services OpenAI User** | The Azure OpenAI resource (or the resource group / subscription containing it) | Data-plane access: send chat completion requests and list deployments |
+
+This is the only role the service requires. **Cognitive Services OpenAI
+Contributor** also works but additionally allows creating and deleting model
+deployments, which the service never does — prefer the *User* role.
+
+:::warning
+The Azure control-plane roles **Reader**, **Contributor** and **Cognitive
+Services Contributor** do *not* grant inference access. They let you see and
+manage the resource in the portal while every model request still returns
+`401 Unauthorized` or `403 Forbidden`. The role must be one of the
+*Cognitive Services OpenAI …* roles.
+:::
+
+**No API permissions or admin consent are needed.** The service uses the OAuth 2
+client credentials flow and requests the token scope
+`https://cognitiveservices.azure.com/.default` directly. You do not have to add
+anything under the app registration's **API permissions** blade, and no
+Microsoft Graph access is involved — the app registration never reads directory
+data.
+
+Role assignments can take a few minutes to propagate. If requests still fail
+with `403` immediately after step 4, wait and retry before changing anything.
 
 #### Prepare the app registration in Azure
 
@@ -339,5 +387,8 @@ project's first request.
 | `'auth_method = entra_id' is only supported for provider 'azure_openai'` | `auth_method` set on a non-Azure provider | Remove `auth_method`, or set `provider = "azure_openai"` |
 | `The 'azure-identity' package is required` | Running from source without the dependency installed | Run `pip install azure-identity` |
 | `401 Unauthorized` / `403 Forbidden` with correct credentials | The app registration has no role on the Azure OpenAI resource | Assign the **Cognitive Services OpenAI User** role (step 4 above) |
+| `403 Forbidden` although a role is assigned | A control-plane role such as **Contributor** or **Cognitive Services Contributor** was assigned — these grant no inference access | Assign **Cognitive Services OpenAI User** instead, see [Required permissions](#required-permissions) |
+| `403 Forbidden` only in the first minutes after setup | The role assignment has not propagated yet | Wait a few minutes and retry |
+| **Add role assignment** is greyed out in the portal | You are missing **Owner** / **User Access Administrator** / **Role Based Access Control Administrator** on the resource | Ask a subscription owner to assign the role |
 | `ClientAuthenticationError: AADSTS7000215` | Invalid client secret, or the secret value was confused with the secret ID | Copy the secret **value** from **Certificates & secrets** |
 | `ClientAuthenticationError` after months of working | The client secret expired | Create a new secret and update `AZURE_CLIENT_SECRET` |
