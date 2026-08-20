@@ -2,13 +2,14 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.validators import raise_field_validation_error, validate_class_path
 
 
 class LLMConfig(BaseModel):
     provider: LLMProvider = LLMProvider.OPENAI
+    auth_method: AzureAuthMethod = AzureAuthMethod.API_KEY
     model: str | None = None
     azure_endpoint: str | None = None
     api_version: str | None = None
@@ -18,6 +19,18 @@ class LLMConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_config(self):
+        if (
+            self.auth_method == AzureAuthMethod.ENTRA_ID
+            and self.provider != LLMProvider.AZURE_OPENAI
+        ):
+            raise_field_validation_error(
+                self,
+                "auth_method",
+                ValueError(
+                    "'auth_method = entra_id' is only supported for provider 'azure_openai'."
+                ),
+            )
+
         if self.provider == LLMProvider.CUSTOM:
             try:
                 validate_class_path(self.class_path)

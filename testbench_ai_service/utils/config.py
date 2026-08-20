@@ -15,6 +15,7 @@ else:
 from pydantic import BaseModel, ValidationError
 
 from testbench_ai_service.config import PROMPTS_DIR, TEMPLATES_DIR, AppConfig
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
     AgentConfig,
@@ -376,6 +377,10 @@ def get_llm_config(
 
     Returns:
         LLMConfig: LLM configuration with overrides applied
+
+    Raises:
+        ValueError: If the merged configuration selects Entra ID authentication
+            for a provider other than 'azure_openai'.
     """
     # Start with global config
     llm_config = config.llm_config.model_copy(deep=True)
@@ -391,6 +396,20 @@ def get_llm_config(
     # Override with request config if provided
     if request_config:
         llm_config = llm_config.model_copy(update=request_config.model_dump(exclude_unset=True))
+
+    # 'model_copy(update=...)' skips validation, so 'LLMConfig.validate_config'
+    # cannot guarantee this invariant across a merge. Re-check it narrowly here
+    # instead of re-validating the whole merged config, which other fields rely
+    # on being lenient.
+    if (
+        llm_config.auth_method == AzureAuthMethod.ENTRA_ID
+        and llm_config.provider != LLMProvider.AZURE_OPENAI
+    ):
+        raise ValueError(
+            f"'auth_method = {AzureAuthMethod.ENTRA_ID.value}' is only supported for provider "
+            f"'{LLMProvider.AZURE_OPENAI.value}', but the merged LLM configuration uses provider "
+            f"'{llm_config.provider.value}'."
+        )
 
     return llm_config
 

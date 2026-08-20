@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, cast
+import time
+from typing import TYPE_CHECKING, Any, cast
 
 from httpx import Timeout
 from openai import AsyncAzureOpenAI, AsyncOpenAI
@@ -14,6 +15,10 @@ from openai.types.responses import ResponseInputParam
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import Message
+
+if TYPE_CHECKING:
+    from azure.core.credentials_async import AsyncTokenCredential
+    from openai.lib.azure import AsyncAzureADTokenProvider
 
 CHAT_MODELS: frozenset[str] = frozenset(
     {
@@ -174,11 +179,21 @@ class OpenAIClient(LLMClient):
     async def _create_response(
         self, model: str, input_data: str | ResponseInputParam, **kwargs: Any
     ) -> str:
-        response = await self.client.responses.create(
-            model=model,
-            input=input_data,
-            **kwargs,
-        )
+        start_time = time.perf_counter()
+        logger.debug("LLM request: OpenAI model '%s'", model)
+        try:
+            response = await self.client.responses.create(
+                model=model,
+                input=input_data,
+                **kwargs,
+            )
+        except Exception:
+            duration = time.perf_counter() - start_time
+            logger.debug("LLM request failed: OpenAI model '%s' in %.3f seconds", model, duration)
+            raise
+
+        duration = time.perf_counter() - start_time
+        logger.debug("LLM response: OpenAI model '%s' completed in %.3f seconds", model, duration)
         output_text = response.output_text
         if not output_text:
             raise RuntimeError(f"Model '{model}' returned an empty response.")
@@ -195,18 +210,22 @@ class AzureOpenAIClient(OpenAIClient):
         azure_endpoint: str,
         api_version: str,
         deployment_mapping: dict[str, str] | None = None,
+        azure_ad_token_provider: AsyncAzureADTokenProvider | None = None,
+        credential: AsyncTokenCredential | None = None,
         timeout: float | Timeout | NotGiven | None = NOT_GIVEN,
         max_retries: int = DEFAULT_MAX_RETRIES,
         _strict_response_validation: bool = False,
     ):
         self.client = AsyncAzureOpenAI(
             api_key=api_key,
+            azure_ad_token_provider=azure_ad_token_provider,
             azure_endpoint=azure_endpoint,
             api_version=api_version,
             timeout=timeout,
             max_retries=max_retries,
             _strict_response_validation=_strict_response_validation,
         )
+        self.credential = credential
         self.deployment_mapping = deployment_mapping or {}
 
     async def query_llm(
@@ -230,3 +249,8 @@ class AzureOpenAIClient(OpenAIClient):
             )
 
         return await self._query_fallback_model(model, input_messages, **kwargs)
+
+    async def close(self):
+        await super().close()
+        if self.credential is not None:
+            await self.credential.close()

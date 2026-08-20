@@ -5,7 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT, PROMPTS_DIR, AppConfig
-from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.models.config import (
     AgentConfig,
     LLMConfig,
@@ -71,6 +71,36 @@ class TestLLMConfig:
             api_version="2024-10-21",
         )
         assert cfg.provider == LLMProvider.AZURE_OPENAI
+
+    def test_auth_method_defaults_to_api_key(self):
+        cfg = LLMConfig()
+        assert cfg.auth_method == AzureAuthMethod.API_KEY
+
+    def test_azure_openai_provider_accepts_entra_id_auth(self):
+        cfg = LLMConfig(
+            provider=LLMProvider.AZURE_OPENAI,
+            auth_method=AzureAuthMethod.ENTRA_ID,
+            azure_endpoint="https://example.openai.azure.com",
+            api_version="2024-10-21",
+        )
+        assert cfg.auth_method == AzureAuthMethod.ENTRA_ID
+
+    @pytest.mark.parametrize(
+        "provider",
+        [LLMProvider.OPENAI, LLMProvider.ANTHROPIC],
+    )
+    def test_entra_id_auth_rejected_for_non_azure_provider(self, provider):
+        with pytest.raises(ValidationError):
+            LLMConfig(provider=provider, auth_method=AzureAuthMethod.ENTRA_ID)
+
+    def test_auth_method_accepts_plain_string_from_toml(self):
+        cfg = LLMConfig(
+            provider=LLMProvider.AZURE_OPENAI,
+            auth_method="entra_id",
+            azure_endpoint="https://example.openai.azure.com",
+            api_version="2024-10-21",
+        )
+        assert cfg.auth_method == AzureAuthMethod.ENTRA_ID
 
 
 class TestPromptConfig:

@@ -4,6 +4,15 @@ import logging.config
 from testbench_ai_service.models.logging import LoggingConfig, LogLevel
 
 
+class RequestIdFilter(logging.Filter):
+    """Provide a placeholder when a log record is outside an HTTP request."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not hasattr(record, "request_id"):
+            record.request_id = "-"
+        return True
+
+
 class ColoredFormatter(logging.Formatter):
     COLOR_MAP = {  # noqa: RUF012
         "DEBUG": "\033[35m",  # Magenta
@@ -35,6 +44,11 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
     return {
         "version": 1,
         "disable_existing_loggers": True,
+        "filters": {
+            "request_id": {
+                "()": "testbench_ai_service.log.RequestIdFilter",
+            }
+        },
         "formatters": {
             "console": {
                 "()": "testbench_ai_service.log.ColoredFormatter",
@@ -47,12 +61,14 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
                 "class": "logging.StreamHandler",
                 "level": config.console.log_level.value,
                 "formatter": "console",
+                "filters": ["request_id"],
                 "stream": "ext://sys.stdout",
             },
             "file": {
                 "class": "logging.handlers.RotatingFileHandler",
                 "level": config.file.log_level.value,
                 "formatter": "file",
+                "filters": ["request_id"],
                 "filename": config.file.file_name,
                 "mode": "a",
                 "maxBytes": 1 * 1024 * 1024,

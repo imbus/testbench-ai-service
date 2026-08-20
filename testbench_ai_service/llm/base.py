@@ -14,6 +14,14 @@ class LLMProvider(str, Enum):
         return self.value
 
 
+class AzureAuthMethod(str, Enum):
+    API_KEY = "api_key"
+    ENTRA_ID = "entra_id"
+
+    def __str__(self):
+        return self.value
+
+
 class LLMClient(ABC):
     @abstractmethod
     def __init__(self, api_key: str | None = None, *args, **kwargs):

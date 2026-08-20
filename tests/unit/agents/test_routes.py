@@ -139,6 +139,16 @@ class TestTriggerTestCaseSetReviews:
         assert call_kwargs["llm_factory"] is self.mock_llm_factory
         assert isinstance(call_kwargs["context"], ExecutionContext)
 
+    def test_logs_precheck_completion_and_duration(self):
+        with (
+            patch("testbench_ai_service.agents.routes.logger") as mock_logger,
+            patch("testbench_ai_service.agents.routes.validate_template_and_agent_vars"),
+        ):
+            self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
+
+        log_messages = [call.args[0] for call in mock_logger.debug.call_args_list]
+        assert any("Precheck completed for agent" in message for message in log_messages)
+
     # ── Payload validation ────────────────────────────────────────────────────
 
     def test_empty_payload_returns_422(self):
