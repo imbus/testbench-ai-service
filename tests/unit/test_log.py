@@ -1,15 +1,18 @@
 import logging
+import logging.config
 from io import StringIO
 from unittest.mock import patch
 
 import pytest
 
 from testbench_ai_service.log import (
+    VERBOSE,
     ColoredFormatter,
     RequestIdFilter,
     get_log_config_dict,
     get_log_level_int,
     setup_logging,
+    truncate_payload,
 )
 from testbench_ai_service.models.logging import (
     ConsoleLoggerConfig,
@@ -29,7 +32,7 @@ class TestColoredFormatter:
         self.formatter = ColoredFormatter("%(levelname)s: %(message)s")
         self.handler.setFormatter(self.formatter)
         self.logger = logging.getLogger("test_colored_formatter")
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(VERBOSE)
         self.logger.propagate = False
         self.logger.addHandler(self.handler)
         yield
@@ -61,6 +64,10 @@ class TestColoredFormatter:
     def test_critical_uses_red_background(self):
         output = self._get_output(self.logger.critical, "critical message")
         assert "\033[41mCRITICAL\033[0m" in output
+
+    def test_verbose_uses_cyan(self):
+        output = self._get_output(lambda m: self.logger.log(VERBOSE, m), "verbose message")
+        assert "\033[36mVERBOSE\033[0m" in output
 
     def test_message_text_is_never_coloured(self):
         """Colour escape codes must only wrap the level name, never the message."""
@@ -165,3 +172,76 @@ class TestSetupLogging:
 
         mock_get_dict.assert_called_once_with(config)
         mock_dict_config.assert_called_once_with(fake_config)
+
+
+class TestVerboseLevel:
+    """VERBOSE is a custom level below DEBUG, used for request/response payloads."""
+
+    def test_verbose_is_below_debug(self):
+        assert VERBOSE < logging.DEBUG
+
+    def test_verbose_level_name_is_registered(self):
+        assert logging.getLevelName(VERBOSE) == "VERBOSE"
+
+    def test_get_log_level_int_resolves_verbose(self):
+        assert get_log_level_int("VERBOSE") == VERBOSE
+
+    def test_get_log_level_int_resolves_verbose_case_insensitively(self):
+        assert get_log_level_int("verbose") == VERBOSE
+
+    def test_log_level_enum_exposes_verbose(self):
+        assert LogLevel.VERBOSE.value == "VERBOSE"
+
+    def test_logger_level_is_verbose_when_a_single_sink_requests_it(self):
+        """A file sink at VERBOSE must pull the logger level down, or payloads never emit."""
+        config = LoggingConfig(
+            console=ConsoleLoggerConfig(log_level=LogLevel.INFO),
+            file=FileLoggerConfig(log_level=LogLevel.VERBOSE, file_name="app.log"),
+        )
+        result = get_log_config_dict(config)
+        assert result["loggers"]["testbench_ai_service"]["level"] == VERBOSE
+
+    def test_dict_config_accepts_verbose_as_handler_level(self):
+        """dictConfig must resolve the "VERBOSE" string, including for uvicorn's copy."""
+        config = LoggingConfig(
+            console=ConsoleLoggerConfig(log_level=LogLevel.VERBOSE),
+            file=FileLoggerConfig(log_level=LogLevel.VERBOSE, file_name=self.log_file),
+        )
+        logging.config.dictConfig(get_log_config_dict(config))
+        assert logging.getLogger("testbench_ai_service").isEnabledFor(VERBOSE)
+
+    @pytest.fixture(autouse=True)
+    def log_file(self, tmp_path):
+        self.log_file = str(tmp_path / "verbose.log")
+        yield
+        # Detach the handlers dictConfig attached, so later tests start clean.
+        tb_logger = logging.getLogger("testbench_ai_service")
+        for handler in list(tb_logger.handlers):
+            tb_logger.removeHandler(handler)
+            handler.close()
+        tb_logger.setLevel(logging.NOTSET)
+        tb_logger.propagate = True
+
+
+class TestMaxPayloadLength:
+    """Payload truncation is configurable on the logging config."""
+
+    def test_defaults_to_4000(self):
+        assert LoggingConfig().max_payload_length == 4000
+
+
+class TestTruncatePayload:
+    """truncate_payload caps a payload and states how long the original was."""
+
+    def test_short_payload_is_returned_unchanged(self):
+        assert truncate_payload("short", 100) == "short"
+
+    def test_payload_at_the_limit_is_returned_unchanged(self):
+        assert truncate_payload("x" * 10, 10) == "x" * 10
+
+    def test_long_payload_is_cut_and_marked(self):
+        result = truncate_payload("x" * 50, 10)
+        assert result == "xxxxxxxxxx... (truncated, 50 characters total)"
+
+    def test_zero_limit_disables_truncation(self):
+        assert truncate_payload("x" * 50, 0) == "x" * 50

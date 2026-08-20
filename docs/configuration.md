@@ -49,6 +49,10 @@ prompts_dir = "prompts"
 [testbench-ai-service.llm_config]
 provider = "openai"
 
+# Payload truncation (VERBOSE level only)
+[testbench-ai-service.logging]
+max_payload_length = 4000
+
 # Console logging
 [testbench-ai-service.logging.console]
 log_level = "INFO"
@@ -435,13 +439,65 @@ variant = "Full Review"
 
 ## Logging
 
+Each sink has its own level, so verbosity can differ between the console and the log file.
+Levels, from least to most verbose: `CRITICAL`, `ERROR`, `WARNING`, `INFO`, `DEBUG`, `VERBOSE`.
+
+`VERBOSE` sits **below** `DEBUG` and additionally logs **request and response payloads** — both
+those of the service's own API and those of every call the service makes to the TestBench server.
+Payload logging is therefore switched on by choosing `VERBOSE` for a sink, and is independent of
+`DEBUG`: running at `DEBUG` still reports which requests were made, how they were answered and how
+long they took, without dumping their contents into the log. Payloads are only read and buffered
+when at least one sink is set to `VERBOSE`, so there is no cost while it is switched off.
+
+| Level     | TestBench and API traffic                                    |
+| --------- | -------------------------------------------------------------- |
+| `DEBUG`   | Method, URL, status code, duration                             |
+| `VERBOSE` | The above, plus request and response bodies                    |
+
+Values of secret-looking keys (`password`, `token`, `api_key`, `authorization` and similar) are
+replaced with `***` before anything is written, and non-text payloads such as the JSON-report
+download are logged as a size placeholder only.
+
+```toml
+# config.toml
+# Keep the console readable, capture payloads in the log file only
+[testbench-ai-service.logging.console]
+log_level = "INFO"
+
+[testbench-ai-service.logging.file]
+log_level = "VERBOSE"
+```
+
+:::warning
+Even with secret keys redacted, payloads contain the test data your TestBench users work with.
+Enable `VERBOSE` deliberately, and treat the resulting log file accordingly.
+:::
+
+### Payload truncation
+
+**`[testbench-ai-service.logging]`**
+
+| Option                 | Type    | Description                                                                                      | Default  |
+| ---------------------- | ------- | ------------------------------------------------------------------------------------------------ | -------- |
+| `max_payload_length` | Integer | Maximum number of characters logged per payload of the service's own API. `0` logs them in full. | `4000` |
+
+Longer payloads are cut off and marked with `... (truncated, N characters total)`. The log file
+rotates at 1 MB with two backups, so logging large payloads in full can quickly discard older
+entries. Bodies exchanged with the TestBench server are capped separately, at 2000 characters.
+
+```toml
+# config.toml
+[testbench-ai-service.logging]
+max_payload_length = 4000
+```
+
 ### Console
 
 **`[testbench-ai-service.logging.console]`**
 
 | Option         | Type   | Description                                                                          | Default                          |
 | -------------- | ------ | ------------------------------------------------------------------------------------ | -------------------------------- |
-| `log_level`  | String | Minimum log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. | `"INFO"`                       |
+| `log_level`  | String | Minimum log level. One of `VERBOSE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. | `"INFO"`                       |
 | `log_format` | String | Python `logging` format string.                                                    | `"%(levelname)s: %(message)s"` |
 
 **Example:**
@@ -460,7 +516,7 @@ log_format = "%(levelname)s: %(message)s"
 | Option         | Type   | Description                                                                          | Default                                                     |
 | -------------- | ------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
 | `file_name`  | String | Path to the log file. Relative paths are resolved from the working directory.        | `"testbench-ai-service.log"`                              |
-| `log_level`  | String | Minimum log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. | `"INFO"`                                                  |
+| `log_level`  | String | Minimum log level. One of `VERBOSE`, `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. | `"INFO"`                                                  |
 | `log_format` | String | Python `logging` format string.                                                    | `"%(asctime)s - %(levelname)8s - %(name)s - %(message)s"` |
 
 **Example:**

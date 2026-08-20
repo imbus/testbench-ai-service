@@ -10,11 +10,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- The body of every request sent to TestBench is now logged at `DEBUG` level. Values of secret-looking keys (`password`, `token`, `api_key`, `authorization` and similar) are replaced with `***`, bodies longer than 2000 characters are truncated, and non-JSON payloads such as execution-result uploads are logged as a size placeholder only.
+- New `VERBOSE` log level, below `DEBUG`, which additionally logs request and response payloads —
+  both those of the service's own API and those of every call made to the TestBench server. Set it
+  per sink via `[testbench-ai-service.logging.console]` or `[testbench-ai-service.logging.file]`,
+  or start the service with `--verbose`. `DEBUG` continues to report which requests were made, how
+  they were answered and how long they took, without their contents. Payloads are only read and
+  buffered when a sink asks for `VERBOSE`, so there is no cost while it is switched off.
+- The bodies of requests sent to TestBench, and the bodies of the responses they return, are logged
+  at `VERBOSE` level. Values of secret-looking keys (`password`, `token`, `api_key`,
+  `authorization` and similar) are replaced with `***`, bodies longer than 2000 characters are
+  truncated, and non-text payloads such as execution-result uploads and the JSON-report download
+  are logged as a size placeholder only.
+- `max_payload_length` under `[testbench-ai-service.logging]` (default `4000`, `0` disables
+  truncation) to cap how much of the service's own API payloads is written to the log.
 
 ### Fixed
 
-- Secrets in incoming request bodies, such as an `api_key` supplied in `llm_config`, are no longer written to the log in plaintext when `DEBUG` logging is enabled.
+- Secrets in incoming request bodies, such as an `api_key` supplied in `llm_config`, are no longer
+  written to the log in plaintext when payload logging is enabled. Response bodies are now redacted
+  the same way; previously they were logged verbatim.
 
 ## [1.0.1][1.0.1] - 2026-06-29
 

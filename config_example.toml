@@ -12,7 +12,15 @@ language = "de"
 [testbench-ai-service.llm_config]
 provider = "openai"
 
+# Maximum number of characters logged per request/response payload at VERBOSE level.
+# Set to 0 to log payloads in full (this can rotate the log file quickly).
+[testbench-ai-service.logging]
+max_payload_length = 4000
+
 # Global logging configuration for console logging
+# Available levels, from least to most verbose: CRITICAL, ERROR, WARNING, INFO, DEBUG, VERBOSE.
+# VERBOSE additionally logs request and response payloads and can be set per sink,
+# e.g. INFO on the console and VERBOSE in the log file.
 [testbench-ai-service.logging.console]
 log_level = "INFO"
 log_format = "%(levelname)s: %(message)s"

@@ -12,6 +12,7 @@ from testbench_ai_service.cli import (
     register_start_command,
     start_action,
 )
+from testbench_ai_service.models.logging import LogLevel
 
 
 class TestPrintCliBanner:
@@ -111,6 +112,7 @@ class TestStartAction:
             "host": None,
             "port": None,
             "dev": False,
+            "verbose": False,
             "tb_server_url": None,
         }
         defaults.update(overrides)
@@ -151,6 +153,21 @@ class TestStartAction:
 
         assert mock_config.host == "0.0.0.0"
         assert mock_config.port == 9000
+
+    def test_verbose_flag_sets_both_sinks_to_verbose(self):
+        mock_config = self._mock_config()
+        with (
+            patch("testbench_ai_service.cli.load_config_from_file", return_value=mock_config),
+            patch("testbench_ai_service.cli.uvicorn.run"),
+            patch("testbench_ai_service.cli.setup_logging"),
+            patch("testbench_ai_service.cli.get_log_config_dict", return_value={}),
+            patch("testbench_ai_service.cli.create_app", return_value=MagicMock()),
+            patch("testbench_ai_service.cli.print_cli_banner"),
+        ):
+            start_action(self._make_args(verbose=True))
+
+        assert mock_config.logging.console.log_level == LogLevel.VERBOSE
+        assert mock_config.logging.file.log_level == LogLevel.VERBOSE
 
     def test_dev_mode_sets_debug(self):
         mock_config = self._mock_config()

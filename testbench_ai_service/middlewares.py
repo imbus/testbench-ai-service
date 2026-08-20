@@ -9,12 +9,23 @@ from fastapi import Request, Response
 from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from testbench_ai_service.log import logger
+from testbench_ai_service.log import VERBOSE, logger, truncate_payload
+from testbench_ai_service.models.logging import DEFAULT_MAX_PAYLOAD_LENGTH
 from testbench_ai_service.utils.log_sanitizer import (
     format_body,
     format_body_text,
     redact_secrets,
 )
+
+#: Content types whose bodies are safe to write into the log as text.
+TEXTUAL_CONTENT_TYPES = ("json", "text/", "xml")
+
+
+def _body_size(body: object) -> str:
+    try:
+        return f"{len(body)} bytes"  # type: ignore[arg-type]
+    except TypeError:
+        return "size unknown"
 
 
 class OutboundRequestLoggingMiddleware:
@@ -74,13 +85,19 @@ class OutboundRequestLoggingMiddleware:
             response.status_code,
             duration,
         )
+        cls._log_response_body(response)
         return response
 
     @classmethod
     def _log_request_body(cls, kwargs: dict) -> None:
+        if not logger.isEnabledFor(VERBOSE):
+            return
+
         json_body = kwargs.get("json")
         if json_body is not None:
-            logger.debug("Testbench request body: %s", format_body(redact_secrets(json_body)))
+            logger.log(
+                VERBOSE, "Testbench request body: %s", format_body(redact_secrets(json_body))
+            )
             return
 
         raw_body = kwargs.get("data")
@@ -89,27 +106,56 @@ class OutboundRequestLoggingMiddleware:
         if raw_body is None:
             return
 
-        try:
-            size = f"{len(raw_body)} bytes"
-        except TypeError:
-            size = "size unknown"
-        logger.debug("Testbench request body: <non-JSON body, %s>", size)
+        logger.log(VERBOSE, "Testbench request body: <non-JSON body, %s>", _body_size(raw_body))
+
+    @classmethod
+    def _log_response_body(cls, response) -> None:
+        if not logger.isEnabledFor(VERBOSE):
+            return
+
+        content_type = response.headers.get("Content-Type", "")
+        text = response.text
+        is_textual = isinstance(content_type, str) and any(
+            marker in content_type.lower() for marker in TEXTUAL_CONTENT_TYPES
+        )
+        if not is_textual or not isinstance(text, str):
+            logger.log(
+                VERBOSE,
+                "Testbench response body: <non-text body, %s>",
+                _body_size(response.content),
+            )
+            return
+
+        logger.log(VERBOSE, "Testbench response body: %s", format_body_text(text))
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):
+    """Logs request/response metadata at DEBUG and, at VERBOSE, their payloads."""
+
+    def __init__(self, app, max_payload_length: int = DEFAULT_MAX_PAYLOAD_LENGTH) -> None:
+        super().__init__(app)
+        self.max_payload_length = max_payload_length
+
     async def dispatch(
         self, request: Request, call_next: Callable[..., Awaitable[Response]]
     ) -> Response:
         start_time = time.time()
 
+        # Reading and buffering payloads is only worth it when a sink is at VERBOSE.
+        log_payloads = logger.isEnabledFor(VERBOSE)
+
         client_addr = (
             f"{request.client.host}:{request.client.port}" if request.client else "unknown"
         )
         logger.debug(f"Request: {request.method} {request.url} from {client_addr}")
-        if request.method in ("POST", "PUT", "PATCH"):
+        if log_payloads and request.method in ("POST", "PUT", "PATCH"):
             body_bytes = await request.body()
             body_text = body_bytes.decode("utf-8", errors="replace") if body_bytes else ""
-            logger.debug("Request Body: %s", format_body_text(body_text))
+            logger.log(
+                VERBOSE,
+                "Request Body: %s",
+                truncate_payload(format_body_text(body_text), self.max_payload_length),
+            )
 
         # Process request and get response
         response = await call_next(request)
@@ -119,7 +165,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Paths to skip response body logging, e.g. docs, openapi
         skip_paths = ["/", request.app.docs_url, request.app.redoc_url, request.app.openapi_url]
 
-        if request.url.path not in skip_paths:
+        if log_payloads and request.url.path not in skip_paths:
             # Capture response body chunks from body_iterator and cache them
             if hasattr(response, "body_iterator"):
                 response_body_chunks = [chunk async for chunk in response.body_iterator]
@@ -129,8 +175,11 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 # For non-streaming responses fallback - may not apply often
                 response_body = getattr(response, "body", b"").decode("utf-8", errors="replace")
 
-            # TODO: sanitize response_body to remove sensitive info
-            logger.debug(f"Response Body: {response_body}")
+            logger.log(
+                VERBOSE,
+                "Response Body: %s",
+                truncate_payload(format_body_text(response_body), self.max_payload_length),
+            )
 
         process_time = time.time() - start_time
         logger.debug(f"Processed in {process_time:.3f} seconds")

@@ -108,6 +108,11 @@ def register_start_command(subparsers):
         "--dev", action="store_true", help="Run the service in development mode with auto-reload."
     )
     start_parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Log at VERBOSE level, which additionally logs request and response payloads.",
+    )
+    start_parser.add_argument(
         "--tb-server-url",
         type=str,
         metavar="URL",
@@ -122,10 +127,9 @@ def init_action(args):
     )
 
 
-def start_action(args):
-    config = load_config_from_file(args.config)
+def apply_cli_overrides(config, args):
+    """Apply command line arguments on top of the loaded configuration."""
 
-    # Apply CLI overrides
     if "tb_server_url" in args and args.tb_server_url is not None:
         config.tb_server_url = args.tb_server_url
     if "host" in args and args.host is not None:
@@ -134,9 +138,21 @@ def start_action(args):
         config.port = args.port
     config.debug = getattr(args, "dev", False) or config.debug
 
+    # --verbose wins over --dev: VERBOSE includes everything DEBUG logs, plus payloads.
+    log_level = None
     if config.debug:
-        config.logging.console.log_level = LogLevel.DEBUG
-        config.logging.file.log_level = LogLevel.DEBUG
+        log_level = LogLevel.DEBUG
+    if getattr(args, "verbose", False):
+        log_level = LogLevel.VERBOSE
+    if log_level is not None:
+        config.logging.console.log_level = log_level
+        config.logging.file.log_level = log_level
+
+
+def start_action(args):
+    config = load_config_from_file(args.config)
+
+    apply_cli_overrides(config, args)
 
     print_cli_banner()
 

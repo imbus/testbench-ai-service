@@ -78,6 +78,7 @@ testbench-ai-service start [OPTIONS]
 | `--host HOST`         | Host to bind to.                                       | `127.0.0.1`   |
 | `--port PORT`         | Port to listen on.                                     | `8010`        |
 | `--dev`               | Run in development mode (debug logging + auto-reload). | —              |
+| `--verbose`           | Log at `VERBOSE` level, including API and TestBench payloads. | —              |
 | `--tb-server-url URL` | Base URL of the TestBench REST API Server.             | from config     |
 
 Command-line arguments take **precedence** over configuration file settings.
@@ -96,6 +97,9 @@ testbench-ai-service start --host 0.0.0.0 --port 9000
 
 # Development mode (with auto-reload)
 testbench-ai-service start --dev
+
+# Verbose logging, including API and TestBench request/response payloads
+testbench-ai-service start --verbose
 
 # Override TestBench server URL
 testbench-ai-service start --tb-server-url https://testbench.example.com/api/

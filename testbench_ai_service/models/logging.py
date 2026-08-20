@@ -2,6 +2,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+DEFAULT_MAX_PAYLOAD_LENGTH = 4000
+
 
 class LogLevel(str, Enum):
     CRITICAL = "CRITICAL"
@@ -11,6 +13,7 @@ class LogLevel(str, Enum):
     WARN = WARNING
     INFO = "INFO"
     DEBUG = "DEBUG"
+    VERBOSE = "VERBOSE"
     NOTSET = "NOTSET"
 
 
@@ -28,3 +31,8 @@ class FileLoggerConfig(BaseModel):
 class LoggingConfig(BaseModel):
     console: ConsoleLoggerConfig = Field(default_factory=ConsoleLoggerConfig)
     file: FileLoggerConfig = Field(default_factory=FileLoggerConfig)
+    max_payload_length: int = Field(
+        default=DEFAULT_MAX_PAYLOAD_LENGTH,
+        ge=0,
+        description="Maximum number of characters logged per payload. 0 means no truncation.",
+    )

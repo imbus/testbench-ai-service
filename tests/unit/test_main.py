@@ -7,10 +7,12 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.main import (
     close_services,
     create_app,
+    init_middlewares,
     init_routers,
     init_services,
     lifespan,
 )
+from testbench_ai_service.middlewares import LoggingMiddleware
 
 
 def _make_app_config():
@@ -120,3 +122,28 @@ class TestLifespan:
                 pass
 
         mock_close.assert_awaited_once_with(app)
+
+
+class TestInitMiddlewares:
+    """The logging middleware is handed the payload limit from the app config."""
+
+    def test_max_payload_length_is_taken_from_the_config(self):
+        app = FastAPI()
+        app.state.config = _make_app_config()
+        app.state.config.logging.max_payload_length = 123
+
+        init_middlewares(app)
+
+        middleware = next(m for m in app.user_middleware if m.cls is LoggingMiddleware)
+        assert middleware.kwargs["max_payload_length"] == 123
+
+    def test_outbound_logging_is_installed_for_the_testbench_server(self):
+        app = FastAPI()
+        app.state.config = _make_app_config()
+
+        with patch(
+            "testbench_ai_service.main.OutboundRequestLoggingMiddleware.install"
+        ) as mock_install:
+            init_middlewares(app)
+
+        mock_install.assert_called_once_with(app.state.config.tb_server_url)

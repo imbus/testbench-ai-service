@@ -3,6 +3,11 @@ import logging.config
 
 from testbench_ai_service.models.logging import LoggingConfig, LogLevel
 
+#: Custom level below DEBUG, reserved for request/response payloads. A sink only
+#: receives payloads when it is explicitly configured to VERBOSE.
+VERBOSE = 5
+logging.addLevelName(VERBOSE, LogLevel.VERBOSE.value)
+
 
 class RequestIdFilter(logging.Filter):
     """Provide a placeholder when a log record is outside an HTTP request."""
@@ -15,6 +20,7 @@ class RequestIdFilter(logging.Filter):
 
 class ColoredFormatter(logging.Formatter):
     COLOR_MAP = {  # noqa: RUF012
+        "VERBOSE": "\033[36m",  # Cyan
         "DEBUG": "\033[35m",  # Magenta
         "INFO": "\033[32m",  # Green
         "WARNING": "\033[33m",  # Yellow
@@ -114,8 +120,18 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
     }
 
 
+def truncate_payload(payload: str, max_length: int) -> str:
+    """Cap *payload* at *max_length* characters. A *max_length* of 0 disables truncation."""
+    if max_length and len(payload) > max_length:
+        return f"{payload[:max_length]}... (truncated, {len(payload)} characters total)"
+    return payload
+
+
 def get_log_level_int(level_str: str, default: int = logging.INFO) -> int:
-    level = getattr(logging, level_str.upper(), default)
+    """Resolve a level name to its integer value, including custom levels like VERBOSE."""
+    level = logging.getLevelName(level_str.upper())
+    if not isinstance(level, int):
+        return default
     return int(level)
 
 
