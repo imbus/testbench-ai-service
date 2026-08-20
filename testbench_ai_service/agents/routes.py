@@ -1,3 +1,4 @@
+import time
 from typing import get_type_hints
 
 import requests
@@ -157,6 +158,7 @@ async def trigger_agent_execution(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=msg)
 
     validate_template_and_agent_vars(context, agent)
+    precheck_start_time = time.perf_counter()
     try:
         precheck_result = await agent.precheck(context, conn)
     except requests.exceptions.HTTPError as e:
@@ -166,6 +168,14 @@ async def trigger_agent_execution(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Could not connect to TestBench server: {e}",
         ) from e
+    precheck_duration = time.perf_counter() - precheck_start_time
+    logger.debug(
+        "Precheck completed for agent '%s': passed=%s, items=%d in %.3f seconds",
+        agent_key,
+        precheck_result.passed,
+        len(precheck_result.items),
+        precheck_duration,
+    )
     logger.debug("Precheck result for agent '%s': %s", agent_key, precheck_result)
 
     if not precheck_result.passed:

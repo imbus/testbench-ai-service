@@ -3,10 +3,17 @@ import re
 from typing import Any
 
 from testbench_ai_service.llm.anthropic import AnthropicClient
-from testbench_ai_service.llm.base import LLMClient, LLMProvider
+from testbench_ai_service.llm.azure_auth import (
+    EntraIdCredentials,
+    create_token_provider,
+    resolve_entra_credentials,
+)
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMClient, LLMProvider
 from testbench_ai_service.llm.openai import AzureOpenAIClient, OpenAIClient
+from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import LLMConfig
 from testbench_ai_service.utils.import_utils import load_class_from_path
+from testbench_ai_service.utils.naming import normalize_project_name
 
 
 class LLMFactory:
@@ -15,7 +22,10 @@ class LLMFactory:
     """
 
     def __init__(self) -> None:
-        self._clients: dict[LLMProvider, LLMClient] = {}
+        # Keyed by (provider, auth method): 'auth_method' is per-project
+        # overridable, so a provider alone would let a project configured for
+        # Entra ID get a cache hit on the API-key client built at startup.
+        self._clients: dict[tuple[LLMProvider, AzureAuthMethod], LLMClient] = {}
         self._project_clients: dict[tuple[str, LLMProvider], LLMClient] = {}
 
     def init_clients(self, configs: list[LLMConfig]):
@@ -49,19 +59,21 @@ class LLMFactory:
             key = (project_name, provider)
             if key in self._project_clients:
                 return self._project_clients[key]
-            # Attempt to retrieve a project-specific API key
-            api_key = self._get_project_api_key(project_name, provider)
-            if api_key is not None:
+            # Attempt to retrieve a project-specific credential
+            credential = self._get_project_credential(project_name, provider, config)
+            if credential is not None:
                 # Create, cache, and return the new project-specific client
-                self._project_clients[key] = self._create_client(provider, config, api_key)
+                self._project_clients[key] = self._create_client(provider, config, credential)
                 return self._project_clients[key]
 
-        # If no global client for provider is found, retrieves the API key and creates the client
-        if provider not in self._clients:
-            api_key = self._get_api_key(provider)
-            self._clients[provider] = self._create_client(provider, config, api_key)
+        # If no global client for provider/auth method is found, retrieve the
+        # credential and create the client
+        global_key = (provider, config.auth_method)
+        if global_key not in self._clients:
+            credential = self._get_credential(provider, config)
+            self._clients[global_key] = self._create_client(provider, config, credential)
 
-        return self._clients[provider]
+        return self._clients[global_key]
 
     async def close_clients(self):
         """
@@ -112,7 +124,7 @@ class LLMFactory:
         """
         Replace all non-alphanumeric characters with underscores, then uppercase
         """
-        return re.sub(r"\W+", "_", project_name).upper()
+        return normalize_project_name(project_name)
 
     def _get_project_api_key(self, project_name: str, provider: LLMProvider) -> str | None:
         """
@@ -122,37 +134,119 @@ class LLMFactory:
         env_key = f"{normalized}_{provider.value.upper()}_API_KEY"
         return os.getenv(env_key)
 
+    def _uses_entra_id(self, provider: LLMProvider, config: LLMConfig) -> bool:
+        """
+        Return True when this provider/config combination authenticates via Entra ID.
+        """
+        return (
+            provider == LLMProvider.AZURE_OPENAI
+            and config.auth_method == AzureAuthMethod.ENTRA_ID
+        )
+
+    def _get_credential(
+        self, provider: LLMProvider, config: LLMConfig
+    ) -> str | EntraIdCredentials | None:
+        """
+        Load the global credential for the provider: Entra ID credentials or an API key.
+        """
+        if self._uses_entra_id(provider, config):
+            return resolve_entra_credentials(None)
+        return self._get_api_key(provider)
+
+    def _get_project_credential(
+        self, project_name: str, provider: LLMProvider, config: LLMConfig
+    ) -> str | EntraIdCredentials | None:
+        """
+        Load the project-specific credential, or None to fall back to the global one.
+        """
+        if self._uses_entra_id(provider, config):
+            return resolve_entra_credentials(project_name)
+        return self._get_project_api_key(project_name, provider)
+
     def _create_client(
-        self, provider: LLMProvider, config: LLMConfig, api_key: str | None
+        self,
+        provider: LLMProvider,
+        config: LLMConfig,
+        credential: str | EntraIdCredentials | None,
     ) -> LLMClient:
         """
-        Create an LLM client instance using the given LLMConfig and API key.
+        Create an LLM client instance using the given LLMConfig and credential.
         """
         common_kwargs = self._get_common_client_kwargs(config)
 
         if provider == LLMProvider.OPENAI:
-            return OpenAIClient(api_key=api_key, **common_kwargs)
+            return OpenAIClient(api_key=self._as_api_key(credential), **common_kwargs)
 
-        if config.provider == LLMProvider.AZURE_OPENAI:
+        if provider == LLMProvider.AZURE_OPENAI:
             assert config.azure_endpoint is not None
             assert config.api_version is not None
-            return AzureOpenAIClient(
-                api_key=api_key,
-                azure_endpoint=config.azure_endpoint,
-                api_version=config.api_version,
-                deployment_mapping=self._get_deployment_mapping(config),
-                **common_kwargs,
-            )
+            return self._create_azure_client(config, credential, common_kwargs)
 
         if provider == LLMProvider.ANTHROPIC:
-            return AnthropicClient(api_key=api_key, **common_kwargs)
+            return AnthropicClient(api_key=self._as_api_key(credential), **common_kwargs)
 
         if provider == LLMProvider.CUSTOM:
             assert config.class_path is not None
             client_class: type[LLMClient] = load_class_from_path(config.class_path)
-            return client_class(api_key, **common_kwargs)
+            return client_class(self._as_api_key(credential), **common_kwargs)
 
         raise NotImplementedError(f"Unsupported LLM provider: '{provider}'.")
+
+    def _as_api_key(self, credential: str | EntraIdCredentials | None) -> str | None:
+        """
+        Narrow a credential to an API key, rejecting Entra ID credentials.
+        """
+        if isinstance(credential, EntraIdCredentials):
+            raise ValueError(
+                "Entra ID credentials are only supported for provider 'azure_openai'."
+            )
+        return credential
+
+    def _create_azure_client(
+        self,
+        config: LLMConfig,
+        credential: str | EntraIdCredentials | None,
+        common_kwargs: dict[str, Any],
+    ) -> LLMClient:
+        """
+        Create an Azure OpenAI client using either Entra ID or an API key.
+        """
+        # Resolved before the credential is created: a malformed
+        # 'deployment_mapping' raises here, and doing that first means there is
+        # no open credential session to leak.
+        deployment_mapping = self._get_deployment_mapping(config)
+
+        api_key: str | None = None
+        azure_credential = None
+        token_provider = None
+
+        if isinstance(credential, EntraIdCredentials):
+            azure_credential, token_provider = create_token_provider(credential)
+            logger.info(
+                "Azure OpenAI client for endpoint '%s' authenticates via Entra ID "
+                "(tenant '%s', client '%s').",
+                config.azure_endpoint,
+                credential.tenant_id,
+                credential.client_id,
+            )
+        else:
+            api_key = credential
+            logger.info(
+                "Azure OpenAI client for endpoint '%s' authenticates via API key.",
+                config.azure_endpoint,
+            )
+
+        assert config.azure_endpoint is not None
+        assert config.api_version is not None
+        return AzureOpenAIClient(
+            api_key=api_key,
+            azure_endpoint=config.azure_endpoint,
+            api_version=config.api_version,
+            deployment_mapping=deployment_mapping,
+            azure_ad_token_provider=token_provider,
+            credential=azure_credential,
+            **common_kwargs,
+        )
 
     def _get_common_client_kwargs(self, config: LLMConfig) -> dict[str, Any]:
         extra = config.model_extra or {}

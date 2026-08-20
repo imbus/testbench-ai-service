@@ -32,6 +32,19 @@ hiddenimports = (
     + collect_submodules("testbench_ai_service")
     + collect_submodules("testbench_cli_reporter")
     + collect_submodules("testbench2robotframework")
+    # Entra ID auth chain. Do NOT remove these as "unused": the async credential
+    # pulls its HTTP transport in through imports PyInstaller's static analysis
+    # cannot follow -- a function-level import in
+    # azure/identity/_internal/pipeline.py:build_async_pipeline and a module-level
+    # __getattr__ in azure/core/pipeline/transport/__init__.py that does
+    # 'from ._aiohttp import AioHttpTransport'. Without azure.core / aiohttp
+    # collected here the binary builds clean and dies at runtime with
+    # "aiohttp package is not installed" on every auth_method = 'entra_id' deployment.
+    + collect_submodules("azure.identity")
+    + collect_submodules("azure.core")
+    + collect_submodules("aiohttp")
+    + collect_submodules("msal")
+    + collect_submodules("msal_extensions")
     + [
         # uvicorn server implementation modules loaded by string at runtime
         "uvicorn.lifespan.on",

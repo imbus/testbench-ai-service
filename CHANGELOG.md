@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.2.0][1.2.0] - 2026-08-20
+
+### Added
+
+- Microsoft Entra ID authentication for Azure OpenAI via a service principal, selected with `auth_method = "entra_id"` in `llm_config`. Credentials are read from `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET`, with per-project overrides using the `{PROJECT}_` prefix. A project that sets none of the three variables uses the global service principal; setting only some of them is rejected with `Entra ID authentication ... is incompletely configured`, which names the variables that are missing.
+- `azure-identity` and `aiohttp` as runtime dependencies. Both are required for `auth_method = "entra_id"` and are bundled in the released binary; they are imported only when Entra ID authentication is actually configured, so API key installations are unaffected.
+
+### Fixed
+
+- Azure OpenAI client creation no longer overrides the provider resolved from the model name, so a `claude-*` model in a prompt variant correctly creates an Anthropic client even when `provider = "azure_openai"` is configured.
+
 ## [1.1.0][1.1.0] - 2026-07-30
 
 ### Added
@@ -72,3 +83,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 [1.0.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.0.0
 [1.0.1]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.0.1
 [1.1.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.1.0
+[1.2.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.2.0

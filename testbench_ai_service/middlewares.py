@@ -1,11 +1,74 @@
 import time
 from collections.abc import Awaitable, Callable
+from functools import wraps
+from typing import ClassVar
+from urllib.parse import urlsplit
 
+import requests
 from fastapi import Request, Response
 from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from testbench_ai_service.log import logger
+
+
+class OutboundRequestLoggingMiddleware:
+    """Log every HTTP request sent to configured Testbench servers."""
+
+    _installed: ClassVar[bool] = False
+    _testbench_server_urls: ClassVar[set[str]] = set()
+
+    @classmethod
+    def install(cls, testbench_server_url: str) -> None:
+        cls._testbench_server_urls.add(testbench_server_url.rstrip("/"))
+        if cls._installed:
+            return
+
+        original_request = requests.sessions.Session.request
+
+        @wraps(original_request)
+        def logged_request(session, method, url, *args, **kwargs):
+            return cls._log_testbench_request(
+                original_request, session, method, url, *args, **kwargs
+            )
+
+        requests.sessions.Session.request = logged_request
+        cls._installed = True
+
+    @classmethod
+    def _log_testbench_request(cls, request, session, method, url, *args, **kwargs):
+        url_text = str(url)
+        if not any(
+            url_text == server_url or url_text.startswith(f"{server_url}/")
+            for server_url in cls._testbench_server_urls
+        ):
+            return request(session, method, url, *args, **kwargs)
+
+        request_url = urlsplit(url_text)
+        sanitized_url = f"{request_url.scheme}://{request_url.netloc}{request_url.path}"
+        start_time = time.perf_counter()
+        logger.debug("Testbench request: %s %s", method.upper(), sanitized_url)
+        try:
+            response = request(session, method, url, *args, **kwargs)
+        except Exception:
+            duration = time.perf_counter() - start_time
+            logger.debug(
+                "Testbench request failed: %s %s in %.3f seconds",
+                method.upper(),
+                sanitized_url,
+                duration,
+            )
+            raise
+
+        duration = time.perf_counter() - start_time
+        logger.debug(
+            "Testbench response: %s %s returned %s in %.3f seconds",
+            method.upper(),
+            sanitized_url,
+            response.status_code,
+            duration,
+        )
+        return response
 
 
 class LoggingMiddleware(BaseHTTPMiddleware):

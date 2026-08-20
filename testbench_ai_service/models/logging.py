@@ -16,7 +16,7 @@ class LogLevel(str, Enum):
 
 class ConsoleLoggerConfig(BaseModel):
     log_level: LogLevel = LogLevel.INFO
-    log_format: str = "%(levelname)s: %(message)s"
+    log_format: str = "%(asctime)s -%(levelname)s: %(message)s"
 
 
 class FileLoggerConfig(BaseModel):

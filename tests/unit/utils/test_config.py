@@ -6,6 +6,8 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
+from testbench_ai_service.models.config import LLMConfig, ProjectConfig
 from testbench_ai_service.utils.config import (
     CONFIG_PREFIX,
     get_agent_config,
@@ -137,6 +139,72 @@ class TestGetLLMConfig:
     def test_unknown_project_falls_back_to_global(self):
         result = get_llm_config(self.config, "unknown_project")
         assert result == self.llm_config
+
+
+class TestGetLLMConfigEntraIdConsistency:
+    """
+    'model_copy(update=...)' skips validation, so 'entra_id' could otherwise escape
+    its azure_openai-only guarantee through a project or request override.
+    """
+
+    def _app_config(self, llm_config: LLMConfig) -> MagicMock:
+        """
+        A stand-in for AppConfig: 'get_llm_config' only reads 'llm_config' and
+        'projects', and a real AppConfig would drag in prompt template validation.
+        """
+        config = MagicMock()
+        config.llm_config = llm_config
+        config.projects = {}
+        return config
+
+    def _entra_global_config(self) -> MagicMock:
+        return self._app_config(
+            LLMConfig(
+                provider=LLMProvider.AZURE_OPENAI,
+                auth_method=AzureAuthMethod.ENTRA_ID,
+                model="gpt-4o",
+                azure_endpoint="https://example.openai.azure.com",
+                api_version="2024-10-21",
+            )
+        )
+
+    def test_project_override_to_a_non_azure_provider_raises(self):
+        config = self._entra_global_config()
+        config.projects = {
+            "proj1": ProjectConfig(llm_config=LLMConfig(provider=LLMProvider.OPENAI))
+        }
+
+        with pytest.raises(ValueError, match="entra_id") as exc_info:
+            get_llm_config(config, project_name="proj1")
+
+        message = str(exc_info.value)
+        assert "'azure_openai'" in message
+        assert "uses provider 'openai'" in message
+
+    def test_request_override_to_a_non_azure_provider_raises(self):
+        config = self._entra_global_config()
+
+        with pytest.raises(ValueError, match="entra_id"):
+            get_llm_config(config, request_config=LLMConfig(provider=LLMProvider.ANTHROPIC))
+
+    def test_azure_entra_config_still_merges(self):
+        config = self._entra_global_config()
+        config.projects = {"proj1": ProjectConfig(llm_config=LLMConfig(model="gpt-4o-mini"))}
+
+        result = get_llm_config(config, project_name="proj1")
+
+        assert result.provider == LLMProvider.AZURE_OPENAI
+        assert result.auth_method == AzureAuthMethod.ENTRA_ID
+        assert result.model == "gpt-4o-mini"
+
+    def test_api_key_config_is_unaffected(self):
+        config = self._app_config(LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o"))
+        config.projects = {"proj1": ProjectConfig(llm_config=LLMConfig(model="gpt-4o-mini"))}
+
+        result = get_llm_config(config, project_name="proj1")
+
+        assert result.provider == LLMProvider.OPENAI
+        assert result.auth_method == AzureAuthMethod.API_KEY
 
 
 class TestGetPromptConfig:
