@@ -1,5 +1,4 @@
 import asyncio
-import re
 import tempfile
 import zipfile
 from io import BytesIO
@@ -257,11 +256,7 @@ def get_test_case_set_nodes(conn: TBConnection, context: ExecutionContext) -> li
     if context.element_type == ElementType.TESTCASESET:
         return [structure.root] if isinstance(structure.root, TestCaseSetNode) else []
 
-    return [
-        node
-        for node in structure.nodes
-        if isinstance(node, TestCaseSetNode) and re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
-    ]
+    return [node for node in structure.nodes if isinstance(node, TestCaseSetNode)]
 
 
 def is_json_based_tov(conn: TBConnection, project_key: str, tov_key: str) -> bool:
