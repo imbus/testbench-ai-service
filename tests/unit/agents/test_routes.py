@@ -4,6 +4,7 @@ import zipfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import requests
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from testbench2robotframework.json_reader import TestBenchJsonReader
@@ -258,6 +259,29 @@ class TestTriggerTestCaseSetReviews:
         )
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
         assert response.status_code == 403
+
+    def _post_with_precheck_error(self, error: Exception):
+        """Drive the request as far as ``precheck``, which then fails with *error*.
+
+        ``validate_template_and_agent_vars`` runs against the mocked agent class and is
+        stubbed out here; it is unrelated to the transport error handling under test.
+        """
+        self.mock_reviewer.precheck = AsyncMock(side_effect=error)
+        with patch("testbench_ai_service.agents.routes.validate_template_and_agent_vars"):
+            return self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
+
+    def test_precheck_connection_error_returns_502(self):
+        response = self._post_with_precheck_error(
+            requests.exceptions.ConnectionError("Connection refused")
+        )
+        assert response.status_code == 502
+
+    def test_precheck_read_timeout_returns_502(self):
+        """A stalled TestBench read must not escape as an unhandled 500."""
+        response = self._post_with_precheck_error(
+            requests.exceptions.ReadTimeout("Read timed out.")
+        )
+        assert response.status_code == 502
 
     # ── Side-effect helpers ───────────────────────────────────────────────────
 

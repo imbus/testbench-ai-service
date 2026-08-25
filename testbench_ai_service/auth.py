@@ -10,6 +10,7 @@ from jwt import DecodeError, decode
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.exceptions import TRANSPORT_ERRORS, handle_requests_transport_error
 from testbench_ai_service.log import logger
 from testbench_ai_service.transport import (
     DEFAULT_CONNECT_TIMEOUT,
@@ -83,7 +84,7 @@ def _validate_token(
 
     Raises:
         HTTPException 401: Token is rejected by TestBench.
-        HTTPException 502: TestBench server is unreachable.
+        HTTPException 502: TestBench server is unreachable or does not respond in time.
     """
     conn: TBConnection | None = None
     try:
@@ -110,14 +111,10 @@ def _validate_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization token"
         ) from e
-    except requests.exceptions.ConnectionError as e:
-        logger.error("Could not connect to TestBench server: %s", e)
+    except TRANSPORT_ERRORS as e:
         if conn is not None:
             conn.close()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not connect to TestBench server: {e!s}",
-        ) from e
+        handle_requests_transport_error(e)
 
 
 def validate_auth_token(

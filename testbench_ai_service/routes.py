@@ -7,7 +7,6 @@ from fastapi import (
     Path,
     Query,
     Request,
-    status,
 )
 from fastapi.responses import RedirectResponse
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -19,7 +18,11 @@ from testbench_ai_service.agents.routes import (
 from testbench_ai_service.auth import AuthInfo, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
-from testbench_ai_service.exceptions import handle_requests_http_error
+from testbench_ai_service.exceptions import (
+    TRANSPORT_ERRORS,
+    handle_requests_http_error,
+    handle_requests_transport_error,
+)
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.models.agent import (
     AgentDetailsResponse,
@@ -46,11 +49,8 @@ def _resolve_project_name(conn: TBConnection, project_key: str | None) -> str | 
         return get_project_name(conn, project_key)
     except requests.exceptions.HTTPError as e:
         handle_requests_http_error(e)
-    except requests.exceptions.ConnectionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not connect to TestBench server: {e!s}",
-        ) from e
+    except TRANSPORT_ERRORS as e:
+        handle_requests_transport_error(e)
 
 
 @router.get("/", include_in_schema=False)

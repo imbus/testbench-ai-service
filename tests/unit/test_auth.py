@@ -148,6 +148,19 @@ class TestValidateToken:
         assert exc_info.value.status_code == 502
 
     @patch("testbench_ai_service.auth.TBConnection")
+    @patch(
+        "testbench_ai_service.auth.get_user_key",
+        side_effect=requests.exceptions.ReadTimeout("Read timed out."),
+    )
+    def test_read_timeout_raises_502(self, mock_get_user_key, mock_conn_cls):
+        """``connection_timeout_sec`` bounds the bootstrap requests, so a stalled
+        server surfaces as ``ReadTimeout`` - a ``Timeout``, not a ``ConnectionError``.
+        """
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_token("https://tb/api/", "any-token", True)
+        assert exc_info.value.status_code == 502
+
+    @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
     def test_session_is_hardened_with_timeouts_and_retries(self, mock_get_user_key, mock_conn_cls):
         """The connection's session must get bounded timeouts and retries."""
@@ -231,6 +244,20 @@ class TestValidateToken:
         side_effect=requests.exceptions.ConnectionError("timeout"),
     )
     def test_connection_closed_on_connection_error(self, mock_get_user_key, mock_conn_cls):
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(HTTPException):
+            _validate_token("https://tb/api/", "any-token", True)
+
+        mock_conn.close.assert_called_once()
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch(
+        "testbench_ai_service.auth.get_user_key",
+        side_effect=requests.exceptions.ReadTimeout("Read timed out."),
+    )
+    def test_connection_closed_on_read_timeout(self, mock_get_user_key, mock_conn_cls):
         mock_conn = MagicMock()
         mock_conn_cls.return_value = mock_conn
 

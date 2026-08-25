@@ -1,11 +1,15 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
+import requests
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.main import create_app
+from testbench_ai_service.routes import _resolve_project_name
 
 
 def _make_auth_info() -> AuthInfo:
@@ -110,3 +114,32 @@ class TestGetPromptDetails:
         client = _make_unauthenticated_client()
         response = client.get("/agents/test_case_set_reviewer/prompt")
         assert response.status_code in (401, 403)
+
+
+class TestResolveProjectName:
+    """``_resolve_project_name`` must map transport failures to HTTP 502."""
+
+    @patch("testbench_ai_service.routes.get_project_name", return_value="Car Configurator")
+    def test_returns_project_name(self, mock_get_project_name):
+        assert _resolve_project_name(MagicMock(), "1") == "Car Configurator"
+
+    def test_returns_none_without_project_key(self):
+        assert _resolve_project_name(MagicMock(), None) is None
+
+    @patch(
+        "testbench_ai_service.routes.get_project_name",
+        side_effect=requests.exceptions.ConnectionError("Connection refused"),
+    )
+    def test_connection_error_raises_502(self, mock_get_project_name):
+        with pytest.raises(HTTPException) as exc_info:
+            _resolve_project_name(MagicMock(), "1")
+        assert exc_info.value.status_code == 502
+
+    @patch(
+        "testbench_ai_service.routes.get_project_name",
+        side_effect=requests.exceptions.ReadTimeout("Read timed out."),
+    )
+    def test_read_timeout_raises_502(self, mock_get_project_name):
+        with pytest.raises(HTTPException) as exc_info:
+            _resolve_project_name(MagicMock(), "1")
+        assert exc_info.value.status_code == 502

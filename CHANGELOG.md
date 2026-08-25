@@ -26,6 +26,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   replayed and a review comment cannot be appended twice.
 - Token validation during authentication is bounded as well, so an unreachable or stalled
   TestBench server fails the request instead of hanging it.
+- A TestBench server that accepts the connection and then stalls now returns `502 Bad Gateway`
+  instead of `500 Internal Server Error`. With the request timeouts in place such a server
+  raises `requests.exceptions.Timeout`, which is not a `ConnectionError` and therefore escaped
+  the handlers that translate unreachable-server failures into a `502`.
 - Test case sets are no longer skipped when the project uses a unique-ID prefix other than
   `iTB`. Node filtering now matches the `-TC-<number>` suffix instead of the full
   `iTB-TC-<number>` pattern.

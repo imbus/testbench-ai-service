@@ -5,7 +5,12 @@ import pytest
 import requests
 from fastapi import HTTPException
 
-from testbench_ai_service.exceptions import handle_requests_http_error, http_exception_handler
+from testbench_ai_service.exceptions import (
+    TRANSPORT_ERRORS,
+    handle_requests_http_error,
+    handle_requests_transport_error,
+    http_exception_handler,
+)
 
 
 class TestHttpExceptionHandler:
@@ -74,3 +79,33 @@ class TestHandleRequestsHttpError:
 
         assert exc_info.value.status_code == 403
         assert exc_info.value.detail == "Forbidden"
+
+
+class TestHandleRequestsTransportError:
+    """Tests for ``handle_requests_transport_error``."""
+
+    def test_connection_error_raises_502(self):
+        error = requests.exceptions.ConnectionError("Connection refused")
+        with pytest.raises(HTTPException) as exc_info:
+            handle_requests_transport_error(error)
+        assert exc_info.value.status_code == 502
+        assert "Could not connect to TestBench server" in exc_info.value.detail
+        assert exc_info.value.__cause__ is error
+
+    def test_read_timeout_raises_502(self):
+        """A stalled read is a ``Timeout`` but not a ``ConnectionError``."""
+        error = requests.exceptions.ReadTimeout("Read timed out. (read timeout=120)")
+        with pytest.raises(HTTPException) as exc_info:
+            handle_requests_transport_error(error)
+        assert exc_info.value.status_code == 502
+        assert "did not respond in time" in exc_info.value.detail
+
+    def test_connect_timeout_raises_502(self):
+        """``ConnectTimeout`` derives from both branches; it must not be ambiguous."""
+        with pytest.raises(HTTPException) as exc_info:
+            handle_requests_transport_error(requests.exceptions.ConnectTimeout("too slow"))
+        assert exc_info.value.status_code == 502
+
+    def test_transport_errors_covers_both_branches(self):
+        assert issubclass(requests.exceptions.ReadTimeout, TRANSPORT_ERRORS)
+        assert issubclass(requests.exceptions.ConnectionError, TRANSPORT_ERRORS)
