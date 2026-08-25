@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.2.1][1.2.1] - 2026-08-25
+
+### Added
+
+- `tb_connect_timeout`, `tb_read_timeout` and `tb_max_retries` in `app_config` to tune outbound
+  TestBench requests. They default to 10 s, 120 s and 3 retries; documented in
+  `docs/configuration.md`.
+
+### Fixed
+
+- Outbound TestBench requests are now bounded and retried. The adapter that
+  `testbench-cli-reporter` mounts has no timeout of its own and overwrites any per-request
+  timeout, so a stalled request blocked the connection heartbeat — observed at 600 s — and a
+  keep-alive connection dropped by the peer aborted the whole agent run with a
+  `ConnectionError`. The service now mounts an adapter that applies a default
+  `(connect, read)` timeout only when the caller supplied none and retries connection and read
+  failures. Retries are limited to idempotent methods, so a `PATCH` on a specification is never
+  replayed and a review comment cannot be appended twice.
+- Token validation during authentication is bounded as well, so an unreachable or stalled
+  TestBench server fails the request instead of hanging it.
+- Test case sets are no longer skipped when the project uses a unique-ID prefix other than
+  `iTB`. Node filtering now matches the `-TC-<number>` suffix instead of the full
+  `iTB-TC-<number>` pattern.
+
 ## [1.2.0][1.2.0] - 2026-08-20
 
 ### Added
@@ -84,3 +108,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 [1.0.1]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.0.1
 [1.1.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.1.0
 [1.2.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.2.0
+[1.2.1]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.2.1
