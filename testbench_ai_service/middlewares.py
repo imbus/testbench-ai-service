@@ -9,6 +9,7 @@ from fastapi import Request, Response
 from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from testbench_ai_service.exceptions import record_elapsed
 from testbench_ai_service.log import logger
 
 
@@ -50,8 +51,9 @@ class OutboundRequestLoggingMiddleware:
         logger.debug("Testbench request: %s %s", method.upper(), sanitized_url)
         try:
             response = request(session, method, url, *args, **kwargs)
-        except Exception:
+        except Exception as e:
             duration = time.perf_counter() - start_time
+            record_elapsed(e, duration)
             logger.debug(
                 "Testbench request failed: %s %s in %.3f seconds",
                 method.upper(),

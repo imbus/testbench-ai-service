@@ -83,12 +83,12 @@ class AppConfig(BaseModel):
     tb_read_timeout: float = Field(
         DEFAULT_READ_TIMEOUT,
         gt=0,
-        description="Seconds to wait for data from the TestBench server before giving up. Bounds requests that would otherwise stall indefinitely.",
+        description="Seconds to wait for data from the TestBench server before giving up. Keep this below the server's own idle timeout (Play's default is 75s), which otherwise drops the connection first.",
     )
     tb_max_retries: int = Field(
         DEFAULT_MAX_RETRIES,
         ge=0,
-        description="How often to retry a TestBench request that failed with a connection error. Only idempotent methods are retried; POST and PATCH are never replayed.",
+        description="How often to retry a TestBench request that failed with a connection error. Only idempotent methods are retried; PATCH is never replayed. The read-only structure POSTs are retried separately.",
     )
     host: str = Field(
         DEFAULT_HOST,

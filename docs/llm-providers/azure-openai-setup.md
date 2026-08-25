@@ -2,7 +2,6 @@
 sidebar_position: 3
 title: Azure OpenAI Setup
 ---
-
 # Azure OpenAI Setup
 
 This guide walks you through connecting the TestBench AI Service to an Azure OpenAI resource.
@@ -37,10 +36,10 @@ This guide walks you through connecting the TestBench AI Service to an Azure Ope
 
 The service supports two ways to authenticate against Azure OpenAI:
 
-| Method | `auth_method` | When to use |
-| --- | --- | --- |
-| API key | `api_key` (default) | Direct integration scenarios where a key is explicitly required |
-| Microsoft Entra ID | `entra_id` | Application development, and wherever your security policy mandates Entra ID |
+| Method             | `auth_method`       | When to use                                                                  |
+| ------------------ | --------------------- | ---------------------------------------------------------------------------- |
+| API key            | `api_key` (default) | Direct integration scenarios where a key is explicitly required              |
+| Microsoft Entra ID | `entra_id`          | Application development, and wherever your security policy mandates Entra ID |
 
 Managed identity is not supported, because the service runs on-premise where no
 managed identity is available. Entra ID authentication therefore uses a service
@@ -72,10 +71,10 @@ permissions **you** need in order to set this up, and the permission the
 
 **1. Permissions you need to complete the setup**
 
-| Task | Required role |
-| --- | --- |
-| Create the app registration and a client secret | **Application Developer** in Microsoft Entra ID — or none at all, if your tenant leaves the default *Users can register applications* setting enabled |
-| Assign a role on the Azure OpenAI resource | **Owner**, **User Access Administrator** or **Role Based Access Control Administrator** on the resource, its resource group or the subscription |
+| Task                                            | Required role                                                                                                                                                     |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create the app registration and a client secret | **Application Developer** in Microsoft Entra ID — or none at all, if your tenant leaves the default *Users can register applications* setting enabled    |
+| Assign a role on the Azure OpenAI resource      | **Owner**, **User Access Administrator** or **Role Based Access Control Administrator** on the resource, its resource group or the subscription |
 
 If you lack the second one, `Add role assignment` is visible but greyed out.
 In that case have a subscription owner perform step 4 for you — the app
@@ -83,8 +82,8 @@ registration itself can still be created independently.
 
 **2. Permission the service principal needs**
 
-| Role | Scope | Purpose |
-| --- | --- | --- |
+| Role                                     | Scope                                                                          | Purpose                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
 | **Cognitive Services OpenAI User** | The Azure OpenAI resource (or the resource group / subscription containing it) | Data-plane access: send chat completion requests and list deployments |
 
 This is the only role the service requires. **Cognitive Services OpenAI
@@ -153,11 +152,11 @@ AZURE_CLIENT_ID=your_application_client_id
 AZURE_CLIENT_SECRET=your_client_secret
 ```
 
-| Variable | Azure portal name |
-| --- | --- |
-| `AZURE_TENANT_ID` | Directory (tenant) ID |
-| `AZURE_CLIENT_ID` | Application (client) ID |
-| `AZURE_CLIENT_SECRET` | Client secret **value** |
+| Variable                | Azure portal name            |
+| ----------------------- | ---------------------------- |
+| `AZURE_TENANT_ID`     | Directory (tenant) ID        |
+| `AZURE_CLIENT_ID`     | Application (client) ID      |
+| `AZURE_CLIENT_SECRET` | Client secret**value** |
 
 `AZURE_OPENAI_API_KEY` is not read in this mode and does not need to be set.
 
@@ -207,49 +206,49 @@ The key is the deployment name you use in prompt variants; the value is the cano
 
 ### Known canonical chat models
 
-| Canonical name    | Type          |
-| ----------------- | ------------- |
-| `gpt-4o`        | Chat          |
-| `gpt-4o-mini`   | Chat          |
-| `gpt-4o-search-preview` | Chat |
+| Canonical name                 | Type |
+| ------------------------------ | ---- |
+| `gpt-4o`                     | Chat |
+| `gpt-4o-mini`                | Chat |
+| `gpt-4o-search-preview`      | Chat |
 | `gpt-4o-mini-search-preview` | Chat |
-| `gpt-4.1`       | Chat          |
-| `gpt-4.1-mini`  | Chat          |
-| `gpt-4.1-nano`  | Chat          |
-| `gpt-4-turbo`   | Chat          |
-| `gpt-4`         | Chat          |
-| `gpt-3.5-turbo` | Chat          |
-| `gpt-3.5-turbo-16k` | Chat      |
-| `gpt-3.5-turbo-instruct` | Chat  |
+| `gpt-4.1`                    | Chat |
+| `gpt-4.1-mini`               | Chat |
+| `gpt-4.1-nano`               | Chat |
+| `gpt-4-turbo`                | Chat |
+| `gpt-4`                      | Chat |
+| `gpt-3.5-turbo`              | Chat |
+| `gpt-3.5-turbo-16k`          | Chat |
+| `gpt-3.5-turbo-instruct`     | Chat |
 
 ### Known canonical reasoning models
 
-| Canonical name           | Type      |
-| ------------------------ | --------- |
-| `gpt-5`                | Reasoning |
-| `gpt-5-mini`           | Reasoning |
-| `gpt-5-nano`           | Reasoning |
-| `gpt-5-codex`          | Reasoning |
-| `gpt-5-pro`            | Reasoning |
-| `gpt-5.1`              | Reasoning |
-| `gpt-5.1-codex`        | Reasoning |
-| `gpt-5.1-codex-max`    | Reasoning |
-| `gpt-5.1-codex-mini`   | Reasoning |
-| `gpt-5.2`              | Reasoning |
-| `gpt-5.2-codex`        | Reasoning |
-| `gpt-5.2-pro`          | Reasoning |
-| `gpt-5.3-codex`        | Reasoning |
-| `gpt-5.4`              | Reasoning |
-| `gpt-5.4-mini`         | Reasoning |
-| `gpt-5.4-nano`         | Reasoning |
-| `gpt-5.4-pro`          | Reasoning |
-| `gpt-5.5`              | Reasoning |
-| `gpt-5.5-pro`          | Reasoning |
-| `o1`                   | Reasoning |
-| `o1-pro`               | Reasoning |
-| `o3`                   | Reasoning |
-| `o3-mini`              | Reasoning |
-| `o4-mini`              | Reasoning |
+| Canonical name         | Type      |
+| ---------------------- | --------- |
+| `gpt-5`              | Reasoning |
+| `gpt-5-mini`         | Reasoning |
+| `gpt-5-nano`         | Reasoning |
+| `gpt-5-codex`        | Reasoning |
+| `gpt-5-pro`          | Reasoning |
+| `gpt-5.1`            | Reasoning |
+| `gpt-5.1-codex`      | Reasoning |
+| `gpt-5.1-codex-max`  | Reasoning |
+| `gpt-5.1-codex-mini` | Reasoning |
+| `gpt-5.2`            | Reasoning |
+| `gpt-5.2-codex`      | Reasoning |
+| `gpt-5.2-pro`        | Reasoning |
+| `gpt-5.3-codex`      | Reasoning |
+| `gpt-5.4`            | Reasoning |
+| `gpt-5.4-mini`       | Reasoning |
+| `gpt-5.4-nano`       | Reasoning |
+| `gpt-5.4-pro`        | Reasoning |
+| `gpt-5.5`            | Reasoning |
+| `gpt-5.5-pro`        | Reasoning |
+| `o1`                 | Reasoning |
+| `o1-pro`             | Reasoning |
+| `o3`                 | Reasoning |
+| `o3-mini`            | Reasoning |
+| `o4-mini`            | Reasoning |
 
 ## 6. Reference the deployment in a prompt variant
 
@@ -376,19 +375,19 @@ project's first request.
 
 ## Troubleshooting
 
-| Symptom | Likely cause | Fix |
-|---|---|---|
-| `API key for provider 'azure_openai' not found` | `AZURE_OPENAI_API_KEY` is not set | Set the variable in your `.env` file or system environment |
-| `'azure_endpoint' must be set for provider 'azure_openai'` | Missing endpoint in `config.toml` | Add `azure_endpoint` to `[testbench-ai-service.llm_config]` |
-| `'api_version' must be set for provider 'azure_openai'` | Missing API version in `config.toml` | Add `api_version` to `[testbench-ai-service.llm_config]` |
-| `DeploymentNotFound` from Azure API | Wrong deployment name in prompt variant | Verify the deployment name in Azure OpenAI Studio and update the prompt YAML |
-| Empty or unexpected response | Deployment mapped to wrong canonical model | Check and correct the `deployment_mapping` in `config.toml` |
-| `Entra ID authentication ... is incompletely configured` | One or two of the three service principal variables are missing | Set all of `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` (or all three project-prefixed variants) |
-| `'auth_method = entra_id' is only supported for provider 'azure_openai'` | `auth_method` set on a non-Azure provider | Remove `auth_method`, or set `provider = "azure_openai"` |
-| `The 'azure-identity' package is required` | Running from source without the dependency installed | Run `pip install azure-identity` |
-| `401 Unauthorized` / `403 Forbidden` with correct credentials | The app registration has no role on the Azure OpenAI resource | Assign the **Cognitive Services OpenAI User** role (step 4 above) |
-| `403 Forbidden` although a role is assigned | A control-plane role such as **Contributor** or **Cognitive Services Contributor** was assigned — these grant no inference access | Assign **Cognitive Services OpenAI User** instead, see [Required permissions](#required-permissions) |
-| `403 Forbidden` only in the first minutes after setup | The role assignment has not propagated yet | Wait a few minutes and retry |
-| **Add role assignment** is greyed out in the portal | You are missing **Owner** / **User Access Administrator** / **Role Based Access Control Administrator** on the resource | Ask a subscription owner to assign the role |
-| `ClientAuthenticationError: AADSTS7000215` | Invalid client secret, or the secret value was confused with the secret ID | Copy the secret **value** from **Certificates & secrets** |
-| `ClientAuthenticationError` after months of working | The client secret expired | Create a new secret and update `AZURE_CLIENT_SECRET` |
+| Symptom                                                                    | Likely cause                                                                                                                                  | Fix                                                                                                                     |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `API key for provider 'azure_openai' not found`                          | `AZURE_OPENAI_API_KEY` is not set                                                                                                           | Set the variable in your`.env` file or system environment                                                             |
+| `'azure_endpoint' must be set for provider 'azure_openai'`               | Missing endpoint in`config.toml`                                                                                                            | Add`azure_endpoint` to `[testbench-ai-service.llm_config]`                                                          |
+| `'api_version' must be set for provider 'azure_openai'`                  | Missing API version in`config.toml`                                                                                                         | Add`api_version` to `[testbench-ai-service.llm_config]`                                                             |
+| `DeploymentNotFound` from Azure API                                      | Wrong deployment name in prompt variant                                                                                                       | Verify the deployment name in Azure OpenAI Studio and update the prompt YAML                                            |
+| Empty or unexpected response                                               | Deployment mapped to wrong canonical model                                                                                                    | Check and correct the`deployment_mapping` in `config.toml`                                                          |
+| `Entra ID authentication ... is incompletely configured`                 | One or two of the three service principal variables are missing                                                                               | Set all of`AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` (or all three project-prefixed variants) |
+| `'auth_method = entra_id' is only supported for provider 'azure_openai'` | `auth_method` set on a non-Azure provider                                                                                                   | Remove`auth_method`, or set `provider = "azure_openai"`                                                             |
+| `The 'azure-identity' package is required`                               | Running from source without the dependency installed                                                                                          | Run`pip install azure-identity`                                                                                       |
+| `401 Unauthorized` / `403 Forbidden` with correct credentials          | The app registration has no role on the Azure OpenAI resource                                                                                 | Assign the**Cognitive Services OpenAI User** role (step 4 above)                                                  |
+| `403 Forbidden` although a role is assigned                              | A control-plane role such as**Contributor** or **Cognitive Services Contributor** was assigned — these grant no inference access | Assign**Cognitive Services OpenAI User** instead, see [Required permissions](#required-permissions)                |
+| `403 Forbidden` only in the first minutes after setup                    | The role assignment has not propagated yet                                                                                                    | Wait a few minutes and retry                                                                                            |
+| **Add role assignment** is greyed out in the portal                  | You are missing**Owner** / **User Access Administrator** / **Role Based Access Control Administrator** on the resource      | Ask a subscription owner to assign the role                                                                             |
+| `ClientAuthenticationError: AADSTS7000215`                               | Invalid client secret, or the secret value was confused with the secret ID                                                                    | Copy the secret**value** from **Certificates & secrets**                                                    |
+| `ClientAuthenticationError` after months of working                      | The client secret expired                                                                                                                     | Create a new secret and update`AZURE_CLIENT_SECRET`                                                                   |

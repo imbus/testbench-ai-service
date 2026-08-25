@@ -30,6 +30,7 @@ from testbench_ai_service.models.testbench import (
     TOVExchangeFormat,
     TovStructureOptions,
 )
+from testbench_ai_service.transport import retry_read_only_post
 
 TEST_CASE_SET_UID = re.compile(r"-TC-\d+$")
 
@@ -126,6 +127,7 @@ def get_test_case_set_catalog(
         return test_case_set_catalog
 
 
+@retry_read_only_post()
 def post_project_cycle_structure(
     conn: TBConnection,
     project_key: str,
@@ -158,6 +160,7 @@ def get_project_details(conn: TBConnection, project_key: str) -> ProjectDetails:
     return ProjectDetails(**project_details)
 
 
+@retry_read_only_post()
 def post_project_tov_structure(
     conn: TBConnection,
     project_key: str,

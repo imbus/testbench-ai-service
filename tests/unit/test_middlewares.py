@@ -1,8 +1,15 @@
 from unittest.mock import MagicMock, patch
 
-from fastapi import FastAPI
+import pytest
+import requests
+from fastapi import FastAPI, HTTPException
 from starlette.testclient import TestClient
+from urllib3.exceptions import ProtocolError
 
+from testbench_ai_service.exceptions import (
+    ELAPSED_ATTRIBUTE,
+    handle_requests_transport_error,
+)
 from testbench_ai_service.middlewares import LoggingMiddleware, OutboundRequestLoggingMiddleware
 
 
@@ -70,3 +77,33 @@ class TestOutboundRequestLoggingMiddleware:
         log_messages = [call.args[0] for call in mock_logger.debug.call_args_list]
         assert any("Testbench request:" in message for message in log_messages)
         assert any("Testbench response:" in message for message in log_messages)
+
+
+class TestElapsedTimeReachesTheErrorMessage:
+    """The join between the outbound logger and the 502 detail.
+
+    Each side is unit-tested on its own; this covers the hand-off between them, which is
+    the part that silently degrades to "no duration" if either end is renamed.
+    """
+
+    def test_a_failed_call_carries_its_duration_into_the_502(self, monkeypatch):
+        server_url = "https://tb:9443/api/"
+        OutboundRequestLoggingMiddleware.install(server_url)
+
+        def _boom(*args, **kwargs):
+            raise requests.exceptions.ConnectionError(
+                ProtocolError("Connection aborted.", ConnectionResetError(10054, "reset"))
+            )
+
+        monkeypatch.setattr(requests.adapters.HTTPAdapter, "send", _boom)
+
+        session = requests.Session()
+        session.trust_env = False
+        with pytest.raises(requests.exceptions.ConnectionError) as raised:
+            session.post(f"{server_url}2/projects/1/tovs/2/structure", json={})
+
+        assert getattr(raised.value, ELAPSED_ATTRIBUTE, None) is not None
+
+        with pytest.raises(HTTPException) as exc_info:
+            handle_requests_transport_error(raised.value)
+        assert "closed the connection before responding after" in exc_info.value.detail

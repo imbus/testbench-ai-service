@@ -7,8 +7,12 @@ from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import ElementType, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.testbench import FilterInfo, FilteringOptions
 from testbench_ai_service.models.testbench import (  # aliased: pytest would try to collect Test* classes
     TestCaseSetNode as TCSNode,
+)
+from testbench_ai_service.models.testbench import (
+    TestFilterType as FilterType,
 )
 from testbench_ai_service.models.testbench import (
     TestStructureItemBaseInformation as ItemBaseInfo,
@@ -24,6 +28,7 @@ from testbench_ai_service.utils.testbench import (
     get_project_name,
     get_test_case_set_nodes,
     get_user_key,
+    post_project_tov_structure,
 )
 
 
@@ -177,3 +182,56 @@ class TestGetTestCaseSetNodes:
         result = get_test_case_set_nodes(MagicMock(), context)
 
         assert [node.base.uniqueID for node in result] == ["CarConfig-TC-7"]
+
+
+class TestPostProjectTovStructure:
+    """Tests for ``post_project_tov_structure``."""
+
+    @staticmethod
+    def _conn_returning_empty_tree() -> MagicMock:
+        conn = MagicMock()
+        conn.server_url = "https://tb:9443/api/"
+        conn.session.post.return_value.json.return_value = {"root": None, "nodes": []}
+        return conn
+
+    def _posted_body(self, **kwargs) -> dict:
+        conn = self._conn_returning_empty_tree()
+        post_project_tov_structure(conn, "310023", "230013", **kwargs)
+        return conn.session.post.call_args.kwargs["json"]
+
+    def test_requests_a_pruned_tree(self):
+        """Both suppress flags must be sent, not left to the server's default.
+
+        Without ``suppressFilteredData`` the server returns the whole subtree annotated
+        with filter state instead of pruning it.  On a large root with a filter attached
+        that is the work that made TestBench stall past its own 75 s socket limit, so
+        the flags are what keep the request answerable - they are not a preference.
+        """
+        body = self._posted_body()
+        assert body["suppressFilteredData"] is True
+        assert body["suppressEmptyTestThemes"] is True
+
+    def test_flags_are_sent_alongside_a_filter(self):
+        """The filtered case is the one that stalled, so it must carry the flags too."""
+        body = self._posted_body(
+            root_uid="ITBEXP-TT-10667",
+            filtering=FilteringOptions(
+                appliedFilters=[
+                    FilterInfo(
+                        name="Neuer Filter",
+                        filterType=FilterType.TestCaseSet,
+                        testThemeUID="ITBEXP-TT-10671",
+                    )
+                ]
+            ),
+        )
+        assert body["suppressFilteredData"] is True
+        assert body["suppressEmptyTestThemes"] is True
+        assert body["treeRootUID"] == "ITBEXP-TT-10667"
+        assert body["filters"][0]["testThemeUID"] == "ITBEXP-TT-10671"
+
+    def test_posts_to_the_tov_structure_endpoint(self):
+        conn = self._conn_returning_empty_tree()
+        post_project_tov_structure(conn, "310023", "230013")
+        url = conn.session.post.call_args.args[0]
+        assert url == "https://tb:9443/api/2/projects/310023/tovs/230013/structure"

@@ -53,6 +53,74 @@ def handle_requests_http_error(e: requests.exceptions.HTTPError):
 TRANSPORT_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 
+#: Builtin ``OSError`` subclasses raised when the peer tears down a connection that was
+#: already established: ECONNRESET (WSAECONNRESET / Windows error 10054), ECONNABORTED
+#: and EPIPE.  Reaching the server and losing the socket mid-request is a different
+#: failure from never reaching it, but ``requests`` reports both as ``ConnectionError``.
+PEER_CLOSED_ERRORS = (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)
+
+
+def peer_closed_connection(e: BaseException) -> bool:
+    """Return True if *e* was caused by the peer dropping an established connection.
+
+    The distinguishing cause is buried: ``requests`` wraps ``urllib3``, which wraps the
+    original ``OSError``, and neither uses a single attribute to expose it.  So the whole
+    cause chain is walked - ``__cause__``/``__context__``, the exceptions passed along as
+    ``args`` (``ProtocolError('Connection aborted.', ConnectionResetError(...))``), and
+    ``MaxRetryError.reason`` - looking for one of :data:`PEER_CLOSED_ERRORS`.
+    """
+    seen: set[int] = set()
+    stack: list[BaseException] = [e]
+    while stack:
+        current = stack.pop()
+        if id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, PEER_CLOSED_ERRORS):
+            return True
+        stack.extend(arg for arg in getattr(current, "args", ()) if isinstance(arg, BaseException))
+        stack.extend(
+            nested for nested in (current.__cause__, current.__context__) if nested is not None
+        )
+        reason = getattr(current, "reason", None)  # urllib3.exceptions.MaxRetryError
+        if isinstance(reason, BaseException):
+            stack.append(reason)
+    return False
+
+
+#: Attribute under which :class:`~testbench_ai_service.middlewares.TestBenchRequestLogger`
+#: parks how long a failed outbound call ran, for :func:`handle_requests_transport_error`
+#: to read back.  An attribute on the exception is the only channel available: the error
+#: travels up through ``requests``, which offers nowhere else to put it.
+ELAPSED_ATTRIBUTE = "testbench_elapsed_seconds"
+
+
+def record_elapsed(e: BaseException, seconds: float) -> None:
+    """Note on *e* how long the failed request ran before it gave up.
+
+    Best effort by design - an exception type that refuses the attribute costs the
+    caller a detail in the message, which is never worth masking the original error.
+    """
+    try:
+        setattr(e, ELAPSED_ATTRIBUTE, seconds)
+    except (AttributeError, TypeError):  # e.g. an exception class using __slots__
+        logger.debug("Could not record elapsed time on %s", type(e).__name__)
+
+
+def _elapsed_phrase(e: BaseException) -> str:
+    """Render the recorded duration, or nothing if the call was not timed.
+
+    The duration is what identifies this failure: a server-side idle timeout lands on
+    the same constant every time (75 s for a stock TestBench), whereas a genuine network
+    fault does not.  Without it in the message, a reader has only an opaque socket error
+    to go on and no reason to suspect a timeout at all.
+    """
+    elapsed = getattr(e, ELAPSED_ATTRIBUTE, None)
+    if not isinstance(elapsed, (int, float)) or isinstance(elapsed, bool):
+        return ""
+    return f" after {elapsed:.1f}s"
+
+
 def handle_requests_transport_error(e: requests.exceptions.RequestException) -> NoReturn:
     """Log a TestBench transport failure and re-raise it as HTTP 502.
 
@@ -60,11 +128,32 @@ def handle_requests_transport_error(e: requests.exceptions.RequestException) -> 
     :func:`~testbench_ai_service.transport.harden_connection`) mean a hung TestBench
     server now raises ``requests.exceptions.Timeout`` instead of hanging forever.  From
     a caller's point of view that is the same failure as an unreachable server: the
-    upstream did not deliver a response, so both map to ``502 Bad Gateway``.
+    upstream did not deliver a response, so all of these map to ``502 Bad Gateway``.
+
+    The three transport failures are reported separately because they point at different
+    culprits.  "Could not connect" sends whoever reads it to the URL, the port and the
+    TLS settings; when the request was in fact delivered and the server then dropped the
+    socket, that is the wrong place to look - the culprit is the upstream, and only it
+    can say why it gave up.
+
+    Reaching this function means every retry that applied has already been spent - the
+    adapter's for idempotent methods, and
+    :func:`~testbench_ai_service.transport.retry_read_only_post` for the structure
+    queries - so the message is genuinely all the caller has left to go on.  Hence the
+    elapsed time from :func:`_elapsed_phrase`: a failure that lands on the same duration
+    every time is a configured timeout, not a network fault, and the number is what makes
+    that visible.
     """
+    elapsed = _elapsed_phrase(e)
     if isinstance(e, requests.exceptions.Timeout):
-        detail = f"TestBench server did not respond in time: {e!s}"
+        detail = f"TestBench server did not respond in time{elapsed}: {e!s}"
+    elif peer_closed_connection(e):
+        detail = f"TestBench server closed the connection before responding{elapsed}: {e!s}"
     else:
-        detail = f"Could not connect to TestBench server: {e!s}"
-    logger.error(detail)
+        detail = f"Could not connect to TestBench server{elapsed}: {e!s}"
+    request = getattr(e, "request", None)
+    if request is None:
+        logger.error(detail)
+    else:
+        logger.error("%s (%s %s)", detail, request.method, request.url)
     raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from e

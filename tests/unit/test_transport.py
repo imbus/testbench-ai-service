@@ -9,15 +9,21 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 from testbench_cli_reporter.testbench import Connection as TBConnection
+from urllib3.exceptions import MaxRetryError, NewConnectionError, ProtocolError
 
+from testbench_ai_service import transport
 from testbench_ai_service.transport import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_MAX_RETRIES,
+    DEFAULT_READ_POST_ATTEMPTS,
     DEFAULT_READ_TIMEOUT,
+    PLAY_DEFAULT_IDLE_TIMEOUT,
     ResilientHTTPAdapter,
     build_retry,
     harden_connection,
+    retry_read_only_post,
 )
+from testbench_ai_service.utils.testbench import post_project_tov_structure
 
 _OK_RESPONSE = (
     b"HTTP/1.1 200 OK\r\n"
@@ -315,3 +321,271 @@ class TestBootstrapTimeout:
 
         assert finished, "expected the bootstrap to give up rather than hang"
         assert isinstance(error, requests.exceptions.Timeout)
+
+
+def _peer_reset() -> requests.exceptions.ConnectionError:
+    """The exception shape a Play idle-timeout produces on Windows.
+
+    WSAECONNRESET (10054) inside a ``ProtocolError`` inside a ``ConnectionError``.
+    """
+    reset = ConnectionResetError(
+        10054, "Eine vorhandene Verbindung wurde vom Remotehost geschlossen"
+    )
+    return requests.exceptions.ConnectionError(ProtocolError("Connection aborted.", reset))
+
+
+class TestRetryReadOnlyPost:
+    """``retry_read_only_post`` covers the gap urllib3's adapter policy leaves open.
+
+    ``build_retry`` keeps ``POST`` out of ``allowed_methods`` so a specification
+    ``PATCH`` is never replayed.  The structure endpoints are reads that happen to be
+    spelled ``POST``, so they fall through that policy and reach the caller on the very
+    first idle-timeout reset - which is exactly the failure this decorator absorbs.
+    """
+
+    @staticmethod
+    def _no_sleeping(monkeypatch) -> list[float]:
+        delays: list[float] = []
+        monkeypatch.setattr(transport.time, "sleep", delays.append)
+        return delays
+
+    def test_reset_is_retried_and_the_second_attempt_wins(self, monkeypatch):
+        """The observed recovery: a 75 s reset, then the same call succeeding in 1.5 s."""
+        self._no_sleeping(monkeypatch)
+        calls = []
+
+        @retry_read_only_post()
+        def structure():
+            calls.append(1)
+            if len(calls) == 1:
+                raise _peer_reset()
+            return "tree"
+
+        assert structure() == "tree"
+        assert len(calls) == 2
+
+    def test_read_timeout_is_retried(self, monkeypatch):
+        """Our own read timeout means the same thing: no response was produced."""
+        self._no_sleeping(monkeypatch)
+        calls = []
+
+        @retry_read_only_post()
+        def structure():
+            calls.append(1)
+            if len(calls) == 1:
+                raise requests.exceptions.ReadTimeout("timed out")
+            return "tree"
+
+        assert structure() == "tree"
+        assert len(calls) == 2
+
+    def test_gives_up_after_the_configured_attempts(self, monkeypatch):
+        self._no_sleeping(monkeypatch)
+        calls = []
+
+        @retry_read_only_post(attempts=3)
+        def structure():
+            calls.append(1)
+            raise _peer_reset()
+
+        with pytest.raises(requests.exceptions.ConnectionError):
+            structure()
+        assert len(calls) == 3, "expected exactly three attempts, not three retries"
+
+    def test_backoff_grows_exponentially(self, monkeypatch):
+        delays = self._no_sleeping(monkeypatch)
+
+        @retry_read_only_post(attempts=3, backoff_factor=0.5)
+        def structure():
+            raise _peer_reset()
+
+        with pytest.raises(requests.exceptions.ConnectionError):
+            structure()
+        assert delays == [0.5, 1.0]
+
+    def test_unreachable_server_is_not_retried_here(self, monkeypatch):
+        """``connect`` retries are not method-gated, so the adapter already handles them.
+
+        Retrying again at the call site would multiply the adapter's attempts.
+        """
+        self._no_sleeping(monkeypatch)
+        calls = []
+        unreachable = requests.exceptions.ConnectionError(
+            MaxRetryError(
+                None,
+                "https://tb:9443/api/",
+                reason=NewConnectionError(None, "Failed to establish a new connection"),
+            )
+        )
+
+        @retry_read_only_post()
+        def structure():
+            calls.append(1)
+            raise unreachable
+
+        with pytest.raises(requests.exceptions.ConnectionError):
+            structure()
+        assert len(calls) == 1
+
+    def test_http_errors_are_not_retried(self, monkeypatch):
+        """A 4xx/5xx is an answer.  Replaying it would just repeat the same answer."""
+        self._no_sleeping(monkeypatch)
+        calls = []
+
+        @retry_read_only_post()
+        def structure():
+            calls.append(1)
+            raise requests.exceptions.HTTPError("403 Forbidden")
+
+        with pytest.raises(requests.exceptions.HTTPError):
+            structure()
+        assert len(calls) == 1
+
+    def test_wrapper_keeps_the_wrapped_identity(self):
+        @retry_read_only_post()
+        def structure():
+            """Docstring kept."""
+
+        assert structure.__name__ == "structure"
+        assert structure.__doc__ == "Docstring kept."
+
+
+class TestReadTimeoutDefault:
+    """The default must stay below the TestBench web server's own socket limit."""
+
+    def test_default_read_timeout_is_below_the_play_idle_timeout(self):
+        """Play's ``idleTimeout`` default is 75 s and TestBench ships it unchanged.
+
+        A read timeout at or above that can never fire first, so a stalled request
+        surfaces as the peer's reset instead of a timeout that names itself.
+        """
+        assert DEFAULT_READ_TIMEOUT < PLAY_DEFAULT_IDLE_TIMEOUT
+
+
+_STRUCTURE_BODY = b'{"root": null, "nodes": []}'
+_STRUCTURE_RESPONSE = (
+    b"HTTP/1.1 200 OK\r\n"
+    b"Content-Type: application/json\r\n"
+    b"Content-Length: %d\r\n"
+    b"Connection: keep-alive\r\n"
+    b"\r\n" % len(_STRUCTURE_BODY)
+) + _STRUCTURE_BODY
+
+
+class _ResetsFirstRequestsServer:
+    """Resets the first *resets_first* requests it receives, then answers normally.
+
+    ``_ConnectionResettingServer`` counts per connection, which cannot express "the
+    server was stalled a moment ago and is fine now" - the shape of the Play idle
+    timeout, where a retry on a fresh connection is what succeeds.
+    """
+
+    def __init__(self, resets_first: int = 1) -> None:
+        self.resets_first = resets_first
+        self.requests_seen = 0
+        self._lock = threading.Lock()
+        self._sock = socket.socket()
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind(("127.0.0.1", 0))
+        self._sock.listen(8)
+        self.port = self._sock.getsockname()[1]
+        self._stop = threading.Event()
+        threading.Thread(target=self._accept_loop, daemon=True).start()
+
+    def _accept_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                conn, _ = self._sock.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._handle, args=(conn,), daemon=True).start()
+
+    def _handle(self, conn: socket.socket) -> None:
+        try:
+            while True:
+                request = b""
+                while b"\r\n\r\n" not in request:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        return
+                    request += chunk
+                header, _, rest = request.partition(b"\r\n\r\n")
+                length = 0
+                for line in header.split(b"\r\n"):
+                    if line.lower().startswith(b"content-length:"):
+                        length = int(line.split(b":")[1])
+                while len(rest) < length:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        break
+                    rest += chunk
+                with self._lock:
+                    self.requests_seen += 1
+                    should_reset = self.requests_seen <= self.resets_first
+                if should_reset:
+                    conn.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+                    conn.close()
+                    return
+                conn.sendall(_STRUCTURE_RESPONSE)
+        except OSError:
+            return
+
+    def close(self) -> None:
+        self._stop.set()
+        with contextlib.suppress(OSError):
+            self._sock.close()
+
+
+@pytest.fixture
+def stalling_then_healthy_server():
+    server = _ResetsFirstRequestsServer()
+    yield server
+    server.close()
+
+
+class TestStructureRetryEndToEnd:
+    """The whole chain, over a real socket: reset -> retry -> tree.
+
+    The unit tests above drive the decorator with synthetic exceptions.  This one proves
+    the exception a real reset produces is actually recognised by
+    ``_response_never_arrived`` once ``requests`` and ``urllib3`` are done wrapping it.
+    """
+
+    def test_structure_post_survives_a_reset(self, monkeypatch, stalling_then_healthy_server):
+        monkeypatch.setattr(transport.time, "sleep", lambda _: None)
+        session = requests.Session()
+        session.trust_env = False
+        session.mount(
+            "http://",
+            ResilientHTTPAdapter(timeout=(2.0, 5.0), max_retries=build_retry(DEFAULT_MAX_RETRIES)),
+        )
+        conn = MagicMock()
+        conn.server_url = f"http://127.0.0.1:{stalling_then_healthy_server.port}/api/"
+        conn.session = session
+
+        tree = post_project_tov_structure(conn, "310023", "230013")
+
+        assert tree.nodes == []
+        assert stalling_then_healthy_server.requests_seen == 2
+        session.close()
+
+    def test_structure_post_still_fails_when_the_server_never_recovers(
+        self, monkeypatch, stalling_then_healthy_server
+    ):
+        """Retrying must not turn a genuinely broken server into a silent success."""
+        monkeypatch.setattr(transport.time, "sleep", lambda _: None)
+        stalling_then_healthy_server.resets_first = 99
+        session = requests.Session()
+        session.trust_env = False
+        session.mount(
+            "http://", ResilientHTTPAdapter(timeout=(2.0, 5.0), max_retries=build_retry(0))
+        )
+        conn = MagicMock()
+        conn.server_url = f"http://127.0.0.1:{stalling_then_healthy_server.port}/api/"
+        conn.session = session
+
+        with pytest.raises(requests.exceptions.ConnectionError):
+            post_project_tov_structure(conn, "310023", "230013")
+
+        assert stalling_then_healthy_server.requests_seen == DEFAULT_READ_POST_ATTEMPTS
+        session.close()

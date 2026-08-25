@@ -45,7 +45,7 @@ prompts_dir = "prompts"
 # tb_ssl_verify = true          # set to false to disable TLS verification (insecure)
 # tb_ssl_ca_bundle = "/path/to/ca-bundle.pem"  # path to custom CA bundle
 # tb_connect_timeout = 10.0     # seconds to wait for a connection
-# tb_read_timeout = 120.0       # seconds to wait for data before giving up
+# tb_read_timeout = 70.0        # seconds to wait for data; keep below the server's 75 s idle timeout
 # tb_max_retries = 3            # retries for failed TestBench connections
 
 # LLM provider configuration
@@ -104,19 +104,19 @@ enabled = false
 
 **`[testbench-ai-service]`**
 
-| Option            | Type    | Description                                                                                                   | Default                           |
-| ----------------- | ------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| `tb_server_url`    | String  | Base URL of the TestBench REST API server.                                                                    | `"https://localhost:9443/api/"` |
-| `tb_ssl_verify`    | Boolean | Verify the SSL/TLS certificate of the TestBench server. Set to `false` to disable (insecure).                | `true`                          |
-| `tb_ssl_ca_bundle` | String  | Path to a CA bundle file for verifying the TestBench server certificate. Takes precedence over `tb_ssl_verify` when set. | —                   |
-| `tb_connect_timeout` | Float | Seconds to wait while establishing a connection to the TestBench server. | `10.0` |
-| `tb_read_timeout`  | Float   | Seconds to wait for data from the TestBench server before giving up. Bounds requests that would otherwise stall indefinitely. | `120.0` |
-| `tb_max_retries`   | Integer | Retries for a TestBench request that failed with a connection error. Only idempotent methods are retried; `POST` and `PATCH` are never replayed. | `3` |
-| `host`             | String  | Host address to bind to.                                                                                      | `"127.0.0.1"`                   |
-| `port`             | Integer | Port number to listen on.                                                                                     | `8010`                          |
-| `debug`            | Boolean | Enable debug mode (verbose logging, auto-reload).                                                             | `false`                         |
-| `language`         | String  | Default language for prompt resolution and localization (`"en"` or `"de"`).                               | `"de"`                          |
-| `prompts_dir`      | String  | Directory containing prompt YAML files. Relative paths in prompt configs are resolved against this directory. | Built-in prompts directory        |
+| Option                 | Type    | Description                                                                                                                                         | Default                           |
+| ---------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `tb_server_url`      | String  | Base URL of the TestBench REST API server.                                                                                                          | `"https://localhost:9443/api/"` |
+| `tb_ssl_verify`      | Boolean | Verify the SSL/TLS certificate of the TestBench server. Set to`false` to disable (insecure).                                                      | `true`                          |
+| `tb_ssl_ca_bundle`   | String  | Path to a CA bundle file for verifying the TestBench server certificate. Takes precedence over`tb_ssl_verify` when set.                           | —                                |
+| `tb_connect_timeout` | Float   | Seconds to wait while establishing a connection to the TestBench server.                                                                            | `10.0`                          |
+| `tb_read_timeout`    | Float   | Seconds to wait for data from the TestBench server before giving up. Keep this**below** the server's own socket limit - see [Read timeout](#read-timeout-and-the-testbench-idle-timeout). | `70.0`                          |
+| `tb_max_retries`     | Integer | Retries for a TestBench request that failed with a connection error. Only idempotent methods are retried;`PATCH` is never replayed. The read-only structure `POST`s retry separately - see [Read timeout](#read-timeout-and-the-testbench-idle-timeout). | `3`                             |
+| `host`               | String  | Host address to bind to.                                                                                                                            | `"127.0.0.1"`                   |
+| `port`               | Integer | Port number to listen on.                                                                                                                           | `8010`                          |
+| `debug`              | Boolean | Enable debug mode (verbose logging, auto-reload).                                                                                                   | `false`                         |
+| `language`           | String  | Default language for prompt resolution and localization (`"en"` or `"de"`).                                                                     | `"de"`                          |
+| `prompts_dir`        | String  | Directory containing prompt YAML files. Relative paths in prompt configs are resolved against this directory.                                       | Built-in prompts directory        |
 
 **Example:**
 
@@ -131,6 +131,28 @@ language = "de"
 prompts_dir = "C:\\TestBenchAIService\\prompts"
 ...
 ```
+
+### Read timeout and the TestBench idle timeout
+
+The TestBench web server is a Play application. Its
+`play.server.https.idleTimeout` (in `iTBServer/webserver/conf/application.conf`)
+inherits `play.server.http.idleTimeout`, whose Play default is **75 seconds**. A request
+that produces no bytes for that long has its socket torn down with no HTTP response at
+all - the client sees a bare connection reset (`WSAECONNRESET` / error 10054 on
+Windows), not a timeout.
+
+`tb_read_timeout` therefore defaults to **70.0**, just under that limit. Raising it above
+75 cannot rescue a slow request, because the server stops waiting first no matter how
+patient the client is; all it does is replace a `ReadTimeout` that names the timeout
+with a reset that names nothing. If you raise the server's `idleTimeout`, raise
+`tb_read_timeout` with it - and keep it lower.
+
+Fetching the test structure (`POST .../tovs/{key}/structure` and the cycle equivalent)
+is a read despite the verb: a filter goes in, a tree comes back, and nothing is
+modified. Those two calls are retried when the server produces no response, which is why
+they are exempt from the "`POST` is never replayed" rule that protects specification
+`PATCH`es. Retries use the same exponential backoff as `tb_max_retries` and add at most
+1.5 s.
 
 ### HTTPS / TLS
 
@@ -215,21 +237,22 @@ trusted_proxies = ["10.0.0.1"]
 
 :::tip[Provider setup guides]
 For step-by-step instructions on configuring each provider see the [LLM Providers](llm-providers/index.md) section:
+
 - [OpenAI Setup](llm-providers/openai-setup.md)
 - [Anthropic Setup](llm-providers/anthropic-setup.md)
 - [Azure OpenAI Setup](llm-providers/azure-openai-setup.md)
 - [Custom LLM Client](llm-providers/custom-client.md)
-:::
+  :::
 
 **`[testbench-ai-service.llm_config]`**
 
 | Option             | Type    | Description                                                                               | Default          |
 | ------------------ | ------- | ----------------------------------------------------------------------------------------- | ---------------- |
-| `provider`       | String  | LLM provider: `"openai"`, `"azure_openai"`, `"anthropic"`, or `"custom"`.          | `"openai"`     |
+| `provider`       | String  | LLM provider:`"openai"`, `"azure_openai"`, `"anthropic"`, or `"custom"`.          | `"openai"`     |
 | `model`          | String  | Override the default model (if not set, the model from the prompt variant is used).       | —               |
-| `azure_endpoint` | String  | Azure OpenAI endpoint URL (required when `provider = "azure_openai"`).                  | —               |
-| `api_version`    | String  | Azure OpenAI API version (required when `provider = "azure_openai"`).                   | —               |
-| `class_path`     | String  | Full Python class path for a custom LLM client (required when `provider = "custom"`).   | —               |
+| `azure_endpoint` | String  | Azure OpenAI endpoint URL (required when`provider = "azure_openai"`).                   | —               |
+| `api_version`    | String  | Azure OpenAI API version (required when`provider = "azure_openai"`).                    | —               |
+| `class_path`     | String  | Full Python class path for a custom LLM client (required when`provider = "custom"`).    | —               |
 | `timeout`        | Float   | HTTP request timeout in seconds, passed through to the underlying client.                 | Provider default |
 | `max_retries`    | Integer | Number of automatic retries on transient errors, passed through to the underlying client. | Provider default |
 
@@ -264,12 +287,12 @@ model = "gpt-4o"  # use your Azure deployment name here
 
 The service automatically routes each request to the correct client based on the model name specified in the prompt variant, regardless of the globally configured `provider`. This lets you mix models from different providers across prompt variants without changing the global config:
 
-| Model name prefix | Routed to |
-| ----------------- | --------- |
-| `gpt-*` (including `gpt-5.*`) | OpenAI (or Azure OpenAI when configured) |
+| Model name prefix                          | Routed to                                |
+| ------------------------------------------ | ---------------------------------------- |
+| `gpt-*` (including `gpt-5.*`)          | OpenAI (or Azure OpenAI when configured) |
 | o-series (`o1`, `o3`, `o4-mini`, …) | OpenAI (or Azure OpenAI when configured) |
-| `claude-*` | Anthropic |
-| anything else | uses `config.provider` |
+| `claude-*`                               | Anthropic                                |
+| anything else                              | uses`config.provider`                  |
 
 For example, if `provider = "openai"` is configured globally but a prompt variant specifies `model: "claude-sonnet-4-6"`, the service automatically uses the Anthropic client for that variant. The corresponding API key (`ANTHROPIC_API_KEY`) must be set in the environment.
 
@@ -344,11 +367,11 @@ class_path = "my_module.MyCustomLLMClient"
 
 Your class must extend `LLMClient` from `testbench_ai_service.llm.base` and implement three methods:
 
-| Method | Description |
-|---|---|
-| `__init__(self, api_key, **kwargs)` | Called once at startup. `api_key` is always `None` for custom providers. Receives `timeout`, `max_retries`, and `_strict_response_validation` from `llm_config` via `**kwargs` if set. |
-| `async query_llm(self, model, messages, *args, **kwargs) -> str` | Sends messages to the model and returns the plain-text response. |
-| `async close(self)` | Releases connections and resources (called on service shutdown). |
+| Method                                                             | Description                                                                                                                                                                                         |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `__init__(self, api_key, **kwargs)`                              | Called once at startup.`api_key` is always `None` for custom providers. Receives `timeout`, `max_retries`, and `_strict_response_validation` from `llm_config` via `**kwargs` if set. |
+| `async query_llm(self, model, messages, *args, **kwargs) -> str` | Sends messages to the model and returns the plain-text response.                                                                                                                                    |
+| `async close(self)`                                              | Releases connections and resources (called on service shutdown).                                                                                                                                    |
 
 :::tip
 The module must be importable from the working directory where the service is started. Place your implementation file in the same directory or add its location to `PYTHONPATH`.
@@ -376,11 +399,11 @@ The `name`, `summary`, and `description` shown in the OpenAPI UI and in TestBenc
 
 **`[testbench-ai-service.agents.<agent_key>.prompt]`**
 
-| Option      | Type   | Description                                                                                          | Required |
-| ----------- | ------ | ---------------------------------------------------------------------------------------------------- | -------- |
-| `file`    | String | Path to the prompt YAML file (relative to `prompts_dir/<language>/`).                              | Yes      |
-| `variant` | String | Prompt variant to use (falls back to `default_variant` in the YAML file).                          | No       |
-| `vars`    | Table  | Key-value pairs for user-provided variables, accessible as `{{ vars.<key> }}` in prompt templates. | No       |
+| Option      | Type   | Description                                                                                         | Required |
+| ----------- | ------ | --------------------------------------------------------------------------------------------------- | -------- |
+| `file`    | String | Path to the prompt YAML file (relative to`prompts_dir/<language>/`).                              | Yes      |
+| `variant` | String | Prompt variant to use (falls back to`default_variant` in the YAML file).                          | No       |
+| `vars`    | Table  | Key-value pairs for user-provided variables, accessible as`{{ vars.<key> }}` in prompt templates. | No       |
 
 For details on how prompts work, see the [Prompts](prompts.md) page.
 
@@ -445,10 +468,10 @@ variant = "Full Review"
 
 **`[testbench-ai-service.logging.console]`**
 
-| Option         | Type   | Description                                                                          | Default                          |
-| -------------- | ------ | ------------------------------------------------------------------------------------ | -------------------------------- |
-| `log_level`  | String | Minimum log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. | `"INFO"`                       |
-| `log_format` | String | Python `logging` format string.                                                    | `"%(levelname)s: %(message)s"` |
+| Option         | Type   | Description                                                                         | Default                          |
+| -------------- | ------ | ----------------------------------------------------------------------------------- | -------------------------------- |
+| `log_level`  | String | Minimum log level. One of`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. | `"INFO"`                       |
+| `log_format` | String | Python`logging` format string.                                                    | `"%(levelname)s: %(message)s"` |
 
 **Example:**
 
@@ -463,11 +486,11 @@ log_format = "%(levelname)s: %(message)s"
 
 **`[testbench-ai-service.logging.file]`**
 
-| Option         | Type   | Description                                                                          | Default                                                     |
-| -------------- | ------ | ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `file_name`  | String | Path to the log file. Relative paths are resolved from the working directory.        | `"testbench-ai-service.log"`                              |
-| `log_level`  | String | Minimum log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. | `"INFO"`                                                  |
-| `log_format` | String | Python `logging` format string.                                                    | `"%(asctime)s - %(levelname)8s - %(name)s - %(message)s"` |
+| Option         | Type   | Description                                                                         | Default                                                     |
+| -------------- | ------ | ----------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `file_name`  | String | Path to the log file. Relative paths are resolved from the working directory.       | `"testbench-ai-service.log"`                              |
+| `log_level`  | String | Minimum log level. One of`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`. | `"INFO"`                                                  |
+| `log_format` | String | Python`logging` format string.                                                    | `"%(asctime)s - %(levelname)8s - %(name)s - %(message)s"` |
 
 **Example:**
 

@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- The test structure request now asks TestBench to prune the tree it returns
+  (`suppressFilteredData`, `suppressEmptyTestThemes`). Both were left unset, so with a filter
+  attached the server built the entire subtree annotated with filter state instead of only the
+  matching nodes. Rooted at a large test theme that was enough to stall it past its own 75 s
+  socket timeout, aborting the agent run with a connection reset. Only matching, non-empty
+  nodes are read, so nothing needed the rest. The same options are already set on the report
+  export path. Applies to test object versions; the cycle structure request still omits them.
+- A TestBench server that accepts a request and then drops the socket no longer reports
+  `Could not connect to TestBench server`. That message sends the reader to the URL, the port
+  and the TLS settings, but the connection had in fact succeeded and the request was delivered;
+  only the upstream can say why it gave up. Such a failure now reports
+  `TestBench server closed the connection before responding`, and the log line names the method
+  and URL of the request that died.
+- The two test structure requests are now retried when the server produces no response. They
+  are reads spelled as `POST` — a filter goes in, a tree comes back, nothing is modified — so
+  they were paying for the safety rule that stops a specification `PATCH` being replayed
+  without needing it. That left the one call slow enough to hit the server's idle timeout as
+  the only one never retried, so a stall aborted the whole agent run at the first occurrence.
+  Observed directly: a request reset after 75 s, and the identical request a minute later
+  answered in 1.5 s. Retried up to three times with exponential backoff, adding at most 1.5 s.
+  Specification `PATCH`es are still never replayed.
+- Transport failures now report how long the request ran (`... after 75.1s: ...`). A stall
+  that ends on the same duration every time is a configured timeout rather than a network
+  fault, and without the number in the message there is nothing to suggest looking for one.
+
+### Changed
+
+- `tb_read_timeout` now defaults to **70 s**, down from 120 s. The TestBench web server is a
+  Play application whose `idleTimeout` defaults to 75 s, so it tears the socket down first no
+  matter how long the client is prepared to wait. A value above 75 could never take effect; it
+  only replaced a `ReadTimeout` that names the timeout with a connection reset that names
+  nothing. Raise it only alongside the server's own `play.server.https.idleTimeout`, and keep
+  it lower.
+
 ## [1.2.1][1.2.1] - 2026-08-25
 
 ### Added
