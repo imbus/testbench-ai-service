@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import requests
+from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.transport import (
     DEFAULT_CONNECT_TIMEOUT,
@@ -207,3 +208,110 @@ class TestConnectionResetRecovery:
         assert resetting_server.resets == 1
         assert resetting_server.connections == 2
         session.close()
+
+
+class _BootstrapStallingServer:
+    """Answers the server-version probe, then stalls on the next request.
+
+    Mirrors the bootstrap sequence of ``testbench_cli_reporter``'s ``Connection.session``:
+    ``read_server_version`` runs first, then ``read_user_roles`` - the latter on the
+    library's own ``TimeoutHTTPAdapter``, whose timeout is ``None`` unless
+    ``connection_timeout_sec`` is passed to the constructor.
+    """
+
+    def __init__(self) -> None:
+        self.stalled = threading.Event()
+        self._sock = socket.socket()
+        self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._sock.bind(("127.0.0.1", 0))
+        self._sock.listen(8)
+        self.port = self._sock.getsockname()[1]
+        self._stop = threading.Event()
+        self._held: list[socket.socket] = []
+        threading.Thread(target=self._accept_loop, daemon=True).start()
+
+    def _accept_loop(self) -> None:
+        while not self._stop.is_set():
+            try:
+                conn, _ = self._sock.accept()
+            except OSError:
+                return
+            threading.Thread(target=self._handle, args=(conn,), daemon=True).start()
+
+    def _handle(self, conn: socket.socket) -> None:
+        try:
+            while True:
+                request = b""
+                while b"\r\n\r\n" not in request:
+                    chunk = conn.recv(4096)
+                    if not chunk:
+                        return
+                    request += chunk
+                if b"serverVersions" in request:
+                    body = b'{"version": "4.1.0"}'
+                    conn.sendall(
+                        b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                        b"Content-Length: " + str(len(body)).encode() + b"\r\n"
+                        b"Connection: keep-alive\r\n\r\n" + body
+                    )
+                    continue
+                # Any later request (read_user_roles) is accepted and never answered.
+                self._held.append(conn)
+                self.stalled.set()
+                self._stop.wait()
+                return
+        except OSError:
+            return
+
+    def close(self) -> None:
+        self._stop.set()
+        for held in self._held:
+            with contextlib.suppress(OSError):
+                held.close()
+        with contextlib.suppress(OSError):
+            self._sock.close()
+
+
+@pytest.fixture
+def stalling_server():
+    server = _BootstrapStallingServer()
+    yield server
+    server.close()
+
+
+class TestBootstrapTimeout:
+    """``connection_timeout_sec`` is what bounds the library's own bootstrap requests."""
+
+    def _open_session(self, port: int, connection_timeout_sec, wait: float = 20):
+        """Access ``conn.session`` in a thread; return (finished, raised exception)."""
+        conn = TBConnection(
+            f"http://127.0.0.1:{port}/api/",
+            verify=False,
+            sessionToken="tok",
+            connection_timeout_sec=connection_timeout_sec,
+        )
+        outcome: dict = {}
+
+        def _access():
+            try:
+                conn.session  # noqa: B018 - the property performs the bootstrap
+            except BaseException as exc:  # recorded so the assertion can inspect it
+                outcome["error"] = exc
+
+        thread = threading.Thread(target=_access, daemon=True)
+        thread.start()
+        thread.join(timeout=wait)
+        return not thread.is_alive(), outcome.get("error")
+
+    def test_bootstrap_hangs_without_a_connection_timeout(self, stalling_server):
+        """Without the timeout the stalled request never returns - the bug behind F1."""
+        finished, _ = self._open_session(stalling_server.port, None, wait=5)
+
+        assert stalling_server.stalled.wait(timeout=5)
+        assert not finished, "expected the bootstrap to hang with connection_timeout_sec=None"
+
+    def test_bootstrap_is_bounded_when_a_connection_timeout_is_given(self, stalling_server):
+        finished, error = self._open_session(stalling_server.port, 2)
+
+        assert finished, "expected the bootstrap to give up rather than hang"
+        assert isinstance(error, requests.exceptions.Timeout)

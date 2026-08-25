@@ -1,3 +1,4 @@
+import math
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from enum import Enum
@@ -86,7 +87,14 @@ def _validate_token(
     """
     conn: TBConnection | None = None
     try:
-        conn = TBConnection(server_url, verify=verify, sessionToken=token)
+        # Bounds the bootstrap requests that ``Connection.session`` makes on the
+        # library's own adapter, before harden_connection() can replace it.
+        conn = TBConnection(
+            server_url,
+            verify=verify,
+            sessionToken=token,
+            connection_timeout_sec=math.ceil(read_timeout),
+        )
         harden_connection(
             conn,
             connect_timeout=connect_timeout,
