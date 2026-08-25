@@ -23,13 +23,15 @@ from testbench_ai_service.models.testbench import (
     ProjectMember,
     ProjectRole,
     SpecificationDetailsForUpdate,
-    TOVExchangeFormat,
     TestCaseSetDetails,
     TestCaseSetNode,
     TestStructureTree,
     TOVDetails,
+    TOVExchangeFormat,
     TovStructureOptions,
 )
+
+TEST_CASE_SET_UID = re.compile(r"-TC-\d+$")
 
 
 def get_user_key(conn: TBConnection) -> str:
@@ -260,7 +262,7 @@ def get_test_case_set_nodes(conn: TBConnection, context: ExecutionContext) -> li
     return [
         node
         for node in structure.nodes
-        if isinstance(node, TestCaseSetNode) and re.match(r"^iTB-TC-\d+$", node.base.uniqueID)
+        if isinstance(node, TestCaseSetNode) and TEST_CASE_SET_UID.search(node.base.uniqueID)
     ]
 
 

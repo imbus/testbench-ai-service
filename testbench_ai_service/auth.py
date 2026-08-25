@@ -1,3 +1,4 @@
+import math
 from collections.abc import Generator
 from dataclasses import dataclass, field
 from enum import Enum
@@ -9,7 +10,14 @@ from jwt import DecodeError, decode
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.exceptions import TRANSPORT_ERRORS, handle_requests_transport_error
 from testbench_ai_service.log import logger
+from testbench_ai_service.transport import (
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_READ_TIMEOUT,
+    harden_connection,
+)
 from testbench_ai_service.utils.testbench import get_user_key
 
 
@@ -60,7 +68,14 @@ def _is_jwt(token: str) -> bool:
         return False
 
 
-def _validate_token(server_url: str, token: str, verify: bool | str) -> tuple[str, TBConnection]:
+def _validate_token(
+    server_url: str,
+    token: str,
+    verify: bool | str,
+    connect_timeout: float = DEFAULT_CONNECT_TIMEOUT,
+    read_timeout: float = DEFAULT_READ_TIMEOUT,
+    max_retries: int = DEFAULT_MAX_RETRIES,
+) -> tuple[str, TBConnection]:
     """Validate *token* against TestBench and return the user key and open connection.
 
     The returned connection is intentionally left open so it can be reused for
@@ -69,11 +84,24 @@ def _validate_token(server_url: str, token: str, verify: bool | str) -> tuple[st
 
     Raises:
         HTTPException 401: Token is rejected by TestBench.
-        HTTPException 502: TestBench server is unreachable.
+        HTTPException 502: TestBench server is unreachable or does not respond in time.
     """
     conn: TBConnection | None = None
     try:
-        conn = TBConnection(server_url, verify=verify, sessionToken=token)
+        # Bounds the bootstrap requests that ``Connection.session`` makes on the
+        # library's own adapter, before harden_connection() can replace it.
+        conn = TBConnection(
+            server_url,
+            verify=verify,
+            sessionToken=token,
+            connection_timeout_sec=math.ceil(read_timeout),
+        )
+        harden_connection(
+            conn,
+            connect_timeout=connect_timeout,
+            read_timeout=read_timeout,
+            max_retries=max_retries,
+        )
         user_key = get_user_key(conn)
         return user_key, conn
     except requests.exceptions.HTTPError as e:
@@ -83,14 +111,10 @@ def _validate_token(server_url: str, token: str, verify: bool | str) -> tuple[st
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authorization token"
         ) from e
-    except requests.exceptions.ConnectionError as e:
-        logger.error("Could not connect to TestBench server: %s", e)
+    except TRANSPORT_ERRORS as e:
         if conn is not None:
             conn.close()
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not connect to TestBench server: {e!s}",
-        ) from e
+        handle_requests_transport_error(e)
 
 
 def validate_auth_token(
@@ -129,7 +153,14 @@ def validate_auth_token(
     logger.debug("Authenticating via %s", auth_type.value)
 
     verify: bool | str = config.tb_ssl_ca_bundle or config.tb_ssl_verify
-    user_key, conn = _validate_token(config.tb_server_url, token, verify)
+    user_key, conn = _validate_token(
+        config.tb_server_url,
+        token,
+        verify,
+        connect_timeout=config.tb_connect_timeout,
+        read_timeout=config.tb_read_timeout,
+        max_retries=config.tb_max_retries,
+    )
     try:
         yield AuthInfo(auth_type=auth_type, token=token, user_key=user_key, conn=conn)
     finally:

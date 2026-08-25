@@ -12,6 +12,7 @@ from testbench_ai_service.auth import (
     validate_auth_token,
 )
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.transport import ResilientHTTPAdapter
 
 
 def _make_app_config() -> AppConfig:
@@ -147,6 +148,73 @@ class TestValidateToken:
         assert exc_info.value.status_code == 502
 
     @patch("testbench_ai_service.auth.TBConnection")
+    @patch(
+        "testbench_ai_service.auth.get_user_key",
+        side_effect=requests.exceptions.ReadTimeout("Read timed out."),
+    )
+    def test_read_timeout_raises_502(self, mock_get_user_key, mock_conn_cls):
+        """``connection_timeout_sec`` bounds the bootstrap requests, so a stalled
+        server surfaces as ``ReadTimeout`` - a ``Timeout``, not a ``ConnectionError``.
+        """
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_token("https://tb/api/", "any-token", True)
+        assert exc_info.value.status_code == 502
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
+    def test_session_is_hardened_with_timeouts_and_retries(self, mock_get_user_key, mock_conn_cls):
+        """The connection's session must get bounded timeouts and retries."""
+        mock_conn = MagicMock()
+        mock_conn.session = requests.Session()
+        mock_conn_cls.return_value = mock_conn
+
+        _validate_token(
+            "https://tb/api/",
+            "tok",
+            True,
+            connect_timeout=4.0,
+            read_timeout=8.0,
+            max_retries=2,
+        )
+
+        adapter = mock_conn.session.get_adapter("https://tb/api/")
+        assert isinstance(adapter, ResilientHTTPAdapter)
+        assert adapter.timeout == (4.0, 8.0)
+        assert adapter.max_retries.total == 2
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
+    def test_bootstrap_is_bounded_by_a_connection_timeout(self, mock_get_user_key, mock_conn_cls):
+        """The library mounts its own adapter partway through ``Connection.session``.
+
+        That adapter's timeout is ``None`` unless ``connection_timeout_sec`` is passed to
+        the constructor, so the bootstrap requests that run before ``harden_connection``
+        can take effect would otherwise wait forever.
+        """
+        mock_conn = MagicMock()
+        mock_conn.session = requests.Session()
+        mock_conn_cls.return_value = mock_conn
+
+        _validate_token("https://tb/api/", "tok", True, connect_timeout=4.0, read_timeout=8.0)
+
+        assert mock_conn_cls.call_args.kwargs["connection_timeout_sec"] == 8
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
+    def test_bootstrap_timeout_is_never_rounded_down_to_zero(
+        self, mock_get_user_key, mock_conn_cls
+    ):
+        """``connection_timeout_sec`` is an int; a sub-second read timeout must not
+        become ``0``, which requests would treat as an immediate timeout."""
+        mock_conn = MagicMock()
+        mock_conn.session = requests.Session()
+        mock_conn_cls.return_value = mock_conn
+
+        _validate_token("https://tb/api/", "tok", True, read_timeout=0.5)
+
+        assert mock_conn_cls.call_args.kwargs["connection_timeout_sec"] == 1
+
+    @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
     def test_connection_not_closed_on_success(self, mock_get_user_key, mock_conn_cls):
         mock_conn = MagicMock()
@@ -185,15 +253,33 @@ class TestValidateToken:
         mock_conn.close.assert_called_once()
 
     @patch("testbench_ai_service.auth.TBConnection")
+    @patch(
+        "testbench_ai_service.auth.get_user_key",
+        side_effect=requests.exceptions.ReadTimeout("Read timed out."),
+    )
+    def test_connection_closed_on_read_timeout(self, mock_get_user_key, mock_conn_cls):
+        mock_conn = MagicMock()
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(HTTPException):
+            _validate_token("https://tb/api/", "any-token", True)
+
+        mock_conn.close.assert_called_once()
+
+    @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
     def test_verify_bool_passed_to_tbconnection(self, mock_get_user_key, mock_conn_cls):
         _validate_token("https://tb/api/", "tok", False)
-        mock_conn_cls.assert_called_once_with("https://tb/api/", verify=False, sessionToken="tok")
+        mock_conn_cls.assert_called_once()
+        assert mock_conn_cls.call_args.args == ("https://tb/api/",)
+        assert mock_conn_cls.call_args.kwargs["verify"] is False
+        assert mock_conn_cls.call_args.kwargs["sessionToken"] == "tok"
 
     @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
     def test_verify_ca_bundle_path_passed_to_tbconnection(self, mock_get_user_key, mock_conn_cls):
         _validate_token("https://tb/api/", "tok", "/path/to/ca.pem")
-        mock_conn_cls.assert_called_once_with(
-            "https://tb/api/", verify="/path/to/ca.pem", sessionToken="tok"
-        )
+        mock_conn_cls.assert_called_once()
+        assert mock_conn_cls.call_args.args == ("https://tb/api/",)
+        assert mock_conn_cls.call_args.kwargs["verify"] == "/path/to/ca.pem"
+        assert mock_conn_cls.call_args.kwargs["sessionToken"] == "tok"

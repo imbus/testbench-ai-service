@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.2.1][1.2.1] - 2026-08-25
+
+### Added
+
+- `tb_connect_timeout`, `tb_read_timeout` and `tb_max_retries` in `app_config` to tune outbound
+  TestBench requests. They default to 10 s, 120 s and 3 retries; documented in
+  `docs/configuration.md`.
+
+### Fixed
+
+- Outbound TestBench requests are now bounded and retried. The adapter that
+  `testbench-cli-reporter` mounts has no timeout of its own and overwrites any per-request
+  timeout, so a stalled request blocked the connection heartbeat — observed at 600 s — and a
+  keep-alive connection dropped by the peer aborted the whole agent run with a
+  `ConnectionError`. The service now mounts an adapter that applies a default
+  `(connect, read)` timeout only when the caller supplied none and retries connection and read
+  failures. Retries are limited to idempotent methods, so a `PATCH` on a specification is never
+  replayed and a review comment cannot be appended twice.
+- Token validation during authentication is bounded as well, so an unreachable or stalled
+  TestBench server fails the request instead of hanging it.
+- A TestBench server that accepts the connection and then stalls now returns `502 Bad Gateway`
+  instead of `500 Internal Server Error`. With the request timeouts in place such a server
+  raises `requests.exceptions.Timeout`, which is not a `ConnectionError` and therefore escaped
+  the handlers that translate unreachable-server failures into a `502`.
+- Test case sets are no longer skipped when the project uses a unique-ID prefix other than
+  `iTB`. Node filtering now matches the `-TC-<number>` suffix instead of the full
+  `iTB-TC-<number>` pattern.
+
 ## [1.2.0][1.2.0] - 2026-08-20
 
 ### Added
@@ -21,20 +49,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- A minimum TestBench version check in the precheck of every built-in agent. All three agents require TestBench 4.1 or newer; against an older server the agent now stops immediately with `Your current TestBench version ... is not supported`, in German or English, instead of failing later with an unrelated error.
-- The Defect Explainer rejects XML-based test object versions in its precheck with `The AI agent does not support XML-based test object versions`. A TOV whose exchange format is inherited is judged by the project default, so only projects that actually store JSON are accepted.
+- Minimum TestBench version check: all built-in agents now verify the connected server during
+  precheck and fail with `409 Conflict` and a localized message if it is older than
+  **TestBench 4.1**.
+- `check_min_testbench_version(context, conn)` helper, available to custom agents. Custom agents
+  that support older servers can skip it or check `conn.server_version` themselves.
+- The Defect Explainer now rejects **XML-based test object versions**. Only JSON-based TOVs are
+  supported — either set directly on the TOV or inherited from the project's default exchange
+  format.
+- TestBench API support for reading project and TOV metadata: `get_project_details()`,
+  `get_tov_details()` and `is_json_based_tov()`, backed by the new `ProjectDetails`, `TOVDetails`
+  and `ProjectContext` models and the `ProjectStatus`, `ProjectExchangeFormat` and
+  `TOVExchangeFormat` enums.
+- English and German messages for both new precheck failures.
+- Dependabot configuration to keep GitHub Actions up to date.
 
 ### Changed
 
-- The Defect Explainer reads the comment format written by testbench2robotframework 2.x, which marks the relevant table cells with `data-tb-*` attributes. Comments written by tb2rf 1.1 and older are still recognized, so existing cycles keep working.
-- `testbench-cli-reporter` and `testbench2robotframework` are now required as stable releases (3.x and 2.x) rather than the previous pre-release versions.
+- The Defect Explainer reads failure messages and inserts explanations using the `data-tb-*`
+  anchors of the current **testbench2robotframework 2.x** comment format. Comments written by
+  tb2rf 1.1 and older are still handled by a legacy fallback.
+- Re-running the Defect Explainer on the same test case now replaces the previous explanation
+  instead of appending another one — including when only its heading remained in the stored
+  comment.
+- LLM output is HTML-escaped before it is written into an execution comment, so explanations
+  containing `<` or `&` no longer corrupt the comment markup.
+- Dependencies now require final releases instead of pre-releases:
+  `testbench-cli-reporter>=3.0.0,<4.0.0` and `testbench2robotframework>=2.0.0,<3.0.0`.
+- Documentation states the TestBench version requirements per agent and the TOV format
+  restriction of the Defect Explainer.
 
 ### Fixed
 
-- Re-running the Defect Explainer on the same test case replaces the previous explanation instead of appending a second copy below it.
-- Explanations containing `<` or `&` no longer break the layout of the execution comment they are written into.
-- An execution comment that is empty is left untouched instead of being replaced by a lone result heading.
-- Failure traces passed to the LLM keep table rows on one line and no longer contain non-breaking spaces, so the model sees the trace as readable plain text.
+- An empty execution comment is no longer replaced by a bare AI disclaimer heading.
+- Execution traces passed to the LLM keep table cells on one line and no longer contain
+  non-breaking spaces from tb2rf's comment indentation.
+- Test cases without an explanation are skipped instead of producing an empty annotation.
 
 ## [1.0.1][1.0.1] - 2026-06-29
 
@@ -62,3 +112,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 [1.0.1]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.0.1
 [1.1.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.1.0
 [1.2.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.2.0
+[1.2.1]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.2.1

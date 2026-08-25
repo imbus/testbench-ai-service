@@ -13,7 +13,12 @@ from testbench_ai_service.dependencies import (
     get_llm_factory,
     get_tb_connection,
 )
-from testbench_ai_service.exceptions import HTTPError, handle_requests_http_error
+from testbench_ai_service.exceptions import (
+    TRANSPORT_ERRORS,
+    HTTPError,
+    handle_requests_http_error,
+    handle_requests_transport_error,
+)
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
@@ -163,11 +168,8 @@ async def trigger_agent_execution(
         precheck_result = await agent.precheck(context, conn)
     except requests.exceptions.HTTPError as e:
         handle_requests_http_error(e)
-    except requests.exceptions.ConnectionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Could not connect to TestBench server: {e}",
-        ) from e
+    except TRANSPORT_ERRORS as e:
+        handle_requests_transport_error(e)
     precheck_duration = time.perf_counter() - precheck_start_time
     logger.debug(
         "Precheck completed for agent '%s': passed=%s, items=%d in %.3f seconds",

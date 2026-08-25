@@ -44,6 +44,9 @@ language = "de"
 prompts_dir = "prompts"
 # tb_ssl_verify = true          # set to false to disable TLS verification (insecure)
 # tb_ssl_ca_bundle = "/path/to/ca-bundle.pem"  # path to custom CA bundle
+# tb_connect_timeout = 10.0     # seconds to wait for a connection
+# tb_read_timeout = 120.0       # seconds to wait for data before giving up
+# tb_max_retries = 3            # retries for failed TestBench connections
 
 # LLM provider configuration
 [testbench-ai-service.llm_config]
@@ -106,6 +109,9 @@ enabled = false
 | `tb_server_url`    | String  | Base URL of the TestBench REST API server.                                                                    | `"https://localhost:9443/api/"` |
 | `tb_ssl_verify`    | Boolean | Verify the SSL/TLS certificate of the TestBench server. Set to `false` to disable (insecure).                | `true`                          |
 | `tb_ssl_ca_bundle` | String  | Path to a CA bundle file for verifying the TestBench server certificate. Takes precedence over `tb_ssl_verify` when set. | —                   |
+| `tb_connect_timeout` | Float | Seconds to wait while establishing a connection to the TestBench server. | `10.0` |
+| `tb_read_timeout`  | Float   | Seconds to wait for data from the TestBench server before giving up. Bounds requests that would otherwise stall indefinitely. | `120.0` |
+| `tb_max_retries`   | Integer | Retries for a TestBench request that failed with a connection error. Only idempotent methods are retried; `POST` and `PATCH` are never replayed. | `3` |
 | `host`             | String  | Host address to bind to.                                                                                      | `"127.0.0.1"`                   |
 | `port`             | Integer | Port number to listen on.                                                                                     | `8010`                          |
 | `debug`            | Boolean | Enable debug mode (verbose logging, auto-reload).                                                             | `false`                         |
