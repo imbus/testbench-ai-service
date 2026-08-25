@@ -12,6 +12,7 @@ from testbench_ai_service.auth import (
     validate_auth_token,
 )
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.transport import ResilientHTTPAdapter
 
 
 def _make_app_config() -> AppConfig:
@@ -145,6 +146,28 @@ class TestValidateToken:
         with pytest.raises(HTTPException) as exc_info:
             _validate_token("https://tb/api/", "any-token", True)
         assert exc_info.value.status_code == 502
+
+    @patch("testbench_ai_service.auth.TBConnection")
+    @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")
+    def test_session_is_hardened_with_timeouts_and_retries(self, mock_get_user_key, mock_conn_cls):
+        """The connection's session must get bounded timeouts and retries."""
+        mock_conn = MagicMock()
+        mock_conn.session = requests.Session()
+        mock_conn_cls.return_value = mock_conn
+
+        _validate_token(
+            "https://tb/api/",
+            "tok",
+            True,
+            connect_timeout=4.0,
+            read_timeout=8.0,
+            max_retries=2,
+        )
+
+        adapter = mock_conn.session.get_adapter("https://tb/api/")
+        assert isinstance(adapter, ResilientHTTPAdapter)
+        assert adapter.timeout == (4.0, 8.0)
+        assert adapter.max_retries.total == 2
 
     @patch("testbench_ai_service.auth.TBConnection")
     @patch("testbench_ai_service.auth.get_user_key", return_value="uk1")

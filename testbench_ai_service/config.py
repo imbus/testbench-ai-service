@@ -14,6 +14,11 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
+from testbench_ai_service.transport import (
+    DEFAULT_CONNECT_TIMEOUT,
+    DEFAULT_MAX_RETRIES,
+    DEFAULT_READ_TIMEOUT,
+)
 from testbench_ai_service.utils.prompt_utils import (
     template_variables,
     validate_agent_variable,
@@ -69,6 +74,21 @@ class AppConfig(BaseModel):
     tb_ssl_ca_bundle: str | None = Field(
         default=None,
         description="Path to a CA bundle file used to verify the TestBench server certificate. When set, takes precedence over tb_ssl_verify.",
+    )
+    tb_connect_timeout: float = Field(
+        DEFAULT_CONNECT_TIMEOUT,
+        gt=0,
+        description="Seconds to wait while establishing a connection to the TestBench server.",
+    )
+    tb_read_timeout: float = Field(
+        DEFAULT_READ_TIMEOUT,
+        gt=0,
+        description="Seconds to wait for data from the TestBench server before giving up. Bounds requests that would otherwise stall indefinitely.",
+    )
+    tb_max_retries: int = Field(
+        DEFAULT_MAX_RETRIES,
+        ge=0,
+        description="How often to retry a TestBench request that failed with a connection error. Only idempotent methods are retried; POST and PATCH are never replayed.",
     )
     host: str = Field(
         DEFAULT_HOST,
