@@ -42,7 +42,7 @@ class ResilientHTTPAdapter(HTTPAdapter):
     """
 
     def __init__(self, *args, timeout: tuple[float, float] | None = None, **kwargs) -> None:
-        self.timeout = timeout
+        self.timeout = timeout or (DEFAULT_CONNECT_TIMEOUT, DEFAULT_READ_TIMEOUT)
         super().__init__(*args, **kwargs)
 
     def send(
