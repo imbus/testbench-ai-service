@@ -71,7 +71,7 @@ class DefectExplainer(Agent):
         """
         Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
-        warnings = []  # noqa: F811
+        warnings = []
         if unsupported_version := check_min_testbench_version(context, conn):
             return unsupported_version
 
