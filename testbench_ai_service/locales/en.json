@@ -18,6 +18,7 @@
     "shared.precheck.missing_cycle_key": "Missing cycle key. Please select a cycle to continue.",
     "shared.precheck.missing_tov_key": "Missing test object version key. Please select a version to continue.",
     "shared.precheck.spec_locked": "The specification is currently locked (UID: {uid}).",
+    "shared.precheck.spec_unlock_failed": "The test case set could not be locked, possibly somebody else is responsible for it (UID: {uid}).",
     "routes.error.insufficient_permissions": "Insufficient permissions to execute the AI agent.",
     "routes.error.insufficient_role": "Insufficient role to execute the AI agent.\nYou need one of the following roles:\n{allowed_roles}",
     "routes.error.unsupported_testbench_version": "Your current TestBench version {server_version} is not supported. The AI Agent requires version {required_version}.",
