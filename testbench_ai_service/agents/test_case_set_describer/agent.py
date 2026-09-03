@@ -19,8 +19,10 @@ from testbench_ai_service.models.agent import (
     PrecheckResult,
 )
 from testbench_ai_service.models.testbench import (
+    OptionalUser,
     PermissionWithCode,
     ProjectRole,
+    SpecificationDetailsForUpdate,
 )
 from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
@@ -29,6 +31,7 @@ from testbench_ai_service.utils.testbench import (
     get_test_case_set_catalog,
     get_test_case_set_details,
     get_test_case_set_nodes,
+    patch_test_structure_element_spec,
 )
 from testbench_ai_service.utils.testbench_helpers import (
     parameter_combinations_as_str,
@@ -94,6 +97,21 @@ class TestCaseSetDescriber(Agent):
             if locked_by_other_user:
                 msg = get_translation(
                     "shared.precheck.spec_locked", context.language, uid=node.base.uniqueID
+                )
+                warnings.append(msg)
+                continue
+
+            try:
+                await patch_test_structure_element_spec(
+                    conn,
+                    context.project_key,
+                    node.spec.key,
+                    SpecificationDetailsForUpdate(locker=OptionalUser(optional=context.user_key)),
+                )
+
+            except Exception as e:
+                msg = get_translation(
+                    "shared.precheck.spec_unlock_failed", context.language, uid=node.base.uniqueID
                 )
                 warnings.append(msg)
                 continue

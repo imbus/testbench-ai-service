@@ -18,6 +18,7 @@
     "shared.precheck.missing_cycle_key": "Testzyklusschlüssel fehlt. Bitte wählen Sie einen Zyklus aus, um fortzufahren.",
     "shared.precheck.missing_tov_key": "Der Schlüssel der Testobjektversion fehlt. Bitte wählen Sie eine Version aus, um fortzufahren.",
     "shared.precheck.spec_locked": "Die Spezifikation ist zurzeit gesperrt (UID: {uid}).",
+    "shared.precheck.spec_unlock_failed": "Der Testfallsatz konnte nicht gesperrt werden, möglicherweise ist eine andere Person dafür verantwortlich (UID: {uid}).",
     "routes.error.insufficient_permissions": "Unzureichende Berechtigungen zum Ausführen des KI-Agenten.",
     "routes.error.insufficient_role": "Unzureichende Rolle zum Ausführen des KI-Agenten.\nSie benötigen eine der folgenden Rollen:\n{allowed_roles}",
     "routes.error.unsupported_testbench_version": "Ihre aktuelle TestBench-Version {server_version} wird nicht unterstützt. Für den KI-Agenten ist Version {required_version} erforderlich.",
