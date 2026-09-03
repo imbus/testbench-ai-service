@@ -101,6 +101,10 @@ class TestCaseSetDescriber(Agent):
                 warnings.append(msg)
                 continue
 
+            if node.spec is None:
+                items.append(node.base.uniqueID)
+                continue
+
             try:
                 await patch_test_structure_element_spec(
                     conn,
@@ -109,7 +113,7 @@ class TestCaseSetDescriber(Agent):
                     SpecificationDetailsForUpdate(locker=OptionalUser(optional=context.user_key)),
                 )
 
-            except Exception as e:
+            except Exception:
                 msg = get_translation(
                     "shared.precheck.spec_unlock_failed", context.language, uid=node.base.uniqueID
                 )

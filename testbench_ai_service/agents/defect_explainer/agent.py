@@ -1,6 +1,5 @@
 import asyncio
 
-from jwt import warnings
 import requests
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -22,18 +21,15 @@ from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.testbench import (
     ActivityStatus,
     PermissionWithCode,
-    ProjectExchangeFormat,
     ProjectRole,
-    TOVExchangeFormat,
     VerdictStatus,
 )
 from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
-    get_project_details,
-    get_tov_details,
     get_test_case_set_catalog,
     get_test_case_set_nodes,
+    get_tov_details,
     is_json_based_tov,
 )
 
@@ -75,10 +71,10 @@ class DefectExplainer(Agent):
         """
         Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
-        warnings = []  # noqa: F811
+        warnings = []
         if unsupported_version := check_min_testbench_version(context, conn):
             return unsupported_version
-          
+
         fetch_test_object_versions = get_tov_details(conn, context.project_key, context.tov_key)
         if not is_json_based_tov(conn, context.project_key, context.tov_key):
             msg = get_translation(
