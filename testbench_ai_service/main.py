@@ -19,7 +19,9 @@ from testbench_ai_service.middlewares import LoggingMiddleware, OutboundRequestL
 from testbench_ai_service.routes import router
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.webui.routes import router as webui_router
 from testbench_ai_service.webui.security import is_loopback
+from testbench_ai_service.webui.session import SessionStore
 from testbench_ai_service.webui.static import STATIC_DIR, mount_spa
 
 
@@ -64,7 +66,7 @@ def init_webui(app: FastAPI):
             app.state.config.host,
         )
 
-    from testbench_ai_service.webui.routes import router as webui_router
+    app.state.webui_sessions = SessionStore()
 
     app.include_router(webui_router)
     mount_spa(app, STATIC_DIR)
