@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from pydantic import BaseModel, ValidationError
 
+import testbench_ai_service.utils.config as config_module
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.models.config import LLMConfig, ProjectConfig
@@ -82,8 +83,6 @@ class TestLoadConfigFromFile:
         reading pyproject.toml. `loaded_from` must name the file that was
         actually parsed (pyproject.toml), not the originally requested,
         nonexistent path."""
-        import testbench_ai_service.utils.config as config_module
-
         project_toml = Path(config_module.__file__).parent.parent / "pyproject.toml"
         fake_content = f"[tool.{CONFIG_PREFIX}]\nsome_setting = 'value'\n".encode()
         real_open = Path.open

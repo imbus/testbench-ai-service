@@ -60,7 +60,11 @@ class TestRunAgentReviewTask:
             return_value="gpt-4o",
         )
         prompt_model_patcher.start()
-        request.addfinalizer(prompt_model_patcher.stop)
+        # addfinalizer (not yield + teardown) is required here: this fixture can
+        # raise during setup (e.g. AppConfig construction below), and a post-yield
+        # teardown never runs in that case, which previously let this mock.patch()
+        # leak out and corrupt TestCaseSetReviewer for every later test.
+        request.addfinalizer(prompt_model_patcher.stop)  # noqa: PT021
 
         # ── LLM factory mock ──────────────────────────────────────────────────
         self.mock_llm_client = AsyncMock()
@@ -123,8 +127,6 @@ class TestRunAgentReviewTask:
         )
 
         load_translations()
-
-        yield
 
     # ── Tests ─────────────────────────────────────────────────────────────────
 
