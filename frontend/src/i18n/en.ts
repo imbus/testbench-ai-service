@@ -15,6 +15,8 @@ export const en = {
   logout: 'Sign out',
   running: 'Running',
   connected: 'Connected',
+  notConnected: 'Not connected',
+  statusSub: 'Service health, connection and keys at a glance',
   apiKeys: 'API keys (.env)',
   recentLog: 'Recent log',
   general: 'General',

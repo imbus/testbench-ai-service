@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { NavRail } from './components/NavRail'
 import { TopBar } from './components/TopBar'
 import { Login } from './screens/Login'
+import { Status } from './screens/Status'
 import { useMeta } from './api/queries'
 import { useSession } from './state/session'
 import { useTranslations, type Lang } from './i18n'
@@ -63,7 +64,7 @@ export function App() {
           <Routes>
             <Route path="/admin" element={<Navigate to="/admin/status" replace />} />
             <Route path="/" element={<Navigate to="/admin/status" replace />} />
-            <Route path="/admin/status" element={<div />} />
+            <Route path="/admin/status" element={<Status lang={lang} />} />
             <Route path="/admin/service" element={<div />} />
             <Route path="/admin/llm" element={<div />} />
             <Route path="/admin/logging" element={<div />} />

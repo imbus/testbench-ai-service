@@ -15,6 +15,8 @@ export const de = {
   logout: 'Abmelden',
   running: 'Läuft',
   connected: 'Verbunden',
+  notConnected: 'Nicht verbunden',
+  statusSub: 'Dienst, Verbindung und Schlüssel auf einen Blick',
   apiKeys: 'API-Schlüssel (.env)',
   recentLog: 'Letzte Protokolleinträge',
   general: 'Allgemein',
