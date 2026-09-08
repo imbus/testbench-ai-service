@@ -131,3 +131,26 @@ test('reports an unreachable TestBench and still renders the rest of the screen'
   expect(screen.getByText(/2 aktiv/)).toBeInTheDocument()
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })
+
+test('shows a translated error when the status request fails', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ detail: 'boom' }), {
+          status: 500,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      ),
+    ),
+  )
+  renderStatus()
+  // The primary alert text must be the translated fallback, not the raw
+  // (English, backend-shaped) error detail — this pins the statusError key
+  // rather than merely asserting an alert exists.
+  await waitFor(() =>
+    expect(screen.getByRole('alert')).toHaveTextContent('Status konnte nicht geladen werden'),
+  )
+  // The raw backend detail may still appear as secondary diagnostic text.
+  expect(screen.getByRole('alert')).toHaveTextContent('boom')
+})

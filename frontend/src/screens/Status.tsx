@@ -52,9 +52,19 @@ export function Status({ lang }: { lang: Lang }) {
 
   if (status.isLoading) return <div style={{ padding: 28 }}>…</div>
   if (status.isError || !status.data) {
+    // The primary line is always the translated fallback — never the raw
+    // (often English, backend-shaped) error text — so this alert can never
+    // show untranslated copy regardless of what threw. The raw message, if
+    // any, is shown underneath only as diagnostic detail.
+    const detail = (status.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
-        {(status.error as Error)?.message ?? 'Failed to load status'}
+        <div>{t.statusError}</div>
+        {detail && (
+          <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+            {detail}
+          </div>
+        )}
       </div>
     )
   }
@@ -161,9 +171,9 @@ export function Status({ lang }: { lang: Lang }) {
               overflowX: 'auto',
             }}
           >
-            {(logs.data ?? []).map((line, index) => (
+            {(logs.data ?? []).map((line) => (
               <div
-                key={index}
+                key={line.raw}
                 data-testid="log-line"
                 style={{ display: 'flex', gap: 10, whiteSpace: 'pre' }}
               >

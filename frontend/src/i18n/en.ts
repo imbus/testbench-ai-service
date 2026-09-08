@@ -17,6 +17,7 @@ export const en = {
   connected: 'Connected',
   notConnected: 'Not connected',
   statusSub: 'Service health, connection and keys at a glance',
+  statusError: 'Failed to load status',
   apiKeys: 'API keys (.env)',
   recentLog: 'Recent log',
   general: 'General',
