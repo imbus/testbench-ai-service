@@ -35,4 +35,7 @@ export const en = {
   overrides: 'overrides',
   keySet: 'key set',
   keyMissing: 'key missing',
+  navLandmark: 'Console sections',
+  darkTheme: 'Dark theme',
+  lightTheme: 'Light theme',
 } as const

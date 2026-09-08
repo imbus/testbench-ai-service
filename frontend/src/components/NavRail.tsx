@@ -45,7 +45,7 @@ export function NavRail({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
   const t = useTranslations(lang)
   return (
     <nav
-      aria-label="Console sections"
+      aria-label={t.navLandmark}
       style={{
         width: 200,
         flex: 'none',

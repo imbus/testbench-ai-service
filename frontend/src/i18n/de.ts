@@ -31,6 +31,9 @@ export const de = {
   overrides: 'Überschreibungen',
   keySet: 'Schlüssel gesetzt',
   keyMissing: 'Schlüssel fehlt',
+  navLandmark: 'Konsolenbereiche',
+  darkTheme: 'Dunkles Design',
+  lightTheme: 'Helles Design',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German

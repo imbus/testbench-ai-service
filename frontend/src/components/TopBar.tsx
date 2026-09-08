@@ -50,7 +50,7 @@ export function TopBar({
       <button
         className="btn btn-secondary btn-icon"
         onClick={onToggleTheme}
-        aria-label={theme === 'light' ? 'Dark theme' : 'Light theme'}
+        aria-label={theme === 'light' ? t.darkTheme : t.lightTheme}
       >
         {theme === 'light' ? '◐' : '◑'}
       </button>
