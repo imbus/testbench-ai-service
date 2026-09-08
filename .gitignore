@@ -193,3 +193,9 @@ templates/
 
 # Subagent-driven-development scratch workspace (ledgers, briefs, review packages)
 .superpowers/
+
+# Frontend (admin web UI)
+node_modules/
+frontend/dist/
+# Vite build output, generated into the package by `npm run build`
+testbench_ai_service/static/
