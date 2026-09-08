@@ -56,3 +56,51 @@ def test_missing_directory_serves_placeholder(tmp_path: Path):
     response = TestClient(app).get("/admin/")
     assert response.status_code == 200
     assert "not been built" in response.text
+
+
+def test_unknown_api_path_is_404_not_html(client: TestClient):
+    """An API path that matches no route must 404, not fall back to index.html.
+
+    The SPA is mounted at ``/admin``, which is a prefix of ``/admin/api`` -- an
+    unmatched API path must not be mistaken for a client-side route.
+    """
+    response = client.get("/admin/api/nonexistent")
+    assert response.status_code == 404
+    assert "text/html" not in response.headers["content-type"]
+
+
+def test_unknown_nested_api_path_is_404(client: TestClient):
+    response = client.get("/admin/api/status/typo")
+    assert response.status_code == 404
+    assert "text/html" not in response.headers["content-type"]
+
+
+def test_bare_api_prefix_is_404(client: TestClient):
+    response = client.get("/admin/api/")
+    assert response.status_code == 404
+
+
+def test_deep_link_still_serves_spa(client: TestClient):
+    """An ordinary client-side route unrelated to the API must still work."""
+    response = client.get("/admin/service")
+    assert response.status_code == 200
+    assert "SPA ROOT" in response.text
+
+
+def test_nested_deep_link_still_serves_spa(client: TestClient):
+    response = client.get("/admin/prompts/de/reviewer")
+    assert response.status_code == 200
+    assert "SPA ROOT" in response.text
+
+
+def test_apiary_deep_link_is_not_mistaken_for_api(client: TestClient):
+    """A deep link whose first segment merely begins with "api" is not the API."""
+    response = client.get("/admin/apiary")
+    assert response.status_code == 200
+    assert "SPA ROOT" in response.text
+
+
+def test_api_docs_deep_link_is_not_mistaken_for_api(client: TestClient):
+    response = client.get("/admin/api-docs")
+    assert response.status_code == 200
+    assert "SPA ROOT" in response.text
