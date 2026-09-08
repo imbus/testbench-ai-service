@@ -1,0 +1,41 @@
+/* TestBench brand tokens, extracted verbatim from the Claude Design artboard
+   "TestBench AI Service Console.dc.html" <helmet> style block.
+   Layer this AFTER industry.css. Do not edit values. */
+
+[data-brand=testbench]{--color-accent:#128a5e;--color-accent-2:#2a9a72;--color-accent-100:#e8f5ef;--color-accent-200:#c9e9d9;--color-accent-300:#9fd6bb;--color-accent-400:#6fbd99;--color-accent-500:#3fa27a;--color-accent-600:#0f7a53;--color-accent-700:#0d6446;--color-accent-800:#0a4d36;--color-accent-900:#073627;--color-accent-2-100:#e8f5ef;--color-accent-2-200:#c9e9d9;--color-accent-2-300:#9fd6bb;--color-accent-2-400:#6fbd99;--color-accent-2-500:#3fa27a;--color-accent-2-600:#0f7a53;--color-accent-2-700:#0d6446;--color-accent-2-800:#0a4d36;--color-accent-2-900:#073627;--tb-orange:#f28c00}
+[data-brand=testbench][data-theme=dark]{--color-accent:#2fb37f;--color-accent-600:#3fc48e;--color-accent-700:#6fd3a8}
+:root:not([data-brand=testbench]){--tb-orange:var(--color-accent-700)}
+[data-corners=soft] .card,[data-corners=soft] .btn,[data-corners=soft] .input,[data-corners=soft] .seg,[data-corners=soft] .tb-chip,[data-corners=soft] select.input,[data-corners=soft] .CodeMirror-hints{border-radius:8px}
+[data-corners=soft] .blueprint,[data-corners=soft] .dialog,[data-corners=soft] pre.blueprint{border-radius:12px}
+[data-corners=soft] .blueprint>.corner{display:none}
+[data-corners=soft] .tag{border-radius:999px}
+[data-corners=soft] .tb-nav{border-radius:8px;border-left-width:0 !important;padding-left:16px !important}
+[data-corners=soft] .blueprint{overflow:hidden}
+[data-corners=soft] .btn-icon{border-radius:999px}
+[data-corners=soft] .tb-row:first-child{border-radius:12px 12px 0 0}
+[data-corners=soft] header{border-bottom-color:transparent;box-shadow:var(--shadow-sm)}
+html,body{margin:0;height:100%}
+body{background:var(--color-bg);color:var(--color-text);font-family:var(--font-body);font-size:14px}
+a{color:var(--color-accent-700)}a:hover{color:var(--color-accent-800)}
+[data-theme=dark]{--color-bg:#15181c;--color-surface:#1d2127;--color-text:#e7e9ec;--color-divider:color-mix(in srgb,#e7e9ec 18%,transparent);
+--color-neutral-100:#2b2f35;--color-neutral-200:#353a41;--color-neutral-300:#454b53;--color-neutral-800:#d4d7db;--color-neutral-900:#f2f3f5;
+--color-accent-100:#12302a;--color-accent-200:#174535;--color-accent-300:#1f5c46;--color-accent-800:#9fe0c2;--color-accent-900:#c9f0dd;
+--shadow-sm:0 1px 2px rgba(0,0,0,.5);--shadow-md:0 3px 10px rgba(0,0,0,.5);--shadow-lg:0 12px 32px rgba(0,0,0,.6)}
+[data-theme=dark] .btn-primary{color:#0f1215}
+.CodeMirror{height:100%;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.5;background:var(--color-bg);color:var(--color-text)}
+.CodeMirror-gutters{background:var(--color-surface);border-right:1px solid var(--color-divider)}
+.CodeMirror-linenumber{color:color-mix(in srgb,var(--color-text) 40%,transparent)}
+.CodeMirror-cursor{border-left:1.5px solid var(--color-accent)}
+.cm-s-default .cm-tag,.cm-s-default .cm-keyword{color:var(--color-accent-700)}
+.cm-s-default .cm-variable,.cm-s-default .cm-variable-2,.cm-s-default .cm-property{color:var(--color-accent-600)}
+.cm-s-default .cm-string{color:#7a5a2a}[data-theme=dark] .cm-s-default .cm-string{color:#d9b07a}
+[data-theme=dark] .cm-s-default .cm-tag,[data-theme=dark] .cm-s-default .cm-keyword{color:#6fd3a8}
+[data-theme=dark] .cm-s-default .cm-variable,[data-theme=dark] .cm-s-default .cm-variable-2,[data-theme=dark] .cm-s-default .cm-property{color:#9fe0c2}
+.cm-lint-line{background:color-mix(in srgb,#c0392b 14%,transparent)}
+.CodeMirror-hints{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--color-surface);color:var(--color-text);border:1px solid var(--color-divider);border-radius:0;box-shadow:var(--shadow-md)}
+.CodeMirror-hint-active{background:var(--color-accent);color:var(--color-bg)}
+.tb-nav:hover{background:color-mix(in srgb,var(--color-text) 6%,transparent)}
+.btn,.tb-chip{white-space:nowrap;flex:none}
+.tb-row:hover{background:color-mix(in srgb,var(--color-text) 4%,transparent)}
+select.input{appearance:auto}
+input[type=checkbox]{accent-color:var(--color-accent)}

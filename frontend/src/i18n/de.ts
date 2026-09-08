@@ -1,0 +1,38 @@
+export const de = {
+  status: 'Status',
+  service: 'Dienst',
+  llm: 'LLM-Anbieter',
+  logging: 'Protokollierung',
+  agents: 'Agenten',
+  projects: 'Projekte',
+  prompts: 'Prompts',
+  raw: 'config.toml (roh)',
+  login: 'Anmelden',
+  username: 'Benutzername',
+  password: 'Passwort',
+  server: 'TestBench-Server',
+  signIn: 'Mit TestBench anmelden',
+  logout: 'Abmelden',
+  running: 'Läuft',
+  connected: 'Verbunden',
+  apiKeys: 'API-Schlüssel (.env)',
+  recentLog: 'Letzte Protokolleinträge',
+  general: 'Allgemein',
+  tbConn: 'TestBench-Verbindung',
+  tls: 'HTTPS / TLS',
+  proxy: 'Reverse Proxy',
+  console: 'Konsole',
+  file: 'Datei',
+  language: 'Sprache',
+  admin: 'Administrator',
+  testManager: 'Testmanager',
+  readOnly: 'Nur lesend — Änderungen erfordern die Administrator-Rolle.',
+  agentsOn: 'aktiv',
+  overrides: 'Überschreibungen',
+  keySet: 'Schlüssel gesetzt',
+  keyMissing: 'Schlüssel fehlt',
+} as const
+
+// Widened to `string` per key (rather than `typeof de`'s literal German
+// values) so `en` — and any future dictionary — can satisfy this type too.
+export type Translations = { readonly [K in keyof typeof de]: string }
