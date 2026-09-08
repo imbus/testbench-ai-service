@@ -52,7 +52,6 @@ export interface ConfigResponse {
   running: Record<string, unknown>
   disk: Record<string, unknown>
   config_path: string
-  in_sync: boolean
 }
 
 export interface MetaResponse {
