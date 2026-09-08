@@ -58,6 +58,51 @@ field under its `service` section already exists as a top-level `AppConfig` fiel
 and its prompt structure matches `PromptDefinition` / `PromptVariant` /
 `MessageTemplate` exactly, including inline `text` versus external `file`.
 
+### 2.1 The abandoned August attempt
+
+The working tree contains an earlier, uncommitted attempt at this feature:
+`testbench_ai_service/webui/` and `tests/unit/webui/` exist as empty directories
+whose `__pycache__` still holds compiled bytecode for `routes.py`, `config_io.py`,
+`prompt_io.py`, `project_prompts.py`, `apply.py`, `security.py`, `static.py`,
+`tree.py`, `models.py` and `errors.py`, dated 2026-08-17. The sources were deleted
+and never committed.
+
+It is worth recording what that attempt had settled on, because it converges with
+this design and corroborates several choices:
+
+- the same `/admin/api` route prefix;
+- `static.py` with `_SpaStaticFiles` / `mount_spa` — the same SPA-fallback approach
+  as section 4.2;
+- `apply.py` with `apply_config` / `restart_required` — the same apply model as
+  section 7;
+- `config_io.py` with a `_document` helper and both `write_config_raw` and
+  `write_config_structured` — i.e. it also reached for a comment-preserving TOML
+  document, confirming the `tomlkit` choice in section 6.2.
+
+Two things it did differently, both of which change this design:
+
+1. **Its security model was `require_loopback`**, not authentication — the console
+   was simply refused from a non-loopback client, with no login at all. The source
+   design has a login screen, so authentication as specified in section 5 stands;
+   but loopback enforcement is cheap defence-in-depth and is kept as an optional
+   `admin_ui.require_loopback` setting (default `false`, since operators do reach
+   the console from another machine).
+2. **It had a `resolve_within` path-containment helper.** This design originally
+   omitted that, which was a genuine gap; see section 9.1.
+
+It also had a prompt "fork" concept (`create_fork`, `delete_fork`,
+`_write_prompt_override`) for materialising a per-project prompt file from a global
+one. That is a real workflow — the source design's per-project `prompt.file`
+override implies it — and it is folded into phase 3 rather than invented afresh.
+
+Because those directories already exist and carry the name the earlier attempt
+chose, the new backend package is `testbench_ai_service/webui/`, not `admin/`. The
+route prefix stays `/admin/api`.
+
+The bytecode is not decompiled into the new implementation; it is evidence about
+intent, not a source of code. If the attempt was abandoned for a reason not visible
+in the bytecode, that reason should be raised before implementation starts.
+
 ## 3. Decisions
 
 | Decision | Choice |
@@ -98,16 +143,19 @@ frontend/                          # Vite + React + TS
     i18n/        # de.ts, en.ts (ported from the prototype's I18N)
 testbench_ai_service/
   static/admin/                    # Vite build output (build artifact, gitignored)
-  admin/                           # new backend package
+  webui/                           # new backend package (name inherited, see 2.1)
     __init__.py
     routes.py                      # APIRouter mounted at /admin/api
     session.py                     # login, session store, CSRF, dependencies
+    security.py                    # resolve_within path containment, loopback check
     config_io.py                   # read / serialize / diff / atomic write of config.toml
     prompts_io.py                  # read / write / lint / render prompt YAML + jinja files
     status.py                      # service, TestBench, env-key, log-tail probes
     reload.py                      # hot reload + restart-required classification
     tasks.py                       # in-flight agent task registry
+    catalogue.py                   # static model catalogue for GET /models
     models.py                      # request/response pydantic models
+    static.py                      # mount_spa + SPA-fallback StaticFiles subclass
 ```
 
 `frontend/` currently contains nothing but an orphaned `node_modules` from an
@@ -145,12 +193,19 @@ binary can never be built with a stale or missing console.
 ```toml
 [testbench-ai-service.admin_ui]
 enabled = true
+require_loopback = false
 ```
 
-Default `true`, because `host` defaults to `127.0.0.1` and the console is therefore
-local-only out of the box. When the console is enabled *and* the bind address is not
-loopback, startup logs a warning naming the risk. Setting `enabled = false` removes
-both the router and the static mount.
+`enabled` defaults to `true`, because `host` defaults to `127.0.0.1` and the console
+is therefore local-only out of the box. When the console is enabled *and* the bind
+address is not loopback, startup logs a warning naming the risk. Setting
+`enabled = false` removes both the router and the static mount.
+
+`require_loopback` defaults to `false` — operators do legitimately reach the console
+from another machine — but when set, every `/admin` request from a non-loopback
+client is refused. This is the August attempt's entire security model (section 2.1)
+kept as an optional extra layer on top of authentication, for hosts where the console
+should never be reachable off-box.
 
 ## 5. Authentication and authorization
 
@@ -322,6 +377,29 @@ builds, so the preview matches what the agent would actually send.
 Switching a message between inline `text` and an external `file` (which the prototype
 supports) creates or absorbs the template file as part of the same atomic write.
 
+### 9.1 Path containment
+
+Every filesystem path the console derives from request data — the `{lang}` and
+`{agent}` path segments, a prompt's `file:` reference, an agent's `prompt.file`
+config value, a renamed template file — is resolved and then checked to be inside
+the configured `prompts_dir` before it is read or written. `webui/security.py`
+provides the single helper both read and write paths go through:
+
+```
+resolve_within(base: Path, candidate: str | Path) -> Path
+```
+
+It resolves `base / candidate` (and `candidate` alone when absolute), then rejects
+anything not under the resolved `base`, raising a 400. Symlinks are resolved before
+the check, so a symlink inside `prompts_dir` pointing outside it is refused too.
+
+Without this, `GET /prompts/../../../../etc/passwd` or a `file: "../../secrets.env"`
+reference turns the console into an arbitrary file read, and the write endpoints into
+an arbitrary file write. This is the single most security-sensitive piece of the
+feature and it is why `security.py` exists as its own module with its own tests.
+
+The same helper guards `templates_dir` if template editing is ever added.
+
 ## 10. Frontend architecture
 
 - **Routing:** React Router, upgrading the prototype's `ui.route` string to real URLs
@@ -370,9 +448,13 @@ Small, but they block phases 2 to 4:
 
 **Phase 1 — vertical slice.** Frontend scaffold, `frontend/node_modules` cleanup and
 gitignore, Vite build wiring, `build_binary.py` step, `/admin` mount with SPA
-fallback, `admin_ui.enabled` config, login with session store and CSRF, `GET /status`,
+fallback, `admin_ui.enabled` / `require_loopback` config, `resolve_within` and the
+loopback check in `security.py`, login with session store and CSRF, `GET /status`,
 Status screen, and read-only Service / LLM / Logging forms from `GET /config`.
 Deployable, and incapable of changing anything.
+
+`security.py` lands in phase 1 even though the paths it guards arrive in phase 4, so
+that no prompt endpoint can ever be written without the helper already existing.
 
 **Phase 2 — config editing.** Draft state, editable forms with validation surfacing,
 `POST /config/preview` diff dialog, `POST /config/apply` with atomic write and hot
@@ -408,6 +490,8 @@ Backend:
   revokes; CSRF mismatch is rejected
 - every mutating route refuses a non-admin session
 - no endpoint leaks an environment variable value
+- `resolve_within` rejects `..` traversal, absolute paths outside the base, and a
+  symlink inside the base that points outside it — for both read and write paths
 
 Frontend, with Vitest and React Testing Library, concentrated on the logic rather
 than the markup:
@@ -423,6 +507,11 @@ Playwright is available for smoke-testing the assembled console.
 - The console writes executable-adjacent configuration (`class_path` imports a Python
   class) and rewrites LLM prompts. Both are Administrator-only, and `class_path`
   already goes through `validate_class_path`.
+- Every request-derived filesystem path is contained to `prompts_dir` by
+  `resolve_within` (section 9.1). Without it the prompt endpoints would be an
+  arbitrary file read and write.
+- `admin_ui.require_loopback` can additionally refuse the console to any
+  non-loopback client, for deployments where the operator always works on the host.
 - The TestBench token never reaches the browser; the cookie holds an opaque id.
 - API-key presence is reported, never values.
 - The console defaults to a loopback bind and warns when enabled on a public one.
@@ -443,12 +532,24 @@ Playwright is available for smoke-testing the assembled console.
 
 ## 16. Open items to verify against a live TestBench
 
-1. `read_user_roles()` calls `GET {server}1/user/{login}/roles`. Confirm the response
-   shape against the deployed TestBench version and that a plain project user gets a
-   non-admin role list rather than an error.
+1. `read_user_roles()` is TestBench-version dependent: on TestBench 4 it reads
+   `GET {server}2/login/session` and returns `globalRoles`; on TestBench 3 it goes
+   via `1/checkLogin` and `1/users` to `1/user/{login}/roles`, and returns
+   `["Project User"]` when `1/users` answers 403. Confirm against the deployed
+   version that an admin's list actually contains the string `Administrator`, since
+   the TB3 path can yield `"Project User"` with a space while
+   `GlobalHumanRole.ProjectUser` is spelled without one — the admin check must not
+   depend on that spelling.
 2. `get_all_projects()` response shape for the Projects screen, and whether it is
    filtered by the calling user's visibility.
 3. Whether logging in via `TBConnection` with username and password is acceptable to
    operators who use Azure Entra ID against TestBench, or whether the console needs to
    accept a pasted session token as an alternative.
 4. Confirm no reverse-proxy deployment strips the `X-CSRF-Token` header.
+5. `TBConnection.__init__` requires `server_url` to match
+   `(https?)://host:port/api/` exactly and takes `verify` as a required positional
+   argument. A configured `tb_server_url` without an explicit port would raise
+   `ValueError` at login rather than returning 401, so login must surface that as a
+   configuration error rather than bad credentials.
+6. Whether the August attempt was abandoned for a reason not recoverable from its
+   bytecode (see section 2.1).
