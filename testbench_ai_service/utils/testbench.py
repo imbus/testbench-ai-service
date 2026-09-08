@@ -26,6 +26,7 @@ from testbench_ai_service.models.testbench import (
     TestCaseSetDetails,
     TestCaseSetNode,
     TestStructureTree,
+    TestThemeDetails,
     TOVDetails,
     TOVExchangeFormat,
     TovStructureOptions,
@@ -49,6 +50,33 @@ def get_test_case_set_details(
 ) -> TestCaseSetDetails:
     tcs_dict = conn.get_project_test_case_set(project_key, test_case_set_key)
     return TestCaseSetDetails.model_validate(tcs_dict)
+
+
+def get_test_theme_details(
+    conn: TBConnection,
+    project_key: str,
+    test_theme_key: str,
+    specification_key: str | None = None,
+) -> TestThemeDetails:
+    """Read one test theme, including its specification.
+
+    ``/projects/{projectKey}/specifications/{specificationKey}`` accepts ``PATCH``
+    only -- it is the write endpoint. A theme's specification is *read* through the
+    element itself, keyed by the theme's ``base.key``, with the specification key
+    passed as a query parameter.
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the theme.
+        test_theme_key: The theme's element key.
+        specification_key: The theme's specification key, when a specific one is
+            wanted rather than the server's default.
+
+    Returns:
+        The parsed theme details.
+    """
+    theme_dict = conn.get_project_test_theme(project_key, test_theme_key, specification_key)
+    return TestThemeDetails.model_validate(theme_dict)
 
 
 def get_json_report_data(

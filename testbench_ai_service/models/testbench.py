@@ -456,6 +456,16 @@ class TestCaseSetSpecificationSummary(BaseModel):
     requirements: list[RequirementReference]
 
 
+class TestThemeDetails(BaseModel):
+    """The payload of ``GET /projects/{projectKey}/testThemes/{testThemeKey}``.
+
+    Only ``spec`` is declared: it is the sole part the requirement agent reads, and
+    pydantic ignores the rest of the element payload.
+    """
+
+    spec: TestThemeSpecification
+
+
 class TestCaseSetDetails(BaseModel):
     key: str
     numbering: str
