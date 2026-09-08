@@ -199,3 +199,5 @@ node_modules/
 frontend/dist/
 # Vite build output, generated into the package by `npm run build`
 testbench_ai_service/static/
+# tsc -b build info (belt-and-braces; tsBuildInfoFile already redirects these under node_modules/)
+*.tsbuildinfo
