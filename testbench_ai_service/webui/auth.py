@@ -45,9 +45,10 @@ def authenticate(config: AppConfig, username: str, password: str) -> tuple[str, 
     Raises:
         HTTPException 401: TestBench rejected the credentials.
         HTTPException 500: ``tb_server_url`` is not a usable TestBench URL.
-        HTTPException 502: TestBench is unreachable.
+        HTTPException 502: TestBench is unreachable, or rejected the request for
+            a reason other than the credentials themselves (e.g. a 503 while the
+            server is starting up, or a wrong-but-shape-valid URL path).
     """
-    conn: TBConnection | None = None
     try:
         conn = TBConnection(
             config.tb_server_url,
@@ -56,6 +57,18 @@ def authenticate(config: AppConfig, username: str, password: str) -> tuple[str, 
             password=password,
             connection_timeout_sec=math.ceil(DEFAULT_READ_TIMEOUT),
         )
+    except ValueError as e:
+        # TBConnection validates the URL shape here, and only here. A ValueError
+        # raised later (e.g. read_user_roles' "User key not found in checkLogin
+        # response" on the TestBench 3 path) is not a configuration problem and
+        # must not be caught by this branch -- hence the narrow try above.
+        logger.error("Cannot log in to TestBench: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"TestBench server URL is not usable, check the configuration: {e}",
+        ) from e
+
+    try:
         harden_connection(
             conn,
             connect_timeout=DEFAULT_CONNECT_TIMEOUT,
@@ -64,32 +77,43 @@ def authenticate(config: AppConfig, username: str, password: str) -> tuple[str, 
         roles = conn.read_user_roles(conn.session)
         token = conn.session_token
         if not token:
+            # Defends against a real defect in the vendored library: on the
+            # TestBench 4 path, Connection.authenticate swallows an HTTPError
+            # that carries a response, so a wrong password can leave
+            # session_token as None and raise nothing at all.
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
             )
         return token, list(roles)
-    except ValueError as e:
-        # TBConnection validates the URL shape in __init__.
-        logger.error("Cannot log in to TestBench: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"TestBench server URL is not usable, check the configuration: {e}",
-        ) from e
     except requests.exceptions.HTTPError as e:
-        logger.warning("Console login rejected for user %r", username)
+        response_status = e.response.status_code if e.response is not None else None
+        if response_status in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
+            logger.warning("Console login rejected for user %r", username)
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            ) from e
+        # Any other status (a 503 while TestBench is starting up, a wrong but
+        # shape-valid URL path, ...) is not a credentials problem and must not
+        # be reported as one.
+        logger.error("TestBench returned an error during console login: %s", e)
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="TestBench server returned an unexpected error",
         ) from e
     except TRANSPORT_ERRORS as e:
         handle_requests_transport_error(e)
     finally:
-        if conn is not None:
-            conn.close()
+        conn.close()
+
+
+def _cookie_secure(config: AppConfig) -> bool:
+    """True only when TLS is configured, matching the scheme cookies travel over."""
+    return bool(config.ssl_cert and config.ssl_key)
 
 
 def set_session_cookies(response: Response, session: Session, config: AppConfig) -> None:
     """Attach the opaque session cookie and the readable CSRF cookie."""
-    secure = bool(config.ssl_cert and config.ssl_key)
+    secure = _cookie_secure(config)
     response.set_cookie(
         SESSION_COOKIE,
         session.sid,
@@ -108,9 +132,16 @@ def set_session_cookies(response: Response, session: Session, config: AppConfig)
     )
 
 
-def clear_session_cookies(response: Response) -> None:
-    response.delete_cookie(SESSION_COOKIE, path="/admin")
-    response.delete_cookie(CSRF_COOKIE, path="/admin")
+def clear_session_cookies(response: Response, config: AppConfig) -> None:
+    """Delete both cookies with the same attributes they were set with.
+
+    ``Response.delete_cookie`` defaults to ``samesite="lax"`` and
+    ``secure=False``; leaving those defaults would emit a deletion cookie that
+    does not match the one being deleted.
+    """
+    secure = _cookie_secure(config)
+    response.delete_cookie(SESSION_COOKIE, path="/admin", samesite="strict", secure=secure)
+    response.delete_cookie(CSRF_COOKIE, path="/admin", samesite="strict", secure=secure)
 
 
 def current_session(
@@ -138,8 +169,18 @@ def require_csrf(
     session: Session = Depends(current_session),
     token: str | None = Header(default=None, alias=CSRF_HEADER),
 ) -> None:
-    """Double-submit check for any state-changing request."""
-    if not token or not secrets.compare_digest(token, session.csrf_token):
+    """Double-submit check for any state-changing request.
+
+    Compares UTF-8-encoded bytes rather than the raw ``str``:
+    ``secrets.compare_digest`` raises ``TypeError`` for ``str`` arguments that
+    contain non-ASCII characters, and Starlette latin-1-decodes header bytes,
+    so any client can reach that by sending a non-ASCII header value. Encoding
+    first keeps a bad token a clean 403 instead of an unhandled 500.
+    """
+    valid = bool(token) and secrets.compare_digest(
+        token.encode("utf-8"), session.csrf_token.encode("utf-8")
+    )
+    if not valid:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Missing or invalid CSRF token"
         )

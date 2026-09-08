@@ -78,8 +78,14 @@ async def sign_out(
     response: Response,
     session: Session = Depends(current_session),
     store: SessionStore = Depends(get_session_store),
+    config: AppConfig = Depends(get_app_config),
     _: None = Depends(require_csrf),
-) -> Response:
+) -> None:
+    """Revoke the session and clear both cookies on the client.
+
+    Must mutate the injected ``response`` and return ``None`` -- returning a
+    fresh ``Response`` instance instead discards the Set-Cookie headers that
+    :func:`clear_session_cookies` just attached.
+    """
     store.revoke(session.sid)
-    clear_session_cookies(response)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    clear_session_cookies(response, config)

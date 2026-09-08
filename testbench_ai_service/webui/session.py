@@ -2,6 +2,10 @@
 
 The browser only ever receives an opaque session id.  The TestBench session
 token stays here, so a stolen cookie cannot be replayed against TestBench.
+Note that on TestBench 3, ``Connection.authenticate`` sets ``session_token``
+to the user's plaintext password, so on those deployments the value stored
+here is the password itself -- a disclosure of this store's memory yields
+credentials, not merely a replayable token.
 
 The store is process-local: restarting the service logs everyone out.
 """

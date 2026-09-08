@@ -36,12 +36,16 @@ def test_login_sets_both_cookies(login):
 
 
 def test_login_returns_identity_not_secrets(login):
-    body = login().json()
+    response = login()
+    body = response.json()
     assert body["username"] == "a.mueller"
     assert body["is_admin"] is True
     assert body["roles"] == ["Administrator"]
-    # The TestBench token must never reach the browser.
-    assert "tb-token-abc" not in str(body)
+    # The TestBench token must never reach the browser, on any channel: not
+    # the JSON body, not a cookie value, not any other response header.
+    assert "tb-token-abc" not in response.text
+    assert "tb-token-abc" not in "".join(response.headers.get_list("set-cookie"))
+    assert "tb-token-abc" not in str(dict(response.headers))
 
 
 def test_session_cookie_is_httponly_and_strict(login):
@@ -76,6 +80,12 @@ def test_project_user_with_space_is_not_admin(login):
     assert login(roles=["Project User"]).json()["is_admin"] is False
 
 
+def test_project_administrator_is_not_admin(login):
+    """Only the exact 'Administrator' string counts -- a substring check on
+    the role list would be defeated by this string, which contains it."""
+    assert login(roles=["ProjectAdministrator"]).json()["is_admin"] is False
+
+
 def test_bad_credentials_return_401(client, tb_connection):
     error = requests.exceptions.HTTPError(response=type("R", (), {"status_code": 401})())
     tb_connection.read_user_roles.side_effect = error
@@ -83,6 +93,17 @@ def test_bad_credentials_return_401(client, tb_connection):
         response = client.post("/admin/api/session", json={"username": "a", "password": "wrong"})
     assert response.status_code == 401
     assert SESSION_COOKIE not in response.cookies
+
+
+def test_testbench_error_unrelated_to_credentials_returns_502(client, tb_connection):
+    """A 503 (e.g. TestBench still starting up) must not be reported as a
+    credentials problem -- the operator would go re-check a password that
+    was never the issue."""
+    error = requests.exceptions.HTTPError(response=type("R", (), {"status_code": 503})())
+    tb_connection.read_user_roles.side_effect = error
+    with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+        response = client.post("/admin/api/session", json={"username": "a", "password": "pw"})
+    assert response.status_code == 502
 
 
 def test_malformed_server_url_is_a_config_error_not_a_401(client):
@@ -114,6 +135,19 @@ def test_logout_revokes_the_session(client, login):
     assert client.get("/admin/api/session").status_code == 401
 
 
+def test_logout_clears_both_cookies_on_the_wire(client, login):
+    """A handler that returns its own ``Response`` instead of mutating the
+    injected one silently drops every Set-Cookie header -- assert the
+    deletion actually reaches the client, not just the server-side revoke."""
+    csrf = login().cookies[CSRF_COOKIE]
+    response = client.delete("/admin/api/session", headers={CSRF_HEADER: csrf})
+    assert response.status_code == 204
+    session_header = _find_set_cookie(response, SESSION_COOKIE)
+    csrf_header = _find_set_cookie(response, CSRF_COOKIE)
+    assert "max-age=0" in session_header.lower()
+    assert "max-age=0" in csrf_header.lower()
+
+
 def test_logout_without_csrf_header_is_403(client, login):
     login()
     assert client.delete("/admin/api/session").status_code == 403
@@ -123,6 +157,19 @@ def test_logout_with_wrong_csrf_token_is_403(client, login):
     login()
     assert (
         client.delete("/admin/api/session", headers={CSRF_HEADER: "not-the-token"}).status_code
+        == 403
+    )
+
+
+def test_logout_with_non_ascii_csrf_header_is_403(client, login):
+    """secrets.compare_digest raises TypeError on non-ASCII str arguments,
+    and Starlette latin-1-decodes header bytes, so any client can reach that
+    with a single non-ASCII byte. Must fail closed as a clean 403, not an
+    unhandled 500."""
+    login()
+    non_ascii_token = "caf\xe9-not-the-token".encode("latin-1")
+    assert (
+        client.delete("/admin/api/session", headers={CSRF_HEADER: non_ascii_token}).status_code
         == 403
     )
 
