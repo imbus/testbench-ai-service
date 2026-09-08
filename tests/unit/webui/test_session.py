@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+# ruff: noqa: SIM300 - test assertions comparing constants are intentionally variable-first
 from testbench_ai_service.webui.session import (
     ABSOLUTE_TIMEOUT,
     IDLE_TIMEOUT,
@@ -88,12 +89,22 @@ def test_activity_refreshes_the_idle_timeout(store: SessionStore, clock: Clock):
         assert store.get(session.sid) is not None
 
 
-def test_expires_at_absolute_cap_despite_activity(store: SessionStore, clock: Clock):
+def test_absolute_cap_is_not_extended_by_activity(store: SessionStore, clock: Clock):
+    """Activity refreshes the idle timer but must not extend the absolute cap.
+
+    Every step is smaller than IDLE_TIMEOUT, so the idle check can never be what
+    expires the session — only the absolute cap can.
+    """
     session = _create(store)
-    for _ in range(20):
-        clock.advance(IDLE_TIMEOUT - timedelta(minutes=1))
-        store.get(session.sid)
-    clock.advance(ABSOLUTE_TIMEOUT)
+    step = IDLE_TIMEOUT - timedelta(minutes=1)
+    elapsed = timedelta()
+
+    while elapsed + step < ABSOLUTE_TIMEOUT:
+        clock.advance(step)
+        elapsed += step
+        assert store.get(session.sid) is not None, "cap fired early"
+
+    clock.advance(step)
     assert store.get(session.sid) is None
 
 
@@ -105,5 +116,5 @@ def test_expired_session_is_dropped_not_merely_hidden(store: SessionStore, clock
 
 
 def test_defaults_match_the_spec():
-    assert timedelta(minutes=60) == IDLE_TIMEOUT
-    assert timedelta(hours=8) == ABSOLUTE_TIMEOUT
+    assert IDLE_TIMEOUT == timedelta(minutes=60)
+    assert ABSOLUTE_TIMEOUT == timedelta(hours=8)
