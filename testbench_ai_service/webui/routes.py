@@ -13,8 +13,10 @@ from testbench_ai_service.webui.auth import (
     require_csrf,
     set_session_cookies,
 )
+from testbench_ai_service.webui.config_io import build_config_response
 from testbench_ai_service.webui.logs import MAX_LIMIT, read_log
 from testbench_ai_service.webui.models import (
+    ConfigResponse,
     LoginRequest,
     LogLine,
     MetaResponse,
@@ -109,6 +111,20 @@ async def read_status(
     everyone signed in.
     """
     return build_status(config, request.app.state.started_at)
+
+
+@router.get("/config", response_model=ConfigResponse)
+async def read_config(
+    request: Request,
+    _: Session = Depends(current_session),
+    config: AppConfig = Depends(get_app_config),
+) -> ConfigResponse:
+    """The service's configuration, as loaded and as stored on disk.
+
+    Requires a session but not the admin role -- Phase 1 is read-only for
+    everyone signed in.
+    """
+    return build_config_response(config, request.app.state.config_path)
 
 
 @router.get("/logs", response_model=list[LogLine])

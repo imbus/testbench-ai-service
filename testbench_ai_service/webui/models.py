@@ -62,6 +62,17 @@ class StatusResponse(BaseModel):
     log_file: str
 
 
+class ConfigResponse(BaseModel):
+    """The service's configuration, as loaded and as stored.
+
+    ``running`` is what the process is using; ``disk`` is what the file says.
+    """
+
+    running: dict
+    disk: dict
+    config_path: str
+
+
 class LogLine(BaseModel):
     """One parsed log record. Unparseable lines keep only ``raw``."""
 
