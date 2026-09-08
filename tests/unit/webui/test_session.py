@@ -2,7 +2,6 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-# ruff: noqa: SIM300 - test assertions comparing constants are intentionally variable-first
 from testbench_ai_service.webui.session import (
     ABSOLUTE_TIMEOUT,
     IDLE_TIMEOUT,
@@ -116,5 +115,6 @@ def test_expired_session_is_dropped_not_merely_hidden(store: SessionStore, clock
 
 
 def test_defaults_match_the_spec():
-    assert IDLE_TIMEOUT == timedelta(minutes=60)
-    assert ABSOLUTE_TIMEOUT == timedelta(hours=8)
+    # Constant-first form is what ruff's SIM300 requires for comparing constants.
+    assert timedelta(minutes=60) == IDLE_TIMEOUT
+    assert timedelta(hours=8) == ABSOLUTE_TIMEOUT
