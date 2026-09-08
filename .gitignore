@@ -190,3 +190,6 @@ prompts/
 # Local template files
 templates/
 !testbench_ai_service/templates/
+
+# Subagent-driven-development scratch workspace (ledgers, briefs, review packages)
+.superpowers/
