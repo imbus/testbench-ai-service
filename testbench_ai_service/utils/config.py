@@ -258,6 +258,9 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
                 config_dict = tomllib.load(config_file)
 
             config_dict = {config_prefix: config_dict["tool"][config_prefix]}
+            # The file actually read is pyproject.toml, not the originally
+            # requested (nonexistent) config_path; record that below.
+            config_file_path = project_toml
 
         except (FileNotFoundError, tomllib.TOMLDecodeError, KeyError):
             print(

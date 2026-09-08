@@ -65,6 +65,14 @@ def test_no_warning_on_loopback_bind(caplog):
     assert not any("reachable" in record.message.lower() for record in caplog.records)
 
 
+def test_warns_on_empty_host_bind(caplog):
+    """An empty host conventionally means INADDR_ANY (bind on all interfaces),
+    the opposite of loopback, so it must still warn."""
+    with caplog.at_level("WARNING"):
+        _app(host="")
+    assert any("reachable" in record.message.lower() for record in caplog.records)
+
+
 def test_app_records_start_time_and_config_path():
     app = _app()
     assert app.state.started_at is not None

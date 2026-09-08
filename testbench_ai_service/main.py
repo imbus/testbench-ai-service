@@ -51,7 +51,9 @@ def init_routers(app: FastAPI):
 
 
 def _is_loopback_bind(host: str) -> bool:
-    if host in ("localhost", ""):
+    # An empty host conventionally means INADDR_ANY (bind on all interfaces),
+    # the opposite of loopback, so it must not be treated as safe here.
+    if host == "localhost":
         return True
     try:
         return ip_address(host).is_loopback

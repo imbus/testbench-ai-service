@@ -126,9 +126,6 @@ class TestRunAgentReviewTask:
 
         yield
 
-        reviewer_patcher.stop()
-        prompt_model_patcher.stop()
-
     # ── Tests ─────────────────────────────────────────────────────────────────
 
     async def test_review_task_completes_and_patches_all_test_case_sets(self):

@@ -1,3 +1,4 @@
+import io
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
@@ -75,6 +76,31 @@ class TestLoadConfigFromFile:
             path.write_text("[other_section]\nsome_setting = 'value'")
             load_config_from_file(path)
         mock_exit.assert_called_once_with(1)
+
+    def test_missing_config_path_records_the_pyproject_fallback_as_loaded_from(self):
+        """When config_path doesn't exist, load_config_from_file falls back to
+        reading pyproject.toml. `loaded_from` must name the file that was
+        actually parsed (pyproject.toml), not the originally requested,
+        nonexistent path."""
+        import testbench_ai_service.utils.config as config_module
+
+        project_toml = Path(config_module.__file__).parent.parent / "pyproject.toml"
+        fake_content = f"[tool.{CONFIG_PREFIX}]\nsome_setting = 'value'\n".encode()
+        real_open = Path.open
+
+        def fake_open(self, *args, **kwargs):
+            if self == project_toml:
+                return io.BytesIO(fake_content)
+            return real_open(self, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "nonexistent.toml"
+            with patch("pathlib.Path.open", fake_open):
+                result = load_config_from_file(str(missing))
+
+        assert isinstance(result, AppConfig)
+        assert result.loaded_from == project_toml
+        assert result.loaded_from != missing
 
 
 class TestGetLLMConfig:
