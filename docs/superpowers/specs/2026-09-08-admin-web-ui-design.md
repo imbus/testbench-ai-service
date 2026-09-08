@@ -335,6 +335,7 @@ header.
 
 | Method | Path | Purpose |
 |---|---|---|
+| GET | `/meta` | **Unauthenticated.** The configured `tb_server_url`, so the login screen can show which TestBench it signs into |
 | POST | `/session` | Log in with TestBench credentials; set cookies |
 | GET | `/session` | Current user, roles, admin flag (survives page reload) |
 | DELETE | `/session` | Log out; revoke server-side |
@@ -353,6 +354,16 @@ header.
 
 `GET /status` reports API-key **presence only**, never values. No endpoint returns
 an environment variable's contents.
+
+`GET /meta` is the only unauthenticated route, and it exists because the login screen
+has to name the TestBench server it is about to authenticate against (section 3.1.2)
+before any session exists. It returns the `tb_server_url` and nothing else. That is a
+deliberate, bounded disclosure: it tells an unauthenticated caller which TestBench
+this service talks to. The service already publishes its version and full route list
+at `/docs` and `/openapi.json` without authentication, so this does not widen the
+exposure meaningfully — but it is the one route that must be reviewed against a
+deployment where the console is reachable from an untrusted network, and it is a
+reason to consider `admin_ui.require_loopback` there.
 
 `GET /models` needs a source the backend does not currently have. It returns a
 curated static catalogue defined in `admin/models.py`, grouped by provider and
