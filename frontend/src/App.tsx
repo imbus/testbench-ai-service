@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { NavRail } from './components/NavRail'
 import { TopBar } from './components/TopBar'
+import { ConfigSection } from './screens/ConfigSection'
 import { Login } from './screens/Login'
 import { Status } from './screens/Status'
 import { useMeta } from './api/queries'
@@ -65,9 +66,9 @@ export function App() {
             <Route path="/admin" element={<Navigate to="/admin/status" replace />} />
             <Route path="/" element={<Navigate to="/admin/status" replace />} />
             <Route path="/admin/status" element={<Status lang={lang} />} />
-            <Route path="/admin/service" element={<div />} />
-            <Route path="/admin/llm" element={<div />} />
-            <Route path="/admin/logging" element={<div />} />
+            <Route path="/admin/service" element={<ConfigSection section="service" lang={lang} />} />
+            <Route path="/admin/llm" element={<ConfigSection section="llm" lang={lang} />} />
+            <Route path="/admin/logging" element={<ConfigSection section="logging" lang={lang} />} />
             <Route path="*" element={<Navigate to="/admin/status" replace />} />
           </Routes>
         </main>

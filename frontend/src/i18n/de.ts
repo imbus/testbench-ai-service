@@ -18,6 +18,7 @@ export const de = {
   notConnected: 'Nicht verbunden',
   statusSub: 'Dienst, Verbindung und Schlüssel auf einen Blick',
   statusError: 'Status konnte nicht geladen werden',
+  configError: 'Konfiguration konnte nicht geladen werden',
   apiKeys: 'API-Schlüssel (.env)',
   recentLog: 'Letzte Protokolleinträge',
   general: 'Allgemein',
