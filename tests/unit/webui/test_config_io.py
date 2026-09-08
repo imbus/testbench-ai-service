@@ -3,7 +3,13 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from testbench_ai_service.webui.config_io import CONFIG_PREFIX, read_config_file
+from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.models.config import LLMConfig, ProjectConfig
+from testbench_ai_service.webui.config_io import (
+    CONFIG_PREFIX,
+    build_config_response,
+    read_config_file,
+)
 
 SAMPLE = """
 [testbench-ai-service]
@@ -65,3 +71,103 @@ def test_non_admin_may_read_config(client, login):
     """Phase 1 is read-only for everyone; only writes need admin."""
     login(roles=["ProjectUser"])
     assert client.get("/admin/api/config").status_code == 200
+
+
+def test_undecodable_bytes_raise_a_400(tmp_path: Path):
+    """Not every broken file is invalid TOML syntax -- binary garbage fails at
+    the UTF-8 decode step inside tomllib.load, before TOML parsing even starts.
+    That must surface the same 400-naming-the-file shape, not a 500."""
+    path = tmp_path / "config.toml"
+    path.write_bytes(b"\xff\xfe\x00\x01 not valid utf-8 \xfa")
+    with pytest.raises(HTTPException) as exc:
+        read_config_file(path)
+    assert exc.value.status_code == 400
+    assert str(path) in str(exc.value.detail)
+
+
+DISK_WITH_PLANTED_SECRETS = """
+[testbench-ai-service]
+port = 9999
+
+[testbench-ai-service.llm_config]
+provider = "anthropic"
+api_key = "sk-disk-secret"
+
+[testbench-ai-service.projects.proj1.llm_config]
+provider = "openai"
+api_key = "sk-disk-nested-secret"
+"""
+
+
+def test_redacts_a_planted_api_key_in_running_and_disk(tmp_path: Path, make_app):
+    """An operator's mistaken `api_key = "..."` under `[llm_config]` must not
+    round-trip through either half of the payload -- `disk` is raw file content
+    with no model to protect it, and `running` picked up the same extra field
+    because `LLMConfig` allows it."""
+    disk_path = tmp_path / "config.toml"
+    disk_path.write_text(DISK_WITH_PLANTED_SECRETS, encoding="utf-8")
+
+    app = make_app(llm_config={"provider": "openai", "api_key": "sk-running-secret"})
+    response = build_config_response(app.state.config, disk_path)
+
+    assert response.running["llm_config"]["api_key"] == "***REDACTED***"
+    assert response.disk["llm_config"]["api_key"] == "***REDACTED***"
+    assert "sk-running-secret" not in str(response.running)
+    assert "sk-disk-secret" not in str(response.disk)
+
+
+def test_redacts_a_planted_api_key_in_nested_project_llm_config(tmp_path: Path, make_app):
+    """`llm_config` also appears nested under `projects.<name>.llm_config`; the
+    redaction must recurse rather than only inspect the top level."""
+    disk_path = tmp_path / "config.toml"
+    disk_path.write_text(DISK_WITH_PLANTED_SECRETS, encoding="utf-8")
+
+    app = make_app(
+        projects={
+            "proj1": ProjectConfig(
+                llm_config=LLMConfig(provider=LLMProvider.OPENAI, api_key="sk-nested-secret")
+            )
+        }
+    )
+    response = build_config_response(app.state.config, disk_path)
+
+    assert response.running["projects"]["proj1"]["llm_config"]["api_key"] == "***REDACTED***"
+    assert response.disk["projects"]["proj1"]["llm_config"]["api_key"] == "***REDACTED***"
+    assert "sk-nested-secret" not in str(response.running)
+    assert "sk-disk-nested-secret" not in str(response.disk)
+
+
+def test_ssl_key_is_not_redacted(tmp_path: Path, make_app):
+    """`ssl_key` is a filesystem path to a certificate key file, not a secret
+    value -- a bare 'key' substring match would wrongly catch it."""
+    key_file = tmp_path / "server.key"
+    key_file.write_text("not a real key, just a path target", encoding="utf-8")
+    app = make_app(ssl_key=str(key_file))
+
+    response = build_config_response(app.state.config, tmp_path / "absent.toml")
+
+    assert response.running["ssl_key"] == str(key_file)
+
+
+def test_api_version_is_not_redacted(make_app):
+    """`api_version` contains the substring 'api' but is not a credential; only
+    the compound tokens 'api_key'/'apikey' should match."""
+    app = make_app(
+        llm_config={
+            "provider": "azure_openai",
+            "azure_endpoint": "https://example.openai.azure.com",
+            "api_version": "2024-02-01",
+        }
+    )
+
+    response = build_config_response(app.state.config, Path("absent.toml"))
+
+    assert response.running["llm_config"]["api_version"] == "2024-02-01"
+
+
+def test_auth_method_value_of_api_key_is_not_redacted(app):
+    """`auth_method`'s legitimate value is the literal string 'api_key' (from
+    `AzureAuthMethod.API_KEY`); redaction matches key NAMES, never values."""
+    response = build_config_response(app.state.config, Path("absent.toml"))
+
+    assert response.running["llm_config"]["auth_method"] == "api_key"
