@@ -4,7 +4,6 @@ This module serves as the API controller for the system.
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from ipaddress import ip_address
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -20,6 +19,7 @@ from testbench_ai_service.middlewares import LoggingMiddleware, OutboundRequestL
 from testbench_ai_service.routes import router
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.webui.security import is_loopback
 from testbench_ai_service.webui.static import STATIC_DIR, mount_spa
 
 
@@ -50,24 +50,13 @@ def init_routers(app: FastAPI):
         app.include_router(agent_router)
 
 
-def _is_loopback_bind(host: str) -> bool:
-    # An empty host conventionally means INADDR_ANY (bind on all interfaces),
-    # the opposite of loopback, so it must not be treated as safe here.
-    if host == "localhost":
-        return True
-    try:
-        return ip_address(host).is_loopback
-    except ValueError:
-        return False
-
-
 def init_webui(app: FastAPI):
     """Mount the browser console, unless it is disabled in config."""
     if not app.state.config.admin_ui.enabled:
         logger.info("Web console is disabled (admin_ui.enabled = false)")
         return
 
-    if not _is_loopback_bind(app.state.config.host):
+    if not is_loopback(app.state.config.host):
         logger.warning(
             "Web console is enabled and the service binds %s, so the console is "
             "reachable from other hosts. Restrict access or set "
