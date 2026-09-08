@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
@@ -15,9 +15,11 @@ from testbench_ai_service.webui.models import (
     LoginRequest,
     MetaResponse,
     SessionResponse,
+    StatusResponse,
 )
 from testbench_ai_service.webui.security import require_loopback
 from testbench_ai_service.webui.session import Session, SessionStore
+from testbench_ai_service.webui.status import build_status
 
 router = APIRouter(
     prefix="/admin/api",
@@ -89,3 +91,17 @@ async def sign_out(
     """
     store.revoke(session.sid)
     clear_session_cookies(response, config)
+
+
+@router.get("/status", response_model=StatusResponse)
+async def read_status(
+    request: Request,
+    _: Session = Depends(current_session),
+    config: AppConfig = Depends(get_app_config),
+) -> StatusResponse:
+    """Service facts, TestBench reachability, credential presence, and agent counts.
+
+    Requires a session but not the admin role -- Phase 1 is read-only for
+    everyone signed in.
+    """
+    return build_status(config, request.app.state.started_at)
