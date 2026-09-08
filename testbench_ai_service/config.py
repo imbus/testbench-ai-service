@@ -14,6 +14,7 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
+from testbench_ai_service.models.webui import AdminUiConfig
 from testbench_ai_service.transport import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_MAX_RETRIES,
@@ -126,8 +127,17 @@ class AppConfig(BaseModel):
     language: LanguageOption = LanguageOption.GERMAN
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    admin_ui: AdminUiConfig = Field(
+        default_factory=AdminUiConfig,
+        description="Browser console served at /admin",
+    )
     agents: dict[str, AgentConfig] = DEFAULT_AGENTS
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
+    loaded_from: Path | None = Field(
+        default=None,
+        exclude=True,
+        description="Path this config was loaded from; set by load_config_from_file",
+    )
 
     @field_validator("tb_server_url", mode="after")
     @classmethod

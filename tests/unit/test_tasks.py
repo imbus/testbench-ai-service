@@ -30,7 +30,7 @@ class TestRunAgentReviewTask:
     """run_agent runs the full review pipeline and writes back results via PATCH."""
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self, request):
         # ── TB connection mock ────────────────────────────────────────────────
         self.mock_tb_connection = MagicMock()
         self.mock_tb_connection.server_url = "https://localhost:9443/api/"
@@ -47,6 +47,7 @@ class TestRunAgentReviewTask:
             "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
         )
         self.mock_reviewer_class = reviewer_patcher.start()
+        request.addfinalizer(reviewer_patcher.stop)
         self.mock_reviewer = TestCaseSetReviewer()
         self.mock_reviewer.get_ai_response = AsyncMock(
             side_effect=self._reviewer_get_ai_response_side_effect
@@ -59,6 +60,7 @@ class TestRunAgentReviewTask:
             return_value="gpt-4o",
         )
         prompt_model_patcher.start()
+        request.addfinalizer(prompt_model_patcher.stop)
 
         # ── LLM factory mock ──────────────────────────────────────────────────
         self.mock_llm_client = AsyncMock()

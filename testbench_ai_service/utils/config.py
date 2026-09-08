@@ -287,10 +287,14 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
             return None  # type: ignore[unreachable]
 
     try:
-        return AppConfig(**config_dict[config_prefix])
+        config = AppConfig(**config_dict[config_prefix])
     except ValidationError as e:
         print_config_errors(e, config_file_path, config_prefix)
         sys.exit(1)
+        return None  # type: ignore[unreachable]
+
+    config.loaded_from = config_file_path
+    return config
 
 
 def merge_prompt_configs(

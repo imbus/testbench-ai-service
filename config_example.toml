@@ -78,3 +78,9 @@ enabled = false
 [testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer.prompt]
 file = "CarConfigurator_reviews_prompt.yaml"
 name = "TestCaseSetReviewer"
+
+# Browser console served at /admin
+[testbench-ai-service.admin_ui]
+enabled = true
+# Refuse the console to any client that is not on this host.
+# require_loopback = false
