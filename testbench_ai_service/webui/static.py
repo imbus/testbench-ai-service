@@ -19,6 +19,8 @@ from testbench_ai_service.log import logger
 
 STATIC_DIR = (Path(__file__).parent.parent / "static" / "admin").resolve()
 
+_NOT_FOUND = 404
+
 _PLACEHOLDER = (
     "<!doctype html><meta charset=utf-8>"
     "<title>TestBench AI Service</title>"
@@ -36,7 +38,7 @@ class _SpaStaticFiles(StaticFiles):
         try:
             return await super().get_response(path, scope)
         except StarletteHTTPException as exc:
-            if exc.status_code != 404:
+            if exc.status_code != _NOT_FOUND:
                 raise
             # Anything with a file extension was meant to be a real file.
             if Path(path).suffix:

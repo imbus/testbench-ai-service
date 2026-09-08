@@ -1,6 +1,5 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 from testbench_ai_service.config import AppConfig
@@ -55,7 +54,7 @@ def test_existing_root_redirect_still_works():
 
 def test_warns_when_enabled_on_non_loopback_bind(caplog):
     with caplog.at_level("WARNING"):
-        _app(host="0.0.0.0")  # noqa: S104 - deliberately testing this case
+        _app(host="0.0.0.0")  # deliberately testing this case
     assert any("reachable" in record.message.lower() for record in caplog.records)
 
 
