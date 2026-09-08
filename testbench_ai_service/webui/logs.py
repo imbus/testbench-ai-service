@@ -27,7 +27,8 @@ def tail_lines(path: Path, limit: int) -> list[str]:
     """
     try:
         with Path(path).open("r", encoding="utf-8", errors="replace") as handle:
-            return [line.rstrip("\n") for line in deque(handle, maxlen=limit) if line.strip()]
+            real_lines = (line.rstrip("\n") for line in handle if line.strip())
+            return list(deque(real_lines, maxlen=limit))
     except OSError as e:
         logger.debug("Cannot read log file %s: %s", path, e)
         return []

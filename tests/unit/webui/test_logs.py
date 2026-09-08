@@ -32,6 +32,25 @@ def test_tail_of_empty_file_is_empty(tmp_path: Path):
     assert tail_lines(log, 10) == []
 
 
+def test_tail_skips_blank_lines_within_the_window(tmp_path: Path):
+    """Blank lines must not occupy a slot in the tail window: a window of
+    `limit` *physical* lines landing on trailing blanks would otherwise
+    return fewer real lines than requested, or none at all, even though real
+    content sits just behind the blanks.
+    """
+    log = tmp_path / "svc.log"
+    log.write_text("\n".join(f"line {i}" for i in range(5)) + "\n\n\n", encoding="utf-8")
+    assert tail_lines(log, 3) == ["line 2", "line 3", "line 4"]
+
+
+def test_tail_skips_interleaved_blank_lines(tmp_path: Path):
+    """Real log files interleave blanks around multi-line messages, not just
+    trail them -- the window must still fill with `limit` real lines."""
+    log = tmp_path / "svc.log"
+    log.write_text("line 0\n\nline 1\n\nline 2\n\nline 3\n\nline 4\n", encoding="utf-8")
+    assert tail_lines(log, 5) == [f"line {i}" for i in range(5)]
+
+
 def test_parses_the_default_file_format():
     line = parse_log_line(SAMPLE.splitlines()[0])
     assert line.level == "INFO"
