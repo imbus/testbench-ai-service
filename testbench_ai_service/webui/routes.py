@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Request, Response, status
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
@@ -11,8 +13,10 @@ from testbench_ai_service.webui.auth import (
     require_csrf,
     set_session_cookies,
 )
+from testbench_ai_service.webui.logs import MAX_LIMIT, read_log
 from testbench_ai_service.webui.models import (
     LoginRequest,
+    LogLine,
     MetaResponse,
     SessionResponse,
     StatusResponse,
@@ -105,3 +109,17 @@ async def read_status(
     everyone signed in.
     """
     return build_status(config, request.app.state.started_at)
+
+
+@router.get("/logs", response_model=list[LogLine])
+async def read_logs(
+    limit: int = Query(default=50, ge=1, le=MAX_LIMIT),
+    _: Session = Depends(current_session),
+    config: AppConfig = Depends(get_app_config),
+) -> list[LogLine]:
+    """Tail the service log for the console's Status screen.
+
+    Requires a session but not the admin role -- Phase 1 is read-only for
+    everyone signed in.
+    """
+    return read_log(Path(config.logging.file.file_name), limit)

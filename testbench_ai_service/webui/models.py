@@ -60,3 +60,13 @@ class StatusResponse(BaseModel):
     api_keys: list[ApiKeyStatus]
     agents: AgentSummary
     log_file: str
+
+
+class LogLine(BaseModel):
+    """One parsed log record. Unparseable lines keep only ``raw``."""
+
+    raw: str
+    timestamp: str | None = None
+    level: str | None = None
+    source: str | None = None
+    message: str
