@@ -131,3 +131,13 @@ class PreviewResponse(BaseModel):
     # The rendered config.toml the apply would write. Also what the Raw screen
     # shows, which is why it is here rather than on a route of its own.
     toml: str
+
+
+class ApplyResponse(BaseModel):
+    """What an apply actually did."""
+
+    written: list[str]
+    backup: str | None
+    restart_required: list[str]
+    reloaded: bool
+    in_flight_tasks: int

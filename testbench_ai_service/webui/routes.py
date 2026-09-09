@@ -1,10 +1,12 @@
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
+from testbench_ai_service.log import logger
+from testbench_ai_service.webui.atomic import write_atomic
 from testbench_ai_service.webui.auth import (
     authenticate,
     clear_session_cookies,
@@ -26,6 +28,7 @@ from testbench_ai_service.webui.edits import merge_edits, validate_edit_paths
 from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 from testbench_ai_service.webui.logs import MAX_LIMIT, read_log
 from testbench_ai_service.webui.models import (
+    ApplyResponse,
     ConfigEditsRequest,
     ConfigResponse,
     LoginRequest,
@@ -35,7 +38,7 @@ from testbench_ai_service.webui.models import (
     SessionResponse,
     StatusResponse,
 )
-from testbench_ai_service.webui.reload import restart_required
+from testbench_ai_service.webui.reload import hot_reload, restart_required
 from testbench_ai_service.webui.security import require_loopback
 from testbench_ai_service.webui.session import Session, SessionStore
 from testbench_ai_service.webui.status import build_status
@@ -238,3 +241,82 @@ async def preview_config(
     preview, _text = _plan_change(body.edits, Path(request.app.state.config_path), config)
     preview.in_flight_tasks = registry.count
     return preview
+
+
+@router.post("/config/apply", response_model=ApplyResponse)
+async def apply_config(
+    body: ConfigEditsRequest,
+    request: Request,
+    config: AppConfig = Depends(get_app_config),
+    registry: TaskRegistry = Depends(get_task_registry),
+    _: Session = Depends(require_admin),
+    __: None = Depends(require_csrf),
+) -> ApplyResponse:
+    """Validate the operator's edits, write them atomically, then reload.
+
+    Refuses with 422 and the field-addressed issues if the merged config is one
+    the service could not boot with -- nothing is written in that case, so a
+    rejected apply can never leave a config file the service will not start
+    from.
+
+    A change the running process cannot honour (see
+    :func:`~testbench_ai_service.webui.reload.restart_required`) is still
+    written, but the in-process swap is skipped: the file is the source of
+    truth, and reporting a new port as live when the socket is still the old
+    one would be a lie. The response names what needs a restart; the console
+    raises its banner. Nothing here ever restarts the service (spec 7).
+    """
+    config_path = Path(request.app.state.config_path)
+    preview, proposed_text = _plan_change(body.edits, config_path, config)
+
+    if not preview.valid:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "The configuration is not valid and was not written.",
+                "issues": [issue.model_dump() for issue in preview.issues],
+            },
+        )
+
+    if not preview.diffs:
+        # Nothing to do. Writing anyway would churn the .bak and the mtime for
+        # an operator who changed their mind back.
+        return ApplyResponse(
+            written=[],
+            backup=None,
+            restart_required=[],
+            reloaded=False,
+            in_flight_tasks=registry.count,
+        )
+
+    # proposed_text, never preview.toml: preview.toml is REDACTED for display
+    # (Task 11), so writing it would replace the operator's real credential
+    # with the literal "***REDACTED***" sentinel. proposed_text is the raw
+    # second element _plan_change returns specifically so apply can write it.
+    backup = write_atomic(config_path, proposed_text)
+
+    needs_restart = preview.restart_required
+    reloaded = False
+    if not needs_restart:
+        # Re-read rather than reuse the candidate _plan_change built: what the
+        # process takes up must be what is now on disk, so a discrepancy
+        # between the document path and the dict path shows up here as a
+        # logged error instead of as a process quietly running something the
+        # file does not say.
+        reloaded_config, issues = validate_config_dict(read_config_file(config_path))
+        if reloaded_config is not None:
+            reloaded_config.loaded_from = config_path
+            reloaded = await hot_reload(request.app, reloaded_config)
+        else:
+            # Should be unreachable: the same dict validated moments ago. If it
+            # happens, the file on disk is the one that is right and the
+            # operator needs to know the process did not follow.
+            logger.error("Wrote %s but could not reload it: %s", config_path, issues)
+
+    return ApplyResponse(
+        written=[str(config_path.resolve())],
+        backup=str(backup) if backup is not None else None,
+        restart_required=needs_restart,
+        reloaded=reloaded,
+        in_flight_tasks=registry.count,
+    )

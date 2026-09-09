@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -409,3 +409,187 @@ def test_preview_redacts_a_credential_inside_an_array_of_tables(aot_client, aot_
     assert "sk-IN-AOT" not in body["toml"]
     assert "sk-IN-AOT-2" not in body["toml"]
     assert body["toml"].count(REDACTED_SENTINEL) == 2
+
+
+def test_apply_writes_the_change_and_keeps_the_comments(file_client, admin, config_file):
+    admin()
+
+    body = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": 9999}},
+        headers=csrf(file_client),
+    ).json()
+
+    written = config_file.read_text(encoding="utf-8")
+    assert "port = 9999" in written
+    assert "# Which TestBench we talk to." in written
+    assert body["written"] == [str(config_file.resolve())]
+
+
+def test_apply_keeps_the_previous_contents_as_a_backup(file_client, admin, config_file):
+    admin()
+
+    body = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": 9999}},
+        headers=csrf(file_client),
+    ).json()
+
+    backup = config_file.with_name("config.toml.bak")
+    assert body["backup"] == str(backup)
+    assert backup.read_text(encoding="utf-8") == COMMENTED
+
+
+def test_apply_hot_reloads_a_swappable_change(file_client, admin, app_with_file):
+    admin()
+
+    # Correction 3: hot_reload constructs its own LLMFactory inside
+    # webui.reload rather than reusing app.state.llm_factory, so the
+    # conftest's make_app patch of testbench_ai_service.main.LLMFactory
+    # (startup only) does not reach it. With no OPENAI_API_KEY set in this
+    # environment and "openai" as the default provider, an unpatched
+    # LLMFactory().init_clients() would raise and hot_reload would (correctly)
+    # report reloaded=False. Patch the same target test_reload.py already
+    # does, so this test exercises a *clean* reload.
+    new_factory = MagicMock()
+    new_factory.init_clients = MagicMock()
+    new_factory.close_clients = AsyncMock()
+    with patch("testbench_ai_service.webui.reload.LLMFactory", MagicMock(return_value=new_factory)):
+        body = file_client.post(
+            "/admin/api/config/apply",
+            json={"edits": {"language": "en"}},
+            headers=csrf(file_client),
+        ).json()
+
+    assert body["reloaded"] is True
+    assert body["restart_required"] == []
+    assert app_with_file.state.config.language.value == "en"
+
+
+def test_apply_writes_a_restart_requiring_change_but_does_not_swap_it(
+    file_client, admin, app_with_file, config_file
+):
+    """The file is the source of truth; a port swap the process cannot honour
+    must not be reported as live."""
+    admin()
+
+    body = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": 9999}},
+        headers=csrf(file_client),
+    ).json()
+
+    assert body["restart_required"] == ["port"]
+    assert "port = 9999" in config_file.read_text(encoding="utf-8")
+    assert app_with_file.state.config.port == 8010
+
+
+def test_apply_of_an_invalid_edit_writes_nothing(file_client, admin, config_file):
+    admin()
+    before = config_file.read_text(encoding="utf-8")
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": "not a number"}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 422
+    assert config_file.read_text(encoding="utf-8") == before
+    assert not config_file.with_name("config.toml.bak").exists()
+
+
+def test_apply_of_an_invalid_edit_returns_the_issues(file_client, admin):
+    admin()
+
+    body = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": "not a number"}},
+        headers=csrf(file_client),
+    ).json()
+
+    assert [issue["path"] for issue in body["detail"]["issues"]] == ["port"]
+
+
+def test_apply_with_no_edits_writes_nothing_and_reports_nothing_written(
+    file_client, admin, config_file
+):
+    admin()
+
+    body = file_client.post(
+        "/admin/api/config/apply", json={"edits": {}}, headers=csrf(file_client)
+    ).json()
+
+    assert body["written"] == []
+    assert body["backup"] is None
+    assert not config_file.with_name("config.toml.bak").exists()
+
+
+def test_apply_refuses_the_redaction_sentinel(file_client, admin, config_file):
+    admin()
+    before = config_file.read_text(encoding="utf-8")
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"llm_config.api_key": REDACTED_SENTINEL}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 400
+    assert config_file.read_text(encoding="utf-8") == before
+
+
+def test_apply_refuses_a_non_admin(file_client, admin, config_file):
+    admin(roles=["Test Manager"])
+    before = config_file.read_text(encoding="utf-8")
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": 9999}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 403
+    assert config_file.read_text(encoding="utf-8") == before
+
+
+def test_apply_refuses_a_missing_csrf_header(file_client, admin, config_file):
+    admin()
+    before = config_file.read_text(encoding="utf-8")
+
+    response = file_client.post("/admin/api/config/apply", json={"edits": {"port": 9999}})
+
+    assert response.status_code == 403
+    assert config_file.read_text(encoding="utf-8") == before
+
+
+def test_apply_removing_a_key_falls_back_to_the_default(file_client, admin, config_file):
+    admin()
+
+    file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": None}},
+        headers=csrf(file_client),
+    )
+
+    assert "port" not in config_file.read_text(encoding="utf-8")
+
+
+def test_a_second_apply_sees_the_first_ones_change(file_client, admin, config_file):
+    """The overlay merges into disk, so nothing silently reverts."""
+    admin()
+
+    file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"language": "en"}},
+        headers=csrf(file_client),
+    )
+    file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"debug": True}},
+        headers=csrf(file_client),
+    )
+
+    written = config_file.read_text(encoding="utf-8")
+    assert 'language = "en"' in written
+    assert "debug = true" in written

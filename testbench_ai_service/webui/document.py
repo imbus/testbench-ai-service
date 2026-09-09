@@ -112,6 +112,14 @@ def apply_edits(document: tomlkit.TOMLDocument, edits: ConfigEdits) -> None:
     The paths in *edits* must already have been through
     :func:`~testbench_ai_service.webui.edits.validate_edit_paths`.
 
+    Do not reuse *document* after this raises: edits are applied one at a
+    time, so a later edit in the same overlay that conflicts leaves the
+    earlier edits already mutated into the document object. This route
+    (`webui/routes.py`) never hits that case in practice, because
+    `_plan_change` runs `merge_edits` over the equivalent dict first, and that
+    raises on the same conflict before `apply_edits` is ever called -- but a
+    caller that skips `merge_edits` would not be protected by that ordering.
+
     Raises:
         HTTPException 400: a path's intermediate segment names an existing
             non-table value (a scalar or list left over from an older
