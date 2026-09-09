@@ -39,6 +39,20 @@ export const de = {
   darkTheme: 'Dunkles Design',
   lightTheme: 'Helles Design',
   revert: 'Zurücksetzen',
+  unapplied: 'nicht übernommene Änderungen',
+  viewDiff: 'Diff anzeigen',
+  discard: 'Verwerfen',
+  apply: 'Übernehmen',
+  applying: 'Wird übernommen…',
+  applied: 'Übernommen',
+  noChanges: 'Keine Änderungen zu übernehmen.',
+  invalidDraft: 'Diese Änderungen wurden nicht geschrieben:',
+  restartNeeded: 'Einige Änderungen werden erst nach einem Neustart wirksam.',
+  restartWhich: 'Neustart erforderlich:',
+  inFlight: 'Agent-Läufe sind noch aktiv.',
+  writesTo: 'Schreibt nach',
+  backupKept: 'Vorheriger Inhalt gesichert als',
+  close: 'Schließen',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German
