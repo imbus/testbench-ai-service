@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { useTranslations, type Lang } from '../i18n'
 import type { FieldSpec } from '../screens/fields'
 import { useDraft } from '../state/draft'
@@ -27,6 +28,21 @@ export function Field({
   const value = draft.valueOf(spec.key, saved)
   const changed = draft.isChanged(spec.key)
   const issueId = `${spec.key}-issue`
+
+  // The list type needs to hold raw text locally while editing. Without this,
+  // a trailing comma produces an array whose join() has no comma, so the comma
+  // can never persist in the displayed value — the next character appends to
+  // the previous entry. Text and number and select types don't need this
+  // because they round-trip through asText() identically.
+  const [text, setText] = useState<string | null>(null)
+
+  // When the edit goes away (Revert or Discard all), clear the local text state
+  // so the input re-syncs to show the saved value or parsed draft value.
+  useEffect(() => {
+    if (!changed) {
+      setText(null)
+    }
+  }, [changed])
 
   /**
    * An empty input means "remove this key", never the empty string.
@@ -123,15 +139,17 @@ export function Field({
             id={spec.key}
             aria-invalid={issue ? true : undefined}
             aria-describedby={issue ? issueId : undefined}
-            value={asText(value)}
-            onChange={(event) =>
-              commit(event.target.value, (text) =>
+            value={text ?? asText(value)}
+            onChange={(event) => {
+              const raw = event.target.value
+              setText(raw)
+              commit(raw, (text) =>
                 text
                   .split(',')
                   .map((entry) => entry.trim())
                   .filter((entry) => entry !== ''),
               )
-            }
+            }}
           />
         )
       default:

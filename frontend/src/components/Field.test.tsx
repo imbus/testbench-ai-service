@@ -152,4 +152,34 @@ describe('Field', () => {
     expect(screen.getByLabelText('port')).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByRole('alert')).toHaveTextContent('Input should be a valid integer')
   })
+
+  it('preserves the comma in the list input while editing', async () => {
+    const spec: FieldSpec = { key: 'trusted_proxies', type: 'list', hint: 'Trusted proxies' }
+    render(<Harness spec={spec} saved={{ trusted_proxies: null }} />)
+
+    await userEvent.type(screen.getByLabelText('trusted_proxies'), '10.0.0.1,')
+
+    expect(screen.getByLabelText('trusted_proxies')).toHaveValue('10.0.0.1,')
+  })
+
+  it('appends to an existing list when editing', async () => {
+    const spec: FieldSpec = { key: 'trusted_proxies', type: 'list', hint: 'Trusted proxies' }
+    render(<Harness spec={spec} saved={{ trusted_proxies: ['10.0.0.1', '10.0.0.2'] }} />)
+
+    await userEvent.type(screen.getByLabelText('trusted_proxies'), ', 10.0.0.3')
+
+    expect(screen.getByTestId('edits')).toHaveTextContent('{"trusted_proxies":["10.0.0.1","10.0.0.2","10.0.0.3"]}')
+  })
+
+  it('restores the saved value in the visible input when reverting a list field', async () => {
+    const spec: FieldSpec = { key: 'trusted_proxies', type: 'list', hint: 'Trusted proxies' }
+    render(<Harness spec={spec} saved={{ trusted_proxies: ['10.0.0.1', '10.0.0.2'] }} />)
+
+    await userEvent.type(screen.getByLabelText('trusted_proxies'), ', 10.0.0.3')
+    expect(screen.getByLabelText('trusted_proxies')).toHaveValue('10.0.0.1, 10.0.0.2, 10.0.0.3')
+
+    await userEvent.click(screen.getByRole('button', { name: /revert/i }))
+
+    expect(screen.getByLabelText('trusted_proxies')).toHaveValue('10.0.0.1, 10.0.0.2')
+  })
 })
