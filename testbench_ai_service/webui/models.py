@@ -95,3 +95,12 @@ class ConfigIssue(BaseModel):
     path: str
     message: str
     toml_section: str
+
+
+class FileDiff(BaseModel):
+    """A unified diff for one file the console proposes to write."""
+
+    path: str
+    diff: str
+    added: int
+    removed: int
