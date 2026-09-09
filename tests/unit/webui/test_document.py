@@ -165,3 +165,90 @@ def test_dotted_key_form_survives(tmp_path: Path):
     assert "testbench-ai-service.debug = true" in rendered or (
         "[testbench-ai-service]" in rendered and "debug = true" in rendered
     )
+
+
+@pytest.fixture
+def interleaved_config_file(tmp_path: Path) -> Path:
+    """Config with interleaved tables (triggers OutOfOrderTableProxy)."""
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "[testbench-ai-service]\n"
+        "# operator note\n"
+        "port = 8010\n"
+        "\n"
+        "[tool.other]\n"
+        "x = 1\n"
+        "\n"
+        "[testbench-ai-service.llm_config]\n"
+        'provider = "openai"\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_interleaved_comment_survives_after_write(interleaved_config_file: Path):
+    """Operator's comment is preserved when section is out-of-order (OutOfOrderTableProxy)."""
+    document = load_document(interleaved_config_file)
+    service_table(document)["debug"] = True
+
+    rendered = render_document(document)
+
+    # Comment must survive
+    assert "# operator note" in rendered
+    # New key must be present
+    assert "debug = true" in rendered or "debug = True" in rendered
+
+
+def test_interleaved_other_sections_survive(interleaved_config_file: Path):
+    """Interleaved [tool.other] table and its content survive intact."""
+    document = load_document(interleaved_config_file)
+    service_table(document)["debug"] = True
+
+    rendered = render_document(document)
+
+    assert "[tool.other]" in rendered
+    assert "x = 1" in rendered
+
+
+def test_interleaved_existing_keys_survive_and_reparses(
+    interleaved_config_file: Path,
+) -> None:
+    """Existing keys in interleaved section survive and re-parse correctly."""
+    document = load_document(interleaved_config_file)
+    table = service_table(document)
+    table["new_key"] = "new_value"
+
+    rendered = render_document(document)
+
+    # Write to disk to test re-parse
+    interleaved_config_file.write_text(rendered, encoding="utf-8")
+
+    # Re-parse and verify
+    re_parsed = load_document(interleaved_config_file)
+    re_parsed_table = re_parsed.get("testbench-ai-service")
+    assert re_parsed_table["port"] == 8010
+    assert re_parsed_table["new_key"] == "new_value"
+    re_parsed_llm = re_parsed_table.get("llm_config")
+    assert re_parsed_llm is not None
+    assert re_parsed_llm["provider"] == "openai"
+
+
+def test_interleaved_nested_table_write_preserves_comment(
+    interleaved_config_file: Path,
+) -> None:
+    """Writing nested table through proxy preserves comments and renders valid TOML."""
+    document = load_document(interleaved_config_file)
+    table = service_table(document)
+    table["logging"] = tomlkit.table()
+    table["logging"]["level"] = "debug"
+
+    rendered = render_document(document)
+
+    # Comment must survive
+    assert "# operator note" in rendered
+    # New nested table must be present and valid
+    assert "[testbench-ai-service.logging]" in rendered
+    assert 'level = "debug"' in rendered
+    # Original nested table must survive
+    assert "[testbench-ai-service.llm_config]" in rendered
+    assert 'provider = "openai"' in rendered

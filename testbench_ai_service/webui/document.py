@@ -14,6 +14,7 @@ from pathlib import Path
 
 import tomlkit
 from fastapi import HTTPException, status
+from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.exceptions import TOMLKitError
 from tomlkit.items import InlineTable, Table
 
@@ -53,15 +54,19 @@ def render_document(document: tomlkit.TOMLDocument) -> str:
     return tomlkit.dumps(document)
 
 
-def service_table(document: tomlkit.TOMLDocument) -> Table:
-    """Return the live ``[testbench-ai-service]`` table, preserving existing keys.
+def service_table(document: tomlkit.TOMLDocument) -> Table | OutOfOrderTableProxy:
+    """Return the live ``[testbench-ai-service]`` table, preserving existing keys and comments.
 
-    If the existing value is a table, return it live. If it is an inline table
-    (or a plain dict), promote it to a real table by copying every existing
-    key/value into a fresh ``tomlkit.table()`` and reassigning it -- inline
-    tables cannot hold the nested sub-tables the console writes, so promotion
-    is deliberate but preserves the operator's keys. If the key holds a
-    non-table value (scalar, list), raise HTTPException 400 rather than
+    If the existing value is a table (or an OutOfOrderTableProxy), return it
+    live -- mutating it in place preserves the operator's comments and section
+    order. An OutOfOrderTableProxy is what tomlkit returns when the section's
+    sub-tables are split across the file by another top-level table; returning
+    it live is the only way to keep comments and order intact. If it is an
+    inline table (or a plain dict), promote it to a real table by copying every
+    existing key/value into a fresh ``tomlkit.table()`` and reassigning it --
+    inline tables cannot hold the nested sub-tables the console writes, so
+    promotion is deliberate but preserves the operator's keys. If the key holds
+    a non-table value (scalar, list), raise HTTPException 400 rather than
     silently destroying data.
 
     The returned table is the one inside *document*, not a copy -- callers
@@ -72,7 +77,8 @@ def service_table(document: tomlkit.TOMLDocument) -> Table:
             (e.g., a scalar or list).
     """
     existing = document.get(CONFIG_PREFIX)
-    if isinstance(existing, Table):
+    if isinstance(existing, (Table, OutOfOrderTableProxy)):
+        # Return live: preserves comments and section order.
         return existing
     if isinstance(existing, (InlineTable, dict)):
         # Promote inline table or dict to a real table, preserving keys.
