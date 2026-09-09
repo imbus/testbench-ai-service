@@ -31,6 +31,23 @@ auth_method = "api_key"
 ssl_key = "/etc/certs/key.pem"
 """
 
+# config.toml is a potentially shared file (load_config_from_file falls back
+# to pyproject.toml), so a credential planted in another tool's
+# [[array.of.tables]] section -- outside [testbench-ai-service] entirely --
+# is a realistic shape the rendered `toml` (the WHOLE file, not only the
+# service's own table) must still hide.
+CREDENTIALED_AOT = """\
+[testbench-ai-service]
+port = 8010
+
+[[tool.other.entries]]
+api_key = "sk-IN-AOT"
+name = "one"
+
+[[tool.other.entries]]
+api_key = "sk-IN-AOT-2"
+"""
+
 
 @pytest.fixture
 def config_file(tmp_path: Path) -> Path:
@@ -92,6 +109,39 @@ def credentialed_admin(credentialed_client, tb_connection):
             tb_connection.read_user_roles.return_value = roles
         with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
             return credentialed_client.post(
+                "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
+            )
+
+    return _login
+
+
+@pytest.fixture
+def aot_config_file(tmp_path: Path) -> Path:
+    path = tmp_path / "config.toml"
+    path.write_text(CREDENTIALED_AOT, encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def aot_app(make_app, aot_config_file: Path):
+    app = make_app()
+    app.state.config_path = aot_config_file
+    return app
+
+
+@pytest.fixture
+def aot_client(aot_app):
+    with TestClient(aot_app, raise_server_exceptions=False) as c:
+        yield c
+
+
+@pytest.fixture
+def aot_admin(aot_client, tb_connection):
+    def _login(roles=None):
+        if roles is not None:
+            tb_connection.read_user_roles.return_value = roles
+        with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+            return aot_client.post(
                 "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
             )
 
@@ -344,3 +394,18 @@ def test_preview_redaction_preserves_comments(credentialed_client, credentialed_
     ).json()
 
     assert "# Provider credential -- must never leave this file." in body["toml"]
+
+
+def test_preview_redacts_a_credential_inside_an_array_of_tables(aot_client, aot_admin):
+    """The array-of-tables leak: the rendered `toml` is the WHOLE file, not
+    only `[testbench-ai-service]`, so another tool's `[[array.of.tables]]`
+    section holding a credential must be redacted too, for every entry."""
+    aot_admin()
+
+    body = aot_client.post(
+        "/admin/api/config/preview", json={"edits": {}}, headers=csrf(aot_client)
+    ).json()
+
+    assert "sk-IN-AOT" not in body["toml"]
+    assert "sk-IN-AOT-2" not in body["toml"]
+    assert body["toml"].count(REDACTED_SENTINEL) == 2

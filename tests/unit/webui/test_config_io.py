@@ -9,6 +9,8 @@ from testbench_ai_service.webui.config_io import (
     CONFIG_PREFIX,
     build_config_response,
     read_config_file,
+    redact_credentials,
+    redact_toml_text,
 )
 
 SAMPLE = """
@@ -171,3 +173,70 @@ def test_auth_method_value_of_api_key_is_not_redacted(app):
     response = build_config_response(app.state.config, Path("absent.toml"))
 
     assert response.running["llm_config"]["auth_method"] == "api_key"
+
+
+@pytest.mark.parametrize("key", ["api-key", "x-api-key", "api.key", "API-KEY"])
+def test_hyphenated_and_dotted_credential_keys_are_redacted(key: str):
+    """Separator variants of the compound 'api_key' token must match too --
+    `redact_credentials` previously matched key names by bare substring only,
+    so `{"api-key": "..."}` round-tripped a real secret through `GET /config`
+    unredacted. Separators are folded to '_' before matching, so 'api-key',
+    'x-api-key', 'api.key' and a differently-cased 'API-KEY' all match
+    exactly as 'api_key' does."""
+    redacted = redact_credentials({"llm_config": {key: "sk-hyphen-secret"}})
+
+    assert redacted["llm_config"][key] == "***REDACTED***"
+
+
+def test_ssl_key_dict_key_is_not_redacted_by_redact_credentials():
+    """Regression guard for the deliberate exclusion: separator normalisation
+    must not turn the bare 'key' substring into a match. 'ssl_key' has no
+    '-', '.' or ' ' to normalise and still must not match, exactly as before."""
+    redacted = redact_credentials({"ssl_key": "/etc/certs/key.pem"})
+
+    assert redacted["ssl_key"] == "/etc/certs/key.pem"
+
+
+def test_auth_method_dict_key_is_not_redacted_by_redact_credentials():
+    """Regression guard: 'auth_method' must still not match after separator
+    normalisation was added -- it contains none of '-', '.' or ' ' either."""
+    redacted = redact_credentials({"auth_method": "api_key"})
+
+    assert redacted["auth_method"] == "api_key"
+
+
+AOT_WITH_SECRETS = """\
+[testbench-ai-service]
+port = 8010
+
+[[tool.other.entries]]
+api_key = "sk-IN-AOT"
+name = "one"
+
+[[tool.other.entries]]
+api_key = "sk-IN-AOT-2"
+"""
+
+
+def test_redact_toml_text_redacts_a_credential_inside_an_array_of_tables():
+    """`config.toml` is a potentially shared file (`load_config_from_file`
+    falls back to `pyproject.toml`), so a credential planted in another
+    tool's `[[array.of.tables]]` section is a realistic shape, not only a
+    scalar table. Both entries must be redacted, not just the first."""
+    out = redact_toml_text(AOT_WITH_SECRETS)
+
+    assert "sk-IN-AOT" not in out
+    assert "sk-IN-AOT-2" not in out
+    assert out.count("***REDACTED***") == 2
+
+
+def test_redact_toml_text_still_redacts_an_array_valued_credential():
+    """An array-VALUED credential key (`api_keys = ["sk-A", "sk-B"]`) is not
+    an array of TABLES -- it is a plain list value under a credential-named
+    key -- and must still be replaced whole by the sentinel, exactly as
+    before this fix."""
+    out = redact_toml_text('[x]\napi_keys = ["sk-A", "sk-B"]\n')
+
+    assert "sk-A" not in out
+    assert "sk-B" not in out
+    assert 'api_keys = "***REDACTED***"' in out

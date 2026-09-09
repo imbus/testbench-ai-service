@@ -11,7 +11,7 @@ from typing import Any
 import tomlkit
 from fastapi import HTTPException, status
 from tomlkit.container import OutOfOrderTableProxy
-from tomlkit.items import InlineTable, Table
+from tomlkit.items import AoT, InlineTable, Table
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
@@ -27,14 +27,20 @@ else:
 # Case-insensitive substring matches against key NAMES only -- never against
 # values. "api_key"/"apikey" are compound tokens deliberately: a bare "key"
 # pattern would wrongly catch `ssl_key`, which is a certificate file path, not
-# a secret, and the compound form leaves `api_version` alone.
+# a secret, and the compound form leaves `api_version` alone. The key is
+# normalised before matching -- "-", "." and " " are folded to "_" -- so
+# separator variants of the same compound token ("api-key", "x-api-key",
+# "api.key", "api key") match exactly as "api_key" does. The bare-substring
+# patterns ("secret", "token", "credential", ...) do not need this: they match
+# regardless of what surrounds them either way.
 _REDACT_KEY_SUBSTRINGS = ("secret", "password", "token", "credential", "api_key", "apikey")
 REDACTED_SENTINEL = "***REDACTED***"
+_SEPARATOR_TRANSLATION = str.maketrans({"-": "_", ".": "_", " ": "_"})
 
 
 def _looks_like_credential_key(key: str) -> bool:
-    lowered = key.lower()
-    return any(pattern in lowered for pattern in _REDACT_KEY_SUBSTRINGS)
+    normalized = key.lower().translate(_SEPARATOR_TRANSLATION)
+    return any(pattern in normalized for pattern in _REDACT_KEY_SUBSTRINGS)
 
 
 def redact_credentials(data: dict[str, Any]) -> dict[str, Any]:
@@ -61,17 +67,31 @@ def redact_credentials(data: dict[str, Any]) -> dict[str, Any]:
     return redacted
 
 
-def _redact_toml_node(node: Table | InlineTable | OutOfOrderTableProxy | dict) -> None:
+def _redact_toml_node(node: Table | InlineTable | OutOfOrderTableProxy | AoT | dict) -> None:
     """Mutate *node* in place, replacing credential-named values with the sentinel.
 
     Recurses into every dict-like child -- ``Table``, ``InlineTable`` and
     ``OutOfOrderTableProxy`` are all named explicitly even though each is
     itself a dict subclass, to match the same three cases ``document.py``
     treats specially, rather than relying on that coincidence silently.
+
+    ``AoT`` (an array of tables, ``[[section]]``) is not dict-like -- it is a
+    list of ``Table`` entries -- so it is walked separately, recursing into
+    each entry. ``config.toml`` is a potentially shared file
+    (``load_config_from_file`` falls back to ``pyproject.toml``), so a
+    credential planted in another tool's array-of-tables section is a real
+    shape to defend against, not a hypothetical one. An array-VALUED
+    credential (``api_keys = ["sk-A", "sk-B"]``) is not an ``AoT`` -- it is a
+    plain value under a credential-named key -- and is redacted whole by the
+    ``elif`` branch below, which is correct: the whole list is the secret.
     """
+    if isinstance(node, AoT):
+        for entry in node:
+            _redact_toml_node(entry)
+        return
     for key in list(node.keys()):
         value = node[key]
-        if isinstance(value, (Table, InlineTable, OutOfOrderTableProxy, dict)):
+        if isinstance(value, (Table, InlineTable, OutOfOrderTableProxy, AoT, dict)):
             _redact_toml_node(value)
         elif _looks_like_credential_key(key):
             node[key] = REDACTED_SENTINEL
