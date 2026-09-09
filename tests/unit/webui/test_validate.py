@@ -266,3 +266,48 @@ def test_bare_keys_remain_unquoted():
     # The toml_section for logging.file.log_level should be [testbench-ai-service.logging.file]
     # with no quotes around logging or file
     assert issues[0].toml_section == "[testbench-ai-service.logging.file]"
+
+
+def test_the_default_log_file_name_is_accepted():
+    """Guards against over-rejection: a false positive here would block every
+    apply that does not touch logging at all, since it inherits the default."""
+    config, issues = validate_config_dict({"tb_server_url": TB_URL})
+
+    assert issues == []
+    assert config is not None
+
+
+def test_a_log_path_in_a_writable_directory_is_accepted(tmp_path):
+    config, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "logging": {"file": {"file_name": str(tmp_path / "svc.log")}},
+        }
+    )
+
+    assert issues == []
+    assert config is not None
+
+
+def test_an_empty_log_file_name_is_rejected():
+    """Path("").parent resolves to ".", the writable current directory, so the
+    empty case needs its own check or it would wrongly pass."""
+    _, issues = validate_config_dict(
+        {"tb_server_url": TB_URL, "logging": {"file": {"file_name": "   "}}}
+    )
+
+    assert [issue.path for issue in issues] == ["logging.file.file_name"]
+
+
+def test_a_log_path_whose_directory_is_missing_is_addressed_to_its_field(tmp_path):
+    """Spec 6.3: the console must refuse a config the service could not boot
+    with. setup_logging()'s RotatingFileHandler creates the file but never a
+    missing directory, so this must be caught here, before any write."""
+    bad_path = tmp_path / "does-not-exist" / "svc.log"
+
+    _, issues = validate_config_dict(
+        {"tb_server_url": TB_URL, "logging": {"file": {"file_name": str(bad_path)}}}
+    )
+
+    assert [issue.path for issue in issues] == ["logging.file.file_name"]
+    assert issues[0].toml_section == "[testbench-ai-service.logging.file]"

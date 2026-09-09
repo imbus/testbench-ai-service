@@ -2,9 +2,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from testbench_ai_service.webui.config_io import REDACTED_SENTINEL
+from testbench_ai_service.webui.config_io import REDACTED_SENTINEL, read_config_file
 from testbench_ai_service.webui.routes import _plan_change
 
 COMMENTED = """\
@@ -593,3 +594,89 @@ def test_a_second_apply_sees_the_first_ones_change(file_client, admin, config_fi
     written = config_file.read_text(encoding="utf-8")
     assert 'language = "en"' in written
     assert "debug = true" in written
+
+
+def test_apply_refuses_an_unwritable_log_path(file_client, admin, config_file):
+    """Spec 6.3 regression guard: the console must never write a config.toml
+    the service could not boot with. Before FIX A, this edit wrote
+    successfully -- AppConfig has no opinion on log-path writability -- and
+    left a config that would crash setup_logging()'s RotatingFileHandler at
+    the very next startup, with no way back in through the console."""
+    admin()
+    before = config_file.read_text(encoding="utf-8")
+    bad_path = str(config_file.parent / "missing" / "nested" / "svc.log")
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"logging.file.file_name": bad_path}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 422
+    assert config_file.read_text(encoding="utf-8") == before
+    assert not config_file.with_name("config.toml.bak").exists()
+
+
+def test_apply_reports_a_degraded_reload_when_setup_logging_fails(
+    file_client, admin, app_with_file
+):
+    """FIX B regression guard: a failure re-applying logging inside hot_reload
+    must not surface as a 500 for a write that already committed, and the
+    config swap must still go through -- the alternative is a process that
+    silently keeps running the OLD config while believing it is running the
+    new one."""
+    admin()
+
+    new_factory = MagicMock()
+    new_factory.init_clients = MagicMock()
+    new_factory.close_clients = AsyncMock()
+    with (
+        patch("testbench_ai_service.webui.reload.LLMFactory", MagicMock(return_value=new_factory)),
+        patch(
+            "testbench_ai_service.webui.reload.setup_logging",
+            side_effect=ValueError("Unable to configure handler 'file'"),
+        ),
+    ):
+        response = file_client.post(
+            "/admin/api/config/apply",
+            json={"edits": {"language": "en"}},
+            headers=csrf(file_client),
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reloaded"] is False
+    assert body["reload_detail"]
+    assert app_with_file.state.config.language.value == "en"
+
+
+def test_apply_reports_a_post_write_reread_failure_without_raising(file_client, admin, config_file):
+    """FIX C/D: the write already committed by the time re-reading the file
+    to verify the reload can fail, so that failure must come back as a
+    normal 200 with the reason named in reload_detail, never a 4xx that
+    would falsely imply the apply itself failed."""
+    admin()
+    calls = {"count": 0}
+
+    def flaky_read(path):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            # The read _plan_change makes before anything is written must
+            # still succeed, or nothing would ever get written to fail the
+            # re-read against in the first place.
+            return read_config_file(path)
+        raise HTTPException(status_code=400, detail="not valid TOML: boom")
+
+    with patch("testbench_ai_service.webui.routes.read_config_file", side_effect=flaky_read):
+        response = file_client.post(
+            "/admin/api/config/apply",
+            json={"edits": {"language": "en"}},
+            headers=csrf(file_client),
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["reloaded"] is False
+    assert body["reload_detail"]
+    assert "boom" in body["reload_detail"]
+    assert 'language = "en"' in config_file.read_text(encoding="utf-8")

@@ -141,3 +141,8 @@ class ApplyResponse(BaseModel):
     restart_required: list[str]
     reloaded: bool
     in_flight_tasks: int
+    # Populated only when `reloaded` is False for a reason other than a
+    # required restart (`restart_required` already explains that case). If
+    # the failure is the log path itself, the service log may be exactly what
+    # cannot be written to -- this field is then the operator's only channel.
+    reload_detail: str | None = None

@@ -129,16 +129,30 @@ async def hot_reload(app: FastAPI, config: AppConfig) -> bool:
     completed but something above was swallowed -- the config and the
     factory are swapped either way.
 
+    ``setup_logging`` and ``load_translations`` are guarded the same way as
+    the client steps below: by the time this runs, ``apply`` has already
+    written the new config to disk (Task 12's validation cannot catch every
+    way a log path can fail to open -- a race, a permission change after the
+    check -- so this is defence in depth, not the primary guard). A request
+    whose write already succeeded must never come back as a 500 because the
+    *in-process* logging setup failed; the failure is logged (best-effort, to
+    whichever logging configuration is still active) and swallowed, exactly
+    like a client failure below.
+
     Changes this cannot cover do not belong here at all; see
     :func:`restart_required`.
     """
-    setup_logging(config.logging)
-    load_translations()
+    succeeded = True
+
+    try:
+        setup_logging(config.logging)
+        load_translations()
+    except Exception as e:
+        succeeded = False
+        logger.warning("Reloaded configuration, but could not re-apply logging: %r", e)
 
     previous_factory = app.state.llm_factory
     app.state.config = config
-
-    succeeded = True
 
     try:
         await previous_factory.close_clients()

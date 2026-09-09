@@ -265,6 +265,19 @@ async def apply_config(
     truth, and reporting a new port as live when the socket is still the old
     one would be a lie. The response names what needs a restart; the console
     raises its banner. Nothing here ever restarts the service (spec 7).
+
+    ``validate_config_dict`` also refuses a ``logging.file.file_name`` the
+    process could not open (see
+    :func:`~testbench_ai_service.webui.validate._log_file_writability_issue`)
+    -- without it, an operator could write a config the process cannot even
+    boot with, since ``setup_logging`` builds the file handler at startup.
+    That check runs before any write, same as every other validation issue.
+
+    Once the write has committed, nothing that follows may turn it back into
+    a non-2xx response: re-reading the file to verify the reload can itself
+    fail (``read_config_file`` raises ``HTTPException`` on a decode error),
+    and that is reported through ``reload_detail`` on a normal 200, not
+    raised -- the write already succeeded and the response must say so.
     """
     config_path = Path(request.app.state.config_path)
     preview, proposed_text = _plan_change(body.edits, config_path, config)
@@ -297,26 +310,55 @@ async def apply_config(
 
     needs_restart = preview.restart_required
     reloaded = False
+    reload_detail: str | None = None
     if not needs_restart:
         # Re-read rather than reuse the candidate _plan_change built: what the
         # process takes up must be what is now on disk, so a discrepancy
         # between the document path and the dict path shows up here as a
         # logged error instead of as a process quietly running something the
         # file does not say.
-        reloaded_config, issues = validate_config_dict(read_config_file(config_path))
-        if reloaded_config is not None:
-            reloaded_config.loaded_from = config_path
-            reloaded = await hot_reload(request.app, reloaded_config)
+        try:
+            on_disk = read_config_file(config_path)
+        except HTTPException as e:
+            # The write already committed (write_atomic already returned).
+            # Turning this into a raised 4xx would tell the operator the
+            # apply failed when the file on disk is exactly what they asked
+            # for; only the in-process verification could not complete.
+            logger.error(
+                "Wrote %s but could not re-read it to verify the reload: %s",
+                config_path,
+                e.detail,
+            )
+            reload_detail = (
+                f"Wrote the configuration, but could not re-read it to verify "
+                f"the reload: {e.detail}"
+            )
         else:
-            # Should be unreachable: the same dict validated moments ago. If it
-            # happens, the file on disk is the one that is right and the
-            # operator needs to know the process did not follow.
-            logger.error("Wrote %s but could not reload it: %s", config_path, issues)
+            reloaded_config, issues = validate_config_dict(on_disk)
+            if reloaded_config is not None:
+                reloaded_config.loaded_from = config_path
+                reloaded = await hot_reload(request.app, reloaded_config)
+                if not reloaded:
+                    reload_detail = (
+                        "Wrote the configuration, but the in-process reload completed "
+                        "with degraded results; check the service log if it is "
+                        "currently writable."
+                    )
+            else:
+                # Should be unreachable: the same dict validated moments ago. If it
+                # happens, the file on disk is the one that is right and the
+                # operator needs to know the process did not follow.
+                logger.error("Wrote %s but could not reload it: %s", config_path, issues)
+                reasons = "; ".join(issue.message for issue in issues)
+                reload_detail = (
+                    f"Wrote the configuration, but it failed re-validation before reload: {reasons}"
+                )
 
     return ApplyResponse(
         written=[str(config_path.resolve())],
         backup=str(backup) if backup is not None else None,
         restart_required=needs_restart,
         reloaded=reloaded,
+        reload_detail=reload_detail,
         in_flight_tasks=registry.count,
     )

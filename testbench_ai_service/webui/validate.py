@@ -11,7 +11,9 @@ input, in both the dotted spelling the console's forms use and the
 ``[section]`` spelling ``config.toml`` uses.
 """
 
+import os
 import re
+from pathlib import Path
 from typing import Any
 
 import tomlkit
@@ -23,6 +25,7 @@ from testbench_ai_service.utils.config import CONFIG_PREFIX
 from testbench_ai_service.webui.models import ConfigIssue
 
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
+_LOG_FILE_SECTION = f"[{CONFIG_PREFIX}.logging.file]"
 
 
 def _quote_key(segment: str) -> str:
@@ -64,6 +67,58 @@ def _issue_path(location: tuple[Any, ...]) -> str:
     return ".".join(str(part) for part in location)
 
 
+def _log_file_writability_issue(config: AppConfig) -> ConfigIssue | None:
+    """Check, with no side effect, whether the configured log file can be written.
+
+    ``setup_logging`` builds a ``RotatingFileHandler`` from
+    ``config.logging.file.file_name`` at both startup (``cli.py``) and hot
+    reload, and raises ``ValueError`` there if the path is unusable -- by
+    which point ``POST /admin/api/config/apply`` has already written the file
+    to disk. Checking it here, before anything is written, is what keeps spec
+    6.3's promise that the console cannot produce a ``config.toml`` the
+    service could not boot with.
+
+    Nothing is created or opened: an existing file must be writable in place;
+    otherwise the parent directory must already exist and be writable, since
+    ``RotatingFileHandler`` creates the file itself but never a missing
+    directory. An empty or whitespace-only path is rejected explicitly first
+    -- ``Path("").parent`` resolves to ``"."``, the current (writable)
+    directory, and would otherwise pass.
+    """
+    file_name = config.logging.file.file_name
+    if not file_name.strip():
+        return ConfigIssue(
+            path="logging.file.file_name",
+            message="The log file path must not be empty.",
+            toml_section=_LOG_FILE_SECTION,
+        )
+
+    path = Path(file_name)
+    if path.exists():
+        if os.access(path, os.W_OK):
+            return None
+        return ConfigIssue(
+            path="logging.file.file_name",
+            message=f"{path} exists but is not writable.",
+            toml_section=_LOG_FILE_SECTION,
+        )
+
+    parent = path.parent
+    if not parent.is_dir():
+        return ConfigIssue(
+            path="logging.file.file_name",
+            message=f"The directory {parent} does not exist.",
+            toml_section=_LOG_FILE_SECTION,
+        )
+    if not os.access(parent, os.W_OK):
+        return ConfigIssue(
+            path="logging.file.file_name",
+            message=f"The directory {parent} is not writable.",
+            toml_section=_LOG_FILE_SECTION,
+        )
+    return None
+
+
 def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[ConfigIssue]]:
     """Construct :class:`AppConfig` from *data*.
 
@@ -72,7 +127,7 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
         with, or ``(None, issues)`` when it is not. Never both.
     """
     try:
-        return AppConfig(**data), []
+        config = AppConfig(**data)
     except ValidationError as e:
         issues = [
             ConfigIssue(
@@ -98,3 +153,14 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
         # ImportError it catches.
         logger.exception("Unexpected failure validating a console config draft")
         return None, [ConfigIssue(path="", message=str(e), toml_section=f"[{CONFIG_PREFIX}]")]
+
+    # AppConfig itself does not validate the log path -- see
+    # _log_file_writability_issue's docstring for why that check belongs here,
+    # in the console's validator, rather than tightening the model every CLI
+    # user also goes through.
+    log_issue = _log_file_writability_issue(config)
+    if log_issue is not None:
+        logger.info("Rejected a console config draft with 1 issue(s)")
+        return None, [log_issue]
+
+    return config, []
