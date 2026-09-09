@@ -34,6 +34,17 @@ export function App() {
 
   useEffect(() => applyTheme(theme), [theme])
 
+  // App is one component instance across the whole session lifecycle (see
+  // the hook-order note above), so an issue marker set while signed in would
+  // otherwise survive in memory past sign-out -- clearStoredDraft() (in
+  // signOut) only clears the draft, not this state. Keyed on `session`
+  // itself rather than a click handler so an expired session (which also
+  // surfaces as `session` becoming null, not just an explicit sign-out)
+  // clears it too, before the next operator on a shared machine sees it.
+  useEffect(() => {
+    if (!session) setIssues([])
+  }, [session])
+
   if (loading) return null
 
   if (!session) {
