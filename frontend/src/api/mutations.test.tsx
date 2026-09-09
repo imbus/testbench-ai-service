@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ApiError } from './client'
 import { useApply, usePreview } from './mutations'
 
 const fetchMock = vi.fn()
@@ -115,12 +116,18 @@ describe('useApply', () => {
   })
 
   it('reports a 422 as an error carrying the server detail', async () => {
+    const detailObj = { message: 'not valid', issues: [{ path: 'port', message: 'invalid' }] }
     fetchMock.mockResolvedValue(
-      jsonResponse({ detail: { message: 'not valid', issues: [] } }, 422),
+      jsonResponse({ detail: detailObj }, 422),
     )
     const { result } = renderHook(() => useApply(), { wrapper })
 
     result.current.mutate({ port: 'nope' })
     await waitFor(() => expect(result.current.isError).toBe(true))
+
+    const error = result.current.error as ApiError
+    expect(error.detail).toEqual(detailObj)
+    const detail = error.detail as Record<string, unknown>
+    expect((detail.issues as Array<Record<string, unknown>>)[0].path).toBe('port')
   })
 })

@@ -63,6 +63,7 @@ class StatusResponse(BaseModel):
     agents: AgentSummary
     log_file: str
     in_flight_tasks: int = 0
+    restart_required: list[str] = []
 
 
 class ConfigResponse(BaseModel):

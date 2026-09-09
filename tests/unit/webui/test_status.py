@@ -125,3 +125,12 @@ def test_status_reports_a_tracked_task(app, client, login):
         registry._labels.clear()
 
     assert body["in_flight_tasks"] == 1
+
+
+def test_status_includes_restart_required_defaulting_to_empty(client, login):
+    login()
+
+    body = client.get("/admin/api/status").json()
+
+    assert "restart_required" in body
+    assert body["restart_required"] == []
