@@ -479,9 +479,24 @@ Includes the `PromptConfig.vars` widening.
 
 **Phase 4 — prompt editor.** CodeMirror integration, variant and message tree,
 variable declaration and values, real lint and render endpoints, inline-vs-file
-switching.
+switching. Includes the live test run below, which is no longer deferred.
 
-**Phase 5 — optional.** Agent test run against a live LLM.
+**Phase 5 — folded into phase 4 (2026-09-09).** The agent test run against a live
+LLM was originally optional. It ships with the prompt editor instead: a prompt the
+operator cannot try against the configured model is a prompt they have to deploy to
+evaluate, which defeats the point of editing it in the console. It gets its own
+endpoint (`POST /prompts/test`), is Administrator-only like every other mutating
+route, and is the one console action that spends money — so it is never triggered
+implicitly, only by the editor's explicit "Test run" button.
+
+### 12.1 Increment decision, 2026-09-09
+
+Phase 2 is being implemented as its own reviewable increment before phases 3 and 4,
+rather than folded into an agents-and-prompts push. Agents are configured *in*
+`config.toml`, so agent editing cannot exist without the phase-2 write path
+(draft, validate, diff, atomic write, hot reload); building the two together would
+mean a single unreviewable change that can corrupt an operator's config file. The
+deviations in section 3.1 are re-confirmed as approved and unchanged.
 
 ## 13. Testing
 
