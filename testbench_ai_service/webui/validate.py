@@ -14,6 +14,7 @@ input, in both the dotted spelling the console's forms use and the
 import re
 from typing import Any
 
+import tomlkit
 from pydantic import ValidationError
 
 from testbench_ai_service.config import AppConfig
@@ -27,14 +28,20 @@ _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 def _quote_key(segment: str) -> str:
     """Render one path segment as a TOML key, quoting when it is not a bare key.
 
-    TestBench project names become table keys, and they contain spaces and
-    punctuation, so the naive dotted join produces invalid TOML an operator
-    cannot paste into config.toml.
+    TestBench project names become table keys, and they contain spaces,
+    punctuation, and potentially control characters. TOML basic strings forbid
+    raw control characters, so escaping is delegated to tomlkit, which owns
+    TOML serialization and handles all edge cases correctly.
     """
     if _BARE_KEY.match(segment):
         return segment
-    escaped = segment.replace("\\", "\\\\").replace('"', '\\"')
-    return '"' + escaped + '"'
+    try:
+        return tomlkit.key(segment).as_string()
+    except Exception:
+        # If tomlkit fails on an exotic segment, the hint must not break the
+        # response. Fall back to just the segment unchanged; the hint becomes
+        # less helpful, but the validation result is still correct.
+        return segment
 
 
 def _toml_section(location: tuple[Any, ...]) -> str:

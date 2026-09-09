@@ -201,3 +201,68 @@ def test_system_exit_from_an_imported_module_returns_a_root_issue():
             assert issues[0].path == ""
         finally:
             sys.path[:] = original_path
+
+
+def test_quote_key_with_literal_newline_produces_parseable_toml():
+    """Regression guard for fix 2: control characters must be escaped.
+
+    A project name containing a literal newline (which validate_edit_paths
+    allows if it's not leading/trailing) must produce a TOML section that parses.
+    Hand-rolled escaping missed control characters; tomlkit handles them correctly.
+    """
+    _, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "projects": {"a\nb": {"language": "INVALID_LANGUAGE"}},
+        }
+    )
+
+    assert issues
+    # Must parse as valid TOML
+    tomllib.loads(issues[0].toml_section + "\nx = 1\n")
+
+
+def test_quote_key_with_literal_tab_produces_parseable_toml():
+    """Regression guard: a project name with a tab must produce parseable TOML."""
+    _, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "projects": {"a\tb": {"language": "INVALID_LANGUAGE"}},
+        }
+    )
+
+    assert issues
+    tomllib.loads(issues[0].toml_section + "\nx = 1\n")
+
+
+def test_quote_key_with_literal_carriage_return_produces_parseable_toml():
+    """Regression guard: a project name with a carriage return must produce parseable TOML."""
+    _, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "projects": {"a\rb": {"language": "INVALID_LANGUAGE"}},
+        }
+    )
+
+    assert issues
+    tomllib.loads(issues[0].toml_section + "\nx = 1\n")
+
+
+def test_bare_keys_remain_unquoted():
+    """Regression guard for requirement 1: bare keys must not be quoted.
+
+    A segment matching [A-Za-z0-9_-]+ must come back completely unquoted to
+    keep the common case free of tomlkit and keep output identical to the
+    fast path.
+    """
+    _, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "logging": {"file": {"log_level": "INVALID_LEVEL"}},
+        }
+    )
+
+    assert issues
+    # The toml_section for logging.file.log_level should be [testbench-ai-service.logging.file]
+    # with no quotes around logging or file
+    assert issues[0].toml_section == "[testbench-ai-service.logging.file]"
