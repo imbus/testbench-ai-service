@@ -55,12 +55,12 @@ def _plan_change(
     edits: dict[str, Any],
     config_path: Path,
     running: AppConfig,
-) -> tuple[PreviewResponse, str]:
+) -> tuple[PreviewResponse, str, bool]:
     """Work out what applying *edits* would do, without doing any of it.
 
-    Returns the preview payload and the rendered TOML text, so ``apply`` can
-    reuse exactly the text ``preview`` showed rather than re-deriving it and
-    risking a different result.
+    Returns the preview payload, the rendered TOML text, and whether there is
+    anything to write, so ``apply`` can reuse exactly the text ``preview``
+    showed rather than re-deriving it and risking a different result.
 
     Everything is computed against *config_path* as it is on disk right now,
     which is what makes a second operator's diff show the first operator's
@@ -88,6 +88,7 @@ def _plan_change(
                 toml=redact_toml_text(current_text),
             ),
             current_text,
+            False,
         )
 
     apply_edits(document, edits)
@@ -104,6 +105,18 @@ def _plan_change(
         redact_toml_text(proposed_text),
     )
 
+    # The DISPLAYED diff and the WRITE decision deliberately read different
+    # texts. `diff` above is computed from the redacted before/after, because
+    # that is what the operator is allowed to see. Whether there is anything
+    # to write is decided from the RAW before/after instead: an overlay that
+    # only changes a credential-named key (permitted -- LLMConfig declares
+    # extra="allow") redacts to an identical before/after and would produce no
+    # diff, which must not be read as "nothing to write" -- that would
+    # silently discard the operator's change. Comparing the raw texts here
+    # catches that case, and also the reverse: a mixed overlay must not be
+    # treated as empty just because its *displayed* diff happens to be.
+    has_write = current_text != proposed_text
+
     return (
         PreviewResponse(
             valid=True,
@@ -114,6 +127,7 @@ def _plan_change(
             toml=redact_toml_text(proposed_text),
         ),
         proposed_text,
+        has_write,
     )
 
 
@@ -210,8 +224,9 @@ async def read_config(
 ) -> ConfigResponse:
     """The service's configuration, as loaded and as stored on disk.
 
-    Requires a session but not the admin role -- Phase 1 is read-only for
-    everyone signed in.
+    Requires a session but not the admin role -- reading the configuration is
+    open to everyone signed in; only ``preview``/``apply`` require the admin
+    role.
     """
     return build_config_response(config, request.app.state.config_path)
 
@@ -224,8 +239,8 @@ async def read_logs(
 ) -> list[LogLine]:
     """Tail the service log for the console's Status screen.
 
-    Requires a session but not the admin role -- Phase 1 is read-only for
-    everyone signed in.
+    Requires a session but not the admin role -- reading the log is open to
+    everyone signed in; only ``preview``/``apply`` require the admin role.
     """
     return read_log(Path(config.logging.file.file_name), limit)
 
@@ -246,7 +261,9 @@ async def preview_config(
     it is gated exactly like ``apply`` rather than becoming a way for a
     non-admin to explore the config surface.
     """
-    preview, _text = _plan_change(body.edits, Path(request.app.state.config_path), config)
+    preview, _text, _has_write = _plan_change(
+        body.edits, Path(request.app.state.config_path), config
+    )
     preview.in_flight_tasks = registry.count
     return preview
 
@@ -288,7 +305,7 @@ async def apply_config(
     raised -- the write already succeeded and the response must say so.
     """
     config_path = Path(request.app.state.config_path)
-    preview, proposed_text = _plan_change(body.edits, config_path, config)
+    preview, proposed_text, has_write = _plan_change(body.edits, config_path, config)
 
     if not preview.valid:
         raise HTTPException(
@@ -299,9 +316,12 @@ async def apply_config(
             },
         )
 
-    if not preview.diffs:
-        # Nothing to do. Writing anyway would churn the .bak and the mtime for
-        # an operator who changed their mind back.
+    if not has_write:
+        # Nothing to do. Decided from the RAW texts (see `_plan_change`), not
+        # from `preview.diffs`: the displayed diff is redacted and can be
+        # empty while a credential-only change still needs writing. Writing
+        # anyway when there is truly nothing to write would churn the .bak and
+        # the mtime for an operator who changed their mind back.
         return ApplyResponse(
             written=[],
             backup=None,

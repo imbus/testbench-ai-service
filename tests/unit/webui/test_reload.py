@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -252,6 +253,25 @@ class TestHotReload:
         reported through the return value."""
         app = fake_app(make_config())
         app.state.llm_factory.close_clients = AsyncMock(side_effect=RuntimeError("already closed"))
+        new = make_config(language="en")
+
+        result = await hot_reload(app, new)
+
+        assert result is False
+        assert app.state.config is new
+        app.state.llm_factory.init_clients.assert_called_once()
+
+    async def test_a_cancelled_error_closing_the_old_clients_does_not_propagate(self):
+        """FIX 4 regression: asyncio.CancelledError is a BaseException (raised
+        when the client disconnects mid-close), not an Exception. By the time
+        close_clients() runs, app.state.config has already been swapped to the
+        new config -- letting CancelledError escape here would leave that new
+        config paired with the old, partly-closed factory, exactly the split
+        state hot_reload's docstring says it prevents. The new factory must
+        still be installed.
+        """
+        app = fake_app(make_config())
+        app.state.llm_factory.close_clients = AsyncMock(side_effect=asyncio.CancelledError())
         new = make_config(language="en")
 
         result = await hot_reload(app, new)

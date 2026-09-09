@@ -1,7 +1,8 @@
 """Reading the service's TOML configuration for the console.
 
-Phase 1 only reads.  The write path in phase 2 builds on ``read_config_file`` and
-adds a comment-preserving ``tomlkit`` round trip.
+This module covers reading and redacting; the write path (``webui/document.py``)
+builds on ``read_config_file`` and adds a comment-preserving ``tomlkit`` round
+trip.
 """
 
 import sys
@@ -121,7 +122,9 @@ def read_config_file(path: Path) -> dict[str, Any]:
 
     Raises:
         HTTPException 400: the file exists but is not valid TOML, cannot be
-            read (e.g. a permissions problem), or is not decodable as UTF-8.
+            read (e.g. a permissions problem), or is not decodable as UTF-8;
+            or the ``[testbench-ai-service]`` key is present but is not a
+            table (e.g. a scalar or list).
     """
     file_path = Path(path)
     if not file_path.is_file():
@@ -135,7 +138,19 @@ def read_config_file(path: Path) -> dict[str, Any]:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{file_path} is not valid TOML: {e}",
         ) from e
-    return dict(document.get(CONFIG_PREFIX, {}))
+    prefix = document.get(CONFIG_PREFIX, {})
+    # This runs first on every route (build_config_response, _plan_change,
+    # read_status all go through here before document.service_table ever
+    # sees the file), so a bare `dict(prefix)` would raise an unhandled
+    # TypeError -- and turn into a 500 -- for exactly the malformed-prefix
+    # case `service_table` already has a documented 400 for. Guard the same
+    # case here too, or that 400 is dead code no maintainer would notice.
+    if not isinstance(prefix, dict):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"[{CONFIG_PREFIX}] must be a table, not {type(prefix).__name__}",
+        )
+    return dict(prefix)
 
 
 def running_config(config: AppConfig) -> dict[str, Any]:

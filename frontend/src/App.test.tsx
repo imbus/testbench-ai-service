@@ -270,6 +270,32 @@ it('clears the marker after a successful apply', async () => {
   )
 })
 
+it('a later VALID preview clears a marker an earlier invalid preview set (FIX 2)', async () => {
+  // Regression guard for FIX 2: DiffDialog's preview effect used to report
+  // issues to `onIssues` only when a preview came back invalid, never
+  // clearing them on a later valid preview. An operator who fixes the field
+  // and reopens the dialog -- without discarding, applying or signing out --
+  // must see the marker clear as soon as the fixed preview comes back valid,
+  // before Apply is ever clicked.
+  window.localStorage.setItem('tbai_admin_draft', JSON.stringify({ port: 9999 }))
+  installFetchRouter({ previewResponses: [PREVIEW_INVALID, PREVIEW_VALID] })
+
+  renderApp({ isAdmin: true, route: '/admin/service' })
+  await screen.findByRole('navigation')
+
+  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  expect(await screen.findByLabelText('port')).toHaveAttribute('aria-invalid', 'true')
+  await userEvent.click(screen.getByRole('button', { name: 'Schließen' }))
+
+  // Reopening mounts a fresh DiffDialog, which re-previews -- this time the
+  // draft is reported valid. The marker must clear without applying.
+  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+
+  await waitFor(() =>
+    expect(screen.getByLabelText('port')).not.toHaveAttribute('aria-invalid', 'true'),
+  )
+})
+
 it('clears the marker when the draft is discarded', async () => {
   window.localStorage.setItem('tbai_admin_draft', JSON.stringify({ port: 9999 }))
   installFetchRouter({ previewResponses: [PREVIEW_INVALID] })
@@ -286,6 +312,56 @@ it('clears the marker when the draft is discarded', async () => {
   await waitFor(() =>
     expect(screen.getByLabelText('port')).not.toHaveAttribute('aria-invalid', 'true'),
   )
+})
+
+const APPLY_REJECTED_DETAIL = {
+  message: 'The configuration is not valid and was not written.',
+  issues: [
+    { path: 'port', message: 'Input should be a valid integer', toml_section: '[testbench-ai-service]' },
+  ],
+}
+
+it('a structured 422 apply rejection does not loop the renderer (regression for the DiffDialog infinite-loop bug)', async () => {
+  // Regression guard for FIX 1: an apply rejected with a structured 422 used
+  // to enter an unbounded render loop -- the issues array derived from
+  // `apply.error` was recomputed fresh on every render and used as a
+  // `useEffect` dependency, so `onIssues` firing (which sets state in App)
+  // produced a new array identity that re-fired the effect, forever. React
+  // reports that specific failure mode as "Maximum update depth exceeded".
+  // Driven through the real App (not DiffDialog in isolation) because the
+  // loop only manifests once `onIssues` actually reaches `App`'s state
+  // setter -- a dialog-only test with a stub `onIssues` would not reproduce
+  // it.
+  window.localStorage.setItem('tbai_admin_draft', JSON.stringify({ port: 9999 }))
+  installFetchRouter({ previewResponses: [PREVIEW_VALID] })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((url: string, init?: RequestInit) => {
+      const method = (init?.method ?? 'GET').toUpperCase()
+      if (url.endsWith('/meta')) return jsonResponse({ tb_server_url: 'https://tb:9443/api/' })
+      if (url.endsWith('/config') && method === 'GET') return jsonResponse(CONFIG_OK)
+      if (url.endsWith('/status')) return jsonResponse(STATUS_OK)
+      if (url.endsWith('/config/preview')) return jsonResponse(PREVIEW_VALID)
+      if (url.endsWith('/config/apply')) return jsonResponse({ detail: APPLY_REJECTED_DETAIL }, 422)
+      return jsonResponse({})
+    }),
+  )
+
+  const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+
+  renderApp({ isAdmin: true, route: '/admin/service' })
+  await screen.findByRole('navigation')
+  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(await screen.findByRole('button', { name: 'Übernehmen' }))
+
+  await waitFor(() =>
+    expect(within(screen.getByRole('dialog')).getByText(/Input should be a valid integer/)).toBeInTheDocument(),
+  )
+
+  const loopMessages = consoleError.mock.calls.filter((call) =>
+    call.some((arg) => typeof arg === 'string' && arg.includes('Maximum update depth exceeded')),
+  )
+  expect(loopMessages).toHaveLength(0)
 })
 
 it('clears the marker when the session ends', async () => {

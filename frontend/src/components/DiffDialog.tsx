@@ -109,13 +109,29 @@ export function DiffDialog({
 
   useEffect(() => {
     if (!onIssues) return
-    if (data && !data.valid) onIssues(data.issues)
+    if (!data) return
+    // Report a clean marker set on a VALID preview too, not just an invalid
+    // one: an operator who fixes the field and reopens the dialog must see
+    // the marker clear here, rather than only on discard/apply/sign-out.
+    onIssues(data.valid ? [] : data.issues)
   }, [data, onIssues])
 
+  // HAZARD -- infinite render loop: this effect must be keyed on `apply.error`
+  // (a stable object identity for a given failed mutation), NEVER on a value
+  // derived fresh each render such as `applyIssues` above. `applyIssues` is
+  // recomputed by `issuesOf(...).filter(...)` on every render, so a dependency
+  // array containing it receives a new array identity every time; the effect
+  // then fires on every render, calls `onIssues`, which sets state in `App`,
+  // which re-renders this component, which produces yet another new
+  // `applyIssues` array -- forever ("Maximum update depth exceeded"). The
+  // preview effect above is safe only because react-query's `data` identity is
+  // stable across renders; nothing derived from `apply.error` may be trusted
+  // the same way, so the issues are computed INSIDE the effect body instead.
   useEffect(() => {
-    if (!onIssues) return
-    if (applyIssues) onIssues(toFieldIssues(applyIssues))
-  }, [applyIssues, onIssues])
+    if (!onIssues || !apply.error) return
+    const issues = issuesOf((apply.error as ApiError).detail)
+    if (issues) onIssues(toFieldIssues(issues))
+  }, [apply.error, onIssues])
 
   const onApply = () => {
     apply.mutate(draft.edits, {

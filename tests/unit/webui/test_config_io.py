@@ -38,6 +38,21 @@ def test_missing_file_yields_empty_dict(tmp_path: Path):
     assert read_config_file(tmp_path / "absent.toml") == {}
 
 
+def test_a_scalar_prefix_raises_a_400_not_a_type_error(tmp_path: Path):
+    """FIX 5 regression: ``dict(document.get(CONFIG_PREFIX, {}))`` raises an
+    unhandled TypeError -- a 500 -- when the key holds a scalar rather than a
+    table. ``document.service_table`` already has a documented 400 for this
+    exact case, but ``read_config_file`` runs first on every route, so that
+    400 was unreachable in practice.
+    """
+    path = tmp_path / "config.toml"
+    path.write_text('testbench-ai-service = "not a table"\n', encoding="utf-8")
+    with pytest.raises(HTTPException) as exc:
+        read_config_file(path)
+    assert exc.value.status_code == 400
+    assert CONFIG_PREFIX in str(exc.value.detail)
+
+
 def test_malformed_toml_raises_a_400(tmp_path: Path):
     path = tmp_path / "config.toml"
     path.write_text("this is [not valid toml", encoding="utf-8")

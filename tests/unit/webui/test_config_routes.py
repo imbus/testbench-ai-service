@@ -349,7 +349,7 @@ def test_plan_change_still_writes_the_real_secret(credentialed_config_file, make
     app = make_app()
     running = app.state.config
 
-    _preview, text_to_write = _plan_change(
+    _preview, text_to_write, _has_write = _plan_change(
         {"llm_config.model": "gpt-4o"}, credentialed_config_file, running
     )
 
@@ -524,6 +524,31 @@ def test_apply_with_no_edits_writes_nothing_and_reports_nothing_written(
     assert body["written"] == []
     assert body["backup"] is None
     assert not config_file.with_name("config.toml.bak").exists()
+
+
+def test_apply_of_only_a_credential_change_still_writes(
+    credentialed_client, credentialed_admin, credentialed_config_file
+):
+    """FIX 3 regression: the write decision must be made on the RAW before/after
+    text, not on the redacted `diffs`. Changing an existing credential value to
+    a different one redacts identically on both sides of the diff (both show
+    the sentinel), so the DISPLAYED diff is empty -- but that must not be read
+    as "nothing to write", or the operator's change would be silently
+    discarded. The real new value must land in the file and the sentinel must
+    never be written.
+    """
+    credentialed_admin()
+
+    body = credentialed_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"llm_config.api_key": "sk-NEW-REAL-SECRET"}},
+        headers=csrf(credentialed_client),
+    ).json()
+
+    assert body["written"] == [str(credentialed_config_file.resolve())]
+    written = credentialed_config_file.read_text(encoding="utf-8")
+    assert "sk-NEW-REAL-SECRET" in written
+    assert REDACTED_SENTINEL not in written
 
 
 def test_apply_refuses_the_redaction_sentinel(file_client, admin, config_file):

@@ -24,6 +24,8 @@ set because it is read per request through ``get_app_config`` and is genuinely
 hot-swappable.
 """
 
+import asyncio
+
 from fastapi import FastAPI
 
 from testbench_ai_service.config import AppConfig
@@ -156,7 +158,14 @@ async def hot_reload(app: FastAPI, config: AppConfig) -> bool:
 
     try:
         await previous_factory.close_clients()
-    except Exception as e:
+    except (Exception, asyncio.CancelledError) as e:
+        # Widened deliberately beyond Exception: asyncio.CancelledError is a
+        # BaseException (raised when the client disconnects mid-close), and by
+        # this point `app.state.config` has already been swapped to the new
+        # config above -- letting it escape here would leave that new config
+        # paired with the old, partly-closed factory, exactly the split state
+        # this function exists to prevent. Bare BaseException is NOT caught:
+        # KeyboardInterrupt must still propagate.
         succeeded = False
         logger.warning("Could not close the previous LLM clients during reload: %r", e)
 
