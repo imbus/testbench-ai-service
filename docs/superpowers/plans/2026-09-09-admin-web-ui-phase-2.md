@@ -91,7 +91,7 @@ Spec 11.2. `LLMConfig` has `extra="allow"`, so these two keys are accepted, stas
 
 **Interfaces:**
 - Consumes: nothing
-- Produces: `LLMConfig.timeout: float | None`, `LLMConfig.max_retries: int | None`. Task 15 renders both as number fields.
+- Produces: `LLMConfig.timeout: float | None`, `LLMConfig.max_retries: int | None`. Task 16 adds both to `LLM_FIELDS` and renders them as number fields.
 
 - [ ] **Step 1: Find the existing tests so the new ones land beside them**
 
@@ -2648,7 +2648,7 @@ def test_preview_writes_nothing(file_client, admin, config_file):
     )
 
     assert config_file.read_text(encoding="utf-8") == before
-    assert not config_file.with_suffix(".toml.bak").exists()
+    assert not config_file.with_name("config.toml.bak").exists()
 
 
 def test_preview_refuses_the_redaction_sentinel(file_client, admin):
@@ -3893,7 +3893,7 @@ describe('Field', () => {
     expect(screen.getByTestId('edits')).toHaveTextContent('{"port":9999}')
   })
 
-  it('leaves a half-typed number alone rather than sending NaN', async () => {
+  it('records a cleared number field as a removal', async () => {
     const spec: FieldSpec = { key: 'port', type: 'number', hint: 'Port to listen on' }
     render(<Harness spec={spec} saved={{ port: 8010 }} />)
 
@@ -4231,13 +4231,51 @@ git commit -m "Add an editable config field to the console"
 
 **Files:**
 - Modify: `frontend/src/screens/ConfigSection.tsx`
+- Modify: `frontend/src/screens/fields.ts`
 - Modify: `frontend/src/screens/ConfigSection.test.tsx`
 
 **Interfaces:**
 - Consumes: `Field` (Task 15), `useDraft` (Task 13), `valueAt` and the `*_FIELDS` specs from `./fields`
 - Produces: `ConfigSection({ section, lang, isAdmin, issues }: { section: Section; lang: Lang; isAdmin: boolean; issues?: ConfigIssue[] })`
 
-- [ ] **Step 1: Read the existing test file to see what must keep passing**
+- [ ] **Step 1: Add the two LLM fields the model now declares**
+
+Task 1 declared `llm_config.timeout` and `llm_config.max_retries` on `LLMConfig`, but nothing
+renders them yet. Append to `LLM_FIELDS` in `frontend/src/screens/fields.ts`:
+
+```ts
+  {
+    key: 'llm_config.timeout',
+    type: 'number',
+    hint: "Seconds to wait for an LLM response. Empty uses the provider SDK's default.",
+  },
+  {
+    key: 'llm_config.max_retries',
+    type: 'number',
+    hint: "Retries after a failed LLM request. Empty uses the provider SDK's default.",
+  },
+```
+
+Then add a test to `frontend/src/screens/fields.test.ts` in the style of the tests already there:
+
+```ts
+it('offers the declared LLM timeout and retry options', () => {
+  const keys = LLM_FIELDS.map((spec) => spec.key)
+
+  expect(keys).toContain('llm_config.timeout')
+  expect(keys).toContain('llm_config.max_retries')
+})
+```
+
+Run it:
+
+```bash
+cd frontend && npx vitest run src/screens/fields.test.ts
+```
+
+Expected: PASS. Add the `LLM_FIELDS` import to that test file if it is not already there.
+
+- [ ] **Step 2: Read the existing test file to see what must keep passing**
 
 ```bash
 cat frontend/src/screens/ConfigSection.test.tsx
@@ -4245,7 +4283,7 @@ cat frontend/src/screens/ConfigSection.test.tsx
 
 The read-only assertions stay: a non-admin session must render exactly what it renders today. Only the admin path is new.
 
-- [ ] **Step 2: Write the failing test**
+- [ ] **Step 3: Write the failing test**
 
 Append to `frontend/src/screens/ConfigSection.test.tsx` (matching the query-client and mock-fetch setup the existing tests already use in that file):
 
@@ -4343,7 +4381,7 @@ function renderSection({
 }
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [ ] **Step 4: Run the test to verify it fails**
 
 ```bash
 cd frontend && npx vitest run src/screens/ConfigSection.test.tsx
@@ -4351,7 +4389,7 @@ cd frontend && npx vitest run src/screens/ConfigSection.test.tsx
 
 Expected: FAIL — `ConfigSection` takes no `isAdmin` or `issues` prop, so TypeScript rejects the render and the editable assertions find nothing.
 
-- [ ] **Step 4: Make the component editable**
+- [ ] **Step 5: Make the component editable**
 
 In `frontend/src/screens/ConfigSection.tsx`, change the imports and signature:
 
@@ -4403,7 +4441,7 @@ Replace the field-rendering block at the bottom with:
       </div>
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [ ] **Step 6: Run the test to verify it passes**
 
 ```bash
 cd frontend && npx vitest run src/screens/ConfigSection.test.tsx
@@ -4411,11 +4449,11 @@ cd frontend && npx vitest run src/screens/ConfigSection.test.tsx
 
 Expected: PASS — the five new tests plus every existing one in that file.
 
-- [ ] **Step 6: Type-check and commit**
+- [ ] **Step 7: Type-check and commit**
 
 ```bash
 cd frontend && npm run build && npm test
-cd .. && git add frontend/src/screens/ConfigSection.tsx frontend/src/screens/ConfigSection.test.tsx
+cd .. && git add frontend/src/screens/ConfigSection.tsx frontend/src/screens/ConfigSection.test.tsx frontend/src/screens/fields.ts frontend/src/screens/fields.test.ts
 git commit -m "Make the console config forms editable for admins"
 ```
 
@@ -4652,8 +4690,10 @@ describe('DiffDialog', () => {
 
     renderDialog()
 
-    expect(await screen.findByText(/Needs a restart:/)).toBeInTheDocument()
-    expect(screen.getByText(/port/)).toBeInTheDocument()
+    await screen.findByText(/Needs a restart:/)
+    // Scoped to the restart line: /port/ alone also matches the diff body,
+    // and Testing Library throws on multiple matches.
+    expect(screen.getByText(/Needs a restart:/).textContent).toContain('port')
   })
 
   it('applies and closes on success', async () => {
@@ -5238,14 +5278,16 @@ describe('Raw', () => {
   })
 
   it('copies the text to the clipboard', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    vi.stubGlobal('navigator', { ...navigator, clipboard: { writeText } })
+    // userEvent.setup() installs a working clipboard stub. Do not stub
+    // navigator by spreading it: its properties live on the prototype, so
+    // {...navigator} is very nearly empty.
+    const user = userEvent.setup()
     renderRaw()
 
     await screen.findByText(/port = 9999/)
-    await userEvent.click(screen.getByRole('button', { name: 'Copy' }))
+    await user.click(screen.getByRole('button', { name: 'Copy' }))
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith(TOML))
+    await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(TOML))
     expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument()
   })
 
@@ -5521,8 +5563,15 @@ Inside the component, above the signed-in return, add:
 
 ```tsx
   const config = useConfig()
-  const [restartFields, setRestartFields] = useState<string[]>([])
+  const status = useStatus()
+  // Derived from the status query rather than remembered from the apply
+  // response: an operator who edits config.toml by hand, or who reloads the
+  // console after applying, must still see the banner. Step 6 adds the field
+  // that feeds this.
+  const restartFields = status.data?.restart_required ?? []
 ```
+
+Import `useConfig` and `useStatus` together from `./api/queries`.
 
 Then replace the signed-in JSX's outer wrapper so the provider spans everything, and insert the banners between `TopBar` and the read-only strip:
 
