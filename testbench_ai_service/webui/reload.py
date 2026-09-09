@@ -24,7 +24,12 @@ set because it is read per request through ``get_app_config`` and is genuinely
 hot-swappable.
 """
 
+from fastapi import FastAPI
+
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.llm.factory import LLMFactory
+from testbench_ai_service.log import logger, setup_logging
+from testbench_ai_service.utils.i18n import load_translations
 
 # Fixed at boot by uvicorn or by the middleware stack.
 RESTART_FIELDS: tuple[str, ...] = (
@@ -85,3 +90,48 @@ def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
                 changed.append(f"agents.{key}.{field}")
 
     return sorted(changed)
+
+
+async def hot_reload(app: FastAPI, config: AppConfig) -> None:
+    """Make *config* the running configuration, in process.
+
+    Ordered deliberately:
+
+    1. logging first, so everything after it is logged the way the operator
+       just asked for;
+    2. translations, which are a module-level dict and cheap to re-read;
+    3. the config swap, which every subsequent request sees through
+       ``get_app_config``;
+    4. the LLM clients last, because rebuilding them is the only step that
+       touches the network and the only one that can be slow.
+
+    Re-applying ``setup_logging`` is safe to repeat: the dict config names every
+    logger the service cares about (``testbench_ai_service``, the four
+    ``uvicorn`` loggers, ``py.warnings``), so ``disable_existing_loggers`` has
+    nothing new to disable, and ``dictConfig`` flushes and closes the handlers
+    it replaces.
+
+    Failures closing the *old* clients are logged and swallowed. By the time
+    this runs the new config is already on disk, so aborting would leave the
+    file and the process disagreeing with no way to reconcile them -- and a
+    client that cannot be closed is a leaked connection, not a corrupt state.
+
+    Changes this cannot cover do not belong here at all; see
+    :func:`restart_required`.
+    """
+    setup_logging(config.logging)
+    load_translations()
+
+    previous_factory = app.state.llm_factory
+    app.state.config = config
+
+    try:
+        await previous_factory.close_clients()
+    except Exception as e:
+        logger.warning("Could not close the previous LLM clients during reload: %r", e)
+
+    factory = LLMFactory()
+    factory.init_clients([config.llm_config])
+    app.state.llm_factory = factory
+
+    logger.info("Configuration reloaded in process")

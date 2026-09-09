@@ -1,11 +1,11 @@
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.models.config import AgentConfig, PromptConfig
-from testbench_ai_service.webui.reload import restart_required
+from testbench_ai_service.webui.reload import hot_reload, restart_required
 
 TB_URL = "https://localhost:9443/api/"
 
@@ -164,3 +164,96 @@ def test_port_and_admin_ui_enabled_changes_are_sorted():
     new = make_config(port=9999, admin_ui={"enabled": False})
 
     assert restart_required(make_config(), new) == ["admin_ui.enabled", "port"]
+
+
+def fake_app(config: AppConfig):
+    """A stand-in for the FastAPI app: reload only touches app.state."""
+    app = MagicMock()
+    app.state.config = config
+    app.state.llm_factory = MagicMock()
+    app.state.llm_factory.close_clients = AsyncMock()
+    app.state.llm_factory.init_clients = MagicMock()
+    return app
+
+
+class TestHotReload:
+    """hot_reload's disk- and network-touching collaborators are replaced for
+    every test here.
+
+    A real ``setup_logging()`` would append to the repository's own log file
+    and, via ``disable_existing_loggers``, can silently disable pytest's own
+    logging for the rest of the session -- see the task-10 correction. A real
+    ``LLMFactory()`` would try to resolve a provider credential from the
+    environment; patching it is also what gives the assertions below
+    (``init_clients.assert_called_once()``, ``call_args``) a Mock to inspect,
+    since ``hot_reload`` always constructs a *new* factory rather than reusing
+    ``app.state.llm_factory``.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _patched_collaborators(self, monkeypatch):
+        monkeypatch.setattr("testbench_ai_service.webui.reload.setup_logging", MagicMock())
+        monkeypatch.setattr("testbench_ai_service.webui.reload.load_translations", MagicMock())
+
+        new_factory = MagicMock()
+        new_factory.init_clients = MagicMock()
+        new_factory.close_clients = AsyncMock()
+        monkeypatch.setattr(
+            "testbench_ai_service.webui.reload.LLMFactory", MagicMock(return_value=new_factory)
+        )
+
+    async def test_hot_reload_swaps_the_config_on_app_state(self):
+        app = fake_app(make_config(language="de"))
+        new = make_config(language="en")
+
+        await hot_reload(app, new)
+
+        assert app.state.config is new
+
+    async def test_hot_reload_closes_the_old_llm_clients_before_building_new_ones(self):
+        app = fake_app(make_config())
+        old_factory = app.state.llm_factory
+
+        await hot_reload(app, make_config())
+
+        old_factory.close_clients.assert_awaited_once()
+        assert app.state.llm_factory is not old_factory
+        app.state.llm_factory.init_clients.assert_called_once()
+
+    async def test_hot_reload_initialises_the_new_clients_from_the_new_llm_config(self):
+        app = fake_app(make_config())
+        new = make_config()
+        new.llm_config.model = "gpt-4.1"
+
+        await hot_reload(app, new)
+
+        (configs,), _ = app.state.llm_factory.init_clients.call_args
+        assert configs == [new.llm_config]
+
+    async def test_hot_reload_reapplies_logging_and_translations(self, monkeypatch):
+        calls: list[str] = []
+        monkeypatch.setattr(
+            "testbench_ai_service.webui.reload.setup_logging",
+            lambda _config: calls.append("logging"),
+        )
+        monkeypatch.setattr(
+            "testbench_ai_service.webui.reload.load_translations",
+            lambda: calls.append("translations"),
+        )
+        app = fake_app(make_config())
+
+        await hot_reload(app, make_config())
+
+        assert calls == ["logging", "translations"]
+
+    async def test_a_failure_closing_the_old_clients_does_not_abort_the_reload(self):
+        """The file is already written; refusing to swap would leave disk and
+        memory disagreeing with nothing to fix it."""
+        app = fake_app(make_config())
+        app.state.llm_factory.close_clients = AsyncMock(side_effect=RuntimeError("already closed"))
+        new = make_config(language="en")
+
+        await hot_reload(app, new)
+
+        assert app.state.config is new
+        app.state.llm_factory.init_clients.assert_called_once()
