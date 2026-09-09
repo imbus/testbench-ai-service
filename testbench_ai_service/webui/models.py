@@ -1,3 +1,5 @@
+from typing import Any
+
 from pydantic import BaseModel, Field
 
 
@@ -105,3 +107,27 @@ class FileDiff(BaseModel):
     diff: str
     added: int
     removed: int
+
+
+class ConfigEditsRequest(BaseModel):
+    """A sparse overlay of dotted config paths to new values.
+
+    A ``None`` value removes the key so the model default takes over again.
+    The browser posts only what the operator changed, never a whole config --
+    see the module docstring of ``webui/edits.py`` for why.
+    """
+
+    edits: dict[str, Any] = Field(default_factory=dict)
+
+
+class PreviewResponse(BaseModel):
+    """What applying the current overlay would do, without doing it."""
+
+    valid: bool
+    issues: list[ConfigIssue]
+    diffs: list[FileDiff]
+    restart_required: list[str]
+    in_flight_tasks: int
+    # The rendered config.toml the apply would write. Also what the Raw screen
+    # shows, which is why it is here rather than on a route of its own.
+    toml: str
