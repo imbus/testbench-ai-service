@@ -81,3 +81,17 @@ class LogLine(BaseModel):
     level: str | None = None
     source: str | None = None
     message: str
+
+
+class ConfigIssue(BaseModel):
+    """One validation failure, addressed to the field that caused it.
+
+    ``path`` is the dotted config path the console's form fields are keyed by,
+    so the UI can mark the offending input. ``toml_section`` is the same
+    location spelled the way it appears in ``config.toml``, for the operator
+    who would rather fix the file by hand.
+    """
+
+    path: str
+    message: str
+    toml_section: str
