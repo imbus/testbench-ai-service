@@ -225,15 +225,17 @@ test('does not show an issue addressed to a different tab', async () => {
 })
 
 test('shows an issue addressed to an array element on the array field', async () => {
+  const message = 'Invalid path'
   renderSection({
     section: 'service',
     isAdmin: true,
     issues: [
-      { path: 'prompts_dir.0', message: 'Invalid path', toml_section: '[x]' },
+      { path: 'prompts_dir.0', message, toml_section: '[x]' },
     ],
   })
 
   expect(await screen.findByLabelText('prompts_dir')).toHaveAttribute('aria-invalid', 'true')
+  expect(screen.getByText(message)).toBeInTheDocument()
 })
 
 test('does not match issues on fields with similar names (dot boundary)', async () => {
@@ -247,4 +249,80 @@ test('does not match issues on fields with similar names (dot boundary)', async 
 
   await screen.findByLabelText('port')
   expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('marks a Service tab when its fields carry issues', async () => {
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    issues: [
+      // ssl_cert is in the tls tab (3rd tab)
+      { path: 'ssl_cert', message: 'SSL certificate required', toml_section: '[x]' },
+    ],
+  })
+
+  // Wait for the fields to load
+  await screen.findByLabelText('host')
+  // The tls tab should be marked with an issue count
+  const tlsTab = screen.getByRole('tab', { name: /HTTPS.*1.*issue/i })
+  expect(tlsTab).toBeInTheDocument()
+  // The general tab (currently selected) should not be marked
+  const generalTab = screen.getByRole('tab', { name: 'Allgemein' })
+  expect(generalTab).toHaveAttribute('aria-selected', 'true')
+  expect(generalTab).toHaveAttribute('aria-label', 'Allgemein')
+})
+
+test('marks multiple tabs when they have issues', async () => {
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    issues: [
+      { path: 'port', message: 'Invalid port', toml_section: '[x]' },
+      { path: 'ssl_cert', message: 'Invalid cert', toml_section: '[x]' },
+      { path: 'trusted_proxies.0', message: 'Invalid proxy', toml_section: '[x]' },
+    ],
+  })
+
+  // Wait for the fields to load
+  await screen.findByLabelText('host')
+  // general tab has port (1 issue)
+  expect(screen.getByRole('tab', { name: /Allgemein.*1.*issue/i })).toBeInTheDocument()
+  // tls tab has ssl_cert (1 issue)
+  expect(screen.getByRole('tab', { name: /HTTPS.*1.*issue/i })).toBeInTheDocument()
+  // proxy tab has trusted_proxies (1 issue)
+  expect(screen.getByRole('tab', { name: /Reverse Proxy.*1.*issue/i })).toBeInTheDocument()
+})
+
+test('does not mark tabs when there are no issues', async () => {
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    issues: [],
+  })
+
+  // Wait for the fields to load
+  await screen.findByLabelText('host')
+  // All tabs should have no issue markers
+  const tabs = screen.getAllByRole('tab')
+  tabs.forEach((tab) => {
+    // Tab labels should not contain issue counts
+    const label = tab.getAttribute('aria-label')
+    expect(label).not.toMatch(/issue/)
+  })
+})
+
+test('marks tabs with issues on non-selected array elements', async () => {
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    issues: [
+      // trusted_proxies.0 should mark the proxy tab
+      { path: 'trusted_proxies.0', message: 'Invalid IP', toml_section: '[x]' },
+    ],
+  })
+
+  // Wait for the fields to load
+  await screen.findByLabelText('host')
+  const proxyTab = screen.getByRole('tab', { name: /Reverse Proxy.*1.*issue/i })
+  expect(proxyTab).toBeInTheDocument()
 })

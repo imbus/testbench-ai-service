@@ -20,6 +20,16 @@ const TOML_SECTION: Record<Section, string> = {
   logging: '[testbench-ai-service.logging.console] · [.file]',
 }
 
+/**
+ * Check if an issue path matches a field key or a child path within it.
+ * Matches exact equality or paths starting with key + '.' to handle array
+ * elements reported by pydantic (e.g., trusted_proxies.0 matches trusted_proxies).
+ * Must not be bare startsWith — that would make port match port_extra.
+ */
+function issueMatchesField(issuePath: string, fieldKey: string): boolean {
+  return issuePath === fieldKey || issuePath.startsWith(fieldKey + '.')
+}
+
 export function ConfigSection({
   section,
   lang,
@@ -65,6 +75,14 @@ export function ConfigSection({
     fields = section === 'llm' ? LLM_FIELDS : LOGGING_FIELDS
   }
 
+  // For Service tabs, determine which have issues
+  const tabIssueCount = (tabKey: string): number => {
+    const tabFields = SERVICE_TABS.find((entry) => entry.key === tabKey)?.fields ?? []
+    return issues.filter((issue) =>
+      tabFields.some((field) => issueMatchesField(issue.path, field.key)),
+    ).length
+  }
+
   return (
     <div
       style={{
@@ -87,38 +105,59 @@ export function ConfigSection({
 
       {section === 'service' && (
         <div role="tablist" style={{ display: 'flex', gap: 18 }}>
-          {SERVICE_TABS.map((entry) => (
-            <button
-              key={entry.key}
-              role="tab"
-              aria-selected={tab === entry.key}
-              onClick={() => setTab(entry.key)}
-              style={{
-                background: 'none',
-                border: 0,
-                borderBottom: `2px solid ${tab === entry.key ? 'var(--color-accent)' : 'transparent'}`,
-                padding: '6px 0',
-                font: 'inherit',
-                fontSize: 14,
-                color: 'inherit',
-                opacity: tab === entry.key ? 1 : 0.7,
-                cursor: 'pointer',
-              }}
-            >
-              {t[entry.labelKey]}
-            </button>
-          ))}
+          {SERVICE_TABS.map((entry) => {
+            const count = tabIssueCount(entry.key)
+            return (
+              <button
+                key={entry.key}
+                role="tab"
+                aria-selected={tab === entry.key}
+                aria-label={`${t[entry.labelKey]}${count > 0 ? ` (${count} ${count === 1 ? 'issue' : 'issues'})` : ''}`}
+                onClick={() => setTab(entry.key)}
+                style={{
+                  background: 'none',
+                  border: 0,
+                  borderBottom: `2px solid ${tab === entry.key ? 'var(--color-accent)' : 'transparent'}`,
+                  padding: '6px 0',
+                  font: 'inherit',
+                  fontSize: 14,
+                  color: 'inherit',
+                  opacity: tab === entry.key ? 1 : 0.7,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}
+              >
+                {t[entry.labelKey]}
+                {count > 0 && (
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: '#a33a2b',
+                      color: '#fff',
+                      fontSize: 11,
+                      fontWeight: 600,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {count}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
 
       <div>
         {fields.map((spec) => {
-          // Match an issue that is either addressed directly to this field or
-          // to a child path within it (e.g. trusted_proxies.0 matches trusted_proxies).
-          // Must not be bare startsWith — that would make port match port_extra.
-          const issue = issues.find(
-            (entry) => entry.path === spec.key || entry.path.startsWith(spec.key + '.'),
-          )?.message
+          const issue = issues.find((entry) => issueMatchesField(entry.path, spec.key))?.message
           // Non-admins keep the phase-1 read-only rendering unchanged rather
           // than getting a form full of disabled inputs.
           return isAdmin ? (
