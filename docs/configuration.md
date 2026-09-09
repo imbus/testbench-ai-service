@@ -235,8 +235,10 @@ For step-by-step instructions on configuring each provider see the [LLM Provider
 | `azure_endpoint` | String  | Azure OpenAI endpoint URL (required when `provider = "azure_openai"`).                  | —               |
 | `api_version`    | String  | Azure OpenAI API version (required when `provider = "azure_openai"`).                   | —               |
 | `class_path`     | String  | Full Python class path for a custom LLM client (required when `provider = "custom"`).   | —               |
-| `timeout`        | Float   | Seconds to wait for an LLM response before giving up. Unset uses the provider SDK's default. | _unset_ |
-| `max_retries`    | Integer | How often the provider SDK retries a failed request. Unset uses the SDK's default.           | _unset_ |
+| `timeout`        | Float   | Seconds to wait for an LLM response before giving up. Must be greater than 0. Unset uses the provider SDK's default. | _unset_ |
+| `max_retries`    | Integer | How often the provider SDK retries a failed request. 0 disables retries. Unset uses the SDK's default.           | _unset_ |
+
+**Note on validation:** The `timeout` and `max_retries` options are now validated at startup. Previously, invalid values (0 or negative for `timeout`, negative values for `max_retries`) were silently accepted. If you encounter a validation error when starting the service, remove the invalid line from your config file.
 
 **OpenAI example:**
 
