@@ -311,3 +311,34 @@ def test_a_log_path_whose_directory_is_missing_is_addressed_to_its_field(tmp_pat
 
     assert [issue.path for issue in issues] == ["logging.file.file_name"]
     assert issues[0].toml_section == "[testbench-ai-service.logging.file]"
+
+
+def test_an_existing_directory_as_log_file_name_is_rejected(tmp_path):
+    """Fix Round 2, Fix 1: os.access() alone is not enough here. A writable
+    directory reports os.access(directory, os.W_OK) as True -- that is
+    exactly what lets files be created inside it -- so exists() plus
+    os.access() alone would call a directory a valid log file.
+    RotatingFileHandler cannot open a directory as a file and raises
+    ValueError there, after the config has already been written."""
+    existing_dir = tmp_path / "logs"
+    existing_dir.mkdir()
+
+    _, issues = validate_config_dict(
+        {"tb_server_url": TB_URL, "logging": {"file": {"file_name": str(existing_dir)}}}
+    )
+
+    assert [issue.path for issue in issues] == ["logging.file.file_name"]
+
+
+def test_an_existing_writable_log_file_is_still_accepted(tmp_path):
+    """Regression guard: the directory fix above must not reject the normal
+    case of a log file that already exists from a previous run."""
+    existing_file = tmp_path / "svc.log"
+    existing_file.write_text("previous log content\n", encoding="utf-8")
+
+    config, issues = validate_config_dict(
+        {"tb_server_url": TB_URL, "logging": {"file": {"file_name": str(existing_file)}}}
+    )
+
+    assert issues == []
+    assert config is not None

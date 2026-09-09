@@ -67,6 +67,54 @@ def _issue_path(location: tuple[Any, ...]) -> str:
     return ".".join(str(part) for part in location)
 
 
+def _existing_path_problem(path: Path) -> str | None:
+    """Why *path*, which already exists, cannot be used as the log file.
+
+    An existing path that is a directory rather than a file is rejected:
+    ``os.access(a_directory, os.W_OK)`` is true for a writable directory --
+    being writable is exactly what lets files be created inside it -- so
+    ``exists()`` plus ``os.access()`` alone would call a directory a valid
+    log file. ``RotatingFileHandler`` cannot open a directory as a file and
+    raises ``ValueError`` there; ``path.is_file()`` is what actually
+    discriminates an existing file from an existing directory.
+    """
+    if not path.is_file():
+        return f"{path} exists but is not a file; a log file path is expected."
+    if not os.access(path, os.W_OK):
+        return f"{path} exists but is not writable."
+    return None
+
+
+def _missing_leaf_problem(parent: Path) -> str | None:
+    """Why a not-yet-existing log file under *parent* cannot be created there.
+
+    ``RotatingFileHandler`` creates the file itself but never a missing
+    directory, so *parent* must already exist and be writable.
+    """
+    if not parent.is_dir():
+        return f"The directory {parent} does not exist."
+    if not os.access(parent, os.W_OK):
+        return f"The directory {parent} is not writable."
+    return None
+
+
+def _log_file_problem(file_name: str) -> str | None:
+    """Why *file_name* cannot be used as the log file, or ``None`` if it can.
+
+    Pure and side-effect free: nothing is created or opened. An empty or
+    whitespace-only path is rejected explicitly first -- ``Path("").parent``
+    resolves to ``"."``, the current (writable) directory, and would
+    otherwise pass.
+    """
+    if not file_name.strip():
+        return "The log file path must not be empty."
+
+    path = Path(file_name)
+    if path.exists():
+        return _existing_path_problem(path)
+    return _missing_leaf_problem(path.parent)
+
+
 def _log_file_writability_issue(config: AppConfig) -> ConfigIssue | None:
     """Check, with no side effect, whether the configured log file can be written.
 
@@ -76,47 +124,17 @@ def _log_file_writability_issue(config: AppConfig) -> ConfigIssue | None:
     which point ``POST /admin/api/config/apply`` has already written the file
     to disk. Checking it here, before anything is written, is what keeps spec
     6.3's promise that the console cannot produce a ``config.toml`` the
-    service could not boot with.
-
-    Nothing is created or opened: an existing file must be writable in place;
-    otherwise the parent directory must already exist and be writable, since
-    ``RotatingFileHandler`` creates the file itself but never a missing
-    directory. An empty or whitespace-only path is rejected explicitly first
-    -- ``Path("").parent`` resolves to ``"."``, the current (writable)
-    directory, and would otherwise pass.
+    service could not boot with. See :func:`_log_file_problem` and its
+    helpers for the actual checks.
     """
-    file_name = config.logging.file.file_name
-    if not file_name.strip():
-        return ConfigIssue(
-            path="logging.file.file_name",
-            message="The log file path must not be empty.",
-            toml_section=_LOG_FILE_SECTION,
-        )
-
-    path = Path(file_name)
-    if path.exists():
-        if os.access(path, os.W_OK):
-            return None
-        return ConfigIssue(
-            path="logging.file.file_name",
-            message=f"{path} exists but is not writable.",
-            toml_section=_LOG_FILE_SECTION,
-        )
-
-    parent = path.parent
-    if not parent.is_dir():
-        return ConfigIssue(
-            path="logging.file.file_name",
-            message=f"The directory {parent} does not exist.",
-            toml_section=_LOG_FILE_SECTION,
-        )
-    if not os.access(parent, os.W_OK):
-        return ConfigIssue(
-            path="logging.file.file_name",
-            message=f"The directory {parent} is not writable.",
-            toml_section=_LOG_FILE_SECTION,
-        )
-    return None
+    message = _log_file_problem(config.logging.file.file_name)
+    if message is None:
+        return None
+    return ConfigIssue(
+        path="logging.file.file_name",
+        message=message,
+        toml_section=_LOG_FILE_SECTION,
+    )
 
 
 def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[ConfigIssue]]:
@@ -128,6 +146,18 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
     """
     try:
         config = AppConfig(**data)
+        # AppConfig itself does not validate the log path -- see
+        # _log_file_writability_issue's docstring for why that check belongs
+        # here, in the console's validator, rather than tightening the model
+        # every CLI user also goes through. It runs inside this same guard,
+        # not after it: it touches the filesystem exactly like the model
+        # validators above it (prompt files, SSL files), and an unexpected
+        # OSError escaping it here would otherwise reproduce the raw-500
+        # pattern the except clause below exists to prevent -- one that,
+        # after a write has already committed, is exactly what FIX C
+        # (apply_config's post-write re-read) was built to stop happening a
+        # second way.
+        log_issue = _log_file_writability_issue(config)
     except ValidationError as e:
         issues = [
             ConfigIssue(
@@ -154,11 +184,6 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
         logger.exception("Unexpected failure validating a console config draft")
         return None, [ConfigIssue(path="", message=str(e), toml_section=f"[{CONFIG_PREFIX}]")]
 
-    # AppConfig itself does not validate the log path -- see
-    # _log_file_writability_issue's docstring for why that check belongs here,
-    # in the console's validator, rather than tightening the model every CLI
-    # user also goes through.
-    log_issue = _log_file_writability_issue(config)
     if log_issue is not None:
         logger.info("Rejected a console config draft with 1 issue(s)")
         return None, [log_issue]

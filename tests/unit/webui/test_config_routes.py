@@ -617,6 +617,26 @@ def test_apply_refuses_an_unwritable_log_path(file_client, admin, config_file):
     assert not config_file.with_name("config.toml.bak").exists()
 
 
+def test_apply_refuses_a_log_path_that_is_an_existing_directory(file_client, admin, config_file):
+    """Fix Round 2, Fix 1 regression guard: an existing directory is
+    writable (os.access says so), but is not a file RotatingFileHandler can
+    open, so it must be refused exactly like a missing directory is."""
+    admin()
+    before = config_file.read_text(encoding="utf-8")
+    existing_dir = config_file.parent / "logs_dir"
+    existing_dir.mkdir()
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"logging.file.file_name": str(existing_dir)}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 422
+    assert config_file.read_text(encoding="utf-8") == before
+    assert not config_file.with_name("config.toml.bak").exists()
+
+
 def test_apply_reports_a_degraded_reload_when_setup_logging_fails(
     file_client, admin, app_with_file
 ):
