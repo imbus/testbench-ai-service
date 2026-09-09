@@ -62,6 +62,10 @@ dependencies = [
   "tzdata>=2025.3",
   "tomli>=2.4.1,<3.0.0",
   "tomli-w>=1.2.0,<2.0.0",
+  # config.toml is hand-edited and commented; tomlkit round-trips comments and
+  # key order, which tomli_w cannot. The console must not delete an operator's
+  # notes on first save.
+  "tomlkit>=0.13.2,<1.0.0",
   "jsonschema>=4.26.0,<5.0.0",
   "PyJWT>=2.12.1,<3.0.0",
 ]
