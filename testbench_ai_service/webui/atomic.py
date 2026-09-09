@@ -23,6 +23,9 @@ def write_atomic(path: Path, text: str) -> Path | None:
     backup is overwritten on each write rather than rotated: it exists so an
     operator can undo the last console save, not as a history.
 
+    When the target is a symlink, ``os.replace`` replaces the symlink itself
+    rather than writing through it.
+
     Returns:
         The backup path, or ``None`` when *path* did not exist.
 
@@ -56,19 +59,15 @@ def write_atomic(path: Path, text: str) -> Path | None:
             file.flush()
             os.fsync(file.fileno())
 
-        # Capture backup info before replace, but only write it after replace succeeds
-        backup_target = None
         if target.exists():
-            backup_target = target.with_name(f"{target.name}.bak")
-            backup_bytes = target.read_bytes()
+            backup = target.with_name(f"{target.name}.bak")
+            backup.write_bytes(target.read_bytes())
 
+        # The only state-mutating call on the target is last. If this raises,
+        # the target is unchanged and the exception signals that to the caller --
+        # which Task 12's apply route depends on for hot-reload accuracy.
         os.replace(temp_path, target)  # noqa: PTH105
         temp_path = None
-
-        # Write backup after replace succeeds, so failed replace doesn't leave backup behind
-        if backup_target is not None:
-            backup = backup_target
-            backup.write_bytes(backup_bytes)
     except OSError as e:
         logger.error("Atomic write to %s failed: %s", target, e)
         raise HTTPException(

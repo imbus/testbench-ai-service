@@ -95,7 +95,12 @@ def test_a_missing_parent_directory_is_a_400(tmp_path: Path):
     assert exc.value.status_code == 400
 
 
-def test_a_failed_replace_leaves_the_original_intact_and_no_temp_file(tmp_path: Path, monkeypatch):
+def test_a_failed_replace_leaves_the_original_intact_and_no_temp_file_but_keeps_the_backup(
+    tmp_path: Path, monkeypatch
+):
+    """When os.replace fails, the target is untouched. The .bak is redundant with
+    the unchanged original, but it exists because the only state-mutating call
+    is last (os.replace), so raised => target unchanged is an invariant."""
     target = tmp_path / "config.toml"
     target.write_text("port = 1\n", encoding="utf-8")
 
@@ -108,4 +113,35 @@ def test_a_failed_replace_leaves_the_original_intact_and_no_temp_file(tmp_path: 
         write_atomic(target, "port = 2\n")
 
     assert target.read_text(encoding="utf-8") == "port = 1\n"
-    assert [entry.name for entry in tmp_path.iterdir()] == ["config.toml"]
+    # No .tmp files left behind by cleanup
+    assert not any(entry.name.endswith(".tmp") for entry in tmp_path.iterdir())
+    # .bak exists (redundant with unchanged original, but expected under this ordering)
+    assert (tmp_path / "config.toml.bak").read_text(encoding="utf-8") == "port = 1\n"
+
+
+def test_a_failed_backup_write_leaves_the_original_intact_and_raises_400(
+    tmp_path: Path, monkeypatch
+):
+    """This test is the regression guard for keeping os.replace as the last
+    state-mutating call. If .bak write moved after replace, a failed .bak write
+    would leave the new content on disk with no backup and a false failure
+    reported. Here, the .bak write fails and we must see the original content
+    unchanged, no .tmp file, and a 400 raised."""
+    target = tmp_path / "config.toml"
+    target.write_text("port = 1\n", encoding="utf-8")
+
+    real_write_bytes = Path.write_bytes
+
+    def selective_write_bytes(self: Path, data: bytes) -> None:
+        if str(self).endswith(".bak"):
+            raise OSError("write_bytes failed for .bak")
+        return real_write_bytes(self, data)
+
+    monkeypatch.setattr(Path, "write_bytes", selective_write_bytes)
+
+    with pytest.raises(HTTPException) as exc:
+        write_atomic(target, "port = 2\n")
+
+    assert exc.value.status_code == 400
+    assert target.read_text(encoding="utf-8") == "port = 1\n"
+    assert not any(entry.name.endswith(".tmp") for entry in tmp_path.iterdir())
