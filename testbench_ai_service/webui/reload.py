@@ -92,7 +92,7 @@ def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
     return sorted(changed)
 
 
-async def hot_reload(app: FastAPI, config: AppConfig) -> None:
+async def hot_reload(app: FastAPI, config: AppConfig) -> bool:
     """Make *config* the running configuration, in process.
 
     Ordered deliberately:
@@ -111,10 +111,23 @@ async def hot_reload(app: FastAPI, config: AppConfig) -> None:
     nothing new to disable, and ``dictConfig`` flushes and closes the handlers
     it replaces.
 
-    Failures closing the *old* clients are logged and swallowed. By the time
-    this runs the new config is already on disk, so aborting would leave the
-    file and the process disagreeing with no way to reconcile them -- and a
-    client that cannot be closed is a leaked connection, not a corrupt state.
+    Failures closing the *old* clients, and failures pre-warming the *new*
+    ones, are logged and swallowed rather than raised. By the time this runs
+    the new config is already on disk, so aborting would leave the file and
+    the process disagreeing with no way to reconcile them. A client that
+    cannot be closed is a leaked connection, not a corrupt state; a client
+    that cannot be pre-warmed -- typically a missing provider credential --
+    is an operator problem that belongs on the next request that needs that
+    client, not on the apply. Either way the new ``LLMFactory`` is installed
+    on ``app.state`` regardless of whether the pre-warm succeeded, because
+    ``LLMFactory.get_client`` creates clients lazily on demand: the process
+    must never end up holding the new config together with the old (already
+    partially closed) factory.
+
+    Returns True when the reload completed with no degradation (both the old
+    clients closed cleanly and the new ones pre-warmed), False when it
+    completed but something above was swallowed -- the config and the
+    factory are swapped either way.
 
     Changes this cannot cover do not belong here at all; see
     :func:`restart_required`.
@@ -125,13 +138,26 @@ async def hot_reload(app: FastAPI, config: AppConfig) -> None:
     previous_factory = app.state.llm_factory
     app.state.config = config
 
+    succeeded = True
+
     try:
         await previous_factory.close_clients()
     except Exception as e:
+        succeeded = False
         logger.warning("Could not close the previous LLM clients during reload: %r", e)
 
     factory = LLMFactory()
-    factory.init_clients([config.llm_config])
+    try:
+        factory.init_clients([config.llm_config])
+    except Exception as e:
+        succeeded = False
+        logger.warning(
+            "Reloaded configuration, but could not pre-initialise the LLM clients: %r. "
+            "The clients will be created on demand; a missing provider credential will "
+            "surface on the next agent request.",
+            e,
+        )
     app.state.llm_factory = factory
 
     logger.info("Configuration reloaded in process")
+    return succeeded

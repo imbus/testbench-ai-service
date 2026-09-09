@@ -248,12 +248,45 @@ class TestHotReload:
 
     async def test_a_failure_closing_the_old_clients_does_not_abort_the_reload(self):
         """The file is already written; refusing to swap would leave disk and
-        memory disagreeing with nothing to fix it."""
+        memory disagreeing with nothing to fix it. The degraded close is still
+        reported through the return value."""
         app = fake_app(make_config())
         app.state.llm_factory.close_clients = AsyncMock(side_effect=RuntimeError("already closed"))
         new = make_config(language="en")
 
-        await hot_reload(app, new)
+        result = await hot_reload(app, new)
 
+        assert result is False
         assert app.state.config is new
         app.state.llm_factory.init_clients.assert_called_once()
+
+    async def test_a_fully_successful_reload_returns_true(self):
+        app = fake_app(make_config())
+
+        result = await hot_reload(app, make_config())
+
+        assert result is True
+
+    async def test_a_failure_pre_warming_the_new_clients_does_not_corrupt_state(self, monkeypatch):
+        """Regression guard: switching the LLM provider without a matching
+        credential in the environment must not leave the process holding the
+        new config together with the old, already-closed factory. The new
+        (only partially warmed) factory is still installed -- its clients are
+        created lazily on demand, so the missing credential surfaces on the
+        next agent request instead of corrupting the reload."""
+        broken_factory = MagicMock()
+        broken_factory.init_clients = MagicMock(side_effect=ValueError("no API key"))
+        monkeypatch.setattr(
+            "testbench_ai_service.webui.reload.LLMFactory",
+            MagicMock(return_value=broken_factory),
+        )
+        app = fake_app(make_config())
+        old_factory = app.state.llm_factory
+        new = make_config(language="en")
+
+        result = await hot_reload(app, new)
+
+        assert result is False
+        assert app.state.config is new
+        assert app.state.llm_factory is broken_factory
+        assert app.state.llm_factory is not old_factory
