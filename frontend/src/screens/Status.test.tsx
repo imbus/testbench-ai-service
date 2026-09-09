@@ -19,6 +19,8 @@ const STATUS: StatusResponse = {
   ],
   agents: { total: 3, enabled: 2, project_overrides: 4, projects: 2 },
   log_file: 'testbench-ai-service.log',
+  in_flight_tasks: 0,
+  restart_required: [],
 }
 
 const LOGS: LogLine[] = [

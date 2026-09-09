@@ -4,11 +4,13 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 export class ApiError extends Error {
   readonly status: number
+  readonly detail: unknown
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, detail?: unknown) {
     super(message)
     this.name = 'ApiError'
     this.status = status
+    this.detail = detail
   }
 }
 
@@ -51,14 +53,22 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   }
 
   if (!response.ok) {
-    let detail = `Request failed with status ${response.status}`
+    let message = `Request failed with status ${response.status}`
+    let detailValue: unknown = undefined
     try {
       const body = await response.json()
-      if (typeof body?.detail === 'string') detail = body.detail
+      if (body?.detail !== undefined) {
+        detailValue = body.detail
+        if (typeof body.detail === 'string') {
+          message = body.detail
+        } else if (typeof body.detail === 'object' && body.detail !== null && 'message' in body.detail && typeof (body.detail as Record<string, unknown>).message === 'string') {
+          message = (body.detail as Record<string, unknown>).message as string
+        }
+      }
     } catch {
       // A non-JSON error body leaves the default message in place.
     }
-    throw new ApiError(detail, response.status)
+    throw new ApiError(message, response.status, detailValue)
   }
 
   if (response.status === 204) return null as T

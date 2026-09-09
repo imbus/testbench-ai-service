@@ -38,6 +38,8 @@ export interface StatusResponse {
   api_keys: ApiKeyStatus[]
   agents: AgentSummary
   log_file: string
+  in_flight_tasks: number
+  restart_required: string[]
 }
 
 export interface LogLine {
@@ -56,4 +58,35 @@ export interface ConfigResponse {
 
 export interface MetaResponse {
   tb_server_url: string
+}
+
+export interface ConfigIssue {
+  path: string
+  message: string
+  toml_section: string
+}
+
+export interface FileDiff {
+  path: string
+  diff: string
+  added: number
+  removed: number
+}
+
+export interface PreviewResponse {
+  valid: boolean
+  issues: ConfigIssue[]
+  diffs: FileDiff[]
+  restart_required: string[]
+  in_flight_tasks: number
+  toml: string
+}
+
+export interface ApplyResponse {
+  written: string[]
+  backup: string | null
+  restart_required: string[]
+  reloaded: boolean
+  in_flight_tasks: number
+  reload_detail: string | null
 }
