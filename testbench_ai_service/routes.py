@@ -34,6 +34,7 @@ from testbench_ai_service.models.prompt import PromptDetailsResponse, PromptVari
 from testbench_ai_service.utils.config import get_agent_config, get_prompt_config
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 from testbench_ai_service.utils.testbench import get_project_name
+from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 
 router = APIRouter()
 
@@ -197,6 +198,7 @@ async def trigger_agent(
     llm_factory: LLMFactory = Depends(get_llm_factory),
     app_config: AppConfig = Depends(get_app_config),
     auth_info: AuthInfo = Depends(validate_auth_token),
+    registry: TaskRegistry = Depends(get_task_registry),
 ) -> TriggerAgentResponse:
     return await trigger_agent_execution(
         agent_key=agent_key,
@@ -206,4 +208,5 @@ async def trigger_agent(
         llm_factory=llm_factory,
         app_config=app_config,
         auth_info=auth_info,
+        registry=registry,
     )

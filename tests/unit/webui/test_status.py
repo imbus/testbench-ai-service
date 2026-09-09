@@ -105,3 +105,23 @@ def test_agent_summary_counts_real_project_overrides(make_app):
 
     assert summary.project_overrides == 5
     assert summary.projects == 2
+
+
+def test_status_reports_zero_in_flight_tasks_on_a_quiet_service(client, login):
+    login()
+
+    body = client.get("/admin/api/status").json()
+
+    assert body["in_flight_tasks"] == 0
+
+
+def test_status_reports_a_tracked_task(app, client, login):
+    login()
+    registry = app.state.task_registry
+    registry._labels.append("test_case_set_reviewer")
+    try:
+        body = client.get("/admin/api/status").json()
+    finally:
+        registry._labels.clear()
+
+    assert body["in_flight_tasks"] == 1

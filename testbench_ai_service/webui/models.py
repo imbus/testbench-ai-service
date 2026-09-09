@@ -60,6 +60,7 @@ class StatusResponse(BaseModel):
     api_keys: list[ApiKeyStatus]
     agents: AgentSummary
     log_file: str
+    in_flight_tasks: int = 0
 
 
 class ConfigResponse(BaseModel):

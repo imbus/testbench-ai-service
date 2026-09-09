@@ -14,6 +14,7 @@ from testbench_ai_service.webui.auth import (
     set_session_cookies,
 )
 from testbench_ai_service.webui.config_io import build_config_response
+from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 from testbench_ai_service.webui.logs import MAX_LIMIT, read_log
 from testbench_ai_service.webui.models import (
     ConfigResponse,
@@ -104,13 +105,11 @@ async def read_status(
     request: Request,
     _: Session = Depends(current_session),
     config: AppConfig = Depends(get_app_config),
+    registry: TaskRegistry = Depends(get_task_registry),
 ) -> StatusResponse:
-    """Service facts, TestBench reachability, credential presence, and agent counts.
-
-    Requires a session but not the admin role -- Phase 1 is read-only for
-    everyone signed in.
-    """
-    return build_status(config, request.app.state.started_at)
+    """Service facts, TestBench reachability, credential presence, agent counts,
+    and how many agent runs are in flight."""
+    return build_status(config, request.app.state.started_at, registry.count)
 
 
 @router.get("/config", response_model=ConfigResponse)

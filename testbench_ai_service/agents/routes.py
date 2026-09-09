@@ -40,6 +40,7 @@ from testbench_ai_service.utils.prompt_utils import (
     validate_template_placeholders,
 )
 from testbench_ai_service.utils.testbench import get_project_roles
+from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 
 TRIGGER_AGENT_ROUTE_KWARGS: dict = {
     "response_model": TriggerAgentResponse,
@@ -100,6 +101,7 @@ async def trigger_agent_execution(
     llm_factory: LLMFactory,
     app_config: AppConfig,
     auth_info: AuthInfo,
+    registry: TaskRegistry,
 ) -> TriggerAgentResponse:
     """Execute the trigger flow shared by all agent endpoints.
 
@@ -115,6 +117,7 @@ async def trigger_agent_execution(
         llm_factory:      Factory for obtaining the LLM client.
         app_config:       The application configuration.
         auth_info:        Validated authentication context for this request.
+        registry:         The console's in-flight task registry.
 
     Returns:
         ``TriggerAgentResponse`` with ``status="accepted"`` and any precheck warnings.
@@ -194,7 +197,8 @@ async def trigger_agent_execution(
         )
 
     background_tasks.add_task(
-        run_agent,
+        _tracked_run_agent,
+        registry,
         agent_key=agent_key,
         agent=agent,
         context=context,
@@ -205,6 +209,16 @@ async def trigger_agent_execution(
     logger.debug("Scheduled background task for agent '%s'", agent_key)
 
     return TriggerAgentResponse(status="accepted", warnings=precheck_result.warnings)
+
+
+async def _tracked_run_agent(registry: TaskRegistry, agent_key: str, **kwargs) -> None:
+    """Run an agent while the console's in-flight registry counts it.
+
+    A wrapper rather than a change to run_agent(): the console is an
+    observer here, and tasks.py should not have to know it exists.
+    """
+    async with registry.track(agent_key):
+        await run_agent(agent_key=agent_key, **kwargs)
 
 
 def validate_template_and_agent_vars(context, agent):
@@ -268,6 +282,7 @@ def create_agent_router(
         llm_factory: LLMFactory = Depends(get_llm_factory),
         app_config: AppConfig = Depends(get_app_config),
         auth_info: AuthInfo = Depends(validate_auth_token),
+        registry: TaskRegistry = Depends(get_task_registry),
     ) -> TriggerAgentResponse:
         return await trigger_agent_execution(
             agent_key=agent_key,
@@ -277,6 +292,7 @@ def create_agent_router(
             llm_factory=llm_factory,
             app_config=app_config,
             auth_info=auth_info,
+            registry=registry,
         )
 
     return router

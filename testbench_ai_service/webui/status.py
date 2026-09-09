@@ -80,7 +80,9 @@ def agent_summary(config: AppConfig) -> AgentSummary:
     )
 
 
-def build_status(config: AppConfig, started_at: datetime) -> StatusResponse:
+def build_status(
+    config: AppConfig, started_at: datetime, in_flight_tasks: int = 0
+) -> StatusResponse:
     uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
     return StatusResponse(
         service=ServiceStatus(
@@ -95,4 +97,5 @@ def build_status(config: AppConfig, started_at: datetime) -> StatusResponse:
         api_keys=api_key_statuses(config),
         agents=agent_summary(config),
         log_file=config.logging.file.file_name,
+        in_flight_tasks=in_flight_tasks,
     )
