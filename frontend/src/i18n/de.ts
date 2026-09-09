@@ -38,6 +38,7 @@ export const de = {
   navLandmark: 'Konsolenbereiche',
   darkTheme: 'Dunkles Design',
   lightTheme: 'Helles Design',
+  revert: 'Zurücksetzen',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German

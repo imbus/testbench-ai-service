@@ -42,4 +42,5 @@ export const en = {
   navLandmark: 'Console sections',
   darkTheme: 'Dark theme',
   lightTheme: 'Light theme',
+  revert: 'Revert',
 } as const
