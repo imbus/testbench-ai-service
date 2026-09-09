@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { usePreview } from '../api/mutations'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
@@ -15,6 +15,7 @@ export function Raw({ lang }: { lang: Lang }) {
   const draft = useDraft()
   const preview = usePreview()
   const [copied, setCopied] = useState(false)
+  const timerRef = useRef<NodeJS.Timeout | number>()
 
   const edits = JSON.stringify(draft.edits)
   useEffect(() => {
@@ -24,10 +25,24 @@ export function Raw({ lang }: { lang: Lang }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edits])
 
+  useEffect(() => {
+    // Clear any pending timer on unmount to avoid setState on an unmounted component.
+    return () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current)
+      }
+    }
+  }, [])
+
   const onCopy = () => {
     void navigator.clipboard.writeText(preview.data?.toml ?? '').then(() => {
+      // Clear any existing timer before starting a new one, so rapid clicks
+      // do not leave the label stuck or double-flip.
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current)
+      }
       setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
+      timerRef.current = window.setTimeout(() => setCopied(false), 2000)
     })
   }
 
@@ -47,7 +62,7 @@ export function Raw({ lang }: { lang: Lang }) {
           {t.rawSub}
         </span>
         <div style={{ flex: 1 }} />
-        {preview.data && (
+        {preview.data && !preview.isError && (
           <button type="button" className="btn btn-secondary" onClick={onCopy}>
             {copied ? t.copied : t.copy}
           </button>
@@ -60,7 +75,7 @@ export function Raw({ lang }: { lang: Lang }) {
         </div>
       )}
 
-      {preview.data && (
+      {preview.data && !preview.isError && (
         <pre
           style={{
             margin: 0,
@@ -76,6 +91,12 @@ export function Raw({ lang }: { lang: Lang }) {
           {preview.data.toml}
         </pre>
       )}
+      {/* React Query retains the last successful data even after a failed
+        re-preview. We deliberately do not render it here: showing an older
+        TOML beside a current error breaks the contract "this is exactly what
+        an apply would write", and the operator cannot tell which text is
+        current. An honest gap is better than a document that looks
+        authoritative and is stale. */}
     </div>
   )
 }
