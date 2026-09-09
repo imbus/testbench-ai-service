@@ -10,15 +10,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
-- A read-only web console at `/admin`, served by the service itself and bundled in the release
+- A web console at `/admin`, served by the service itself and bundled in the release
   binary. Sign in with TestBench credentials against the server configured as `tb_server_url`;
   the console then shows service status, a tail of the log file, and the effective Service, LLM
-  and Logging configuration. Nothing can be edited from the browser yet — configuration editing
-  is planned for a later release.
+  and Logging configuration. Agents, per-project overrides and prompts are still read-only from
+  the browser.
 - `[testbench-ai-service.admin_ui]` with `enabled` (default `true`) and `require_loopback`
   (default `false`). Set `enabled = false` to switch the console off entirely: `/admin` and the
   console API then return `404` and the agent endpoints are unaffected. Documented in
   `docs/web-console.md`.
+- Configuration editing in the web console, for administrators. Change Service, LLM provider and
+  Logging settings, review the exact unified diff before anything is written, then apply: the
+  service rewrites `config.toml` atomically through a comment-preserving TOML document — your
+  comments, key order and formatting survive, and only the keys you changed are touched — keeps
+  the previous contents as `config.toml.bak`, and reloads in place. A configuration the service
+  could not start with is refused before anything is written, with the error marked against the
+  offending field. Settings the running process cannot take up (`host`, `port`, the TLS paths,
+  `trusted_proxies`, `admin_ui.enabled`, and an agent's `endpoint_path` or `class_path`) are written and then flagged
+  in a "restart needed" banner. A new **Raw config.toml** screen shows the file the pending
+  changes would produce. Editing requires the global `Administrator` role; every other session
+  keeps the read-only console. Documented in `docs/web-console.md`.
+- `[testbench-ai-service.llm_config]` gains `timeout` and `max_retries`. Both were already
+  forwarded to the provider SDKs when present in the file; declaring them makes them validated,
+  documented, and editable from the console.
+
+### Fixed
+
+- `GET /admin/api/config` previously did not redact credential keys written with hyphens or
+  dots (`api-key`, `x-api-key`, `api.key`), so such a value could be shown in plaintext by
+  the console's configuration screen. Now all credential-named keys, regardless of separator
+  style, are redacted uniformly.
 
 ## [1.2.1][1.2.1] - 2026-08-25
 
