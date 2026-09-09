@@ -69,6 +69,8 @@ export function Field({
             id={spec.key}
             aria-checked={value === true}
             aria-labelledby={`${spec.key}-label`}
+            aria-invalid={issue ? true : undefined}
+            aria-describedby={issue ? issueId : undefined}
             onClick={() => draft.setValue(spec.key, value !== true)}
             style={{
               width: 36,

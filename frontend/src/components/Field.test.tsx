@@ -182,4 +182,49 @@ describe('Field', () => {
 
     expect(screen.getByLabelText('trusted_proxies')).toHaveValue('10.0.0.1, 10.0.0.2')
   })
+
+  it('links a validation issue to the bool switch via aria-invalid and aria-describedby', () => {
+    const spec: FieldSpec = { key: 'debug', type: 'bool', hint: 'Verbose logging' }
+    render(
+      <DraftProvider saved={{ debug: false }}>
+        <Field spec={spec} saved={false} issue="Invalid boolean value" />
+      </DraftProvider>,
+    )
+
+    const switchButton = screen.getByRole('switch', { name: 'debug' })
+    expect(switchButton).toHaveAttribute('aria-invalid', 'true')
+    expect(switchButton).toHaveAttribute('aria-describedby', 'debug-issue')
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid boolean value')
+  })
+
+  it('toggles the bool switch via keyboard (Enter key)', async () => {
+    const spec: FieldSpec = { key: 'debug', type: 'bool', hint: 'Verbose logging' }
+    render(<Harness spec={spec} saved={{ debug: false }} />)
+
+    const switchButton = screen.getByRole('switch', { name: 'debug' })
+    await userEvent.tab()
+    await userEvent.keyboard('{Enter}')
+
+    expect(switchButton).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByTestId('edits')).toHaveTextContent('{"debug":true}')
+  })
+
+  it('links a validation issue to the select via aria-invalid and aria-describedby', () => {
+    const spec: FieldSpec = {
+      key: 'language',
+      type: 'select',
+      options: ['de', 'en'],
+      hint: 'Default language',
+    }
+    render(
+      <DraftProvider saved={{ language: 'de' }}>
+        <Field spec={spec} saved="de" issue="Invalid language selection" />
+      </DraftProvider>,
+    )
+
+    const selectElement = screen.getByLabelText('language')
+    expect(selectElement).toHaveAttribute('aria-invalid', 'true')
+    expect(selectElement).toHaveAttribute('aria-describedby', 'language-issue')
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid language selection')
+  })
 })
