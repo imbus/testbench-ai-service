@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import type { ApiError } from '../api/client'
 import { useApply, usePreview } from '../api/mutations'
+import type { ConfigIssue } from '../api/types'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
 
@@ -43,6 +44,23 @@ function issuesOf(detail: unknown): RenderableIssue[] | null {
   return wellFormed.length > 0 ? wellFormed : null
 }
 
+/**
+ * Narrow a `RenderableIssue` list down to the subset `ConfigSection` can
+ * address to a field: a `toml_section`-only entry (no `path`) has nothing for
+ * `issueMatchesField` to compare against, so it is dropped here rather than
+ * forwarded as a field marker with an empty path.
+ */
+function toFieldIssues(issues: RenderableIssue[] | null): ConfigIssue[] {
+  if (!issues) return []
+  return issues
+    .filter((issue): issue is RenderableIssue & { path: string } => typeof issue.path === 'string')
+    .map((issue) => ({
+      path: issue.path,
+      message: issue.message,
+      toml_section: issue.toml_section ?? '',
+    }))
+}
+
 function IssueList({ issues }: { issues: RenderableIssue[] }) {
   return (
     <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
@@ -62,7 +80,18 @@ function IssueList({ issues }: { issues: RenderableIssue[] }) {
  * off disk and constructs an AppConfig (which imports agent classes), so it is
  * not something to run per character.
  */
-export function DiffDialog({ lang, onClose }: { lang: Lang; onClose: () => void }) {
+export function DiffDialog({
+  lang,
+  onClose,
+  onIssues,
+}: {
+  lang: Lang
+  onClose: () => void
+  /** Field-addressed validation failures, forwarded up to `App` so the config
+   * screens can mark the offending inputs. Optional so callers that don't
+   * care about issue markers (and existing tests) need not supply it. */
+  onIssues?: (issues: ConfigIssue[]) => void
+}) {
   const t = useTranslations(lang)
   const draft = useDraft()
   const preview = usePreview()
@@ -78,11 +107,22 @@ export function DiffDialog({ lang, onClose }: { lang: Lang; onClose: () => void 
   const data = preview.data
   const applyIssues = apply.isError ? issuesOf((apply.error as ApiError).detail) : null
 
+  useEffect(() => {
+    if (!onIssues) return
+    if (data && !data.valid) onIssues(data.issues)
+  }, [data, onIssues])
+
+  useEffect(() => {
+    if (!onIssues) return
+    if (applyIssues) onIssues(toFieldIssues(applyIssues))
+  }, [applyIssues, onIssues])
+
   const onApply = () => {
     apply.mutate(draft.edits, {
       onSuccess: (response) => {
         // The edits are on disk now, so the overlay has nothing left to say.
         draft.discardAll()
+        onIssues?.([])
         // A populated reload_detail means the reload failed for a reason other
         // than a required restart (e.g. the log file could not be opened) — in
         // that exact case the reason cannot be written to the log, so this

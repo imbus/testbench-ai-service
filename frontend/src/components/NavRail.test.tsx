@@ -36,3 +36,21 @@ test('an admin has nothing disabled', () => {
     expect(link).not.toHaveAttribute('aria-disabled', 'true')
   }
 })
+
+it('offers the raw config screen to an admin', () => {
+  renderNav(true)
+
+  expect(screen.getByRole('link', { name: /config\.toml/ })).toHaveAttribute(
+    'href',
+    '/admin/raw',
+  )
+})
+
+it('marks the raw config screen restricted for a non-admin', () => {
+  renderNav(false)
+
+  expect(screen.getByRole('link', { name: /config\.toml/ })).toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+})

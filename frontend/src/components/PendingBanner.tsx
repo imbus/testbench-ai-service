@@ -1,10 +1,20 @@
 import { useState } from 'react'
+import type { ConfigIssue } from '../api/types'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
 import { DiffDialog } from './DiffDialog'
 
 /** The artboard's top strip: how many changes are queued, and what to do with them. */
-export function PendingBanner({ lang }: { lang: Lang }) {
+export function PendingBanner({
+  lang,
+  onIssues,
+}: {
+  lang: Lang
+  /** Forwarded to the diff dialog so a preview or apply rejection's
+   * field-addressed issues can reach the config screens. Optional so callers
+   * that don't track issues (and existing tests) need not supply it. */
+  onIssues?: (issues: ConfigIssue[]) => void
+}) {
   const t = useTranslations(lang)
   const draft = useDraft()
   const [showDiff, setShowDiff] = useState(false)
@@ -55,12 +65,18 @@ export function PendingBanner({ lang }: { lang: Lang }) {
           type="button"
           className="btn btn-secondary"
           style={{ padding: '4px 10px', fontSize: 13 }}
-          onClick={() => draft.discardAll()}
+          onClick={() => {
+            draft.discardAll()
+            // A validation marker must not outlive the draft that caused it.
+            onIssues?.([])
+          }}
         >
           {t.discard}
         </button>
       </div>
-      {showDiff && <DiffDialog lang={lang} onClose={() => setShowDiff(false)} />}
+      {showDiff && (
+        <DiffDialog lang={lang} onClose={() => setShowDiff(false)} onIssues={onIssues} />
+      )}
     </>
   )
 }

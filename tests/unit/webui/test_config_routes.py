@@ -700,3 +700,60 @@ def test_apply_reports_a_post_write_reread_failure_without_raising(file_client, 
     assert body["reload_detail"]
     assert "boom" in body["reload_detail"]
     assert 'language = "en"' in config_file.read_text(encoding="utf-8")
+
+
+def test_status_reports_no_restart_needed_when_disk_matches_the_process(file_client, admin):
+    admin()
+
+    body = file_client.get("/admin/api/status").json()
+
+    assert body["restart_required"] == []
+
+
+def test_status_reports_a_restart_after_a_boot_fixed_change_is_written(
+    file_client, admin, config_file
+):
+    admin()
+
+    file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": 9999}},
+        headers=csrf(file_client),
+    )
+    body = file_client.get("/admin/api/status").json()
+
+    assert body["restart_required"] == ["port"]
+
+
+def test_status_reports_a_restart_for_a_hand_edited_file(file_client, admin, config_file):
+    """An operator editing config.toml by hand must see the banner too."""
+    admin()
+    config_file.write_text(COMMENTED.replace("port = 8010", "port = 7777"), encoding="utf-8")
+
+    body = file_client.get("/admin/api/status").json()
+
+    assert body["restart_required"] == ["port"]
+
+
+def test_status_reports_no_restart_after_a_hot_swappable_apply(file_client, admin):
+    admin()
+
+    file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"language": "en"}},
+        headers=csrf(file_client),
+    )
+    body = file_client.get("/admin/api/status").json()
+
+    assert body["restart_required"] == []
+
+
+def test_status_survives_an_invalid_file_on_disk(file_client, admin, config_file):
+    """A hand-edit that broke the file must not 500 the status screen."""
+    admin()
+    config_file.write_text('[testbench-ai-service]\nport = "not a number"\n', encoding="utf-8")
+
+    response = file_client.get("/admin/api/status")
+
+    assert response.status_code == 200
+    assert response.json()["restart_required"] == []

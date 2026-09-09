@@ -11,11 +11,12 @@ export function useMeta() {
   })
 }
 
-export function useStatus() {
+export function useStatus({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['status'],
     queryFn: () => apiFetch<StatusResponse>('/status'),
     refetchInterval: 15_000,
+    enabled,
   })
 }
 
@@ -27,9 +28,10 @@ export function useLogs(limit = 25) {
   })
 }
 
-export function useConfig() {
+export function useConfig({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['config'],
     queryFn: () => apiFetch<ConfigResponse>('/config'),
+    enabled,
   })
 }

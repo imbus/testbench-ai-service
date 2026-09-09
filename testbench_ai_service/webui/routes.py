@@ -190,8 +190,16 @@ async def read_status(
     registry: TaskRegistry = Depends(get_task_registry),
 ) -> StatusResponse:
     """Service facts, TestBench reachability, credential presence, agent counts,
-    and how many agent runs are in flight."""
-    return build_status(config, request.app.state.started_at, registry.count)
+    in-flight runs, and whether the file on disk has changes the process has
+    not taken up.
+
+    The restart list is derived rather than remembered: an operator who edits
+    config.toml by hand, or who reloads the console after an apply, must still
+    see the banner, and process state would not survive either.
+    """
+    on_disk, _issues = validate_config_dict(read_config_file(Path(request.app.state.config_path)))
+    pending = restart_required(config, on_disk) if on_disk is not None else []
+    return build_status(config, request.app.state.started_at, registry.count, pending)
 
 
 @router.get("/config", response_model=ConfigResponse)

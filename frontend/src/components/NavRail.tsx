@@ -39,6 +39,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon: 'M8 21h12a2 2 0 0 0 2-2v-2H10v2a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v3h4M19 17V5a2 2 0 0 0-2-2H4M15 8h-5M15 12h-5',
     adminOnly: true,
   },
+  {
+    key: 'raw',
+    path: '/admin/raw',
+    labelKey: 'raw',
+    icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6',
+    adminOnly: true,
+  },
 ]
 
 export function NavRail({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {

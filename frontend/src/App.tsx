@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { NavRail } from './components/NavRail'
+import { PendingBanner } from './components/PendingBanner'
+import { RestartBanner } from './components/RestartBanner'
 import { TopBar } from './components/TopBar'
 import { ConfigSection } from './screens/ConfigSection'
 import { Login } from './screens/Login'
+import { Raw } from './screens/Raw'
 import { Status } from './screens/Status'
-import { useMeta } from './api/queries'
+import type { ConfigIssue } from './api/types'
+import { useConfig, useMeta, useStatus } from './api/queries'
+import { DraftProvider } from './state/draft'
 import { useSession } from './state/session'
 import { useTranslations, type Lang } from './i18n'
 import { applyTheme, preferredTheme, storedTheme, type Theme } from './theme'
@@ -15,7 +20,17 @@ export function App() {
   const meta = useMeta()
   const [lang, setLang] = useState<Lang>('de')
   const [theme, setTheme] = useState<Theme>(() => storedTheme() ?? preferredTheme())
+  const [issues, setIssues] = useState<ConfigIssue[]>([])
   const t = useTranslations(lang)
+  // Called unconditionally, ahead of the early returns below: this component
+  // stays mounted across the loading -> signed-in transition, and hooks
+  // called only on some renders of the same instance corrupt React's hook
+  // order (a hard crash, not a lint nit). Gated on `session` rather than
+  // dropped from the login/loading renders entirely -- both routes need a
+  // session, and firing them at the Login screen would just poll a 401 every
+  // 15 seconds for data nothing there uses.
+  const config = useConfig({ enabled: !!session })
+  const status = useStatus({ enabled: !!session })
 
   useEffect(() => applyTheme(theme), [theme])
 
@@ -37,51 +52,89 @@ export function App() {
     )
   }
 
+  // Derived from the status query rather than remembered from the apply
+  // response: an operator who edits config.toml by hand, or who reloads the
+  // console after applying, must still see the banner.
+  const restartFields = status.data?.restart_required ?? []
+
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      <TopBar
-        session={session}
-        lang={lang}
-        theme={theme}
-        onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-        onSetLang={setLang}
-        onSignOut={() => void signOut()}
-      />
-      {!session.is_admin && (
-        <div
-          style={{
-            padding: '8px var(--space-4)',
-            fontSize: 13,
-            background: 'var(--color-surface)',
-            borderBottom: '1px solid var(--color-divider)',
-          }}
-        >
-          {t.readOnly}
+    // The draft is measured against the config *on disk* -- the draft is "what
+    // will be written", and the running snapshot is fully defaulted, so
+    // measuring against it would count every default the file omits as a
+    // pending change. `disk` can be undefined while the query is in flight;
+    // that state must NOT be coerced to `{}` here -- an empty object means
+    // "the file genuinely has no keys" and would prune (and thereby destroy)
+    // any queued removal edits before the config has even loaded.
+    <DraftProvider saved={config.data?.disk}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <TopBar
+          session={session}
+          lang={lang}
+          theme={theme}
+          onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          onSetLang={setLang}
+          onSignOut={() => void signOut()}
+        />
+        {session.is_admin && <PendingBanner lang={lang} onIssues={setIssues} />}
+        <RestartBanner lang={lang} fields={restartFields} />
+        {!session.is_admin && (
+          <div
+            style={{
+              padding: '8px var(--space-4)',
+              fontSize: 13,
+              background: 'var(--color-surface)',
+              borderBottom: '1px solid var(--color-divider)',
+            }}
+          >
+            {t.readOnly}
+          </div>
+        )}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+          <NavRail lang={lang} isAdmin={session.is_admin} />
+          <main style={{ flex: 1, minWidth: 0 }}>
+            <Routes>
+              <Route path="/admin" element={<Navigate to="/admin/status" replace />} />
+              <Route path="/" element={<Navigate to="/admin/status" replace />} />
+              <Route path="/admin/status" element={<Status lang={lang} />} />
+              <Route
+                path="/admin/service"
+                element={
+                  <ConfigSection
+                    section="service"
+                    lang={lang}
+                    isAdmin={session.is_admin}
+                    issues={issues}
+                  />
+                }
+              />
+              <Route
+                path="/admin/llm"
+                element={
+                  <ConfigSection
+                    section="llm"
+                    lang={lang}
+                    isAdmin={session.is_admin}
+                    issues={issues}
+                  />
+                }
+              />
+              <Route
+                path="/admin/logging"
+                element={
+                  <ConfigSection
+                    section="logging"
+                    lang={lang}
+                    isAdmin={session.is_admin}
+                    issues={issues}
+                  />
+                }
+              />
+              <Route path="/admin/raw" element={<Raw lang={lang} />} />
+              <Route path="*" element={<Navigate to="/admin/status" replace />} />
+            </Routes>
+          </main>
         </div>
-      )}
-      <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-        <NavRail lang={lang} isAdmin={session.is_admin} />
-        <main style={{ flex: 1, minWidth: 0 }}>
-          <Routes>
-            <Route path="/admin" element={<Navigate to="/admin/status" replace />} />
-            <Route path="/" element={<Navigate to="/admin/status" replace />} />
-            <Route path="/admin/status" element={<Status lang={lang} />} />
-            <Route
-              path="/admin/service"
-              element={<ConfigSection section="service" lang={lang} isAdmin={session.is_admin} />}
-            />
-            <Route
-              path="/admin/llm"
-              element={<ConfigSection section="llm" lang={lang} isAdmin={session.is_admin} />}
-            />
-            <Route
-              path="/admin/logging"
-              element={<ConfigSection section="logging" lang={lang} isAdmin={session.is_admin} />}
-            />
-            <Route path="*" element={<Navigate to="/admin/status" replace />} />
-          </Routes>
-        </main>
       </div>
-    </div>
+    </DraftProvider>
   )
 }
