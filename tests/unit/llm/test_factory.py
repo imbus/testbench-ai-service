@@ -5,6 +5,7 @@ import pytest
 from testbench_ai_service.llm.azure_auth import EntraIdCredentials
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.llm.factory import LLMFactory
+from testbench_ai_service.models.config import LLMConfig
 
 
 def _make_llm_config(
@@ -19,6 +20,8 @@ def _make_llm_config(
     config.azure_endpoint = None
     config.api_version = None
     config.auth_method = auth_method
+    config.timeout = None
+    config.max_retries = None
     return config
 
 
@@ -228,9 +231,7 @@ class TestLLMFactoryEntraIdDispatch:
     @patch.object(LLMFactory, "_create_client")
     @patch("testbench_ai_service.llm.factory.resolve_entra_credentials")
     def test_project_principal_takes_precedence_over_global(self, mock_resolve, mock_create):
-        project_credentials = EntraIdCredentials(
-            tenant_id="tp", client_id="cp", client_secret="sp"
-        )
+        project_credentials = EntraIdCredentials(tenant_id="tp", client_id="cp", client_secret="sp")
         mock_resolve.return_value = project_credentials
         project_client = MagicMock()
         mock_create.return_value = project_client
@@ -245,9 +246,7 @@ class TestLLMFactoryEntraIdDispatch:
 
     @patch.object(LLMFactory, "_create_client")
     @patch("testbench_ai_service.llm.factory.resolve_entra_credentials")
-    def test_project_without_principal_falls_back_to_global_client(
-        self, mock_resolve, mock_create
-    ):
+    def test_project_without_principal_falls_back_to_global_client(self, mock_resolve, mock_create):
         global_credentials = EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s")
         # First call is the project lookup (None), second is the global lookup.
         mock_resolve.side_effect = [None, global_credentials]
@@ -416,3 +415,28 @@ class TestLLMFactoryAuthLogging:
         messages = [record.getMessage() for record in caplog.records]
         assert any("Entra ID" in message for message in messages)
         assert not any("secret-value" in message for message in messages)
+
+
+def test_declared_timeout_and_max_retries_reach_the_client_kwargs():
+    """timeout/max_retries are declared fields now, not model_extra."""
+    factory = LLMFactory()
+    config = LLMConfig(provider=LLMProvider.OPENAI, timeout=42.5, max_retries=7)
+
+    assert config.timeout == 42.5
+    assert config.max_retries == 7
+    assert factory._get_common_client_kwargs(config) == {"timeout": 42.5, "max_retries": 7}
+
+
+def test_unset_timeout_and_max_retries_are_omitted_from_client_kwargs():
+    """An unset field must not become an explicit None the SDK would honour."""
+    factory = LLMFactory()
+
+    assert factory._get_common_client_kwargs(LLMConfig(provider=LLMProvider.OPENAI)) == {}
+
+
+def test_strict_response_validation_still_comes_from_extra():
+    """The private SDK flag stays undeclared; it is not a config surface."""
+    factory = LLMFactory()
+    config = LLMConfig(provider=LLMProvider.OPENAI, _strict_response_validation=False)
+
+    assert factory._get_common_client_kwargs(config) == {"_strict_response_validation": False}

@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.models.language import LanguageOption
@@ -14,6 +14,16 @@ class LLMConfig(BaseModel):
     azure_endpoint: str | None = None
     api_version: str | None = None
     class_path: str | None = None
+    timeout: float | None = Field(
+        default=None,
+        gt=0,
+        description="Seconds to wait for an LLM response before giving up. Unset uses the provider SDK's own default.",
+    )
+    max_retries: int | None = Field(
+        default=None,
+        ge=0,
+        description="How often the provider SDK retries a failed request. Unset uses the SDK's own default.",
+    )
 
     model_config = ConfigDict(extra="allow")
 

@@ -139,8 +139,7 @@ class LLMFactory:
         Return True when this provider/config combination authenticates via Entra ID.
         """
         return (
-            provider == LLMProvider.AZURE_OPENAI
-            and config.auth_method == AzureAuthMethod.ENTRA_ID
+            provider == LLMProvider.AZURE_OPENAI and config.auth_method == AzureAuthMethod.ENTRA_ID
         )
 
     def _get_credential(
@@ -197,9 +196,7 @@ class LLMFactory:
         Narrow a credential to an API key, rejecting Entra ID credentials.
         """
         if isinstance(credential, EntraIdCredentials):
-            raise ValueError(
-                "Entra ID credentials are only supported for provider 'azure_openai'."
-            )
+            raise ValueError("Entra ID credentials are only supported for provider 'azure_openai'.")
         return credential
 
     def _create_azure_client(
@@ -249,9 +246,25 @@ class LLMFactory:
         )
 
     def _get_common_client_kwargs(self, config: LLMConfig) -> dict[str, Any]:
+        """Kwargs passed to every provider SDK client.
+
+        'timeout' and 'max_retries' are declared fields (the console renders
+        them), so they are read off the model. Only an explicitly-set value is
+        forwarded: passing None would override the SDK's own default with
+        nothing. '_strict_response_validation' stays undeclared -- it is a
+        private SDK flag, not a configuration surface -- so it still comes from
+        model_extra.
+        """
+        kwargs: dict[str, Any] = {}
+        if config.timeout is not None:
+            kwargs["timeout"] = config.timeout
+        if config.max_retries is not None:
+            kwargs["max_retries"] = config.max_retries
+
         extra = config.model_extra or {}
-        allowed_keys = {"timeout", "max_retries", "_strict_response_validation"}
-        return {key: value for key, value in extra.items() if key in allowed_keys}
+        if "_strict_response_validation" in extra:
+            kwargs["_strict_response_validation"] = extra["_strict_response_validation"]
+        return kwargs
 
     def _get_deployment_mapping(self, config: LLMConfig) -> dict[str, str] | None:
         extra = config.model_extra or {}
