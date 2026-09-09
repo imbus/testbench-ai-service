@@ -4,6 +4,7 @@ Phase 1 only reads.  The write path in phase 2 builds on ``read_config_file`` an
 adds a comment-preserving ``tomlkit`` round trip.
 """
 
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -14,10 +15,10 @@ from testbench_ai_service.log import logger
 from testbench_ai_service.utils.config import CONFIG_PREFIX
 from testbench_ai_service.webui.models import ConfigResponse
 
-try:  # Python 3.11+
+if sys.version_info >= (3, 11):
     import tomllib
-except ModuleNotFoundError:  # Python 3.10
-    import tomli as tomllib  # type: ignore[no-redef]
+else:
+    import tomli as tomllib
 
 
 # Case-insensitive substring matches against key NAMES only -- never against

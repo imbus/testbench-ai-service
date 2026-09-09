@@ -91,7 +91,7 @@ def is_loopback(host: str | None) -> bool:
     # ("::") does not 403 every legitimate local client on Python 3.10-3.12.
     mapped = getattr(addr, "ipv4_mapped", None)
     if mapped is not None:
-        return mapped.is_loopback
+        return bool(mapped.is_loopback)
     return addr.is_loopback
 
 

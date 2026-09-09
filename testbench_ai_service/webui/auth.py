@@ -177,7 +177,7 @@ def require_csrf(
     so any client can reach that by sending a non-ASCII header value. Encoding
     first keeps a bad token a clean 403 instead of an unhandled 500.
     """
-    valid = bool(token) and secrets.compare_digest(
+    valid = token is not None and secrets.compare_digest(
         token.encode("utf-8"), session.csrf_token.encode("utf-8")
     )
     if not valid:
