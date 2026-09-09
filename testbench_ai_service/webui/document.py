@@ -15,7 +15,7 @@ from pathlib import Path
 import tomlkit
 from fastapi import HTTPException, status
 from tomlkit.exceptions import TOMLKitError
-from tomlkit.items import Table
+from tomlkit.items import InlineTable, Table
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.utils.config import CONFIG_PREFIX
@@ -54,14 +54,40 @@ def render_document(document: tomlkit.TOMLDocument) -> str:
 
 
 def service_table(document: tomlkit.TOMLDocument) -> Table:
-    """Return the live ``[testbench-ai-service]`` table, creating it if absent.
+    """Return the live ``[testbench-ai-service]`` table, preserving existing keys.
+
+    If the existing value is a table, return it live. If it is an inline table
+    (or a plain dict), promote it to a real table by copying every existing
+    key/value into a fresh ``tomlkit.table()`` and reassigning it -- inline
+    tables cannot hold the nested sub-tables the console writes, so promotion
+    is deliberate but preserves the operator's keys. If the key holds a
+    non-table value (scalar, list), raise HTTPException 400 rather than
+    silently destroying data.
 
     The returned table is the one inside *document*, not a copy -- callers
     mutate it in place and then render the document.
+
+    Raises:
+        HTTPException 400: if the existing value at the key is not a table
+            (e.g., a scalar or list).
     """
     existing = document.get(CONFIG_PREFIX)
     if isinstance(existing, Table):
         return existing
+    if isinstance(existing, (InlineTable, dict)):
+        # Promote inline table or dict to a real table, preserving keys.
+        table = tomlkit.table()
+        for key, value in existing.items():
+            table[key] = value
+        document[CONFIG_PREFIX] = table
+        return table
+    if existing is not None:
+        # Existing but not a table (scalar, list, etc.) -- don't silently replace it.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"[{CONFIG_PREFIX}] must be a table, not {type(existing).__name__}",
+        )
+    # Key is absent; create empty table.
     table = tomlkit.table()
     document[CONFIG_PREFIX] = table
     return table

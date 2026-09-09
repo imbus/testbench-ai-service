@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+import tomlkit
 from fastapi import HTTPException
 
 from testbench_ai_service.webui.document import (
@@ -82,3 +83,85 @@ def test_service_table_returns_the_live_table_not_a_copy(config_file: Path):
     service_table(document)["new_key"] = "new_value"
 
     assert 'new_key = "new_value"' in render_document(document)
+
+
+def test_inline_table_section_keeps_all_keys_after_promotion(tmp_path: Path):
+    """Inline table is promoted to regular table, preserving operator's keys."""
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "testbench-ai-service = { port = 8010, debug = true }\n",
+        encoding="utf-8",
+    )
+
+    document = load_document(path)
+    table = service_table(document)
+
+    assert table["port"] == 8010
+    assert table["debug"] is True
+
+    rendered = render_document(document)
+    assert "[testbench-ai-service]" in rendered
+    assert "port = 8010" in rendered
+    assert "debug = true" in rendered
+
+    # Verify re-parse still has the keys
+    re_parsed = load_document(tmp_path / "config.toml")
+    re_parsed_table = re_parsed.get("testbench-ai-service")
+    assert isinstance(re_parsed_table, dict)
+    assert re_parsed_table["port"] == 8010
+    assert re_parsed_table["debug"] is True
+
+
+def test_can_write_nested_table_after_inline_promotion(tmp_path: Path):
+    """After promoting inline table, can write nested sub-tables."""
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "testbench-ai-service = { port = 8010 }\n",
+        encoding="utf-8",
+    )
+
+    document = load_document(path)
+    table = service_table(document)
+    # This should work after promotion; would fail with an inline table.
+    table["llm_config"] = tomlkit.table()
+    table["llm_config"]["provider"] = "openai"
+
+    rendered = render_document(document)
+    assert "[testbench-ai-service]" in rendered
+    assert "port = 8010" in rendered
+    assert "[testbench-ai-service.llm_config]" in rendered
+    assert 'provider = "openai"' in rendered
+
+
+def test_scalar_at_service_key_raises_400(tmp_path: Path):
+    """A scalar value at the service key is an error, not silently replaced."""
+    path = tmp_path / "config.toml"
+    path.write_text("testbench-ai-service = 5\n", encoding="utf-8")
+
+    document = load_document(path)
+    with pytest.raises(HTTPException) as exc:
+        service_table(document)
+    assert exc.value.status_code == 400
+
+
+def test_dotted_key_form_survives(tmp_path: Path):
+    """Dotted key form (testbench-ai-service.port = ...) already works; keep it working."""
+    path = tmp_path / "config.toml"
+    path.write_text(
+        "testbench-ai-service.port = 8010\ntestbench-ai-service.debug = true\n",
+        encoding="utf-8",
+    )
+
+    document = load_document(path)
+    table = service_table(document)
+
+    assert table["port"] == 8010
+    assert table["debug"] is True
+
+    rendered = render_document(document)
+    assert "testbench-ai-service.port = 8010" in rendered or (
+        "[testbench-ai-service]" in rendered and "port = 8010" in rendered
+    )
+    assert "testbench-ai-service.debug = true" in rendered or (
+        "[testbench-ai-service]" in rendered and "debug = true" in rendered
+    )
