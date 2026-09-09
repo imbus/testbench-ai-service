@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import type { ConfigIssue } from '../api/types'
 import { useConfig } from '../api/queries'
+import { Field } from '../components/Field'
 import { ReadOnlyField } from '../components/ReadOnlyField'
 import { useTranslations, type Lang } from '../i18n'
 import { LLM_FIELDS, LOGGING_FIELDS, SERVICE_TABS, valueAt, type FieldSpec } from './fields'
@@ -18,7 +20,18 @@ const TOML_SECTION: Record<Section, string> = {
   logging: '[testbench-ai-service.logging.console] · [.file]',
 }
 
-export function ConfigSection({ section, lang }: { section: Section; lang: Lang }) {
+export function ConfigSection({
+  section,
+  lang,
+  isAdmin,
+  issues = [],
+}: {
+  section: Section
+  lang: Lang
+  isAdmin: boolean
+  /** Field-addressed validation failures from the last preview or apply. */
+  issues?: ConfigIssue[]
+}) {
   const t = useTranslations(lang)
   const config = useConfig()
   const [tab, setTab] = useState(SERVICE_TABS[0].key)
@@ -99,9 +112,31 @@ export function ConfigSection({ section, lang }: { section: Section; lang: Lang 
       )}
 
       <div>
-        {fields.map((spec) => (
-          <ReadOnlyField key={spec.key} spec={spec} value={valueAt(running, spec.key)} />
-        ))}
+        {fields.map((spec) => {
+          // Match an issue that is either addressed directly to this field or
+          // to a child path within it (e.g. trusted_proxies.0 matches trusted_proxies).
+          // Must not be bare startsWith — that would make port match port_extra.
+          const issue = issues.find(
+            (entry) => entry.path === spec.key || entry.path.startsWith(spec.key + '.'),
+          )?.message
+          // Non-admins keep the phase-1 read-only rendering unchanged rather
+          // than getting a form full of disabled inputs.
+          return isAdmin ? (
+            <Field
+              key={spec.key}
+              spec={spec}
+              // The draft is "what will be written", so it is measured against
+              // the file, not against the fully-defaulted running config --
+              // otherwise every default the file omits counts as a pending
+              // change whose diff would come back empty.
+              saved={valueAt(config.data.disk, spec.key) ?? valueAt(running, spec.key)}
+              issue={issue}
+              lang={lang}
+            />
+          ) : (
+            <ReadOnlyField key={spec.key} spec={spec} value={valueAt(running, spec.key)} />
+          )
+        })}
       </div>
     </div>
   )

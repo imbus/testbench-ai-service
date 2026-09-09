@@ -89,6 +89,16 @@ export const LLM_FIELDS: FieldSpec[] = [
   { key: 'llm_config.azure_endpoint', type: 'text', hint: 'Required for Azure' },
   { key: 'llm_config.api_version', type: 'text', hint: 'Required for Azure' },
   { key: 'llm_config.class_path', type: 'text', hint: 'Custom LLMClient subclass' },
+  {
+    key: 'llm_config.timeout',
+    type: 'number',
+    hint: "Seconds to wait for an LLM response. Empty uses the provider SDK's default.",
+  },
+  {
+    key: 'llm_config.max_retries',
+    type: 'number',
+    hint: "Retries after a failed LLM request. Empty uses the provider SDK's default.",
+  },
 ]
 
 export const LOGGING_FIELDS: FieldSpec[] = [

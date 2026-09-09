@@ -53,3 +53,10 @@ test('logging covers both sinks', () => {
   expect(keys).toContain('logging.console.log_level')
   expect(keys).toContain('logging.file.file_name')
 })
+
+test('offers the declared LLM timeout and retry options', () => {
+  const keys = LLM_FIELDS.map((spec) => spec.key)
+
+  expect(keys).toContain('llm_config.timeout')
+  expect(keys).toContain('llm_config.max_retries')
+})

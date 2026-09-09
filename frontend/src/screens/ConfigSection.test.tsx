@@ -1,6 +1,8 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ConfigIssue } from '../api/types'
+import { DraftProvider } from '../state/draft'
 import { ConfigSection } from './ConfigSection'
 
 // Correction 1: the brief's fixture included `in_sync: true`. The backend
@@ -35,16 +37,43 @@ const CONFIG = {
   config_path: 'C:\\svc\\config.toml',
 }
 
-function renderSection(section: 'service' | 'llm' | 'logging') {
+function renderSection({
+  section = 'service',
+  isAdmin = false,
+  disk = CONFIG.disk,
+  running = CONFIG.running,
+  issues = [],
+}: {
+  section?: 'service' | 'llm' | 'logging'
+  isAdmin?: boolean
+  disk?: Record<string, unknown>
+  running?: Record<string, unknown>
+  issues?: ConfigIssue[]
+} = {}) {
+  // If specific disk/running values are provided, update the fetch mock
+  if (
+    disk !== CONFIG.disk ||
+    running !== CONFIG.running
+  ) {
+    const fetchMock = vi.mocked(fetch)
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ running, disk, config_path: '/tmp/config.toml' }),
+    } as Response)
+  }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <ConfigSection section={section} lang="de" />
+      <DraftProvider saved={disk}>
+        <ConfigSection section={section} lang="de" isAdmin={isAdmin} issues={issues} />
+      </DraftProvider>
     </QueryClientProvider>,
   )
 }
 
 beforeEach(() => {
+  window.localStorage.clear()
   vi.stubGlobal(
     'fetch',
     vi.fn(() =>
@@ -61,7 +90,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 test('shows service values from the running config', async () => {
-  renderSection('service')
+  renderSection({ section: 'service' })
   await waitFor(() =>
     expect(screen.getByText('https://tb.example.com:9443/api/')).toBeInTheDocument(),
   )
@@ -69,7 +98,7 @@ test('shows service values from the running config', async () => {
 })
 
 test('every value is read-only in phase 1', async () => {
-  renderSection('service')
+  renderSection({ section: 'service' })
   // Positive assertion first: real values are actually on screen, so the
   // negative checks below cannot pass against a component that rendered
   // nothing at all.
@@ -80,7 +109,7 @@ test('every value is read-only in phase 1', async () => {
 })
 
 test('switching tabs shows the TestBench connection fields', async () => {
-  renderSection('service')
+  renderSection({ section: 'service' })
   await waitFor(() => expect(screen.getByText('127.0.0.1')).toBeInTheDocument())
   await userEvent.click(screen.getByRole('tab', { name: 'TestBench-Verbindung' }))
   // Assert content from the new tab actually appears, not merely that the
@@ -89,30 +118,30 @@ test('switching tabs shows the TestBench connection fields', async () => {
 })
 
 test('booleans render as true/false rather than an empty control', async () => {
-  renderSection('service')
+  renderSection({ section: 'service' })
   await waitFor(() => expect(screen.getByText('false')).toBeInTheDocument())
 })
 
 test('an unset value renders as a dash, not "null"', async () => {
-  renderSection('service')
+  renderSection({ section: 'service' })
   await waitFor(() => expect(screen.getByText('127.0.0.1')).toBeInTheDocument())
   expect(screen.queryByText('null')).toBeNull()
   expect(screen.getAllByText('—').length).toBeGreaterThan(0)
 })
 
 test('the llm section shows the provider', async () => {
-  renderSection('llm')
+  renderSection({ section: 'llm' })
   await waitFor(() => expect(screen.getByText('openai')).toBeInTheDocument())
 })
 
 test('the logging section shows both sinks', async () => {
-  renderSection('logging')
+  renderSection({ section: 'logging' })
   await waitFor(() => expect(screen.getByText('svc.log')).toBeInTheDocument())
   expect(screen.getByText('INFO')).toBeInTheDocument()
 })
 
 test('the config path is shown so the operator knows which file this is', async () => {
-  renderSection('service')
+  renderSection({ section: 'service' })
   await waitFor(() =>
     expect(screen.getByText(/config\.toml/)).toBeInTheDocument(),
   )
@@ -134,7 +163,7 @@ test('shows a translated error when the config request fails', async () => {
       ),
     ),
   )
-  renderSection('service')
+  renderSection({ section: 'service' })
   await waitFor(() =>
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Konfiguration konnte nicht geladen werden',
@@ -142,4 +171,80 @@ test('shows a translated error when the config request fails', async () => {
   )
   // The raw backend detail may still appear as secondary diagnostic text.
   expect(screen.getByRole('alert')).toHaveTextContent('boom')
+})
+
+test('renders editable fields for an admin', async () => {
+  renderSection({ section: 'service', isAdmin: true })
+
+  expect(await screen.findByLabelText('host')).toBeEnabled()
+})
+
+test('renders read-only fields for a non-admin', async () => {
+  renderSection({ section: 'service', isAdmin: false })
+
+  await screen.findByText('tb_server_url')
+  expect(screen.queryByLabelText('host')).not.toBeInTheDocument()
+})
+
+test('measures edits against the disk config, not the running one', async () => {
+  // The disk file omits 'debug'; the running config defaults it to false.
+  // Showing 'false' is right; counting it as a pending change is not.
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    disk: { host: '127.0.0.1' },
+    running: { host: '127.0.0.1', debug: false, port: 8010 },
+  })
+
+  const debug = await screen.findByRole('switch', { name: 'debug' })
+  expect(debug).toHaveAttribute('aria-checked', 'false')
+  expect(screen.queryByRole('button', { name: /revert/i })).not.toBeInTheDocument()
+})
+
+test('shows a field-addressed validation issue on the right field', async () => {
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    issues: [{ path: 'port', message: 'Input should be a valid integer', toml_section: '[x]' }],
+  })
+
+  expect(await screen.findByLabelText('port')).toHaveAttribute('aria-invalid', 'true')
+})
+
+test('does not show an issue addressed to a different tab', async () => {
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    issues: [
+      { path: 'llm_config.model', message: 'nope', toml_section: '[x]' },
+    ],
+  })
+
+  await screen.findByLabelText('host')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
+test('shows an issue addressed to an array element on the array field', async () => {
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    issues: [
+      { path: 'prompts_dir.0', message: 'Invalid path', toml_section: '[x]' },
+    ],
+  })
+
+  expect(await screen.findByLabelText('prompts_dir')).toHaveAttribute('aria-invalid', 'true')
+})
+
+test('does not match issues on fields with similar names (dot boundary)', async () => {
+  renderSection({
+    section: 'service',
+    isAdmin: true,
+    issues: [
+      { path: 'port_extra', message: 'nope', toml_section: '[x]' },
+    ],
+  })
+
+  await screen.findByLabelText('port')
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
 })

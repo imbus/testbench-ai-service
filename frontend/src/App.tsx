@@ -66,9 +66,18 @@ export function App() {
             <Route path="/admin" element={<Navigate to="/admin/status" replace />} />
             <Route path="/" element={<Navigate to="/admin/status" replace />} />
             <Route path="/admin/status" element={<Status lang={lang} />} />
-            <Route path="/admin/service" element={<ConfigSection section="service" lang={lang} />} />
-            <Route path="/admin/llm" element={<ConfigSection section="llm" lang={lang} />} />
-            <Route path="/admin/logging" element={<ConfigSection section="logging" lang={lang} />} />
+            <Route
+              path="/admin/service"
+              element={<ConfigSection section="service" lang={lang} isAdmin={session.is_admin} />}
+            />
+            <Route
+              path="/admin/llm"
+              element={<ConfigSection section="llm" lang={lang} isAdmin={session.is_admin} />}
+            />
+            <Route
+              path="/admin/logging"
+              element={<ConfigSection section="logging" lang={lang} isAdmin={session.is_admin} />}
+            />
             <Route path="*" element={<Navigate to="/admin/status" replace />} />
           </Routes>
         </main>
