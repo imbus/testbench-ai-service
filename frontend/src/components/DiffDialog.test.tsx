@@ -263,4 +263,78 @@ describe('DiffDialog', () => {
     expect(screen.getByText(/\/tmp\/config\.toml\.bak/)).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
   })
+
+  it('renders the valid issue and does not crash when a structured 422 issues array contains a null entry', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(PREVIEW_OK)).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          detail: {
+            message: 'The configuration is not valid and was not written.',
+            issues: [
+              null,
+              { path: 'port', message: 'Input should be a valid integer', toml_section: '[x]' },
+            ],
+          },
+        },
+        422,
+      ),
+    )
+    renderDialog()
+
+    await screen.findByText(/-port = 8010/)
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The configuration is not valid and was not written.',
+    )
+    const portIssue = screen.getByText(/Input should be a valid integer/)
+    expect(portIssue.closest('li')).toHaveTextContent('port')
+  })
+
+  it('skips a structured 422 issue entry with no message rather than rendering an empty row', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(PREVIEW_OK)).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          detail: {
+            message: 'The configuration is not valid and was not written.',
+            issues: [
+              { path: 'port', toml_section: '[x]' },
+              { path: 'host', message: 'Input should be a valid string', toml_section: '[x]' },
+            ],
+          },
+        },
+        422,
+      ),
+    )
+    renderDialog()
+
+    await screen.findByText(/-port = 8010/)
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByText(/Input should be a valid string/)).toBeInTheDocument()
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+  })
+
+  it('falls back to just the summary message when every structured 422 issue entry is malformed', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(PREVIEW_OK)).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          detail: {
+            message: 'The configuration is not valid and was not written.',
+            issues: [null, { toml_section: '[x]' }, { path: 'port' }],
+          },
+        },
+        422,
+      ),
+    )
+    renderDialog()
+
+    await screen.findByText(/-port = 8010/)
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The configuration is not valid and was not written.',
+    )
+    expect(screen.queryByRole('list')).not.toBeInTheDocument()
+  })
 })

@@ -1,23 +1,49 @@
 import { useEffect } from 'react'
 import type { ApiError } from '../api/client'
 import { useApply, usePreview } from '../api/mutations'
-import type { ConfigIssue } from '../api/types'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
 
-/** A structured `{message, issues}` apply-rejection detail, as opposed to a bare string. */
-function issuesOf(detail: unknown): ConfigIssue[] | null {
-  if (
-    detail !== null &&
-    typeof detail === 'object' &&
-    Array.isArray((detail as { issues?: unknown }).issues)
-  ) {
-    return (detail as { issues: ConfigIssue[] }).issues
-  }
-  return null
+/** What IssueList needs — a preview's `ConfigIssue` and a validated apply-rejection entry both satisfy this. */
+interface RenderableIssue {
+  path?: string
+  toml_section?: string
+  message: string
 }
 
-function IssueList({ issues }: { issues: ConfigIssue[] }) {
+/**
+ * True for an entry that can be labeled and shown: a non-null object with a
+ * string `message` and at least one of a string `path` or `toml_section`
+ * (the renderer falls back from `path` to `toml_section`, so either is
+ * enough).
+ */
+function isRenderableIssue(entry: unknown): entry is RenderableIssue {
+  if (entry === null || typeof entry !== 'object') return false
+  const candidate = entry as Record<string, unknown>
+  if (typeof candidate.message !== 'string') return false
+  return typeof candidate.path === 'string' || typeof candidate.toml_section === 'string'
+}
+
+/**
+ * A structured `{message, issues}` apply-rejection detail, as opposed to a
+ * bare string.
+ *
+ * Validated entry by entry, not just at the container: a `null` entry, or
+ * one missing both `path` and `toml_section`, would otherwise throw at
+ * `key={...issue.path...}` or render an unlabeled row. Malformed entries are
+ * dropped rather than rendered; if none survive, this returns `null` — the
+ * same as "no issues" at all — so the dialog falls back to just the summary
+ * message instead of an empty list.
+ */
+function issuesOf(detail: unknown): RenderableIssue[] | null {
+  if (detail === null || typeof detail !== 'object') return null
+  const raw = (detail as { issues?: unknown }).issues
+  if (!Array.isArray(raw)) return null
+  const wellFormed = raw.filter(isRenderableIssue)
+  return wellFormed.length > 0 ? wellFormed : null
+}
+
+function IssueList({ issues }: { issues: RenderableIssue[] }) {
   return (
     <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13 }}>
       {issues.map((issue) => (
