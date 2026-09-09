@@ -11,8 +11,9 @@ Usage:
     python build_binary.py [options]
 
 Options:
-    --spec PATH     Path to the .spec file  [default: testbench-ai-service.spec]
-    --no-clean      Keep previous artefacts (faster incremental rebuild)
+    --spec PATH      Path to the .spec file  [default: testbench-ai-service.spec]
+    --skip-frontend  Do not rebuild the web console before packaging
+    --no-clean       Keep previous artefacts (faster incremental rebuild)
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ INIT_FILE = REPO_ROOT / "testbench_ai_service" / "__init__.py"
 DEFAULT_SPEC = REPO_ROOT / "testbench-ai-service.spec"
 DIST_DIR = REPO_ROOT / "dist"
 BUILD_DIR = REPO_ROOT / "build"
+FRONTEND_DIR = REPO_ROOT / "frontend"
 
 MIN_PYTHON = (3, 10)
 
@@ -115,6 +117,34 @@ def _clean_artefacts() -> None:
             shutil.rmtree(directory)
 
 
+def build_frontend(frontend_dir: Path = FRONTEND_DIR, *, skip: bool = False) -> None:
+    """Build the web console into ``testbench_ai_service/static/admin``.
+
+    PyInstaller sweeps that directory up via ``collect_data_files``, so the binary
+    must never be built with stale or missing console assets -- a silent skip would
+    ship a binary whose /admin serves a placeholder.
+    """
+    if skip:
+        print("Skipping frontend build (--skip-frontend)")
+        return
+
+    if not (frontend_dir / "package.json").is_file():
+        sys.exit(f"ERROR: No package.json in {frontend_dir}; cannot build the web console.")
+
+    npm = shutil.which("npm") or "npm"
+    for command in (["ci"], ["run", "build"]):
+        print(f"\n>>> npm {' '.join(command)} (in {frontend_dir})\n")
+        try:
+            subprocess.run([npm, *command], cwd=frontend_dir, check=True)
+        except FileNotFoundError:
+            sys.exit(
+                "ERROR: Node.js and npm are required to build the web console. "
+                "Install Node 20+, or pass --skip-frontend to build without it."
+            )
+        except subprocess.CalledProcessError as e:
+            sys.exit(f"ERROR: Frontend build failed (npm {' '.join(command)}): {e}")
+
+
 def _build(spec: Path) -> None:
     _run(
         [
@@ -158,6 +188,12 @@ def _parse_args() -> argparse.Namespace:
         help=f"Path to the .spec file  [default: {DEFAULT_SPEC.name}]",
     )
     parser.add_argument(
+        "--skip-frontend",
+        action="store_true",
+        help="Do not rebuild the web console; use whatever is already in "
+        "testbench_ai_service/static/admin.",
+    )
+    parser.add_argument(
         "--no-clean",
         dest="clean",
         action="store_false",
@@ -185,6 +221,8 @@ def main() -> None:
 
     if args.clean:
         _clean_artefacts()
+
+    build_frontend(skip=args.skip_frontend)
 
     _build(spec)
 
