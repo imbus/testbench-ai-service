@@ -56,6 +56,43 @@ If you want to contribute code, it's important to ensure that everything works c
 pytest tests/unit
 ```
 
+## Web Console Frontend
+
+The browser console served at `/admin` is a React + TypeScript app under
+`frontend/`. It builds into `testbench_ai_service/static/admin/`, which is
+git-ignored, so a fresh checkout has no console until you build it. Node 20+ is
+required.
+
+**Install the dependencies:**
+```bash
+cd frontend
+npm install
+```
+
+**Run the dev server:**
+```bash
+npm run dev
+```
+
+It serves the console with hot reload and proxies `/admin/api` to a service
+running on `http://127.0.0.1:8010`, so start the service separately with
+`testbench-ai-service start`.
+
+**Run the frontend tests (Vitest):**
+```bash
+npm test
+```
+
+**Build the console into the package:**
+```bash
+npm run build
+```
+
+Run the build before starting the service if you want to exercise the console
+at `/admin` rather than through the dev server. `python build_binary.py` runs
+`npm ci && npm run build` for you; pass `--skip-frontend` to package whatever is
+already built.
+
 ## Code Style & Linting
 
 This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, and [mypy](https://mypy-lang.org/) for static type checking.

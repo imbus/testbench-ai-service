@@ -63,6 +63,11 @@ file_name = "testbench-ai-service.log"
 log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 
+# Browser console at /admin
+[testbench-ai-service.admin_ui]
+enabled = true
+# require_loopback = false      # refuse console clients that are not on this host
+
 # agent: Test Case Set Reviewer
 [testbench-ai-service.agents.test_case_set_reviewer]
 enabled = true
@@ -478,3 +483,26 @@ file_name = "testbench-ai-service.log"
 log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 ```
+
+---
+
+## Web console
+
+**`[testbench-ai-service.admin_ui]`**
+
+| Option             | Type    | Description                                                                                  | Default |
+| ------------------ | ------- | -------------------------------------------------------------------------------------------- | ------- |
+| `enabled`          | Boolean | Serve the browser console at `/admin`. When `false`, `/admin` and the console API return `404`. | `true`  |
+| `require_loopback` | Boolean | Refuse console requests from any client that is not on this machine.                          | `false` |
+
+**Example:**
+
+```toml
+# config.toml
+[testbench-ai-service.admin_ui]
+enabled = true
+require_loopback = false
+```
+
+See [Web Console](web-console.md) for signing in, the roles it checks, and the
+security implications of a non-loopback `host`.

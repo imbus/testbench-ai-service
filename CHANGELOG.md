@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- A read-only web console at `/admin`, served by the service itself and bundled in the release
+  binary. Sign in with TestBench credentials against the server configured as `tb_server_url`;
+  the console then shows service status, a tail of the log file, and the effective Service, LLM
+  and Logging configuration. Nothing can be edited from the browser yet — configuration editing
+  is planned for a later release.
+- `[testbench-ai-service.admin_ui]` with `enabled` (default `true`) and `require_loopback`
+  (default `false`). Set `enabled = false` to switch the console off entirely: `/admin` and the
+  console API then return `404` and the agent endpoints are unaffected. Documented in
+  `docs/web-console.md`.
+
 ## [1.2.1][1.2.1] - 2026-08-25
 
 ### Added
