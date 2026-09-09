@@ -14,6 +14,11 @@ TB_URL = "https://localhost:9443/api/"
 def no_url_probe():
     with (
         patch("testbench_ai_service.config.validate_tb_server_url"),
+        # restart_required compares field values and never touches template
+        # variables, so the agent-data compatibility check is irrelevant here;
+        # it is disabled only so the fixtures can pair an arbitrary class_path
+        # with a fixed prompt file in order to test that a class_path change
+        # is detected.
         patch("testbench_ai_service.config.validate_agent_variable", return_value=True),
     ):
         yield
@@ -136,3 +141,26 @@ def test_changing_an_agent_prompt_file_does_not_need_a_restart():
     new = make_config(agents={"reviewer": changed})
 
     assert restart_required(old, new) == []
+
+
+def test_admin_ui_enabled_change_needs_a_restart():
+    """init_webui() is called once from create_app(); toggling the console requires restart."""
+    old = make_config()
+    new = make_config(admin_ui={"enabled": False})
+
+    assert restart_required(old, new) == ["admin_ui.enabled"]
+
+
+def test_admin_ui_require_loopback_change_does_not_need_a_restart():
+    """require_loopback is read per request through get_app_config and is hot-swappable."""
+    old = make_config()
+    new = make_config(admin_ui={"require_loopback": True})
+
+    assert restart_required(old, new) == []
+
+
+def test_port_and_admin_ui_enabled_changes_are_sorted():
+    """Multiple restart-required changes are returned sorted."""
+    new = make_config(port=9999, admin_ui={"enabled": False})
+
+    assert restart_required(make_config(), new) == ["admin_ui.enabled", "port"]
