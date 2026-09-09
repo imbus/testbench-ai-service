@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import { DRAFT_STORAGE_KEY } from './draft'
 import { SessionProvider, useSession } from './session'
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -21,6 +22,7 @@ const session = {
 
 beforeEach(() => {
   vi.restoreAllMocks()
+  window.localStorage.clear()
 })
 
 test('recovers the session on mount', async () => {
@@ -114,4 +116,31 @@ test('signing out clears local state even if the request fails', async () => {
   })
 
   expect(result.current.session).toBeNull()
+})
+
+test('signing out clears the stored draft so another operator does not see queued edits', async () => {
+  // Operator A queues edits.
+  window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: 9999 }))
+
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      // Mount recovery: session exists.
+      .mockResolvedValueOnce(jsonResponse(session))
+      // Sign-out: revoke the session.
+      .mockResolvedValueOnce(jsonResponse({})),
+  )
+  const { result } = renderHook(() => useSession(), { wrapper })
+  await waitFor(() => expect(result.current.session).toEqual(session))
+
+  // Verify the draft is stored.
+  expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull()
+
+  await act(async () => {
+    await result.current.signOut()
+  })
+
+  // Operator A has signed out; the draft must be gone so Operator B cannot see it.
+  expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull()
 })

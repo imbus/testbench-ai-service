@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { ApiError, apiFetch } from '../api/client'
 import type { SessionInfo } from '../api/types'
+import { clearStoredDraft } from './draft'
 
 interface SessionState {
   session: SessionInfo | null
@@ -50,6 +51,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       await apiFetch('/session', { method: 'DELETE' })
     } finally {
       setSession(null)
+      clearStoredDraft()
     }
   }, [])
 

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { DRAFT_STORAGE_KEY, DraftProvider, useDraft } from './draft'
+import { DRAFT_STORAGE_KEY, DraftProvider, clearStoredDraft, useDraft } from './draft'
 
 function Probe() {
   const draft = useDraft()
@@ -158,5 +158,100 @@ describe('useDraft', () => {
     )
 
     expect(screen.getByTestId('count')).toHaveTextContent('0')
+  })
+
+  it('does not prune or clear storage while saved is undefined (regression guard for fix 1: queued removals must survive loading)', () => {
+    // Operator queued a removal: {"port": null} stored in localStorage.
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: null }))
+
+    // Mount with saved={undefined} (config loading phase).
+    render(
+      <DraftProvider saved={undefined}>
+        <Probe />
+      </DraftProvider>,
+    )
+
+    // The removal edit must NOT be pruned away.
+    expect(screen.getByTestId('count')).toHaveTextContent('1')
+    expect(screen.getByTestId('edits')).toHaveTextContent('{"port":null}')
+
+    // Storage must NOT be cleared during loading.
+    expect(JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY) ?? '{}')).toEqual({
+      port: null,
+    })
+  })
+
+  it('preserves stored edits and does not modify storage while saved is undefined', () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: 9999 }))
+    const storageBefore = window.localStorage.getItem(DRAFT_STORAGE_KEY)
+
+    render(
+      <DraftProvider saved={undefined}>
+        <Probe />
+      </DraftProvider>,
+    )
+
+    expect(screen.getByTestId('count')).toHaveTextContent('1')
+    expect(screen.getByTestId('edits')).toHaveTextContent('{"port":9999}')
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBe(storageBefore)
+  })
+
+  it('keeps a removal edit through mount with undefined then remount with defined (second-mount regression case)', () => {
+    // Operator queued a removal.
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: null }))
+
+    // Mount with undefined (config still loading).
+    const { unmount } = render(
+      <DraftProvider saved={undefined}>
+        <Probe />
+      </DraftProvider>,
+    )
+    expect(screen.getByTestId('edits')).toHaveTextContent('{"port":null}')
+
+    // Unmount (operator reloads before config arrived).
+    unmount()
+
+    // Storage must still hold the removal.
+    expect(JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY) ?? '{}')).toEqual({
+      port: null,
+    })
+
+    // Remount with loaded config.
+    render(
+      <DraftProvider saved={{ port: 8010 }}>
+        <Probe />
+      </DraftProvider>,
+    )
+
+    // The removal is now correctly pruned (port is present in saved).
+    expect(screen.getByTestId('count')).toHaveTextContent('1')
+    expect(screen.getByTestId('edits')).toHaveTextContent('{"port":null}')
+  })
+
+  it('still prunes removals when saved is an empty object (not undefined)', () => {
+    // Operator queued a removal, but the config file is genuinely empty.
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: null }))
+
+    // Mount with deliberately empty config (not undefined).
+    render(
+      <DraftProvider saved={{}}>
+        <Probe />
+      </DraftProvider>,
+    )
+
+    // The removal should be pruned because port is not in the saved config.
+    expect(screen.getByTestId('count')).toHaveTextContent('0')
+  })
+
+  it('clearStoredDraft removes the storage key and does not throw', () => {
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: 9999 }))
+
+    expect(() => clearStoredDraft()).not.toThrow()
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull()
+  })
+
+  it('clearStoredDraft does not throw when the key is absent', () => {
+    expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull()
+    expect(() => clearStoredDraft()).not.toThrow()
   })
 })

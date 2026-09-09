@@ -62,8 +62,14 @@ function sameValue(left: unknown, right: unknown): boolean {
  * Runs on every change and whenever `saved` arrives, which is what keeps a
  * concurrent save by another operator from leaving a phantom "1 unapplied
  * change" the diff would show as empty.
+ *
+ * While `saved` is undefined (config not yet loaded), do not prune: an
+ * undefined saved state means "we have not read the file yet", whereas an
+ * empty object means "the file has no such key". Pruning against undefined
+ * throws away the operator's queued removals (null values).
  */
-function prune(edits: Edits, saved: Record<string, unknown>): Edits {
+function prune(edits: Edits, saved: Record<string, unknown> | undefined): Edits {
+  if (saved === undefined) return edits
   const pruned: Edits = {}
   for (const [path, value] of Object.entries(edits)) {
     const savedValue = valueAt(saved, path)
@@ -81,8 +87,13 @@ export function DraftProvider({
   saved,
   children,
 }: {
-  /** The configuration as saved on disk — what edits are measured against. */
-  saved: Record<string, unknown>
+  /** The configuration as saved on disk — what edits are measured against.
+   *
+   * If undefined, the config has not been loaded yet. In this state, edits are
+   * not pruned and storage is not modified, preserving queued removals through
+   * the loading phase.
+   */
+  saved: Record<string, unknown> | undefined
   children: ReactNode
 }) {
   const [edits, setEdits] = useState<Edits>(readStored)
@@ -92,6 +103,10 @@ export function DraftProvider({
   const effective = useMemo(() => prune(edits, saved), [edits, saved])
 
   useEffect(() => {
+    // Only persist if we have a loaded config to measure against. While `saved`
+    // is undefined, storage is left alone to avoid destroying queued removals.
+    if (saved === undefined) return
+
     try {
       if (Object.keys(effective).length === 0) {
         window.localStorage.removeItem(DRAFT_STORAGE_KEY)
@@ -101,7 +116,7 @@ export function DraftProvider({
     } catch {
       // Private-browsing quota errors are not worth a broken console.
     }
-  }, [effective])
+  }, [effective, saved])
 
   const setValue = useCallback((path: string, value: unknown) => {
     setEdits((current) => ({ ...current, [path]: value }))
@@ -142,4 +157,20 @@ export function useDraft(): DraftApi {
   const api = useContext(DraftContext)
   if (api === null) throw new Error('useDraft must be used inside a DraftProvider')
   return api
+}
+
+/**
+ * Clear the stored draft from localStorage. Wrapped in try/catch like all
+ * storage access so errors cannot crash the console.
+ *
+ * Called by session.tsx's signOut to prevent the draft from persisting across
+ * logout, which would expose one operator's queued edits to another on a
+ * shared machine.
+ */
+export function clearStoredDraft(): void {
+  try {
+    window.localStorage.removeItem(DRAFT_STORAGE_KEY)
+  } catch {
+    // Errors accessing storage should not break logout.
+  }
 }
