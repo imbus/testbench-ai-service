@@ -5,12 +5,30 @@ import pytest
 from fastapi.testclient import TestClient
 
 from testbench_ai_service.webui.config_io import REDACTED_SENTINEL
+from testbench_ai_service.webui.routes import _plan_change
 
 COMMENTED = """\
 [testbench-ai-service]
 # Which TestBench we talk to.
 tb_server_url = "https://localhost:9443/api/"
 port = 8010
+"""
+
+# A real-looking provider credential, an adjacent non-secret key right next to
+# it (so a diff's context lines would include the secret if it were not
+# redacted), a legitimate enum value that merely contains the substring
+# "api_key", and a certificate path that merely contains the bare substring
+# "key" -- the last two must NOT be redacted.
+CREDENTIALED = """\
+[testbench-ai-service]
+port = 8010
+
+[testbench-ai-service.llm_config]
+# Provider credential -- must never leave this file.
+api_key = "sk-REAL-SECRET-VALUE"
+model = "gpt-4"
+auth_method = "api_key"
+ssl_key = "/etc/certs/key.pem"
 """
 
 
@@ -41,6 +59,39 @@ def admin(file_client, tb_connection):
             tb_connection.read_user_roles.return_value = roles
         with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
             return file_client.post(
+                "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
+            )
+
+    return _login
+
+
+@pytest.fixture
+def credentialed_config_file(tmp_path: Path) -> Path:
+    path = tmp_path / "config.toml"
+    path.write_text(CREDENTIALED, encoding="utf-8")
+    return path
+
+
+@pytest.fixture
+def credentialed_app(make_app, credentialed_config_file: Path):
+    app = make_app()
+    app.state.config_path = credentialed_config_file
+    return app
+
+
+@pytest.fixture
+def credentialed_client(credentialed_app):
+    with TestClient(credentialed_app, raise_server_exceptions=False) as c:
+        yield c
+
+
+@pytest.fixture
+def credentialed_admin(credentialed_client, tb_connection):
+    def _login(roles=None):
+        if roles is not None:
+            tb_connection.read_user_roles.return_value = roles
+        with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+            return credentialed_client.post(
                 "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
             )
 
@@ -203,3 +254,93 @@ def test_preview_reports_in_flight_tasks(file_client, admin, app_with_file):
         app_with_file.state.task_registry._labels.clear()
 
     assert body["in_flight_tasks"] == 1
+
+
+def test_preview_redacts_a_credential_from_the_toml_even_with_no_edits(
+    credentialed_client, credentialed_admin
+):
+    credentialed_admin()
+
+    body = credentialed_client.post(
+        "/admin/api/config/preview",
+        json={"edits": {}},
+        headers=csrf(credentialed_client),
+    ).json()
+
+    assert "sk-REAL-SECRET-VALUE" not in body["toml"]
+    assert REDACTED_SENTINEL in body["toml"]
+
+
+def test_preview_of_an_adjacent_edit_does_not_leak_the_secret_into_the_diff(
+    credentialed_client, credentialed_admin
+):
+    credentialed_admin()
+
+    body = credentialed_client.post(
+        "/admin/api/config/preview",
+        json={"edits": {"llm_config.model": "gpt-4o"}},
+        headers=csrf(credentialed_client),
+    ).json()
+
+    assert "sk-REAL-SECRET-VALUE" not in body["diffs"][0]["diff"]
+    assert REDACTED_SENTINEL in body["diffs"][0]["diff"]
+
+
+def test_plan_change_still_writes_the_real_secret(credentialed_config_file, make_app):
+    """The tuple's second element is what ``apply`` (Task 12) writes to disk.
+
+    It must stay the RAW rendered text, never the redacted display text --
+    otherwise applying an unrelated edit would overwrite the operator's real
+    credential with the literal sentinel string. This is the guard against
+    "fixing" the leak by redacting the write path instead of only the
+    response.
+    """
+    app = make_app()
+    running = app.state.config
+
+    _preview, text_to_write = _plan_change(
+        {"llm_config.model": "gpt-4o"}, credentialed_config_file, running
+    )
+
+    assert "sk-REAL-SECRET-VALUE" in text_to_write
+    assert REDACTED_SENTINEL not in text_to_write
+
+
+def test_preview_does_not_redact_a_legitimate_enum_value_containing_api_key(
+    credentialed_client, credentialed_admin
+):
+    credentialed_admin()
+
+    body = credentialed_client.post(
+        "/admin/api/config/preview",
+        json={"edits": {}},
+        headers=csrf(credentialed_client),
+    ).json()
+
+    assert 'auth_method = "api_key"' in body["toml"]
+
+
+def test_preview_does_not_redact_a_certificate_path_with_bare_key_substring(
+    credentialed_client, credentialed_admin
+):
+    credentialed_admin()
+
+    body = credentialed_client.post(
+        "/admin/api/config/preview",
+        json={"edits": {}},
+        headers=csrf(credentialed_client),
+    ).json()
+
+    assert 'ssl_key = "/etc/certs/key.pem"' in body["toml"]
+
+
+def test_preview_redaction_preserves_comments(credentialed_client, credentialed_admin):
+    credentialed_admin()
+
+    body = credentialed_client.post(
+        "/admin/api/config/preview",
+        json={"edits": {}},
+        headers=csrf(credentialed_client),
+    ).json()
+
+    assert "# Provider credential -- must never leave this file." in body["toml"]

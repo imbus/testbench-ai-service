@@ -8,7 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import tomlkit
 from fastapi import HTTPException, status
+from tomlkit.container import OutOfOrderTableProxy
+from tomlkit.items import InlineTable, Table
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
@@ -56,6 +59,38 @@ def redact_credentials(data: dict[str, Any]) -> dict[str, Any]:
         else:
             redacted[key] = value
     return redacted
+
+
+def _redact_toml_node(node: Table | InlineTable | OutOfOrderTableProxy | dict) -> None:
+    """Mutate *node* in place, replacing credential-named values with the sentinel.
+
+    Recurses into every dict-like child -- ``Table``, ``InlineTable`` and
+    ``OutOfOrderTableProxy`` are all named explicitly even though each is
+    itself a dict subclass, to match the same three cases ``document.py``
+    treats specially, rather than relying on that coincidence silently.
+    """
+    for key in list(node.keys()):
+        value = node[key]
+        if isinstance(value, (Table, InlineTable, OutOfOrderTableProxy, dict)):
+            _redact_toml_node(value)
+        elif _looks_like_credential_key(key):
+            node[key] = REDACTED_SENTINEL
+
+
+def redact_toml_text(text: str) -> str:
+    """Return *text* with credential-named values replaced by the sentinel.
+
+    The console renders config.toml for display, and the rendered text must
+    hide the same values ``redact_credentials`` hides in the JSON config --
+    otherwise the Raw screen leaks what GET /config redacts. Matching reuses
+    ``_looks_like_credential_key``, so both endpoints agree by construction.
+
+    Never pass the result to a writer: the sentinel would replace a real
+    credential in the operator's file.
+    """
+    document = tomlkit.parse(text)
+    _redact_toml_node(document)
+    return tomlkit.dumps(document)
 
 
 def read_config_file(path: Path) -> dict[str, Any]:

@@ -15,7 +15,11 @@ from testbench_ai_service.webui.auth import (
     require_csrf,
     set_session_cookies,
 )
-from testbench_ai_service.webui.config_io import build_config_response, read_config_file
+from testbench_ai_service.webui.config_io import (
+    build_config_response,
+    read_config_file,
+    redact_toml_text,
+)
 from testbench_ai_service.webui.diff import file_diff
 from testbench_ai_service.webui.document import apply_edits, load_document, render_document
 from testbench_ai_service.webui.edits import merge_edits, validate_edit_paths
@@ -78,14 +82,24 @@ def _plan_change(
                 diffs=[],
                 restart_required=[],
                 in_flight_tasks=0,
-                toml=current_text,
+                toml=redact_toml_text(current_text),
             ),
             current_text,
         )
 
     apply_edits(document, edits)
     proposed_text = render_document(document)
-    diff = file_diff(str(config_path.resolve()), current_text, proposed_text)
+    # toml/diffs are DISPLAY-ONLY and go through redact_toml_text -- the Raw
+    # screen and the apply dialog's diff must hide the same credential values
+    # GET /config already hides. The tuple's second element (proposed_text)
+    # stays RAW: it is what apply (Task 12) writes to disk, and writing the
+    # redacted text would replace the operator's real credential with the
+    # literal sentinel string, destroying it.
+    diff = file_diff(
+        str(config_path.resolve()),
+        redact_toml_text(current_text),
+        redact_toml_text(proposed_text),
+    )
 
     return (
         PreviewResponse(
@@ -94,7 +108,7 @@ def _plan_change(
             diffs=[diff] if diff is not None else [],
             restart_required=restart_required(running, candidate),
             in_flight_tasks=0,
-            toml=proposed_text,
+            toml=redact_toml_text(proposed_text),
         ),
         proposed_text,
     )
