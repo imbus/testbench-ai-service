@@ -115,3 +115,102 @@ def test_too_many_edits_are_refused():
         validate_edit_paths({f"key_{index}": index for index in range(MAX_EDITS + 1)})
 
     assert exc.value.status_code == 400
+
+
+# Fix 1: Reject when existing parent is not a dict (data destruction)
+def test_merge_refuses_to_destroy_a_scalar_value():
+    """A path like 'port.sub' conflicts with existing scalar 'port'."""
+    with pytest.raises(HTTPException) as exc:
+        merge_edits({"port": 8010}, {"port.sub": 1})
+
+    assert exc.value.status_code == 400
+    assert "conflicts" in exc.value.detail.lower()
+    assert "port" in exc.value.detail.lower()
+
+
+def test_absent_parent_still_builds_intermediate_tables():
+    """Regression: absent parent must still create intermediate dicts."""
+    assert merge_edits({}, {"logging.file.log_level": "DEBUG"}) == {
+        "logging": {"file": {"log_level": "DEBUG"}}
+    }
+
+
+def test_existing_dict_parent_is_still_reused():
+    """Regression: existing dict parent must not be replaced."""
+    assert merge_edits({"logging": {"file": {}}}, {"logging.file.log_level": "DEBUG"}) == {
+        "logging": {"file": {"log_level": "DEBUG"}}
+    }
+
+
+# Fix 2: Reject path prefix collisions (ambiguous merge order)
+def test_validate_refuses_path_and_its_prefix():
+    """Paths 'a' and 'a.b' conflict due to insertion order ambiguity."""
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({"a": "scalar", "a.b": 1})
+
+    assert exc.value.status_code == 400
+    assert "conflict" in exc.value.detail.lower()
+
+
+def test_validate_refuses_path_and_its_prefix_reverse_order():
+    """Same conflict regardless of insertion order."""
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({"a.b": 1, "a": "scalar"})
+
+    assert exc.value.status_code == 400
+
+
+def test_validate_refuses_deeper_prefix_collision():
+    """Three-level collision: logging, logging.file, logging.file.log_level."""
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({"logging.file": {}, "logging.file.log_level": "DEBUG"})
+
+    assert exc.value.status_code == 400
+
+
+def test_validate_accepts_leaf_only_overlay():
+    """Real UI sends only leaf paths; all leaves are accepted."""
+    validate_edit_paths(
+        {
+            "port": 1,
+            "llm_config.model": "x",
+            "logging.file.log_level": "DEBUG",
+        }
+    )
+
+
+# Fix 3: Reject sentinel in set and frozenset
+def test_the_redaction_sentinel_is_refused_inside_a_set():
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({"some_set": {"item1", REDACTED_SENTINEL}})
+
+    assert exc.value.status_code == 400
+
+
+def test_the_redaction_sentinel_is_refused_inside_a_frozenset():
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({"some_frozenset": frozenset(["item1", REDACTED_SENTINEL])})
+
+    assert exc.value.status_code == 400
+
+
+# Fix 4: Reject segments with leading/trailing whitespace
+def test_validate_refuses_segment_with_leading_whitespace():
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({" port": 1})
+
+    assert exc.value.status_code == 400
+
+
+def test_validate_refuses_segment_with_trailing_whitespace():
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({"port ": 1})
+
+    assert exc.value.status_code == 400
+
+
+def test_validate_refuses_segment_with_both_spaces():
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({" port ": 1})
+
+    assert exc.value.status_code == 400

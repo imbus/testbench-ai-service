@@ -42,9 +42,47 @@ def _contains_sentinel(value: Any) -> bool:
         return value == REDACTED_SENTINEL
     if isinstance(value, dict):
         return any(_contains_sentinel(item) for item in value.values())
-    if isinstance(value, (list, tuple)):
+    if isinstance(value, (list, tuple, set, frozenset)):
         return any(_contains_sentinel(item) for item in value)
     return False
+
+
+def _check_path_prefix_collisions(edits: ConfigEdits) -> None:
+    """Reject overlays with both a path and a proper prefix of that path."""
+    paths_set = set(edits)
+    for path in edits:
+        segments = path.split(".")
+        for i in range(1, len(segments)):
+            prefix = ".".join(segments[:i])
+            if prefix in paths_set:
+                _reject(
+                    f"Edit paths {path!r} and {prefix!r} conflict: "
+                    "send one value for the table, not separate entries"
+                )
+
+
+def _validate_single_path(path: str, value: Any) -> None:
+    """Validate a single path and its value."""
+    if not isinstance(path, str) or not path.strip():
+        _reject("An edit path must be a non-empty string")
+    if "\x00" in path:
+        _reject("An edit path may not contain a NUL byte")
+    segments = path.split(".")
+    if len(segments) > MAX_PATH_SEGMENTS:
+        _reject(f"Edit path {path!r} is nested deeper than {MAX_PATH_SEGMENTS} levels")
+    if any(not segment.strip() for segment in segments):
+        _reject(f"Edit path {path!r} has an empty segment")
+    if any(segment != segment.strip() for segment in segments):
+        _reject(f"Edit path {path!r} has a segment with leading or trailing whitespace")
+    if _contains_sentinel(value):
+        # The console shows credential-named values as REDACTED_SENTINEL.
+        # Writing that string back would replace a real secret with a
+        # placeholder, or plant the placeholder as a value. Neither is ever
+        # what the operator meant.
+        _reject(
+            f"Edit path {path!r} carries the redacted placeholder. "
+            "Credential values cannot be set from the console."
+        )
 
 
 def validate_edit_paths(edits: ConfigEdits) -> None:
@@ -57,25 +95,10 @@ def validate_edit_paths(edits: ConfigEdits) -> None:
     if len(edits) > MAX_EDITS:
         _reject(f"Too many edits in one request (limit {MAX_EDITS})")
 
+    _check_path_prefix_collisions(edits)
+
     for path, value in edits.items():
-        if not isinstance(path, str) or not path.strip():
-            _reject("An edit path must be a non-empty string")
-        if "\x00" in path:
-            _reject("An edit path may not contain a NUL byte")
-        segments = path.split(".")
-        if len(segments) > MAX_PATH_SEGMENTS:
-            _reject(f"Edit path {path!r} is nested deeper than {MAX_PATH_SEGMENTS} levels")
-        if any(not segment.strip() for segment in segments):
-            _reject(f"Edit path {path!r} has an empty segment")
-        if _contains_sentinel(value):
-            # The console shows credential-named values as REDACTED_SENTINEL.
-            # Writing that string back would replace a real secret with a
-            # placeholder, or plant the placeholder as a value. Neither is ever
-            # what the operator meant.
-            _reject(
-                f"Edit path {path!r} carries the redacted placeholder. "
-                "Credential values cannot be set from the console."
-            )
+        _validate_single_path(path, value)
 
 
 def merge_edits(base: dict[str, Any], edits: ConfigEdits) -> dict[str, Any]:
@@ -109,9 +132,12 @@ def _set_at(target: dict[str, Any], segments: list[str], value: Any) -> None:
     node = target
     for segment in segments[:-1]:
         child = node.get(segment)
-        if not isinstance(child, dict):
+        if child is None:
             child = {}
             node[segment] = child
+        elif not isinstance(child, dict):
+            path = ".".join(segments)
+            _reject(f"Edit path {path!r} conflicts with {segment!r}, which is not a table")
         node = child
     node[segments[-1]] = _deep_copy(value)
 
