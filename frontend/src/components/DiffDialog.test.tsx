@@ -29,7 +29,9 @@ const PREVIEW_OK = {
 
 function renderDialog(onClose = vi.fn()) {
   window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: 9999 }))
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
   return render(
     <QueryClientProvider client={client}>
       <DraftProvider saved={{ port: 8010 }}>
@@ -170,6 +172,95 @@ describe('DiffDialog', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Cannot write /tmp/config.toml')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('renders the summary message and every field-level reason from a structured 422 apply rejection', async () => {
+    // Guards the field-level reasons, not just the summary: an untested
+    // rendering path here is one refactor away from silently reverting to
+    // "the configuration is not valid" with no field named — the exact
+    // regression the preview/apply issue plumbing exists to prevent.
+    fetchMock.mockResolvedValueOnce(jsonResponse(PREVIEW_OK)).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          detail: {
+            message: 'The configuration is not valid and was not written.',
+            issues: [
+              {
+                path: 'logging.file.file_name',
+                message: 'directory does not exist: /nope',
+                toml_section: '[testbench-ai-service.logging.file]',
+              },
+              {
+                path: 'port',
+                message: 'Input should be a valid integer',
+                toml_section: '[testbench-ai-service]',
+              },
+            ],
+          },
+        },
+        422,
+      ),
+    )
+    renderDialog()
+
+    await screen.findByText(/-port = 8010/)
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The configuration is not valid and was not written.',
+    )
+    const dirIssue = screen.getByText(/directory does not exist: \/nope/)
+    expect(dirIssue.closest('li')).toHaveTextContent('logging.file.file_name')
+    const portIssue = screen.getByText(/Input should be a valid integer/)
+    expect(portIssue.closest('li')).toHaveTextContent('port')
+  })
+
+  it('still shows a plain string apply-rejection detail (the non-structured branch)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(PREVIEW_OK))
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Cannot write /tmp/config.toml' }, 400))
+    renderDialog()
+
+    await screen.findByText(/-port = 8010/)
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Cannot write /tmp/config.toml')
+  })
+
+  it('shows the message from an apply rejection whose detail is an object without issues, without crashing', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(PREVIEW_OK))
+      .mockResolvedValueOnce(jsonResponse({ detail: { message: 'Unexpected error' } }, 500))
+    renderDialog()
+
+    await screen.findByText(/-port = 8010/)
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unexpected error')
+  })
+
+  it('shows the backup path alongside the reload detail when a reload fails for another reason', async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(PREVIEW_OK))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          written: ['/tmp/config.toml'],
+          backup: '/tmp/config.toml.bak',
+          restart_required: [],
+          reloaded: false,
+          reload_detail: 'Could not open the log file for writing.',
+          in_flight_tasks: 0,
+        }),
+      )
+    const onClose = vi.fn()
+    renderDialog(onClose)
+
+    await screen.findByText(/-port = 8010/)
+    await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByText(/Could not open the log file for writing\./)).toBeInTheDocument()
+    expect(screen.getByText(/\/tmp\/config\.toml\.bak/)).toBeInTheDocument()
     expect(onClose).not.toHaveBeenCalled()
   })
 })

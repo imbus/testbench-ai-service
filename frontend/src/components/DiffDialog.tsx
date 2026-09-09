@@ -165,6 +165,15 @@ export function DiffDialog({ lang, onClose }: { lang: Lang; onClose: () => void 
             <div role="alert" style={{ color: '#a33a2b' }}>
               {apply.data.reload_detail}
             </div>
+            {/* This is exactly the moment the operator wants to know a backup
+                exists: the dialog is staying open specifically because the
+                reload didn't go cleanly, and a clean apply never renders this
+                (it auto-closes, discarding the draft — see onApply above). */}
+            {apply.data.backup && (
+              <div className="text-muted" style={{ fontSize: 12 }}>
+                {t.backupKept} <code>{apply.data.backup}</code>
+              </div>
+            )}
           </div>
         )}
 
