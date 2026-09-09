@@ -53,6 +53,9 @@ export const de = {
   writesTo: 'Schreibt nach',
   backupKept: 'Vorheriger Inhalt gesichert als',
   close: 'Schließen',
+  rawSub: 'Aus dem aktuellen (nicht übernommenen) Stand erzeugt · nur lesbar',
+  copy: 'Kopieren',
+  copied: 'Kopiert',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German

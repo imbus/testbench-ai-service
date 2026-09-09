@@ -57,4 +57,7 @@ export const en = {
   writesTo: 'Writes to',
   backupKept: 'Previous contents kept as',
   close: 'Close',
+  rawSub: 'Generated from the current (unapplied) state · read-only',
+  copy: 'Copy',
+  copied: 'Copied',
 } as const
