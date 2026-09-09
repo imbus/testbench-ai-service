@@ -1,6 +1,10 @@
+import sys
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import tomllib
 
 from testbench_ai_service.webui.validate import validate_config_dict
 
@@ -112,3 +116,88 @@ def test_an_unexpected_error_becomes_a_root_issue():
     assert len(issues) == 1
     assert issues[0].path == ""
     assert "kaboom" in issues[0].message
+
+
+def test_an_array_element_error_is_addressed_to_the_array_section():
+    """Regression guard for fix 2: trusted_proxies[2] error belongs to [testbench-ai-service].
+
+    The array itself is a field inside the root section, not a sub-table.
+    """
+    _, issues = validate_config_dict(
+        {"tb_server_url": TB_URL, "trusted_proxies": ["valid", "192.168.1.0/24", 123]}
+    )
+
+    assert issues
+    assert issues[0].toml_section == "[testbench-ai-service]"
+
+
+def test_quoted_keys_produce_valid_toml():
+    """A project name with spaces must be quoted so the hint is valid TOML."""
+    _, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "projects": {"My Project": {"language": "INVALID_LANGUAGE"}},
+        }
+    )
+
+    assert issues
+    # The toml_section should be [testbench-ai-service.projects."My Project"]
+    assert issues[0].toml_section == '[testbench-ai-service.projects."My Project"]'
+
+    # It must parse as valid TOML (the operator can paste this as a hint into config.toml)
+    tomllib.loads(issues[0].toml_section + "\nx = 1\n")
+
+
+def test_escaped_quotes_in_keys_produce_valid_toml():
+    """A project name with quotes must have them escaped in the TOML section."""
+    _, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "projects": {'Odd"Name': {"language": "INVALID_LANGUAGE"}},
+        }
+    )
+
+    assert issues
+    # The quotes must be escaped with backslash
+    assert issues[0].toml_section == '[testbench-ai-service.projects."Odd\\"Name"]'
+
+    # It must parse as valid TOML
+    tomllib.loads(issues[0].toml_section + "\nx = 1\n")
+
+
+def test_system_exit_from_an_imported_module_returns_a_root_issue():
+    """Fix 1: a class_path whose module calls sys.exit() must not propagate.
+
+    This repo's own utils/config.py calls sys.exit(), so validators that
+    import modules can encounter it unexpectedly.
+    """
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir)
+        # Create a module that calls sys.exit(1) at import time
+        module_file = tmp_path / "exit_on_import.py"
+        module_file.write_text("sys.exit(1)\n")
+
+        # Monkeypatch sys.path so the module can be imported
+        original_path = sys.path[:]
+        try:
+            sys.path.insert(0, str(tmp_path))
+
+            config, issues = validate_config_dict(
+                {
+                    "tb_server_url": TB_URL,
+                    "agents": {
+                        "test_case_set_reviewer": {
+                            "enabled": True,
+                            "endpoint_path": "/x",
+                            "class_path": "exit_on_import.SomeClass",
+                            "prompt": {"file": "test_case_set_reviewer/prompt.yaml"},
+                        }
+                    },
+                }
+            )
+
+            assert config is None
+            assert len(issues) == 1
+            assert issues[0].path == ""
+        finally:
+            sys.path[:] = original_path
