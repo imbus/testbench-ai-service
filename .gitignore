@@ -201,3 +201,7 @@ frontend/dist/
 testbench_ai_service/static/
 # tsc -b build info (belt-and-braces; tsBuildInfoFile already redirects these under node_modules/)
 *.tsbuildinfo
+
+# Rotated log files (`*.log` above does not match the numbered suffixes
+# RotatingFileHandler appends)
+*.log.[0-9]*
