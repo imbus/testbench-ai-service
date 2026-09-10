@@ -80,4 +80,3 @@ def login(client, tb_connection):
             )
 
     return _login
-
