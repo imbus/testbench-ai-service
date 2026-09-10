@@ -122,7 +122,8 @@ class TestCaseSetDescriber(Agent):
 
         test_case_set_catalog = {}
         try:
-            test_case_set_catalog = get_test_case_set_catalog(
+            test_case_set_catalog = await asyncio.to_thread(
+                get_test_case_set_catalog,
                 conn=conn,
                 project_key=context.project_key,
                 tov_key=context.tov_key,

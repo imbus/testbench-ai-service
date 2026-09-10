@@ -127,7 +127,8 @@ class TestCaseSetReviewer(Agent):
 
         test_case_set_catalog = {}
         try:
-            test_case_set_catalog = get_test_case_set_catalog(
+            test_case_set_catalog = await asyncio.to_thread(
+                get_test_case_set_catalog,
                 conn=conn,
                 project_key=context.project_key,
                 tov_key=context.tov_key,
@@ -160,8 +161,8 @@ class TestCaseSetReviewer(Agent):
     ) -> None:
         """Performs a review for a single test case set."""
         try:
-            test_case = get_test_case_set_details(
-                conn, context.project_key, test_case_set.details.key
+            test_case = await asyncio.to_thread(
+                get_test_case_set_details, conn, context.project_key, test_case_set.details.key
             )
             current_spec_key = test_case.spec.key
             previous_review_comment = strip_html_body_tags(test_case.spec.reviewComment)
