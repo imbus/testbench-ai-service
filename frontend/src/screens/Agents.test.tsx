@@ -184,11 +184,32 @@ describe('list view', () => {
     expect(within(detail).getByText('Release 2.0')).toBeInTheDocument()
   })
 
-  it('offers no expander for an agent no project overrides', async () => {
+  it('counts the projects that override an agent', async () => {
     renderAgents()
     await waitFor(() => expect(screen.getByText('explainer')).toBeInTheDocument())
     const row = screen.getByTestId('agent-row-explainer')
+    // `Gone` is the only project with an explainer block.
     expect(within(row).getByTestId('override-count')).toHaveTextContent('1')
+  })
+
+  it('offers no expander for an agent no project overrides', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.startsWith('/admin/api/config'))
+        return ok({
+          running: { agents: DISK.agents },
+          disk: { agents: DISK.agents },
+          config_path: 'C:/svc/config.toml',
+        })
+      if (url.startsWith('/admin/api/projects')) return ok(PROJECTS)
+      if (url.includes('/prompts/')) return ok(meta('Reviewer'))
+      return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
+    })
+    renderAgents()
+    await waitFor(() => expect(screen.getByText('explainer')).toBeInTheDocument())
+    const row = screen.getByTestId('agent-row-explainer')
+
+    expect(within(row).getByTestId('override-count')).toHaveTextContent('0')
+    expect(within(row).queryByRole('button', { name: /overrid/i })).toBeNull()
   })
 
   it('renders read-only for a non-admin session', async () => {
@@ -254,6 +275,24 @@ describe('matrix view', () => {
     // `Gone` is config-only, so it is still a column; the point is the
     // unavailable notice appears rather than the list silently looking short.
     expect(screen.getByTestId('projects-unavailable')).toBeInTheDocument()
+  })
+})
+
+describe('the matrix against an unapplied draft', () => {
+  it('resolves an inheriting cell through the pending global switch', async () => {
+    // The cell's accessible label states the value that actually applies --
+    // that is the whole reason it exists, since colour alone cannot say it.
+    // Reading only the saved config would make it state the opposite of what
+    // this draft applies.
+    renderAgents()
+    await waitFor(() => expect(screen.getByText('reviewer')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('switch', { name: /reviewer/ }))
+    await userEvent.click(screen.getByRole('tab', { name: /matrix/i }))
+
+    const cell = screen.getByLabelText(/reviewer.*Release 2\.0/)
+    expect(cell).toHaveAttribute('data-state', 'inherit')
+    expect(cell.getAttribute('aria-label')).toMatch(/off/i)
   })
 })
 

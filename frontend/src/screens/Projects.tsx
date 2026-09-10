@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   agentKeys,
+  agentPath,
   configuredProjects,
   effectiveAgent,
   projectAgentPath,
@@ -115,6 +116,16 @@ export function Projects({
         </div>
       )}
 
+      {/* A refresh that never came back is not the same as a project list that
+          is merely stale, and the row above cannot say so: the route answers
+          200 with the previous list even when the fetch failed, and a 403 or a
+          dropped connection never reaches it at all. */}
+      {refresh.isError && (
+        <div data-testid="refresh-failed" role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
+          {t.refreshFailed} {(refresh.error as Error)?.message}
+        </div>
+      )}
+
       {/* Only when the console genuinely cannot know the real names. Typing a
           name that has to match TestBench character for character is a
           footgun, and not one worth offering while the real list is in hand. */}
@@ -201,7 +212,12 @@ function ProjectCard({
 
   const block = valueAt(running, projectPath(name))
   const declared = block !== undefined
-  const llmConfig = valueAt(running, projectPath(name, 'llm_config'))
+  // `running` is a pydantic dump, so a project without an llm_config carries
+  // an explicit null here rather than nothing at all. Testing for `undefined`
+  // alone would put an "llm_config · edit in config.toml" panel reading
+  // `null` on every declared project.
+  const llmConfigValue = valueAt(running, projectPath(name, 'llm_config'))
+  const llmConfig = llmConfigValue === null ? undefined : llmConfigValue
   const globalLanguage = valueAt(running, 'language')
 
   return (
@@ -256,7 +272,14 @@ function ProjectCard({
                 <TriState
                   path={path}
                   saved={valueAt(disk, path)}
-                  inherited={effectiveAgent(running, agentKey, null).enabled === true}
+                  inherited={
+                    // Draft-aware: an agent switched off globally in this same
+                    // unapplied draft must not read as running here.
+                    draft.valueOf(
+                      agentPath(agentKey, 'enabled'),
+                      effectiveAgent(running, agentKey, null).enabled,
+                    ) === true
+                  }
                   label={`${agentKey} · ${name}`}
                   readOnly={!isAdmin}
                   lang={lang}
@@ -284,6 +307,7 @@ function ProjectCard({
         >
           <div style={{ marginBottom: 4 }}>
             <strong>llm_config</strong> · {t.editInConfigToml}
+            <div className="text-muted" style={{ fontSize: 11 }}>{t.removedWithProject}</div>
           </div>
           <pre
             style={{
@@ -304,7 +328,7 @@ function ProjectCard({
             type="button"
             className="btn btn-ghost"
             style={{ fontSize: 12 }}
-            onClick={() => draft.unsetValue(projectPath(name))}
+            onClick={() => draft.unsetSubtree(projectPath(name))}
           >
             {t.removeAllOverrides}
           </button>

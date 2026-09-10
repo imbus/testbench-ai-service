@@ -427,3 +427,88 @@ describe('a non-admin session', () => {
     expect(screen.getByTestId('agent-detail').textContent).toContain('/test-case-set-reviews')
   })
 })
+
+// --- vars inherit the way the runtime merges them ------------------------
+
+describe('prompt variables in a project that declares its own', () => {
+  /** merge_prompt_configs replaces `vars` wholesale; it does not merge keys. */
+  const RUNNING = {
+    ...DISK,
+    projects: {
+      ...DISK.projects,
+      Beta: { agents: { reviewer: { prompt: { vars: { max_findings: 3 } } } } },
+    },
+  }
+
+  function renderWithBeta() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.startsWith('/admin/api/config'))
+        return ok({ running: RUNNING, disk: RUNNING, config_path: 'C:/svc/config.toml' })
+      if (url.startsWith('/admin/api/projects')) return ok(PROJECTS)
+      if (url.includes('/prompts/')) return ok(META)
+      return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
+    })
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={['/admin/agents/reviewer']}>
+          <DraftProvider saved={RUNNING}>
+            <Routes>
+              <Route
+                path="/admin/agents/:agentKey"
+                element={<AgentDetail lang="en" isAdmin issues={[]} />}
+              />
+            </Routes>
+            <Edits />
+          </DraftProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  async function inBeta() {
+    renderWithBeta()
+    await waitFor(() => expect(screen.getByTestId('agent-vars')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('tab', { name: 'Beta' }))
+  }
+
+  it('says the global variables no longer apply', async () => {
+    await inBeta()
+    expect(screen.getByTestId('vars-replaced')).toBeInTheDocument()
+  })
+
+  it('falls back to the prompt default, not to the global value', async () => {
+    await inBeta()
+    // `tone` is 'formal' globally, but Beta declares its own vars table, so
+    // the runtime hands the agent the prompt's own default instead.
+    const notes = screen.getAllByTestId('inherit-note').map((node) => node.textContent)
+    expect(notes.some((text) => text?.includes('formal'))).toBe(false)
+  })
+
+  it('keeps the global variables for a project that declares none', async () => {
+    renderWithBeta()
+    await waitFor(() => expect(screen.getByTestId('agent-vars')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
+
+    const notes = screen.getAllByTestId('inherit-note').map((node) => node.textContent)
+    expect(notes.some((text) => text?.includes('formal'))).toBe(true)
+    expect(screen.queryByTestId('vars-replaced')).toBeNull()
+  })
+})
+
+// --- one draft, one meaning ---------------------------------------------
+
+describe('removing every override for one agent in a project', () => {
+  it('drops the edits queued inside that override', async () => {
+    renderDetail()
+    await waitFor(() => expect(screen.getByTestId('agent-settings')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
+
+    await userEvent.click(screen.getByRole('switch', { name: 'enabled' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove all overrides' }))
+
+    // The server rejects an overlay holding both a table and a key inside it,
+    // so keeping the switch's edit would 400 the preview.
+    expect(edits()).toEqual({ 'projects.Alpha.agents.reviewer': null })
+  })
+})

@@ -71,6 +71,8 @@ export const de = {
   promptVars: 'Prompt-Variablen',
   noPromptVars: 'Diese Variante deklariert keine Variablen.',
   notDeclaredByVariant: 'Von dieser Variante nicht deklariert',
+  varsReplaceGlobal:
+    'Dieses Projekt definiert eigene Prompt-Variablen und ersetzt damit den globalen Satz vollständig. Nicht gesetzte Variablen fallen auf den Prompt-Standard zurück, nicht auf den globalen Wert.',
   notEditableHere: 'Nicht hier änderbar',
   removeAllOverrides: 'Alle Überschreibungen entfernen',
   promptMetaUnavailable: 'Prompt-Metadaten konnten nicht gelesen werden.',
@@ -79,10 +81,12 @@ export const de = {
   fetchedAt: 'Geladen',
   refresh: 'Neu laden',
   refreshing: 'Wird geladen…',
+  refreshFailed: 'Die Projektliste konnte nicht aktualisiert werden.',
   projectName: 'Projektname',
   projectNameExact: 'Muss exakt dem Namen in TestBench entsprechen.',
   add: 'Hinzufügen',
   editInConfigToml: 'in config.toml bearbeiten',
+  removedWithProject: 'Wird von „Alle Überschreibungen entfernen“ zusammen mit dem Projektblock gelöscht',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German

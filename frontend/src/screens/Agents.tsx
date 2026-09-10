@@ -216,27 +216,40 @@ function AgentRow({
           {String(agent.endpoint_path ?? '—')}
         </div>
 
-        <button
-          type="button"
-          aria-expanded={expanded}
-          aria-label={`${overriders.length} ${t.overrides}`}
-          onClick={() => setExpanded(!expanded)}
-          style={{
-            background: 'none',
-            border: 0,
-            font: 'inherit',
-            fontSize: 12,
-            color: 'inherit',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            opacity: 0.8,
-          }}
-        >
-          <span data-testid="override-count">{overriders.length}</span>
-          <span>{t.overrides}</span>
-        </button>
+        {/* Only an expander when there is something to expand. A control
+            that announces itself as collapsible and then opens "no overrides"
+            is noise, and it is the row's only interactive element besides the
+            switch. */}
+        {overriders.length === 0 ? (
+          <span
+            style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, opacity: 0.8 }}
+          >
+            <span data-testid="override-count">0</span>
+            <span>{t.overrides}</span>
+          </span>
+        ) : (
+          <button
+            type="button"
+            aria-expanded={expanded}
+            aria-label={`${overriders.length} ${t.overrides}`}
+            onClick={() => setExpanded(!expanded)}
+            style={{
+              background: 'none',
+              border: 0,
+              font: 'inherit',
+              fontSize: 12,
+              color: 'inherit',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              opacity: 0.8,
+            }}
+          >
+            <span data-testid="override-count">{overriders.length}</span>
+            <span>{t.overrides}</span>
+          </button>
+        )}
       </div>
 
       {expanded && (
@@ -293,7 +306,10 @@ function Matrix({
 }) {
   const t = useTranslations(lang)
   const projects = useProjects()
-  const fromTestBench = (projects.data?.projects ?? []).map((entry) => entry.name)
+  const draft = useDraft()
+  // Deduplicated: TestBench has been known to report a name twice, and two
+  // columns with the same React key render as one broken column.
+  const fromTestBench = [...new Set((projects.data?.projects ?? []).map((entry) => entry.name))]
   const columns = [
     ...fromTestBench,
     ...configuredProjects(running).filter((name) => !fromTestBench.includes(name)),
@@ -301,7 +317,7 @@ function Matrix({
 
   if (columns.length === 0) {
     return (
-      <div data-testid="projects-unavailable" className="text-muted" style={{ fontSize: 13 }}>
+      <div data-testid="no-projects" className="text-muted" style={{ fontSize: 13 }}>
         {t.noProjects}
       </div>
     )
@@ -351,7 +367,13 @@ function Matrix({
         </thead>
         <tbody>
           {keys.map((agentKey) => {
-            const inherited = effectiveAgent(running, agentKey, null).enabled === true
+            // Draft-aware, like the list view's own switch: an agent switched
+            // off globally in this same unapplied draft must not show every
+            // inheriting project as still running it -- the accessible label
+            // of each cell states the resolved value, and it would be lying.
+            const globalPath = agentPath(agentKey, 'enabled')
+            const inherited =
+              draft.valueOf(globalPath, effectiveAgent(running, agentKey, null).enabled) === true
             return (
               <tr key={agentKey}>
                 <th

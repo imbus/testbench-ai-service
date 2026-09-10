@@ -16,6 +16,22 @@ export interface FieldSpec {
    * operator should read.
    */
   label?: string
+  /**
+   * A select that may also be set to nothing.
+   *
+   * Without it a select can only ever move between its options: a variant
+   * written into `config.toml` could be changed but never taken back out,
+   * and "no variant" is what makes the prompt's own `default_variant` apply.
+   */
+  allowEmpty?: boolean
+  /**
+   * Which setting of an agent this field edits (`enabled`, `prompt.file`,
+   * `prompt.variant`), independent of the scope its `key` addresses.
+   *
+   * Only the agent screens set it, and only so they can read the same setting
+   * out of another scope without having to recognise it from the path.
+   */
+  setting?: string
 }
 
 export interface ServiceTab {

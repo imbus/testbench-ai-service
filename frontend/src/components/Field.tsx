@@ -51,7 +51,13 @@ export function Field({
   const draft = useDraft()
   const draftValue = draft.valueOf(spec.key, saved)
   const changed = draft.isChanged(spec.key)
-  const issueId = `${spec.key}-issue`
+  // A path is not a DOM id. `aria-labelledby` and `aria-describedby` are
+  // space-separated IDREF lists, and a project called `My Project` puts a
+  // space in the key -- the switch would then have no accessible name at all
+  // and a validation message would never be announced. The draft still keys
+  // off `spec.key`; only the DOM sees this.
+  const domId = encodeURIComponent(spec.key)
+  const issueId = `${domId}-issue`
 
   // Overridden means "this scope has an opinion": a draft edit that is not a
   // queued removal, or -- absent any edit -- a value already on disk. A `null`
@@ -111,9 +117,9 @@ export function Field({
           <button
             type="button"
             role="switch"
-            id={spec.key}
+            id={domId}
             aria-checked={value === true}
-            aria-labelledby={`${spec.key}-label`}
+            aria-labelledby={`${domId}-label`}
             aria-invalid={issue ? true : undefined}
             aria-describedby={issue ? issueId : undefined}
             onClick={() => draft.setValue(spec.key, value !== true)}
@@ -146,12 +152,19 @@ export function Field({
         return (
           <select
             className="input"
-            id={spec.key}
+            id={domId}
             aria-invalid={issue ? true : undefined}
             aria-describedby={issue ? issueId : undefined}
             value={asText(value)}
-            onChange={(event) => draft.setValue(spec.key, event.target.value)}
+            onChange={(event) =>
+              // The blank option is the way back to no value at all, which is
+              // what makes the prompt's own default_variant apply again.
+              event.target.value === ''
+                ? draft.unsetValue(spec.key)
+                : draft.setValue(spec.key, event.target.value)
+            }
           >
+            {spec.allowEmpty && <option value="">—</option>}
             {(spec.options ?? []).map((option) => (
               <option key={option} value={option}>
                 {option}
@@ -163,7 +176,7 @@ export function Field({
         return (
           <input
             className="input"
-            id={spec.key}
+            id={domId}
             type="number"
             aria-invalid={issue ? true : undefined}
             aria-describedby={issue ? issueId : undefined}
@@ -184,7 +197,7 @@ export function Field({
         return (
           <textarea
             className="input"
-            id={spec.key}
+            id={domId}
             rows={4}
             aria-invalid={issue ? true : undefined}
             aria-describedby={issue ? issueId : undefined}
@@ -198,7 +211,7 @@ export function Field({
         return (
           <input
             className="input"
-            id={spec.key}
+            id={domId}
             aria-invalid={issue ? true : undefined}
             aria-describedby={issue ? issueId : undefined}
             placeholder={placeholder}
@@ -219,7 +232,7 @@ export function Field({
         return (
           <input
             className="input"
-            id={spec.key}
+            id={domId}
             type="text"
             aria-invalid={issue ? true : undefined}
             aria-describedby={issue ? issueId : undefined}
@@ -254,8 +267,8 @@ export function Field({
     >
       <div>
         <label
-          id={`${spec.key}-label`}
-          htmlFor={spec.key}
+          id={`${domId}-label`}
+          htmlFor={domId}
           // The last segment only, as ReadOnlyField shows it: the section is
           // already in the screen's subheading, so 'llm_config.model' would
           // read as 'llm_config.' twice. The id and htmlFor stay the full

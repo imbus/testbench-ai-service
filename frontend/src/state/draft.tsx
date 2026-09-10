@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { splitPath } from '../api/paths'
 import { valueAt } from '../screens/fields'
 
 export const DRAFT_STORAGE_KEY = 'tbai_admin_draft'
@@ -28,6 +29,8 @@ export interface DraftApi {
   valueOf: (path: string, fallback: unknown) => unknown
   setValue: (path: string, value: unknown) => void
   unsetValue: (path: string) => void
+  /** Queue a removal of a whole table, dropping edits queued inside it. */
+  unsetSubtree: (path: string) => void
   revert: (path: string) => void
   discardAll: () => void
 }
@@ -126,6 +129,40 @@ export function DraftProvider({
     setEdits((current) => ({ ...current, [path]: null }))
   }, [])
 
+  const unsetSubtree = useCallback((path: string) => {
+    // Removing a table and editing something inside it are the same overlay
+    // saying two things about one address, and the server refuses the pair
+    // (`_check_path_prefix_collisions`) -- so "Remove all overrides" followed
+    // by any earlier edit under that project would 400 on preview with no way
+    // back except discarding the whole draft. The removal supersedes them, so
+    // they go with it, in one update rather than a revert-then-unset race.
+    setEdits((current) => {
+      let target: string[]
+      try {
+        target = splitPath(path)
+      } catch {
+        return { ...current, [path]: null }
+      }
+      const next: Edits = {}
+      for (const [key, value] of Object.entries(current)) {
+        let segments: string[]
+        try {
+          segments = splitPath(key)
+        } catch {
+          // A path this build cannot tokenize is not one we can prove is
+          // inside the subtree; leave it exactly as it is.
+          next[key] = value
+          continue
+        }
+        const inside =
+          segments.length > target.length && target.every((part, i) => segments[i] === part)
+        if (!inside) next[key] = value
+      }
+      next[path] = null
+      return next
+    })
+  }, [])
+
   const revert = useCallback((path: string) => {
     setEdits((current) => {
       const next = { ...current }
@@ -144,10 +181,11 @@ export function DraftProvider({
       valueOf: (path, fallback) => (path in effective ? effective[path] : fallback),
       setValue,
       unsetValue,
+      unsetSubtree,
       revert,
       discardAll,
     }),
-    [effective, setValue, unsetValue, revert, discardAll],
+    [effective, setValue, unsetValue, unsetSubtree, revert, discardAll],
   )
 
   return <DraftContext.Provider value={api}>{children}</DraftContext.Provider>

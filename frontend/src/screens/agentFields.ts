@@ -43,11 +43,13 @@ export function AGENT_FIELDS(
   return [
     {
       key: scopedPath(scope, agentKey, 'enabled'),
+      setting: 'enabled',
       type: 'bool',
       hint: 'Whether this agent registers its endpoint and runs',
     },
     {
       key: scopedPath(scope, agentKey, 'prompt.file'),
+      setting: 'prompt.file',
       type: 'text',
       hint: 'Prompt YAML, relative to prompts_dir/<language>/',
     },
@@ -63,7 +65,7 @@ function variantField(
 ): FieldSpec {
   const key = scopedPath(scope, agentKey, 'prompt.variant')
   const hint = "Which variant of the prompt to use. Empty uses the prompt's default_variant."
-  if (!variants) return { key, type: 'text', hint }
+  if (!variants) return { key, setting: 'prompt.variant', type: 'text', hint }
 
   // A configured variant the prompt no longer declares is still offered, so
   // the select does not silently rewrite it to the first option the moment the
@@ -72,7 +74,7 @@ function variantField(
     configuredVariant && !variants.includes(configuredVariant)
       ? [configuredVariant, ...variants]
       : variants
-  return { key, type: 'select', options, hint }
+  return { key, setting: 'prompt.variant', type: 'select', options, allowEmpty: true, hint }
 }
 
 /**
@@ -134,23 +136,29 @@ const VAR_TYPES: Record<PromptVarDefinition['value_type'], FieldSpec['type']> = 
  * file, which is exactly why the metadata endpoint exists (design D7). Without
  * it this would be an untyped key/value grid.
  */
+export function promptVarPath(scope: Scope, agentKey: string, varName: string): string {
+  const prefix =
+    scope.kind === 'global'
+      ? ['agents', agentKey]
+      : ['projects', scope.project, 'agents', agentKey]
+  // Over segments, never over an already-joined string: a variable name
+  // containing a dot must be quoted as one segment, and re-splitting a joined
+  // path would tear it back apart.
+  return joinPath([...prefix, 'prompt', 'vars', varName])
+}
+
 export function promptVarField(
   scope: Scope,
   agentKey: string,
   varName: string,
   definition: PromptVarDefinition,
 ): FieldSpec {
-  const prefix =
-    scope.kind === 'global'
-      ? ['agents', agentKey]
-      : ['projects', scope.project, 'agents', agentKey]
-
   const hints = [definition.description, definition.required ? 'Required' : null].filter(
     (part): part is string => !!part,
   )
 
   return {
-    key: joinPath([...prefix, 'prompt', 'vars', varName]),
+    key: promptVarPath(scope, agentKey, varName),
     type: VAR_TYPES[definition.value_type] ?? 'text',
     // The declared name, not the path's last segment: `max_findings` is the
     // key, "Maximum findings" is what the prompt author called it.

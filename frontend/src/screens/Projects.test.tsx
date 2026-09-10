@@ -351,3 +351,73 @@ describe('a config payload with nothing in it', () => {
     )
   })
 })
+
+// --- the payload the server actually sends -------------------------------
+
+describe('against a running config as pydantic dumps it', () => {
+  /** `model_dump(mode="json")` writes every unset optional field as null. */
+  const RUNNING = {
+    ...DISK,
+    projects: {
+      Alpha: { language: 'en', llm_config: null, agents: { reviewer: { enabled: false } } },
+      Legacy: { language: null, llm_config: null, agents: { explainer: { enabled: true } } },
+      Modelled: {
+        language: null,
+        llm_config: { provider: 'anthropic', model: 'claude-x' },
+        agents: null,
+      },
+    },
+  }
+
+  function renderDumped() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.startsWith('/admin/api/config'))
+        return ok({ running: RUNNING, disk: DISK, config_path: 'C:/svc/config.toml' })
+      if (url.startsWith('/admin/api/projects')) return ok(AVAILABLE)
+      return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
+    })
+    return render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <DraftProvider saved={DISK}>
+            <Projects lang="en" isAdmin issues={[]} />
+            <Edits />
+          </DraftProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+  }
+
+  it('shows no llm_config panel for a project that has none', async () => {
+    renderDumped()
+    await ready()
+    // A null llm_config is "not configured", not a block to display: the
+    // panel would render the literal text `null` on nearly every project.
+    expect(within(screen.getByTestId('project-Alpha')).queryByTestId('project-llm-config')).toBeNull()
+  })
+
+  it('still shows the panel for a project that really has one', async () => {
+    renderDumped()
+    await ready()
+    const panel = within(screen.getByTestId('project-Modelled')).getByTestId('project-llm-config')
+    expect(panel.textContent).toContain('claude-x')
+  })
+})
+
+// --- one draft, one meaning ---------------------------------------------
+
+describe('removing every override for a project', () => {
+  it('drops the edits queued inside that project', async () => {
+    renderProjects()
+    await ready()
+    const alpha = within(screen.getByTestId('project-Alpha'))
+
+    await userEvent.click(alpha.getByRole('button', { name: /reviewer · Alpha/ }))
+    await userEvent.click(alpha.getByRole('button', { name: 'Remove all overrides' }))
+
+    // Not both: the server refuses an overlay carrying a path and a prefix of
+    // it, so preview and apply would 400 with no way back but Discard all.
+    expect(edits()).toEqual({ 'projects.Alpha': null })
+  })
+})

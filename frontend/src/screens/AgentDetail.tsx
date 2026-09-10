@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import {
   configuredProjects,
   effectiveAgent,
+  inheritedVars,
   overridingProjects,
   projectAgentPath,
   projectPath,
@@ -19,6 +20,7 @@ import {
   AGENT_FIELDS,
   AGENT_READONLY_FIELDS,
   promptVarField,
+  promptVarPath,
   varDefault,
 } from './agentFields'
 import { valueAt } from './fields'
@@ -127,6 +129,18 @@ export function AgentDetail({
   )
   const undeclared = meta.data ? configured.filter((name) => !(name in declared)) : []
 
+  // What an unset variable falls back to in this scope. Empty in global scope,
+  // and empty in a project that declares any vars of its own: the runtime
+  // replaces the whole map rather than merging it key by key, so the global
+  // values do not reach such a project at all.
+  const inheritable = inheritedVars(running, agentKey, project)
+  const varsReplaced =
+    scope.kind === 'project' &&
+    Object.keys(inheritable).length === 0 &&
+    Object.keys(
+      (effectiveAgent(running, agentKey, null).prompt?.vars as Record<string, unknown>) ?? {},
+    ).length > 0
+
   const overriders = overridingProjects(running, agentKey)
   const known = [
     ...(projects.data?.projects ?? []).map((entry) => entry.name),
@@ -205,11 +219,10 @@ export function AgentDetail({
       <div data-testid="agent-settings">
         {AGENT_FIELDS(scope, agentKey, variantNames, savedVariant ? String(savedVariant) : undefined).map(
           (spec) => {
-            const setting = spec.key.endsWith('enabled')
-              ? 'enabled'
-              : spec.key.endsWith('prompt.file')
-                ? 'prompt.file'
-                : 'prompt.variant'
+            // From the spec, not from the shape of its path: a fourth field
+            // added to AGENT_FIELDS would otherwise be silently read as the
+            // variant.
+            const setting = spec.setting ?? ''
             return isAdmin ? (
               <Field
                 key={spec.key}
@@ -232,6 +245,11 @@ export function AgentDetail({
 
       <section data-testid="agent-vars">
         <h3 style={{ margin: '4px 0', fontSize: 16 }}>{t.promptVars}</h3>
+        {varsReplaced && (
+          <div data-testid="vars-replaced" className="text-muted" style={{ fontSize: 12 }}>
+            {t.varsReplaceGlobal}
+          </div>
+        )}
         {Object.keys(declared).length === 0 && undeclared.length === 0 ? (
           <div className="text-muted" style={{ fontSize: 12 }}>
             {t.noPromptVars}
@@ -246,7 +264,7 @@ export function AgentDetail({
                 varName={name}
                 definition={definition}
                 disk={disk}
-                globalAgent={globalAgent as Record<string, unknown>}
+                inheritable={inheritable}
                 issues={issues}
                 isAdmin={isAdmin}
                 lang={lang}
@@ -256,7 +274,7 @@ export function AgentDetail({
               <div key={name} data-testid={`undeclared-${name}`}>
                 <ReadOnlyField
                   spec={{
-                    key: `agents.${agentKey}.prompt.vars.${name}`,
+                    key: promptVarPath(scope, agentKey, name),
                     type: 'text',
                     label: name,
                     hint: t.notDeclaredByVariant,
@@ -284,7 +302,7 @@ export function AgentDetail({
             type="button"
             className="btn btn-ghost"
             style={{ fontSize: 12 }}
-            onClick={() => draft.unsetValue(projectAgentPath(scope.project, agentKey))}
+            onClick={() => draft.unsetSubtree(projectAgentPath(scope.project, agentKey))}
           >
             {t.removeAllOverrides}
           </button>
@@ -340,7 +358,7 @@ function VarField({
   varName,
   definition,
   disk,
-  globalAgent,
+  inheritable,
   issues,
   isAdmin,
   lang,
@@ -350,7 +368,8 @@ function VarField({
   varName: string
   definition: PromptVarDefinition
   disk: Record<string, unknown>
-  globalAgent: Record<string, unknown>
+  /** The variables this scope inherits, already resolved by `inheritedVars`. */
+  inheritable: Record<string, unknown>
   issues: ConfigIssue[]
   isAdmin: boolean
   lang: Lang
@@ -359,7 +378,7 @@ function VarField({
   const spec = promptVarField(scope, agentKey, varName, definition)
   const saved = valueAt(disk, spec.key)
 
-  const fromGlobal = valueAt(globalAgent, `prompt.vars.${varName}`)
+  const fromGlobal = inheritable[varName]
   const inheritedValue = scope.kind === 'project' ? (fromGlobal ?? varDefault(definition)) : varDefault(definition)
   const label =
     scope.kind === 'project' && fromGlobal !== undefined ? t.globalScope : t.promptDefault

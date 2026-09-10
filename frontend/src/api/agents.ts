@@ -72,11 +72,31 @@ function deepMerge(
 ): Record<string, unknown> {
   const merged: Record<string, unknown> = { ...base }
   for (const [key, value] of Object.entries(override)) {
+    // `running` is a pydantic dump, so every unset optional field is present
+    // as an explicit null -- a project that overrides only `enabled` still
+    // carries `prompt: null`. That is "no opinion", not "erase the global
+    // prompt", and the server's own merge (model_dump(exclude_unset=True))
+    // never sees those keys at all.
+    if (value === null) continue
     const existing = table(merged[key])
     const incoming = table(value)
     merged[key] = existing && incoming ? deepMerge(existing, incoming) : value
   }
   return merged
+}
+
+/** The project's own override table for one agent, if it has one. */
+function projectOverride(
+  config: Record<string, unknown>,
+  agentKey: string,
+  project: string,
+): Record<string, unknown> | undefined {
+  return table(table(table(table(config.projects)?.[project])?.agents)?.[agentKey])
+}
+
+/** The `vars` table a scope declares itself, as opposed to inherits. */
+function declaredVars(agent: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  return table(table(agent?.prompt)?.vars)
 }
 
 /**
@@ -96,10 +116,33 @@ export function effectiveAgent(
   const global = table(table(config.agents)?.[agentKey]) ?? {}
   if (project === null) return global as AgentSettings
 
-  const override = table(
-    table(table(table(config.projects)?.[project])?.agents)?.[agentKey],
-  )
-  return (override ? deepMerge(global, override) : global) as AgentSettings
+  const override = projectOverride(config, agentKey, project)
+  if (!override) return global as AgentSettings
+
+  const merged = deepMerge(global, override)
+  // `vars` is one field to the runtime, not a table it recurses into:
+  // `merge_prompt_configs` replaces the whole map when the project declares
+  // one. Merging per key here would show the operator inherited variables the
+  // agent will never receive.
+  const ownVars = declaredVars(override)
+  if (ownVars) merged.prompt = { ...(table(merged.prompt) ?? {}), vars: ownVars }
+  return merged as AgentSettings
+}
+
+/**
+ * The prompt variables *project* inherits from the global agent — none once it
+ * declares a `vars` table of its own, since the runtime replaces the map
+ * rather than merging it. Globally there is nothing to inherit from but the
+ * prompt YAML's own defaults, which this does not know about.
+ */
+export function inheritedVars(
+  config: Record<string, unknown>,
+  agentKey: string,
+  project: string | null,
+): Record<string, unknown> {
+  if (project === null) return {}
+  if (declaredVars(projectOverride(config, agentKey, project))) return {}
+  return declaredVars(table(table(config.agents)?.[agentKey])) ?? {}
 }
 
 /**

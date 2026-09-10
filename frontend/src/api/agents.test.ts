@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import {
   agentPath,
   effectiveAgent,
+  inheritedVars,
   overridingProjects,
   projectAgentPath,
   projectPath,
@@ -181,5 +182,59 @@ describe('overridingProjects', () => {
     // operator wrote, and the Agents list must show it rather than hide it.
     const config = { projects: { Alpha: { agents: { x: {} } } } }
     expect(overridingProjects(config, 'x')).toEqual(['Alpha'])
+  })
+})
+
+describe('the shape the server actually sends', () => {
+  // `running` is `AppConfig.model_dump(mode="json")`, which writes every unset
+  // optional field as an explicit null. A fixture built from raw TOML never
+  // contains those, which is why they went unnoticed.
+  const RUNNING = {
+    agents: {
+      reviewer: {
+        enabled: true,
+        endpoint_path: '/reviews',
+        class_path: 'x.Y',
+        prompt: { file: 'reviewer/prompt.yaml', variant: 'Thorough', vars: { a: 1, b: 2 } },
+      },
+    },
+    projects: {
+      Alpha: {
+        language: null,
+        llm_config: null,
+        agents: { reviewer: { enabled: false, prompt: null } },
+      },
+      Beta: {
+        language: 'en',
+        llm_config: null,
+        agents: { reviewer: { enabled: null, prompt: { file: null, variant: null, vars: { b: 99 } } } },
+      },
+    },
+  }
+
+  it('does not let a null override erase the inherited prompt', () => {
+    const agent = effectiveAgent(RUNNING, 'reviewer', 'Alpha')
+
+    expect(agent.enabled).toBe(false)
+    expect(agent.prompt?.variant).toBe('Thorough')
+    expect(agent.prompt?.file).toBe('reviewer/prompt.yaml')
+  })
+
+  it('replaces vars wholesale, the way merge_prompt_configs does', () => {
+    const agent = effectiveAgent(RUNNING, 'reviewer', 'Beta')
+
+    expect(agent.prompt?.vars).toEqual({ b: 99 })
+  })
+
+  it('keeps the global vars for a project that declares none', () => {
+    const agent = effectiveAgent(RUNNING, 'reviewer', 'Alpha')
+
+    expect(agent.prompt?.vars).toEqual({ a: 1, b: 2 })
+  })
+
+  it('reports nothing inherited once the project declares its own vars', () => {
+    expect(inheritedVars(RUNNING, 'reviewer', 'Beta')).toEqual({})
+    expect(inheritedVars(RUNNING, 'reviewer', 'Alpha')).toEqual({ a: 1, b: 2 })
+    expect(inheritedVars(RUNNING, 'reviewer', null)).toEqual({})
   })
 })

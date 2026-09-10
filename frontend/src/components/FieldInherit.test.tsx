@@ -265,3 +265,76 @@ describe('without inheritedFrom', () => {
     expect(screen.getByTestId('field-row')).toHaveAttribute('data-overridden', 'true')
   })
 })
+
+describe('a project name that is not a bare path segment', () => {
+  const SPACED: FieldSpec = {
+    key: 'projects.My Project.agents.reviewer.enabled',
+    type: 'bool',
+    hint: 'Run this agent for this project',
+  }
+
+  it('still gives the switch an accessible name', () => {
+    // aria-labelledby is a space-separated IDREF list, so the raw path would
+    // parse as two tokens and name nothing. The switch would be announced as
+    // an unlabelled "switch" for exactly the project names the tokenizer
+    // exists to support.
+    render(<Harness spec={SPACED} saved={undefined} inherited={{ value: true, label: 'Global' }} />)
+
+    expect(screen.getByRole('switch', { name: 'enabled' })).toBeTruthy()
+  })
+
+  it('still announces a validation message on that field', () => {
+    render(
+      <DraftProvider saved={{}}>
+        <Field spec={SPACED} saved={undefined} issue="Input should be a valid boolean" lang="en" />
+      </DraftProvider>,
+    )
+
+    const control = screen.getByRole('switch')
+    const described = control.getAttribute('aria-describedby')
+    expect(described).toBeTruthy()
+    expect(described!.split(' ')).toHaveLength(1)
+    expect(document.getElementById(described!)?.textContent).toContain('valid boolean')
+  })
+})
+
+describe('a value that happens to equal the inherited one', () => {
+  it('is still written as an explicit override', async () => {
+    // Deliberate: an override that says what the global table says today is
+    // a *pin*, and it stops following the global value tomorrow. The way to
+    // go back to inheriting is "Clear override", which is offered the moment
+    // the row is overridden.
+    const user = userEvent.setup()
+    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'Global' }} />)
+
+    await user.click(screen.getByRole('switch'))
+    await user.click(screen.getByRole('switch'))
+
+    expect(JSON.parse(screen.getByTestId('edits').textContent!)).toEqual({
+      'projects.Alpha.agents.reviewer.enabled': true,
+    })
+  })
+
+  it('offers a select the way back to no value at all', async () => {
+    const user = userEvent.setup()
+    const spec: FieldSpec = {
+      key: 'agents.reviewer.prompt.variant',
+      type: 'select',
+      options: ['Thorough', 'Quick'],
+      allowEmpty: true,
+      hint: 'Prompt variant',
+    }
+    render(
+      <DraftProvider saved={{ agents: { reviewer: { prompt: { variant: 'Quick' } } } }}>
+        <Field spec={spec} saved="Quick" lang="en" />
+        <Edits />
+      </DraftProvider>,
+    )
+
+    await user.selectOptions(screen.getByRole('combobox'), '')
+
+    expect(JSON.parse(screen.getByTestId('edits').textContent!)).toEqual({
+      'agents.reviewer.prompt.variant': null,
+    })
+  })
+})

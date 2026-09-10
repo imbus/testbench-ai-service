@@ -75,6 +75,8 @@ export const en = {
   promptVars: 'Prompt variables',
   noPromptVars: 'This variant declares no variables.',
   notDeclaredByVariant: 'Not declared by this variant',
+  varsReplaceGlobal:
+    'This project defines its own prompt variables, which replace the global set entirely. Unset variables fall back to the prompt default, not to the global value.',
   notEditableHere: 'Not editable here',
   removeAllOverrides: 'Remove all overrides',
   promptMetaUnavailable: 'The prompt metadata could not be read.',
@@ -83,8 +85,10 @@ export const en = {
   fetchedAt: 'Fetched',
   refresh: 'Refresh',
   refreshing: 'Refreshing…',
+  refreshFailed: 'The project list could not be refreshed.',
   projectName: 'Project name',
   projectNameExact: 'Must match the name in TestBench exactly.',
   add: 'Add',
   editInConfigToml: 'edit in config.toml',
+  removedWithProject: 'Removed together with the project block by “Remove all overrides”',
 } as const
