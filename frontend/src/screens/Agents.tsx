@@ -14,6 +14,10 @@ import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
 import { valueAt } from './fields'
 
+/** The list's column track. The header strip and every row share it, or
+ *  the columns stop lining up the moment one of them is edited. */
+const GRID_COLUMNS = '32px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.3fr) 170px 190px'
+
 type View = 'list' | 'matrix'
 
 /**
@@ -59,46 +63,66 @@ export function Agents({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
         padding: '28px 32px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
-        maxWidth: 1100,
+        gap: 20,
       }}
     >
-      <div>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t.agents}</h2>
-        <div
-          className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
-        >
-          [testbench-ai-service.agents] · {config.data.config_path}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: 30 }}>{t.agents}</h2>
+          <div
+            className="text-muted"
+            style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+          >
+            [testbench-ai-service.agents] · {config.data.config_path}
+          </div>
+        </div>
+        <div style={{ flex: 1 }} />
+        {/* Two views of one table, so a segmented control rather than tabs:
+            the design system paints the checked option through
+            `.seg:has(input:checked)`, which needs real radios. */}
+        <div className="seg" role="radiogroup" aria-label={t.agents}>
+          {(['list', 'matrix'] as const).map((entry) => (
+            <label key={entry} className="seg-opt">
+              <input
+                type="radio"
+                name="agents-view"
+                checked={view === entry}
+                onChange={() => setView(entry)}
+              />
+              {entry === 'list' ? t.viewList : t.viewMatrix}
+            </label>
+          ))}
         </div>
       </div>
 
-      <div role="tablist" style={{ display: 'flex', gap: 18 }}>
-        {(['list', 'matrix'] as const).map((entry) => (
-          <button
-            key={entry}
-            role="tab"
-            aria-selected={view === entry}
-            onClick={() => setView(entry)}
+      {view === 'list' ? (
+        <div className="blueprint" style={{ overflowX: 'auto' }}>
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
+          <div
             style={{
-              background: 'none',
-              border: 0,
-              borderBottom: `2px solid ${view === entry ? 'var(--color-accent)' : 'transparent'}`,
-              padding: '6px 0',
-              font: 'inherit',
-              fontSize: 14,
-              color: 'inherit',
-              opacity: view === entry ? 1 : 0.7,
-              cursor: 'pointer',
+              display: 'grid',
+              gridTemplateColumns: GRID_COLUMNS,
+              gap: 12,
+              padding: '8px 14px',
+              borderBottom: '1px solid var(--color-divider)',
+              fontSize: 11,
+              letterSpacing: '.08em',
+              textTransform: 'uppercase',
+              color: 'color-mix(in srgb, var(--color-text) 60%, transparent)',
             }}
           >
-            {entry === 'list' ? t.viewList : t.viewMatrix}
-          </button>
-        ))}
-      </div>
-
-      {view === 'list' ? (
-        <div>
+            <span />
+            <span>Agent</span>
+            <span>
+              {t.model} ({t.effective})
+            </span>
+            <span>endpoint_path</span>
+            <span>prompt.file · variant</span>
+            <span>{t.agentsOn}</span>
+          </div>
           {keys.map((key) => (
             <AgentRow
               key={key}
@@ -153,79 +177,32 @@ function AgentRow({
   const savedEnabled = valueAt(disk, enabledPath)
   const enabled = draft.valueOf(enabledPath, savedEnabled ?? agent.enabled) === true
 
+  const promptLabel = [agent.prompt?.file, agent.prompt?.variant]
+    .filter((part): part is string => typeof part === 'string' && part !== '')
+    .join(' · ')
+
   return (
-    <div
-      data-testid={`agent-row-${agentKey}`}
-      style={{ borderBottom: '1px solid var(--color-divider)', padding: '10px 0' }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          aria-label={`${agentKey} ${t.agentsOn}`}
-          disabled={!isAdmin}
-          onClick={() => draft.setValue(enabledPath, !enabled)}
-          style={{
-            width: 36,
-            height: 20,
-            flex: 'none',
-            borderRadius: 10,
-            border: '1px solid var(--color-divider)',
-            background: enabled ? 'var(--color-accent)' : 'var(--color-surface)',
-            position: 'relative',
-            cursor: isAdmin ? 'pointer' : 'default',
-            opacity: isAdmin ? 1 : 0.5,
-            padding: 0,
-          }}
-        >
-          <span
-            style={{
-              position: 'absolute',
-              top: 2,
-              left: enabled ? 18 : 2,
-              width: 14,
-              height: 14,
-              borderRadius: 7,
-              background: enabled ? '#fff' : 'var(--color-text)',
-              transition: 'left .15s',
-            }}
-          />
-        </button>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <Link
-            to={`/admin/agents/${encodeURIComponent(agentKey)}`}
-            style={{
-              color: 'inherit',
-              fontSize: 14,
-              fontFamily: 'ui-monospace, Menlo, monospace',
-            }}
-          >
-            {agentKey}
-          </Link>
-          <div className="text-muted" style={{ fontSize: 11 }}>
-            {meta.data?.name ?? '—'}
-          </div>
-        </div>
-
-        <div
-          className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
-        >
-          {String(agent.endpoint_path ?? '—')}
-        </div>
-
+    <div data-testid={`agent-row-${agentKey}`}>
+      <div
+        className="tb-row"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: GRID_COLUMNS,
+          gap: 12,
+          alignItems: 'center',
+          padding: '8px 14px',
+          borderBottom: '1px solid var(--color-divider)',
+          // A disabled agent dims as a whole row: the switch alone is a small
+          // mark to read across six columns.
+          opacity: enabled ? 1 : 0.6,
+        }}
+      >
         {/* Only an expander when there is something to expand. A control
             that announces itself as collapsible and then opens "no overrides"
-            is noise, and it is the row's only interactive element besides the
-            switch. */}
+            is noise. */}
         {overriders.length === 0 ? (
-          <span
-            style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, opacity: 0.8 }}
-          >
-            <span data-testid="override-count">0</span>
-            <span>{t.overrides}</span>
+          <span aria-hidden="true" className="text-muted" style={{ fontSize: 12 }}>
+            ·
           </span>
         ) : (
           <button
@@ -240,41 +217,129 @@ function AgentRow({
               fontSize: 12,
               color: 'inherit',
               cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              opacity: 0.8,
+              padding: 0,
+              textAlign: 'left',
             }}
           >
-            <span data-testid="override-count">{overriders.length}</span>
-            <span>{t.overrides}</span>
+            {expanded ? '▾' : '▸'}
           </button>
         )}
+
+        {/* One link over both lines, as the artboard draws it: the title and
+            the key are the same target, and a reader searching for either
+            finds the row. The key alone when the prompt file is unreadable --
+            repeating it as its own subtitle says nothing twice. */}
+        <Link
+          to={`/admin/agents/${encodeURIComponent(agentKey)}`}
+          style={{ color: 'inherit', minWidth: 0, textDecoration: 'none' }}
+        >
+          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 16 }}>
+            {meta.data?.name ?? agentKey}
+          </div>
+          {meta.data?.name && (
+            <div
+              className="text-muted"
+              style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+            >
+              {agentKey}
+            </div>
+          )}
+        </Link>
+
+        <span
+          className="text-muted"
+          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+        >
+          {meta.data?.default_model ?? '—'}
+        </span>
+
+        <span
+          className="text-muted"
+          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+        >
+          {String(agent.endpoint_path ?? '—')}
+        </span>
+
+        <span
+          className="text-muted"
+          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+        >
+          {promptLabel || '—'}
+        </span>
+
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            aria-label={`${agentKey} ${t.agentsOn}`}
+            disabled={!isAdmin}
+            onClick={() => draft.setValue(enabledPath, !enabled)}
+            style={{
+              width: 36,
+              height: 20,
+              flex: 'none',
+              borderRadius: 10,
+              border: '1px solid var(--color-divider)',
+              background: enabled ? 'var(--color-accent)' : 'transparent',
+              position: 'relative',
+              cursor: isAdmin ? 'pointer' : 'default',
+              opacity: isAdmin ? 1 : 0.5,
+              padding: 0,
+            }}
+          >
+            <span
+              style={{
+                position: 'absolute',
+                top: 2,
+                left: enabled ? 18 : 2,
+                width: 14,
+                height: 14,
+                borderRadius: 7,
+                background: enabled ? 'var(--color-bg)' : 'var(--color-neutral-500)',
+                transition: 'left .15s',
+              }}
+            />
+          </button>
+          <span className="text-muted" style={{ fontSize: 11 }}>
+            <span data-testid="override-count">{overriders.length}</span> {t.overrides}
+          </span>
+        </span>
       </div>
 
       {expanded && (
         <div
           data-testid={`agent-overrides-${agentKey}`}
-          style={{ padding: '8px 0 2px 50px', display: 'flex', flexWrap: 'wrap', gap: 10 }}
+          style={{
+            padding: '8px 14px 12px 58px',
+            background: 'var(--color-surface)',
+            borderBottom: '1px solid var(--color-divider)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 6,
+          }}
         >
+          <div
+            className="text-muted"
+            style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' }}
+          >
+            {t.perProject}
+          </div>
           {overriders.length === 0 ? (
             <span className="text-muted" style={{ fontSize: 12 }}>
               {t.noOverrides}
             </span>
           ) : (
             overriders.map((project) => (
-              <span
+              <div
                 key={project}
-                style={{
-                  fontSize: 12,
-                  padding: '2px 8px',
-                  borderRadius: 10,
-                  background: 'var(--color-surface)',
-                  border: '1px solid var(--color-divider)',
-                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}
               >
-                {project}
-              </span>
+                <span style={{ flex: 1 }}>{project}</span>
+                <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
+                  {t.override}
+                </span>
+              </div>
             ))
           )}
         </div>
@@ -283,14 +348,6 @@ function AgentRow({
   )
 }
 
-/**
- * Agents × projects, one tri-state per cell.
- *
- * Columns are the **union** of the cached TestBench list and the projects that
- * `config.toml` declares. A config-only project keeps its column and is
- * flagged: dropping it would hide an override the operator has to be able to
- * find, and that case is exactly the one needing attention.
- */
 function Matrix({
   keys,
   disk,
@@ -323,20 +380,30 @@ function Matrix({
     )
   }
 
+  /** What a column header says under the project's name. */
+  const columnSub = (project: string): string => {
+    const overrides = agentKeys(running).filter(
+      (agentKey) => overridingProjects(running, agentKey).indexOf(project) !== -1,
+    ).length
+    return overrides > 0 ? `${overrides} ${t.overrides}` : t.inheritsGlobal
+  }
+
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {projects.data?.source === 'unavailable' && (
-        <div
-          data-testid="projects-unavailable"
-          style={{ fontSize: 12, marginBottom: 8, color: '#a33a2b' }}
-        >
+        <div data-testid="projects-unavailable" style={{ fontSize: 12, color: '#a33a2b' }}>
           {t.projectsUnavailable}
         </div>
       )}
-      <table role="table" style={{ borderCollapse: 'collapse', fontSize: 13 }}>
+      <div className="blueprint" style={{ overflow: 'auto' }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <table role="table" style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
         <thead>
           <tr>
-            <th style={{ textAlign: 'left', padding: '6px 12px 6px 0' }} />
+            <th style={{ textAlign: 'left', padding: '8px 14px', minWidth: 220 }} />
             {columns.map((project) => {
               const inTestBench = fromTestBench.includes(project)
               return (
@@ -347,19 +414,30 @@ function Matrix({
                   data-testid={`column-${project}`}
                   data-in-testbench={String(inTestBench)}
                   style={{
-                    padding: '6px 4px',
-                    fontWeight: 500,
-                    // Long project names in a narrow column: rotate rather
-                    // than let the grid grow past the viewport.
-                    writingMode: 'vertical-rl',
-                    textOrientation: 'mixed',
+                    padding: '8px 12px',
+                    minWidth: 150,
+                    textAlign: 'left',
+                    verticalAlign: 'bottom',
+                    fontWeight: 400,
+                    borderLeft: '1px solid var(--color-divider)',
+                    borderBottom: '1px solid var(--color-divider)',
                     whiteSpace: 'nowrap',
-                    color: inTestBench ? 'inherit' : '#a33a2b',
                   }}
                   title={inTestBench ? project : `${project} · ${t.notInTestBench}`}
                 >
-                  {project}
-                  {!inTestBench && ' ⚠'}
+                  <div
+                    style={{
+                      fontFamily: 'var(--font-heading)',
+                      fontSize: 15,
+                      color: inTestBench ? 'inherit' : '#a33a2b',
+                    }}
+                  >
+                    {project}
+                    {!inTestBench && ' ⚠'}
+                  </div>
+                  <div className="text-muted" style={{ fontSize: 11, fontWeight: 400 }}>
+                    {columnSub(project)}
+                  </div>
                 </th>
               )
             })}
@@ -379,20 +457,37 @@ function Matrix({
                 <th
                   role="rowheader"
                   scope="row"
+                  className="tb-row"
                   style={{
                     textAlign: 'left',
-                    padding: '4px 12px 4px 0',
+                    padding: '6px 14px',
                     fontWeight: 400,
                     fontFamily: 'ui-monospace, Menlo, monospace',
                     whiteSpace: 'nowrap',
+                    borderBottom: '1px solid var(--color-divider)',
                   }}
                 >
                   {agentKey}
                 </th>
                 {columns.map((project) => {
                   const path = projectAgentPath(project, agentKey, 'enabled')
+                  // The cell that carries an opinion is tinted, so the shape
+                  // of the overrides is readable across the whole grid before
+                  // any single cell is read.
+                  const overridden =
+                    draft.valueOf(path, valueAt(disk, path)) !== undefined &&
+                    draft.valueOf(path, valueAt(disk, path)) !== null
                   return (
-                    <td key={project} style={{ padding: 2, textAlign: 'center' }}>
+                    <td
+                      key={project}
+                      style={{
+                        padding: '4px 12px',
+                        textAlign: 'center',
+                        borderLeft: '1px solid var(--color-divider)',
+                        borderBottom: '1px solid var(--color-divider)',
+                        background: overridden ? 'var(--color-accent-100)' : 'transparent',
+                      }}
+                    >
                       <TriState
                         path={path}
                         saved={valueAt(disk, path)}
@@ -408,7 +503,8 @@ function Matrix({
             )
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
     </div>
   )
 }

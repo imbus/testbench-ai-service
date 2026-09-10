@@ -10,12 +10,10 @@ import {
 import { useRefreshProjects } from '../api/mutations'
 import { useConfig, useProjects } from '../api/queries'
 import type { ConfigIssue } from '../api/types'
-import { Field } from '../components/Field'
-import { ReadOnlyField } from '../components/ReadOnlyField'
 import { TriState } from '../components/TriState'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
-import { PROJECT_FIELDS } from './agentFields'
+import { LANGUAGES } from './agentFields'
 import { valueAt } from './fields'
 
 function issueFor(issues: ConfigIssue[], key: string): string | undefined {
@@ -76,8 +74,8 @@ export function Projects({
         padding: '28px 32px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
-        maxWidth: 1000,
+        gap: 20,
+        maxWidth: 1100,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
@@ -170,19 +168,27 @@ export function Projects({
           {t.noProjects}
         </div>
       ) : (
-        names.map((name) => (
-          <ProjectCard
-            key={name}
-            name={name}
-            inTestBench={fromTestBench.includes(name)}
-            agentKeys={keys}
-            disk={disk}
-            running={running}
-            issues={issues}
-            isAdmin={isAdmin}
-            lang={lang}
-          />
-        ))
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gap: 24,
+          }}
+        >
+          {names.map((name) => (
+            <ProjectCard
+              key={name}
+              name={name}
+              inTestBench={fromTestBench.includes(name)}
+              agentKeys={keys}
+              disk={disk}
+              running={running}
+              issues={issues}
+              isAdmin={isAdmin}
+              lang={lang}
+            />
+          ))}
+        </div>
       )}
     </div>
   )
@@ -220,75 +226,171 @@ function ProjectCard({
   const llmConfig = llmConfigValue === null ? undefined : llmConfigValue
   const globalLanguage = valueAt(running, 'language')
 
+  // What the header chip counts: every key this project's block carries. The
+  // draft is not consulted -- the chip describes the file, and the pending
+  // banner already describes the draft.
+  const overrideCount = (() => {
+    const table = block !== null && typeof block === 'object' ? (block as Record<string, unknown>) : {}
+    const agents = table.agents
+    const perAgent =
+      agents !== null && typeof agents === 'object' ? Object.keys(agents as object).length : 0
+    return perAgent + (table.language ? 1 : 0) + (table.llm_config ? 1 : 0)
+  })()
+
+  const languagePath = projectPath(name, 'language')
+  const savedLanguage = valueAt(disk, languagePath)
+  const language = draft.valueOf(languagePath, savedLanguage)
+  const languageIssue = issueFor(issues, languagePath)
+
   return (
     <section
+      className="card blueprint"
       data-testid={`project-${name}`}
       data-in-testbench={String(inTestBench)}
-      style={{
-        border: '1px solid var(--color-divider)',
-        borderRadius: 6,
-        padding: '14px 16px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
-      }}
+      style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-        <h3 style={{ margin: 0, fontSize: 17 }}>{name}</h3>
+      {/* The frame's corner marks. Hidden under [data-corners=soft], but they
+          are what the square-cornered brand draws, so they are always emitted
+          -- and always first, as the design system's selectors expect. */}
+      <i className="corner tl" />
+      <i className="corner tr" />
+      <i className="corner bl" />
+      <i className="corner br" />
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h3 className="card-title" style={{ margin: 0, fontSize: 19 }}>
+          {name}
+        </h3>
+        <div style={{ flex: 1 }} />
         {!inTestBench && (
           <span style={{ fontSize: 11, color: '#a33a2b' }}>⚠ {t.notInTestBench}</span>
         )}
+        {overrideCount > 0 ? (
+          <span className="tag tag-accent">
+            {overrideCount} {t.overrides}
+          </span>
+        ) : (
+          <span className="tag tag-neutral">{t.inheritsGlobal}</span>
+        )}
       </div>
 
-      {isAdmin ? (
-        PROJECT_FIELDS(name).map((spec) => (
-          <Field
-            key={spec.key}
-            spec={spec}
-            saved={valueAt(disk, spec.key)}
-            issue={issueFor(issues, spec.key)}
-            inheritedFrom={{ value: globalLanguage, label: t.globalScope }}
-            lang={lang}
-          />
-        ))
-      ) : (
-        PROJECT_FIELDS(name).map((spec) => (
-          <ReadOnlyField key={spec.key} spec={spec} value={valueAt(running, spec.key) ?? globalLanguage} />
-        ))
+      {/* Three states, one control: the language override is exactly the
+          inherit/de/en choice, so it reads as a segmented switch rather than a
+          select whose empty option means "inherit". */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+        <span
+          id={`${encodeURIComponent(languagePath)}-label`}
+          style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}
+        >
+          language
+        </span>
+        {isAdmin ? (
+          <div
+            className="seg"
+            role="radiogroup"
+            aria-labelledby={`${encodeURIComponent(languagePath)}-label`}
+          >
+            <label className="seg-opt" style={{ padding: '3px 10px', fontSize: 12 }}>
+              <input
+                type="radio"
+                name={`lang-${encodeURIComponent(name)}`}
+                checked={language === undefined || language === null}
+                onChange={() => draft.unsetValue(languagePath)}
+              />
+              {t.inherit} ({String(globalLanguage ?? '')})
+            </label>
+            {LANGUAGES.map((option) => (
+              <label key={option} className="seg-opt" style={{ padding: '3px 10px', fontSize: 12 }}>
+                <input
+                  type="radio"
+                  name={`lang-${encodeURIComponent(name)}`}
+                  checked={language === option}
+                  onChange={() => draft.setValue(languagePath, option)}
+                />
+                {option}
+              </label>
+            ))}
+          </div>
+        ) : (
+          <span className="text-muted" style={{ fontSize: 12 }}>
+            {String(valueAt(running, languagePath) ?? globalLanguage ?? '')}
+          </span>
+        )}
+        {draft.isChanged(languagePath) && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ fontSize: 11, padding: '0 6px' }}
+            onClick={() => draft.revert(languagePath)}
+          >
+            {t.revert}
+          </button>
+        )}
+      </div>
+      {languageIssue && (
+        <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
+          {languageIssue}
+        </span>
       )}
 
-      <div>
-        <div className="text-muted" style={{ fontSize: 11, marginBottom: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div className="text-muted" style={{ fontSize: 11 }}>
           {t.agents}
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
-          {keys.map((agentKey) => {
-            const path = projectAgentPath(name, agentKey, 'enabled')
-            return (
-              <div
-                key={agentKey}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}
-              >
-                <TriState
-                  path={path}
-                  saved={valueAt(disk, path)}
-                  inherited={
-                    // Draft-aware: an agent switched off globally in this same
-                    // unapplied draft must not read as running here.
-                    draft.valueOf(
-                      agentPath(agentKey, 'enabled'),
-                      effectiveAgent(running, agentKey, null).enabled,
-                    ) === true
-                  }
-                  label={`${agentKey} · ${name}`}
-                  readOnly={!isAdmin}
-                  lang={lang}
-                />
-                <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{agentKey}</span>
-              </div>
-            )
-          })}
-        </div>
+        {keys.map((agentKey) => {
+          const path = projectAgentPath(name, agentKey, 'enabled')
+          const scoped = effectiveAgent(running, agentKey, name)
+          const variant = scoped.prompt?.variant
+          const hasOverride = valueAt(disk, path) !== undefined
+          return (
+            <div
+              key={agentKey}
+              className="tb-row"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                fontSize: 13,
+                padding: '4px 0',
+                borderTop: '1px solid var(--color-divider)',
+              }}
+            >
+              <TriState
+                path={path}
+                saved={valueAt(disk, path)}
+                inherited={
+                  // Draft-aware: an agent switched off globally in this same
+                  // unapplied draft must not read as running here.
+                  draft.valueOf(
+                    agentPath(agentKey, 'enabled'),
+                    effectiveAgent(running, agentKey, null).enabled,
+                  ) === true
+                }
+                label={`${agentKey} · ${name}`}
+                readOnly={!isAdmin}
+                lang={lang}
+              />
+              <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', flex: 1 }}>
+                {agentKey}
+              </span>
+              {/* Which prompt this agent runs here, since the toggle only says
+                  whether it runs at all. */}
+              {typeof variant === 'string' && variant && (
+                <span
+                  className="text-muted"
+                  style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+                >
+                  {variant}
+                </span>
+              )}
+              {hasOverride && (
+                <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
+                  {t.override}
+                </span>
+              )}
+            </div>
+          )
+        })}
       </div>
 
       {/* D8 keeps the per-project surface to language and agents. A project
@@ -322,8 +424,12 @@ function ProjectCard({
         </div>
       )}
 
-      {isAdmin && declared && (
-        <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span className="card-meta" style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>
+          [testbench-ai-service.{projectPath(name)}]
+        </span>
+        <div style={{ flex: 1 }} />
+        {isAdmin && declared && (
           <button
             type="button"
             className="btn btn-ghost"
@@ -332,8 +438,8 @@ function ProjectCard({
           >
             {t.removeAllOverrides}
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   )
 }

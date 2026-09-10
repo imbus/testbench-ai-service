@@ -136,26 +136,47 @@ describe('which projects get a card', () => {
 // --- per-project settings ----------------------------------------------
 
 describe('a project card', () => {
-  it('offers the language override', async () => {
+  it('offers the language override as a three-way choice', async () => {
     renderProjects()
     await ready()
-    const card = screen.getByTestId('project-Alpha')
-    expect(within(card).getByLabelText('language')).toHaveValue('en')
+    const group = within(screen.getByTestId('project-Alpha')).getByRole('radiogroup', {
+      name: 'language',
+    })
+
+    expect(within(group).getByRole('radio', { name: 'en' })).toBeChecked()
+    expect(within(group).getByRole('radio', { name: /Inherited/ })).not.toBeChecked()
   })
 
   it('writes the language override to the project path', async () => {
     renderProjects()
     await ready()
     const card = screen.getByTestId('project-Fresh')
-    await userEvent.selectOptions(within(card).getByLabelText('language'), 'en')
+
+    await userEvent.click(within(card).getByRole('radio', { name: 'en' }))
+
     expect(edits()).toEqual({ 'projects.Fresh.language': 'en' })
+  })
+
+  it('takes the override back off again', async () => {
+    // The reason this is a segment and not a select: "inherit" is a state the
+    // operator picks, not the absence of a pick.
+    renderProjects()
+    await ready()
+    const card = screen.getByTestId('project-Alpha')
+
+    await userEvent.click(within(card).getByRole('radio', { name: /Inherited/ }))
+
+    expect(edits()).toEqual({ 'projects.Alpha.language': null })
   })
 
   it('says a project with no language override inherits the global one', async () => {
     renderProjects()
     await ready()
     const card = screen.getByTestId('project-Legacy')
-    expect(within(card).getByTestId('inherit-note').textContent).toMatch(/de/)
+
+    const inheriting = within(card).getByRole('radio', { name: /Inherited/ })
+    expect(inheriting).toBeChecked()
+    expect(inheriting.closest('label')?.textContent).toMatch(/de/)
   })
 
   it('has a tri-state per agent', async () => {

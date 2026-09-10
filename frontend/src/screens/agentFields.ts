@@ -17,7 +17,8 @@ import { joinPath } from '../api/paths'
 import type { PromptVarDefinition } from '../api/types'
 import type { FieldSpec } from './fields'
 
-const LANGUAGES = ['de', 'en']
+/** The languages a project may pin, as the Service form offers them. */
+export const LANGUAGES = ['de', 'en']
 
 function scopedPath(scope: Scope, agentKey: string, setting: string): string {
   return scope.kind === 'global'

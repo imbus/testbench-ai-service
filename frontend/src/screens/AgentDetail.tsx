@@ -159,10 +159,10 @@ export function AgentDetail({
     <div
       data-testid="agent-detail"
       style={{
-        padding: '28px 32px',
+        padding: '24px 32px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 18,
         maxWidth: 900,
       }}
     >
@@ -216,7 +216,11 @@ export function AgentDetail({
         </div>
       )}
 
-      <div data-testid="agent-settings">
+      <div className="blueprint" data-testid="agent-settings" style={{ padding: '4px 14px' }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
         {AGENT_FIELDS(scope, agentKey, variantNames, savedVariant ? String(savedVariant) : undefined).map(
           (spec) => {
             // From the spec, not from the shape of its path: a fourth field
@@ -243,8 +247,20 @@ export function AgentDetail({
         )}
       </div>
 
-      <section data-testid="agent-vars">
-        <h3 style={{ margin: '4px 0', fontSize: 16 }}>{t.promptVars}</h3>
+      <section className="blueprint" data-testid="agent-vars" style={{ padding: '10px 14px' }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{t.promptVars}</h3>
+          <span
+            className="text-muted"
+            style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+          >
+            prompt.vars
+          </span>
+        </div>
         {varsReplaced && (
           <div data-testid="vars-replaced" className="text-muted" style={{ fontSize: 12 }}>
             {t.varsReplaceGlobal}
@@ -289,8 +305,12 @@ export function AgentDetail({
         )}
       </section>
 
-      <section data-testid="agent-readonly">
-        <h3 style={{ margin: '4px 0', fontSize: 16 }}>{t.notEditableHere}</h3>
+      <section className="blueprint" data-testid="agent-readonly" style={{ padding: '10px 14px' }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{t.notEditableHere}</h3>
         {AGENT_READONLY_FIELDS(agentKey).map((spec) => (
           <ReadOnlyField key={spec.key} spec={spec} value={valueAt(running, spec.key)} />
         ))}
@@ -325,17 +345,18 @@ function ScopeTab({
     <button
       type="button"
       role="tab"
+      className="tb-chip"
       aria-selected={selected}
       onClick={onSelect}
       style={{
-        background: 'none',
-        border: 0,
-        borderBottom: `2px solid ${selected ? 'var(--color-accent)' : 'transparent'}`,
-        padding: '6px 0',
+        // A chip, as the artboard draws the scope switcher -- but still a tab,
+        // because that is what selecting a scope is.
+        border: '1px solid var(--color-divider)',
+        padding: '4px 12px',
         font: 'inherit',
-        fontSize: 14,
-        color: 'inherit',
-        opacity: selected ? 1 : 0.7,
+        fontSize: 13,
+        background: selected ? 'var(--color-accent)' : 'transparent',
+        color: selected ? 'var(--color-bg)' : 'inherit',
         cursor: 'pointer',
       }}
     >
