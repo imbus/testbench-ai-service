@@ -23,6 +23,7 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.utils.config import CONFIG_PREFIX
 from testbench_ai_service.webui.models import ConfigIssue
+from testbench_ai_service.webui.paths import join_path
 
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 _LOG_FILE_SECTION = f"[{CONFIG_PREFIX}.logging.file]"
@@ -64,7 +65,17 @@ def _toml_section(location: tuple[Any, ...]) -> str:
 
 
 def _issue_path(location: tuple[Any, ...]) -> str:
-    return ".".join(str(part) for part in location)
+    """Spell a pydantic error location the way the console addresses the field.
+
+    Through the tokenizer, not a plain join: the forms match an issue to an
+    input by comparing this string against the path they built, and a project
+    name that needs quoting is quoted there. An array index is a bare segment
+    and comes through unchanged.
+    """
+    parts = [str(part) for part in location]
+    # A model-level error carries no location at all; it stays the empty
+    # string the root-addressed issues already used.
+    return join_path(parts) if parts else ""
 
 
 def _existing_path_problem(path: Path) -> str | None:

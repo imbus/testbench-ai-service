@@ -32,6 +32,7 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger, setup_logging
 from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.webui.paths import join_path
 
 # Fixed at boot by uvicorn or by the middleware stack.
 RESTART_FIELDS: tuple[str, ...] = (
@@ -84,12 +85,12 @@ def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
     # An added or removed agent is reported as the agent itself rather than as
     # its fields: there is no old (or new) value to name, and the operator's
     # takeaway is the same either way.
-    changed.extend(f"agents.{key}" for key in old_keys ^ new_keys)
+    changed.extend(join_path(["agents", key]) for key in old_keys ^ new_keys)
 
     for key in sorted(old_keys & new_keys):
         for field in RESTART_AGENT_FIELDS:
             if getattr(old.agents[key], field) != getattr(new.agents[key], field):
-                changed.append(f"agents.{key}.{field}")
+                changed.append(join_path(["agents", key, field]))
 
     return sorted(changed)
 

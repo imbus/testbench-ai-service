@@ -274,6 +274,26 @@ def test_a_dotted_project_name_does_not_collide_with_its_bare_lookalike():
     )
 
 
+def test_two_spellings_of_one_address_collide():
+    """Same key, two spellings, two values -- and one of them would be lost.
+
+    The prefix check exists so an overlay cannot carry both a table and a key
+    inside it. The same reasoning applies to the exact duplicate: whichever
+    entry merge_edits happens to see last wins, silently, and the operator
+    approved a diff built from only one of them.
+    """
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths(
+            {
+                "projects.My Project.language": "de",
+                'projects."My Project".language': "en",
+            }
+        )
+
+    assert exc.value.status_code == 400
+    assert "conflict" in exc.value.detail.lower()
+
+
 def test_deepest_real_path_is_within_the_segment_limit():
     validate_edit_paths({'projects."Release 2.0".agents.reviewer.prompt.vars.max_findings': 10})
 

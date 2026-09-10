@@ -342,3 +342,29 @@ def test_an_existing_writable_log_file_is_still_accepted(tmp_path):
 
     assert issues == []
     assert config is not None
+
+
+def test_an_issue_path_is_spelled_the_way_the_console_addresses_it():
+    """The forms match an issue to a field by comparing the two paths.
+
+    The console builds its paths with the tokenizer, so a project name that
+    needs quoting is quoted there. An issue path joined with a plain '.' never
+    matches it, and the message is silently dropped instead of marking the
+    field the operator has to fix.
+    """
+    _, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "projects": {"Release 2.0": {"language": "INVALID_LANGUAGE"}},
+        }
+    )
+
+    assert issues
+    assert issues[0].path == 'projects."Release 2.0".language'
+
+
+def test_an_array_index_stays_a_bare_segment_in_the_issue_path():
+    _, issues = validate_config_dict({"tb_server_url": TB_URL, "trusted_proxies": ["valid", 123]})
+
+    assert issues
+    assert issues[0].path == "trusted_proxies.1"

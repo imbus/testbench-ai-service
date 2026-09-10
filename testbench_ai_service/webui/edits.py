@@ -49,13 +49,27 @@ def _contains_sentinel(value: Any) -> bool:
 
 
 def _check_path_prefix_collisions(tokenized: dict[str, list[str]]) -> None:
-    """Reject overlays with both a path and a proper prefix of that path.
+    """Reject overlays with two entries for one address.
 
     Compares *segments*, not strings. Two spellings of the same path -- say
     ``projects."My Project"`` and ``projects.My Project`` -- are the same
     address, and a string-prefix test would miss the collision between them.
+
+    That covers two shapes: a path together with a proper prefix of it (a
+    table and a key inside that table), and the exact duplicate. Both mean one
+    of the two values is silently dropped, and the operator approved a diff
+    built from whichever one survived.
     """
-    by_segments = {tuple(segments): path for path, segments in tokenized.items()}
+    by_segments: dict[tuple[str, ...], str] = {}
+    for path, segments in tokenized.items():
+        key = tuple(segments)
+        if key in by_segments:
+            _reject(
+                f"Edit paths {path!r} and {by_segments[key]!r} conflict: "
+                "they address the same key, spelled two ways"
+            )
+        by_segments[key] = path
+
     for path, segments in tokenized.items():
         for index in range(1, len(segments)):
             prefix = tuple(segments[:index])
