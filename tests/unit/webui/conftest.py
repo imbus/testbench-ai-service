@@ -9,6 +9,21 @@ from testbench_ai_service.main import create_app
 TB_URL = "https://localhost:9443/api/"
 
 
+@pytest.fixture(autouse=True)
+def no_tb_server_probe():
+    """Keep the console suite off the network.
+
+    ``AppConfig`` validation probes ``tb_server_url`` with a real HTTP request,
+    and the preview, apply and status routes build an ``AppConfig`` out of the
+    operator's edits -- so those tests passed only when something happened to
+    be listening on ``localhost:9443``, and failed on any machine where nothing
+    was. Whether that URL is reachable is not what this suite is about; it is
+    covered where the validator itself is tested.
+    """
+    with patch("testbench_ai_service.config.validate_tb_server_url"):
+        yield
+
+
 @pytest.fixture
 def make_app():
     """Build a real app with the LLM factory mocked out."""
@@ -65,3 +80,4 @@ def login(client, tb_connection):
             )
 
     return _login
+
