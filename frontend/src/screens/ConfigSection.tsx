@@ -89,22 +89,28 @@ export function ConfigSection({
         padding: '28px 32px',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
-        maxWidth: 900,
+        gap: 20,
+        maxWidth: 1100,
       }}
     >
-      <div>
+      {/* The artboard sets the screen title and the TOML section it edits on
+          one line, so the section reads as the subject of the heading rather
+          than as a caption under it. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <h2 style={{ margin: 0, fontSize: 30 }}>{t[TITLE_KEY[section]]}</h2>
-        <div
+        <span
           className="text-muted"
           style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
         >
           {TOML_SECTION[section]} · {config.data.config_path}
-        </div>
+        </span>
       </div>
 
       {section === 'service' && (
-        <div role="tablist" style={{ display: 'flex', gap: 18 }}>
+        <div
+          role="tablist"
+          style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--color-divider)' }}
+        >
           {SERVICE_TABS.map((entry) => {
             const count = tabIssueCount(entry.key)
             return (
@@ -118,7 +124,7 @@ export function ConfigSection({
                   background: 'none',
                   border: 0,
                   borderBottom: `2px solid ${tab === entry.key ? 'var(--color-accent)' : 'transparent'}`,
-                  padding: '6px 0',
+                  padding: '8px 0',
                   font: 'inherit',
                   fontSize: 14,
                   color: 'inherit',
@@ -155,7 +161,7 @@ export function ConfigSection({
         </div>
       )}
 
-      <div>
+      <div style={{ maxWidth: 860 }}>
         {fields.map((spec) => {
           const issue = issues.find((entry) => issueMatchesField(entry.path, spec.key))?.message
           // Non-admins keep the phase-1 read-only rendering unchanged rather

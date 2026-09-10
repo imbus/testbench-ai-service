@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
@@ -90,5 +90,42 @@ describe('PendingBanner', () => {
     await userEvent.click(screen.getByRole('button', { name: 'View diff' }))
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+
+  it('opens the same diff dialog from Apply', async () => {
+    // The artboard's primary verb on this strip is Apply, and it opens the
+    // diff rather than writing: one apply, behind one approval of the exact
+    // text that will be written.
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        valid: true,
+        issues: [],
+        diffs: [
+          {
+            path: '/tmp/config.toml',
+            diff: '-port = 8010\n+port = 9999\n',
+            added: 1,
+            removed: 1,
+          },
+        ],
+        restart_required: ['port'],
+        in_flight_tasks: 0,
+        toml: '',
+      }),
+    } as Response)
+    renderBanner()
+
+    await userEvent.click(screen.getByText('seed'))
+    await userEvent.click(
+      within(screen.getByRole('status')).getByRole('button', { name: 'Apply' }),
+    )
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    // Nothing was written by opening it.
+    expect(
+      fetchMock.mock.calls.filter(([url]) => String(url).includes('/config/apply')),
+    ).toHaveLength(0)
   })
 })

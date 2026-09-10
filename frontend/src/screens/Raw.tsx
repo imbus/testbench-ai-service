@@ -77,17 +77,21 @@ export function Raw({ lang }: { lang: Lang }) {
 
       {preview.data && !preview.isError && (
         <pre
+          className="blueprint"
           style={{
             margin: 0,
             padding: '16px 20px',
             fontSize: 12.5,
             lineHeight: 1.55,
             background: 'var(--color-surface)',
-            border: '1px solid var(--color-divider)',
             overflow: 'auto',
             fontFamily: 'ui-monospace, Menlo, monospace',
           }}
         >
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
           {preview.data.toml}
         </pre>
       )}

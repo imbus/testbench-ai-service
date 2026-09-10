@@ -73,6 +73,17 @@ export function PendingBanner({
         >
           {t.discard}
         </button>
+        {/* The artboard's primary verb, and it does what the artboard's does:
+            opens the diff. Applying still happens in one place, behind the
+            operator's approval of the exact text that will be written. */}
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ padding: '4px 12px', fontSize: 13 }}
+          onClick={() => setShowDiff(true)}
+        >
+          {t.apply}
+        </button>
       </div>
       {showDiff && (
         <DiffDialog lang={lang} onClose={() => setShowDiff(false)} onIssues={onIssues} />

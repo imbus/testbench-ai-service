@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useTranslations, type Lang, type Translations } from '../i18n'
 
@@ -7,9 +8,11 @@ interface NavItem {
   labelKey: keyof Translations
   icon: string
   adminOnly: boolean
+  /** Renders a rule above this entry, the way the artboard groups the rail. */
+  dividerBefore?: boolean
 }
 
-/** Icon paths are lifted from the source design's ICONS map. */
+/** Icon paths are lifted verbatim from the source design's ICONS map. */
 export const NAV_ITEMS: NavItem[] = [
   {
     key: 'status',
@@ -43,28 +46,41 @@ export const NAV_ITEMS: NavItem[] = [
     key: 'agents',
     path: '/admin/agents',
     labelKey: 'agents',
-    icon: 'M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5zM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
+    icon: 'M12 8V4H8M4 8h16v12H4zM2 14h2M20 14h2M15 13v2M9 13v2',
     // Read-only for a non-admin, like Status: gating the link would hide
     // information the operator is allowed to see.
     adminOnly: false,
+    dividerBefore: true,
   },
   {
     key: 'projects',
     path: '/admin/projects',
     labelKey: 'projects',
-    icon: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+    icon: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z',
     adminOnly: false,
   },
+  // The artboard puts Prompts here, between Projects and this rule. It is
+  // phase 4's screen; the rule it sits above is the artboard's and stays.
   {
     key: 'raw',
     path: '/admin/raw',
     labelKey: 'raw',
-    icon: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M9 13h6M9 17h6',
+    icon: 'M10 12.5 8 15l2 2.5M14 12.5l2 2.5-2 2.5M14 2v4a2 2 0 0 0 2 2h4M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z',
     adminOnly: true,
+    dividerBefore: true,
   },
 ]
 
-export function NavRail({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
+export function NavRail({
+  lang,
+  isAdmin,
+  /** Count shown on Projects, as the artboard badges it. Hidden at zero. */
+  overrideCount = 0,
+}: {
+  lang: Lang
+  isAdmin: boolean
+  overrideCount?: number
+}) {
   const t = useTranslations(lang)
   return (
     <nav
@@ -77,60 +93,88 @@ export function NavRail({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
         display: 'flex',
         flexDirection: 'column',
         gap: 2,
+        // Below the 52px top bar, so a long matrix scrolls under a rail that
+        // stays where the operator left it.
+        position: 'sticky',
+        top: 52,
+        alignSelf: 'flex-start',
+        height: 'calc(100vh - 52px)',
       }}
     >
       {NAV_ITEMS.map((item) => {
         const restricted = item.adminOnly && !isAdmin
+        const badge = item.key === 'projects' && overrideCount > 0 ? overrideCount : null
         return (
-          <NavLink
-            key={item.key}
-            to={item.path}
-            aria-disabled={restricted || undefined}
-            style={({ isActive }) => ({
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: '8px 14px',
-              margin: '0 8px',
-              color: 'inherit',
-              textDecoration: 'none',
-              fontSize: 14,
-              borderLeft: `2px solid ${isActive ? 'var(--color-accent)' : 'transparent'}`,
-              background: isActive ? 'var(--color-accent-100)' : 'transparent',
-              opacity: restricted ? 0.5 : isActive ? 1 : 0.8,
-            })}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              aria-hidden="true"
-              style={{ flex: 'none', opacity: 0.8 }}
+          <Fragment key={item.key}>
+            {item.dividerBefore && (
+              <div
+                aria-hidden="true"
+                style={{ height: 1, background: 'var(--color-divider)', margin: '8px 16px' }}
+              />
+            )}
+            <NavLink
+              to={item.path}
+              className="tb-nav"
+              aria-disabled={restricted || undefined}
+              style={({ isActive }) => ({
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 14px',
+                margin: '0 8px',
+                color: 'inherit',
+                textDecoration: 'none',
+                fontSize: 14,
+                borderLeft: `2px solid ${isActive ? 'var(--color-accent)' : 'transparent'}`,
+                background: isActive ? 'var(--color-accent-100)' : 'transparent',
+                opacity: restricted ? 0.5 : isActive ? 1 : 0.8,
+              })}
             >
-              <path d={item.icon} />
-            </svg>
-            <span style={{ flex: 1 }}>{t[item.labelKey]}</span>
-            {restricted && (
               <svg
-                width="13"
-                height="13"
+                width="16"
+                height="16"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 aria-hidden="true"
+                style={{ flex: 'none', opacity: 0.8 }}
               >
-                <rect x="4" y="11" width="16" height="10" />
-                <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                <path d={item.icon} />
               </svg>
-            )}
-          </NavLink>
+              <span style={{ flex: 1 }}>{t[item.labelKey]}</span>
+              {restricted && (
+                <svg
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  aria-hidden="true"
+                >
+                  <rect x="4" y="11" width="16" height="10" />
+                  <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                </svg>
+              )}
+              {badge !== null && (
+                <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
+                  {badge}
+                </span>
+              )}
+            </NavLink>
+          </Fragment>
         )
       })}
+      <div style={{ flex: 1 }} />
+      <div
+        className="text-muted"
+        style={{ padding: '8px 24px', fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+      >
+        config.toml · prompts/
+      </div>
     </nav>
   )
 }

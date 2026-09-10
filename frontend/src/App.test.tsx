@@ -263,7 +263,11 @@ it('clears the marker after a successful apply', async () => {
   // Reopening mounts a fresh DiffDialog, which re-previews -- this time the
   // draft is reported valid, so Apply is offered.
   await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
-  await userEvent.click(await screen.findByRole('button', { name: 'Übernehmen' }))
+  // Scoped to the dialog: the pending banner carries an Apply of its own
+  // (it opens this dialog), so the name is ambiguous page-wide.
+  await userEvent.click(
+    within(await screen.findByRole('dialog')).getByRole('button', { name: 'Übernehmen' }),
+  )
 
   await waitFor(() =>
     expect(screen.getByLabelText('port')).not.toHaveAttribute('aria-invalid', 'true'),
@@ -352,7 +356,11 @@ it('a structured 422 apply rejection does not loop the renderer (regression for 
   renderApp({ isAdmin: true, route: '/admin/service' })
   await screen.findByRole('navigation')
   await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
-  await userEvent.click(await screen.findByRole('button', { name: 'Übernehmen' }))
+  // Scoped to the dialog: the pending banner carries an Apply of its own
+  // (it opens this dialog), so the name is ambiguous page-wide.
+  await userEvent.click(
+    within(await screen.findByRole('dialog')).getByRole('button', { name: 'Übernehmen' }),
+  )
 
   await waitFor(() =>
     expect(within(screen.getByRole('dialog')).getByText(/Input should be a valid integer/)).toBeInTheDocument(),

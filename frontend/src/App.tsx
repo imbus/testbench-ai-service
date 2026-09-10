@@ -57,11 +57,14 @@ export function App() {
         // TestBench they are signing into before they type a password.
         serverUrl={meta.data?.tb_server_url ?? ''}
         lang={lang}
+        theme={theme}
         busy={busy}
         error={error}
         onSignIn={(username, password) => {
           void signIn(username, password).catch(() => undefined)
         }}
+        onSetLang={setLang}
+        onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
       />
     )
   }
@@ -70,6 +73,7 @@ export function App() {
   // response: an operator who edits config.toml by hand, or who reloads the
   // console after applying, must still see the banner.
   const restartFields = status.data?.restart_required ?? []
+  const service = status.data?.service
 
   return (
     // The draft is measured against the config *on disk* -- the draft is "what
@@ -85,6 +89,7 @@ export function App() {
           session={session}
           lang={lang}
           theme={theme}
+          serviceLabel={service ? `${service.host}:${service.port}` : undefined}
           onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
           onSetLang={setLang}
           onSignOut={() => void signOut()}
@@ -104,7 +109,11 @@ export function App() {
           </div>
         )}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
-          <NavRail lang={lang} isAdmin={session.is_admin} />
+          <NavRail
+            lang={lang}
+            isAdmin={session.is_admin}
+            overrideCount={status.data?.agents?.project_overrides ?? 0}
+          />
           <main style={{ flex: 1, minWidth: 0 }}>
             <Routes>
               <Route path="/admin" element={<Navigate to="/admin/status" replace />} />

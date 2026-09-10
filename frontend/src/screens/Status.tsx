@@ -81,7 +81,7 @@ export function Status({ lang }: { lang: Lang }) {
         maxWidth: 1200,
       }}
     >
-      <div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <h2 style={{ margin: 0, fontSize: 30 }}>{t.status}</h2>
         <span className="text-muted" style={{ fontSize: 13 }}>
           {t.statusSub}
@@ -151,48 +151,60 @@ export function Status({ lang }: { lang: Lang }) {
         </Card>
       </div>
 
-      <div>
-        <h4 style={{ margin: '0 0 8px' }}>{t.recentLog}</h4>
-        <div className="card blueprint" style={{ padding: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <h4 style={{ margin: 0 }}>{t.recentLog}</h4>
+          <span
+            className="text-muted"
+            style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+          >
+            {log_file}
+          </span>
+        </div>
+        <div
+          className="blueprint"
+          style={{
+            background: 'var(--color-surface)',
+            padding: '10px 14px',
+            fontFamily: 'ui-monospace, Menlo, monospace',
+            fontSize: 12,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 3,
+            overflowX: 'auto',
+          }}
+        >
           <i className="corner tl" />
           <i className="corner tr" />
           <i className="corner bl" />
           <i className="corner br" />
-          <div className="card-meta" style={{ marginBottom: 8 }}>
-            {log_file}
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-              fontFamily: 'ui-monospace, Menlo, monospace',
-              fontSize: 12,
-              overflowX: 'auto',
-            }}
-          >
-            {(logs.data ?? []).map((line) => (
-              <div
-                key={line.raw}
-                data-testid="log-line"
-                style={{ display: 'flex', gap: 10, whiteSpace: 'pre' }}
+          {(logs.data ?? []).map((line) => (
+            <div
+              key={line.raw}
+              data-testid="log-line"
+              // The artboard's four fixed tracks: time, level, source, message.
+              // A grid keeps the messages on one left edge, which a flex row
+              // with per-cell minimums only manages until one source is long.
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '70px 70px 240px 1fr',
+                gap: 12,
+                whiteSpace: 'pre',
+              }}
+            >
+              <span className="text-muted">{line.timestamp?.slice(11) ?? ''}</span>
+              <span
+                style={{
+                  color: LEVEL_COLORS[line.level ?? ''] ?? 'var(--color-accent-700)',
+                  fontWeight: 500,
+                }}
               >
-                <span className="text-muted">{line.timestamp?.slice(11) ?? ''}</span>
-                <span
-                  style={{
-                    color: LEVEL_COLORS[line.level ?? ''] ?? 'var(--color-accent-700)',
-                    minWidth: 62,
-                  }}
-                >
-                  {line.level ?? ''}
-                </span>
-                <span className="text-muted" style={{ minWidth: 160 }}>
-                  {line.source ?? ''}
-                </span>
-                <span>{line.message}</span>
-              </div>
-            ))}
-          </div>
+                {line.level ?? ''}
+              </span>
+              <span className="text-muted">{line.source ?? ''}</span>
+              <span>{line.message}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

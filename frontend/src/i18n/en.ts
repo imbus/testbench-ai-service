@@ -8,6 +8,9 @@ export const en = {
   prompts: 'Prompts',
   raw: 'Raw config.toml',
   login: 'Sign in',
+  consoleSubtitle: 'Configuration console',
+  loginHint:
+    'The JWT is validated against the TestBench REST API. Admin: full access · Test manager: read-only.',
   username: 'Username',
   password: 'Password',
   server: 'TestBench server',

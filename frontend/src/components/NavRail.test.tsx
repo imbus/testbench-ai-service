@@ -82,6 +82,22 @@ it('keeps agents and projects readable for a non-admin', () => {
   }
 })
 
+it('badges Projects with the number of overrides in force', () => {
+  render(
+    <MemoryRouter initialEntries={['/admin/status']}>
+      <NavRail lang="de" isAdmin overrideCount={3} />
+    </MemoryRouter>,
+  )
+
+  expect(screen.getByRole('link', { name: /Projekte/ })).toHaveTextContent('3')
+})
+
+it('leaves the badge off when nothing is overridden', () => {
+  renderNav(true)
+
+  expect(screen.getByRole('link', { name: /Projekte/ })).toHaveTextContent(/^Projekte$/)
+})
+
 it('orders agents and projects after the config sections and before the raw file', () => {
   renderNav(true)
   const labels = screen.getAllByRole('link').map((link) => link.textContent ?? '')

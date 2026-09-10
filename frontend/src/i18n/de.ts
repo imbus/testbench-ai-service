@@ -8,6 +8,9 @@ export const de = {
   prompts: 'Prompts',
   raw: 'config.toml (roh)',
   login: 'Anmelden',
+  consoleSubtitle: 'Konfigurationskonsole',
+  loginHint:
+    'Das JWT wird gegen die TestBench-REST-API geprüft. Admin: Vollzugriff · Testmanager: nur lesend.',
   username: 'Benutzername',
   password: 'Passwort',
   server: 'TestBench-Server',

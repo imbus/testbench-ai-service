@@ -58,6 +58,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- The console's remaining screens now follow the Claude Design artboard the agents and
+  projects screens were rebuilt against. The sign-in screen carries the TestBench lockup on
+  the artboard's blueprint grid, with language and theme controls that work before sign-in;
+  the top bar carries the same lockup, the address the service answers on, and the signed-in
+  operator with their role; the nav rail is grouped by rules, badges Projects with the number
+  of overrides in force, and names the files the console writes; the Status log reads as the
+  artboard's four-column register; and the settings screens take the artboard's header,
+  tab strip and measure. The pending-changes strip gains the artboard's **Apply** button,
+  which opens the same diff dialog the existing one does -- nothing is written without the
+  operator approving the exact text first.
+
 - A partial `[testbench-ai-service.agents.<key>]` block now overrides only the settings it
   names, instead of replacing the whole agent table. Writing just `enabled = false` for a
   built-in agent is now valid and leaves the other agents alone; nested blocks merge too, so
