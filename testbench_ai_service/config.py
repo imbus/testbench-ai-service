@@ -63,6 +63,23 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
 }
 
 
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Merge *override* into *base*, recursing into nested tables.
+
+    Neither argument is mutated. A non-table value replaces whatever is at that
+    key; two tables are merged key by key, so ``{"prompt": {"variant": "x"}}``
+    sets the variant without discarding the prompt's ``file``.
+    """
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(existing, value)
+        else:
+            merged[key] = value
+    return merged
+
+
 class AppConfig(BaseModel):
     tb_server_url: str = Field(
         "https://localhost:9443/api/",
@@ -138,6 +155,48 @@ class AppConfig(BaseModel):
         exclude=True,
         description="Path this config was loaded from; set by load_config_from_file",
     )
+
+    @field_validator("agents", mode="before")
+    @classmethod
+    def merge_agents_onto_defaults(cls, agents: Any) -> Any:
+        """Let a partial ``[agents.<key>]`` block override one setting.
+
+        Without this, ``agents`` is a plain replacement: every ``AgentConfig``
+        field is required, so ``enabled = false`` on its own fails validation,
+        and spelling the block out in full drops every agent the operator did
+        not mention. There was no way to express "turn this agent off".
+
+        A key that names a built-in is merged onto that built-in, recursively,
+        so ``[agents.x.prompt] variant = "..."`` keeps the prompt's ``file``. A
+        key that names no built-in is passed through untouched and must still
+        be declared in full -- there is nothing to inherit from.
+
+        Merging happens *before* validation on plain dicts, rather than through
+        ``model_copy(update=...)`` on the built model: ``model_copy`` neither
+        validates nor recurses, so a nested partial would leave ``prompt`` as a
+        raw dict and every ``agent.prompt.file`` lookup would raise.
+        """
+        if not isinstance(agents, dict):
+            return agents
+
+        # Start from every built-in, so an agent the operator did not mention
+        # survives. model_dump() builds a fresh dict every call, so the shared
+        # DEFAULT_AGENTS models are never touched.
+        merged: dict[Any, Any] = {
+            key: default.model_dump() for key, default in DEFAULT_AGENTS.items()
+        }
+        for key, override in agents.items():
+            default = DEFAULT_AGENTS.get(key)
+            if default is None:
+                merged[key] = override
+                continue
+            # A Python caller passes AgentConfig objects; TOML gives dicts.
+            fields = override.model_dump() if isinstance(override, BaseModel) else override
+            if not isinstance(fields, dict):
+                merged[key] = override
+                continue
+            merged[key] = _deep_merge(merged[key], fields)
+        return merged
 
     @field_validator("tb_server_url", mode="after")
     @classmethod

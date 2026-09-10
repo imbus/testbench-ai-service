@@ -371,11 +371,22 @@ For a complete implementation guide, examples, and troubleshooting reference, se
 
 Each agent is configured under its own key. The three built-in Agents are `test_case_set_reviewer`, `test_case_set_describer`, and `defect_explainer`.
 
+A block for a **built-in** agent overrides only the settings it names; everything else keeps its built-in value, and agents you do not mention are unaffected. So turning one agent off is a single line:
+
+```toml
+[testbench-ai-service.agents.test_case_set_reviewer]
+enabled = false
+```
+
+Nested blocks merge the same way — setting `prompt.variant` keeps the built-in `prompt.file`. A **new** agent key has nothing to inherit from, so it must declare `enabled`, `endpoint_path`, `class_path` and `prompt.file` in full.
+
+A disabled agent registers no HTTP endpoint at all.
+
 | Option            | Type    | Description                                                 | Required |
 | ----------------- | ------- | ----------------------------------------------------------- | -------- |
-| `enabled`       | Boolean | Whether this agent is active.                               | Yes      |
-| `endpoint_path` | String  | The HTTP endpoint path (e.g.,`"/test-case-set-reviews"`). | Yes      |
-| `class_path`    | String  | Full Python class path to the agent service implementation. | Yes      |
+| `enabled`       | Boolean | Whether this agent is active. A disabled agent registers no endpoint. | For a new agent |
+| `endpoint_path` | String  | The HTTP endpoint path (e.g.,`"/test-case-set-reviews"`). | For a new agent |
+| `class_path`    | String  | Full Python class path to the agent service implementation. | For a new agent |
 
 :::note
 The `name`, `summary`, and `description` shown in the OpenAPI UI and in TestBench as the agent name, summary, and description are read from the prompt YAML file (`name`, `summary`, `description` fields at the root of the YAML).
@@ -385,9 +396,9 @@ The `name`, `summary`, and `description` shown in the OpenAPI UI and in TestBenc
 
 | Option      | Type   | Description                                                                                          | Required |
 | ----------- | ------ | ---------------------------------------------------------------------------------------------------- | -------- |
-| `file`    | String | Path to the prompt YAML file (relative to `prompts_dir/<language>/`).                              | Yes      |
+| `file`    | String | Path to the prompt YAML file (relative to `prompts_dir/<language>/`).                              | For a new agent |
 | `variant` | String | Prompt variant to use (falls back to `default_variant` in the YAML file).                          | No       |
-| `vars`    | Table  | Key-value pairs for user-provided variables, accessible as `{{ vars.<key> }}` in prompt templates. | No       |
+| `vars`    | Table  | Key-value pairs for user-provided variables, accessible as `{{ vars.<key> }}` in prompt templates. Values may be strings, numbers or booleans, matching the `value_type` the variant declares. | No       |
 
 For details on how prompts work, see the [Prompts](prompts.md) page.
 

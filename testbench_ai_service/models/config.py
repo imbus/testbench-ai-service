@@ -63,10 +63,18 @@ class LLMConfig(BaseModel):
         return self
 
 
+# Prompt variables carry the value types PromptVariableDefinition declares
+# ('number' and 'boolean' as well as the string kinds), so the config that
+# supplies them has to be able to hold them. Order matters for pydantic's
+# smart union only in that every member is a distinct scalar type; bool is
+# listed before int deliberately, since bool is a subclass of int.
+PromptVarValue = str | bool | int | float
+
+
 class PromptConfig(BaseModel):
     file: Path
     variant: str | None = None
-    vars: dict[str, str] | None = None
+    vars: dict[str, PromptVarValue] | None = None
 
     model_config = ConfigDict(extra="allow")
 
@@ -74,7 +82,7 @@ class PromptConfig(BaseModel):
 class ProjectPromptConfig(BaseModel):
     file: Path | None = None
     variant: str | None = None
-    vars: dict[str, str] | None = None
+    vars: dict[str, PromptVarValue] | None = None
 
 
 class AgentConfig(BaseModel):

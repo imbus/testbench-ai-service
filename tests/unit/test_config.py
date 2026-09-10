@@ -4,7 +4,13 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT, PROMPTS_DIR, AppConfig
+from testbench_ai_service.config import (
+    DEFAULT_AGENTS,
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    PROMPTS_DIR,
+    AppConfig,
+)
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.models.config import (
     AgentConfig,
@@ -263,3 +269,164 @@ class TestAppConfigTbServerUrlValidator:
         ):
             AppConfig(tb_server_url="https://mytb.example.com/api/")
         mock_validate.assert_called_once_with("https://mytb.example.com/api/")
+
+
+class TestPromptVarsAreTyped:
+    """Spec 11.1: prompt variables carry typed values, not only strings.
+
+    PromptVariableDefinition already declares 'number' and 'boolean' value
+    types, so a config that supplies one was a hard boot failure before this.
+    """
+
+    @pytest.mark.parametrize(
+        ("value", "expected_type"),
+        [(10, int), (1.5, float), (True, bool), ("ten", str)],
+    )
+    def test_a_prompt_var_keeps_the_type_it_was_written_with(self, value, expected_type):
+        cfg = PromptConfig(file="prompts/test.yaml", vars={"max_findings": value})
+
+        assert cfg.vars is not None
+        assert type(cfg.vars["max_findings"]) is expected_type
+        assert cfg.vars["max_findings"] == value
+
+    @pytest.mark.parametrize(
+        ("value", "expected_type"),
+        [(10, int), (1.5, float), (True, bool), ("ten", str)],
+    )
+    def test_a_project_prompt_var_keeps_the_type_it_was_written_with(self, value, expected_type):
+        cfg = ProjectPromptConfig(vars={"max_findings": value})
+
+        assert cfg.vars is not None
+        assert type(cfg.vars["max_findings"]) is expected_type
+        assert cfg.vars["max_findings"] == value
+
+    def test_a_quoted_number_stays_a_string(self):
+        """'10' and 10 are different values; the union must not collapse them."""
+        cfg = PromptConfig(file="prompts/test.yaml", vars={"max_findings": "10"})
+
+        assert cfg.vars == {"max_findings": "10"}
+        assert type(cfg.vars["max_findings"]) is str
+
+
+class TestAgentsMergeOntoDefaults:
+    """A partial [agents.<key>] block overrides one setting, not the whole dict.
+
+    Before this, ``agents`` was a plain default: declaring one agent replaced
+    every built-in, and declaring one *partially* was rejected outright because
+    every AgentConfig field is required. There was therefore no way to write
+    "turn this agent off" into config.toml -- the naive spelling failed
+    validation and the complete spelling silently deleted the other agents.
+    """
+
+    def test_a_partial_block_leaves_the_other_agents_in_place(self):
+        cfg = _make_app_config(agents={"test_case_set_reviewer": {"enabled": False}})
+
+        assert set(cfg.agents) == {
+            "test_case_set_reviewer",
+            "test_case_set_describer",
+            "defect_explainer",
+        }
+        assert cfg.agents["test_case_set_reviewer"].enabled is False
+        assert cfg.agents["test_case_set_describer"].enabled is True
+
+    def test_a_partial_block_keeps_the_fields_it_did_not_mention(self):
+        cfg = _make_app_config(agents={"test_case_set_reviewer": {"enabled": False}})
+
+        agent = cfg.agents["test_case_set_reviewer"]
+        assert agent.endpoint_path == "/test-case-set-reviews"
+        assert agent.class_path.endswith("TestCaseSetReviewer")
+
+    def test_a_nested_partial_merges_rather_than_replacing_the_prompt(self):
+        """The console writes 'agents.<key>.prompt.variant' on its own."""
+        cfg = _make_app_config(
+            agents={"test_case_set_reviewer": {"prompt": {"variant": "Quick Review"}}}
+        )
+
+        prompt = cfg.agents["test_case_set_reviewer"].prompt
+        assert isinstance(prompt, PromptConfig)
+        assert prompt.variant == "Quick Review"
+        # The file was not mentioned, so the built-in value must survive.
+        assert prompt.file == Path("test_case_set_reviewer/prompt.yaml")
+
+    def test_a_complete_block_for_a_builtin_also_keeps_the_others(self):
+        """The one behaviour change: declaring one agent no longer deletes the rest."""
+        cfg = _make_app_config(
+            agents={
+                "test_case_set_reviewer": {
+                    "enabled": False,
+                    "endpoint_path": "/custom",
+                    "class_path": (
+                        "testbench_ai_service.agents.test_case_set_reviewer.agent"
+                        ".TestCaseSetReviewer"
+                    ),
+                    "prompt": {"file": "test_case_set_reviewer/prompt.yaml"},
+                }
+            }
+        )
+
+        assert len(cfg.agents) == 3
+        assert cfg.agents["test_case_set_reviewer"].endpoint_path == "/custom"
+
+    def test_an_unknown_agent_key_still_requires_every_field(self):
+        with pytest.raises(ValidationError) as exc:
+            _make_app_config(agents={"my_agent": {"enabled": True}})
+
+        missing = {tuple(error["loc"]) for error in exc.value.errors()}
+        assert ("agents", "my_agent", "endpoint_path") in missing
+        assert ("agents", "my_agent", "class_path") in missing
+        assert ("agents", "my_agent", "prompt") in missing
+
+    def test_a_complete_unknown_agent_is_added_beside_the_builtins(self):
+        cfg = _make_app_config(
+            agents={
+                "second_reviewer": {
+                    "enabled": True,
+                    "endpoint_path": "/second-reviews",
+                    "class_path": (
+                        "testbench_ai_service.agents.test_case_set_reviewer.agent"
+                        ".TestCaseSetReviewer"
+                    ),
+                    "prompt": {"file": "test_case_set_reviewer/prompt.yaml"},
+                }
+            }
+        )
+
+        assert len(cfg.agents) == 4
+        assert cfg.agents["second_reviewer"].endpoint_path == "/second-reviews"
+
+    def test_a_bad_value_in_a_partial_block_is_field_addressed(self):
+        with pytest.raises(ValidationError) as exc:
+            _make_app_config(agents={"test_case_set_reviewer": {"enabled": "yes please"}})
+
+        locations = {tuple(error["loc"]) for error in exc.value.errors()}
+        assert ("agents", "test_case_set_reviewer", "enabled") in locations
+
+    def test_merging_does_not_mutate_the_shared_defaults(self):
+        """DEFAULT_AGENTS is a module-level dict; poisoning it would leak everywhere."""
+        _make_app_config(agents={"test_case_set_reviewer": {"enabled": False}})
+
+        assert DEFAULT_AGENTS["test_case_set_reviewer"].enabled is True
+        assert _make_app_config().agents["test_case_set_reviewer"].enabled is True
+
+    def test_omitting_agents_entirely_still_yields_the_builtins(self):
+        cfg = _make_app_config()
+
+        assert set(cfg.agents) == set(DEFAULT_AGENTS)
+
+    def test_an_agent_declared_as_a_model_instance_still_works(self):
+        """Python callers pass AgentConfig objects, not dicts."""
+        cfg = _make_app_config(
+            agents={
+                "test_case_set_reviewer": AgentConfig(
+                    enabled=False,
+                    endpoint_path="/x",
+                    class_path=(
+                        "testbench_ai_service.agents.test_case_set_reviewer.agent"
+                        ".TestCaseSetReviewer"
+                    ),
+                    prompt=PromptConfig(file="test_case_set_reviewer/prompt.yaml"),
+                )
+            }
+        )
+
+        assert cfg.agents["test_case_set_reviewer"].endpoint_path == "/x"
