@@ -148,6 +148,16 @@ on disk keeps the real values, and applying changes never writes the placeholder
 Without this redaction, credentials would leak on the Raw screen and in the
 preview diff.
 
+### Apply result
+
+When **Apply** succeeds, the response indicates whether the reload succeeded or
+completed with degradation. A change can be written and the service reloaded but
+with a warning — for instance the new logging configuration could not be
+applied — in which case the console shows the reason directly. This is important
+when the logging path itself is the problem: a reason logged to a file that
+cannot be written has nowhere to go, so the reason must be shown in the console
+instead.
+
 ## Agents
 
 The **Agents** screen lists every agent the service knows about, with a switch
@@ -180,7 +190,15 @@ In each scope you can set:
 The variant list and the variable types come from the prompt YAML itself, not
 from `config.toml`. If the prompt file cannot be read the console says so and
 leaves the variant as a free-text field, so you can still correct the path that
-caused it.
+caused it. The same happens for a prompt file configured as an absolute path
+outside `prompts_dir`: the service runs it, but the console will not read
+outside that directory, so it shows the variant as free text.
+
+Prompt **variables** in a project scope are all-or-nothing. As soon as a project
+sets one variable, its `vars` table replaces the global one entirely rather than
+merging with it, so any variable the project does not name falls back to the
+prompt's own default and not to the global value. The screen says so when it
+applies.
 
 A variable that is set in `config.toml` but not declared by the selected variant
 is still shown, flagged, so a value the prompt will ignore cannot hide in the
@@ -194,7 +212,8 @@ Edit them in `config.toml` directly; both need a restart to take effect.
 :::note
 An agent cannot be removed by leaving it out of `config.toml` — every built-in
 agent is always present. Set `enabled = false` instead. A disabled agent
-registers no endpoint, so the effect is the same.
+registers no endpoint, so the effect is the same, and its prompt file and class
+path are no longer checked at startup.
 :::
 
 ## Projects
@@ -206,7 +225,8 @@ been renamed or deleted there, and its overrides are no longer doing anything.
 
 Each card carries the project's `language` override, a three-state toggle per
 agent, and **Remove all overrides**, which deletes the whole project block in a
-single change.
+single change — including anything else the block holds, such as an
+`llm_config`.
 
 The three states of an agent toggle are deliberate and different:
 
@@ -221,8 +241,10 @@ The same distinction applies to every field on the agent screens: a field that
 is inherited shows what it inherits and from where, and **Clear override**
 returns it to inheriting.
 
-Per-project `llm_config` is not editable here. A project that already has one is
-shown read-only, and you can change it in `config.toml`.
+Per-project `llm_config` is not editable here. A project that already has one
+is shown read-only, and you can change it in `config.toml`. Note that **Remove
+all overrides** deletes the whole project block, so an `llm_config` the project
+carries goes with it — the preview diff shows exactly what would be removed.
 
 ### The project list
 
@@ -234,16 +256,6 @@ again.
 If TestBench could not be asked, the console says so and offers a free-text
 field for typing a project name by hand. The name must match the name in
 TestBench exactly, including spaces and punctuation.
-
-### Apply result
-
-When **Apply** succeeds, the response indicates whether the reload succeeded or
-completed with degradation. A change can be written and the service reloaded but
-with a warning — for instance the new logging configuration could not be
-applied — in which case the console shows the reason directly. This is important
-when the logging path itself is the problem: a reason logged to a file that
-cannot be written has nowhere to go, so the reason must be shown in the console
-instead.
 
 ---
 
