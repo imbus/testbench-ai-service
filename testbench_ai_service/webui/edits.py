@@ -21,13 +21,14 @@ from typing import Any, cast
 from fastapi import HTTPException, status
 
 from testbench_ai_service.webui.config_io import REDACTED_SENTINEL
+from testbench_ai_service.webui.paths import join_path, split_path
 
 ConfigEdits = dict[str, Any]
 
 # Bounds, not policy: they exist so a malformed or hostile payload cannot make
 # the server walk an unbounded structure. The real config is nowhere near
 # either limit -- the deepest legitimate path is
-# 'projects.<name>.agents.<key>.prompt.vars.<var>' at six segments.
+# 'projects."<name>".agents.<key>.prompt.vars.<var>' at seven segments.
 MAX_EDITS = 500
 MAX_PATH_SEGMENTS = 8
 
@@ -47,33 +48,40 @@ def _contains_sentinel(value: Any) -> bool:
     return False
 
 
-def _check_path_prefix_collisions(edits: ConfigEdits) -> None:
-    """Reject overlays with both a path and a proper prefix of that path."""
-    paths_set = set(edits)
-    for path in edits:
-        segments = path.split(".")
-        for i in range(1, len(segments)):
-            prefix = ".".join(segments[:i])
-            if prefix in paths_set:
+def _check_path_prefix_collisions(tokenized: dict[str, list[str]]) -> None:
+    """Reject overlays with both a path and a proper prefix of that path.
+
+    Compares *segments*, not strings. Two spellings of the same path -- say
+    ``projects."My Project"`` and ``projects.My Project`` -- are the same
+    address, and a string-prefix test would miss the collision between them.
+    """
+    by_segments = {tuple(segments): path for path, segments in tokenized.items()}
+    for path, segments in tokenized.items():
+        for index in range(1, len(segments)):
+            prefix = tuple(segments[:index])
+            if prefix in by_segments:
                 _reject(
-                    f"Edit paths {path!r} and {prefix!r} conflict: "
+                    f"Edit paths {path!r} and {by_segments[prefix]!r} conflict: "
                     "send one value for the table, not separate entries"
                 )
 
 
-def _validate_single_path(path: str, value: Any) -> None:
-    """Validate a single path and its value."""
+def _tokenize(path: str) -> list[str]:
+    """Split *path* into segments, turning a malformed path into a 400."""
+    try:
+        return split_path(path)
+    except ValueError as e:
+        _reject(str(e))
+        raise  # unreachable; _reject always raises
+
+
+def _validate_single_path(path: str, value: Any) -> list[str]:
+    """Validate a single path and its value, returning its segments."""
     if not isinstance(path, str) or not path.strip():
         _reject("An edit path must be a non-empty string")
-    if "\x00" in path:
-        _reject("An edit path may not contain a NUL byte")
-    segments = path.split(".")
+    segments = _tokenize(path)
     if len(segments) > MAX_PATH_SEGMENTS:
         _reject(f"Edit path {path!r} is nested deeper than {MAX_PATH_SEGMENTS} levels")
-    if any(not segment.strip() for segment in segments):
-        _reject(f"Edit path {path!r} has an empty segment")
-    if any(segment != segment.strip() for segment in segments):
-        _reject(f"Edit path {path!r} has a segment with leading or trailing whitespace")
     if _contains_sentinel(value):
         # The console shows credential-named values as REDACTED_SENTINEL.
         # Writing that string back would replace a real secret with a
@@ -83,6 +91,7 @@ def _validate_single_path(path: str, value: Any) -> None:
             f"Edit path {path!r} carries the redacted placeholder. "
             "Credential values cannot be set from the console."
         )
+    return segments
 
 
 def validate_edit_paths(edits: ConfigEdits) -> None:
@@ -95,10 +104,11 @@ def validate_edit_paths(edits: ConfigEdits) -> None:
     if len(edits) > MAX_EDITS:
         _reject(f"Too many edits in one request (limit {MAX_EDITS})")
 
-    _check_path_prefix_collisions(edits)
+    # Per-path validation runs first: the collision check tokenizes every path,
+    # which is only meaningful once each one is known to be well formed.
+    tokenized = {path: _validate_single_path(path, value) for path, value in edits.items()}
 
-    for path, value in edits.items():
-        _validate_single_path(path, value)
+    _check_path_prefix_collisions(tokenized)
 
 
 def merge_edits(base: dict[str, Any], edits: ConfigEdits) -> dict[str, Any]:
@@ -112,7 +122,7 @@ def merge_edits(base: dict[str, Any], edits: ConfigEdits) -> dict[str, Any]:
     """
     merged = cast(dict[str, Any], _deep_copy(base))
     for path, value in edits.items():
-        segments = path.split(".")
+        segments = _tokenize(path)
         if value is None:
             _remove_at(merged, segments)
         else:
@@ -136,7 +146,7 @@ def _set_at(target: dict[str, Any], segments: list[str], value: Any) -> None:
             child = {}
             node[segment] = child
         elif not isinstance(child, dict):
-            path = ".".join(segments)
+            path = join_path(segments)
             _reject(f"Edit path {path!r} conflicts with {segment!r}, which is not a table")
         node = child
     node[segments[-1]] = _deep_copy(value)

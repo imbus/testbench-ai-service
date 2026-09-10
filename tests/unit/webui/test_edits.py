@@ -214,3 +214,97 @@ def test_validate_refuses_segment_with_both_spaces():
         validate_edit_paths({" port ": 1})
 
     assert exc.value.status_code == 400
+
+
+# Phase 3: project-scoped paths quote segments that a bare split would
+# mis-address. A TestBench project name is an arbitrary string.
+
+
+def test_a_quoted_segment_addresses_a_project_name_containing_a_dot():
+    merged = merge_edits({}, {'projects."Release 2.0".language': "en"})
+
+    assert merged == {"projects": {"Release 2.0": {"language": "en"}}}
+
+
+def test_a_quoted_segment_removes_a_key_under_a_dotted_project_name():
+    base = {"projects": {"a.b": {"language": "en", "agents": {}}}}
+
+    merged = merge_edits(base, {'projects."a.b".language': None})
+
+    assert merged == {"projects": {"a.b": {"agents": {}}}}
+
+
+def test_a_dotted_project_name_is_not_confused_with_a_nested_table():
+    """'projects."a.b".x' and 'projects.a.b.x' address different things."""
+    merged = merge_edits(
+        {},
+        {
+            'projects."a.b".language': "en",
+            "projects.a.b.language": "de",
+        },
+    )
+
+    assert merged == {
+        "projects": {
+            "a.b": {"language": "en"},
+            "a": {"b": {"language": "de"}},
+        }
+    }
+
+
+def test_a_quoted_path_and_its_quoted_prefix_still_collide():
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths(
+            {
+                'projects."Release 2.0"': {"language": "en"},
+                'projects."Release 2.0".language': "de",
+            }
+        )
+
+    assert exc.value.status_code == 400
+    assert "conflict" in exc.value.detail.lower()
+
+
+def test_a_dotted_project_name_does_not_collide_with_its_bare_lookalike():
+    validate_edit_paths(
+        {
+            'projects."a.b".language': "en",
+            "projects.a.b.language": "de",
+        }
+    )
+
+
+def test_deepest_real_path_is_within_the_segment_limit():
+    validate_edit_paths({'projects."Release 2.0".agents.reviewer.prompt.vars.max_findings': 10})
+
+
+def test_a_quoted_segment_may_contain_whitespace_at_its_edges():
+    merged = merge_edits({}, {'projects." padded ".language': "en"})
+
+    assert merged == {"projects": {" padded ": {"language": "en"}}}
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        'projects."unterminated.language',
+        'projects."a"b.language',
+        r'projects."bad\escape".language',
+        '""',
+        'projects."".language',
+    ],
+)
+def test_a_malformed_quoted_path_is_refused(path: str):
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({path: 1})
+
+    assert exc.value.status_code == 400
+
+
+def test_a_quoted_path_that_is_too_deep_is_still_refused():
+    path = 'a."b".c."d".e."f".g."h".i'
+
+    with pytest.raises(HTTPException) as exc:
+        validate_edit_paths({path: 1})
+
+    assert exc.value.status_code == 400

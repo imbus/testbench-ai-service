@@ -1,0 +1,169 @@
+{
+  "_comment": "Shared by tests/unit/webui/test_paths.py and frontend/src/api/paths.test.ts. The two tokenizers must agree exactly: if they drift, the browser prunes an edit the server still applies. Edit this file, never one side's expectations.",
+  "roundtrip": [
+    {
+      "path": "port",
+      "segments": [
+        "port"
+      ]
+    },
+    {
+      "path": "llm_config.model",
+      "segments": [
+        "llm_config",
+        "model"
+      ]
+    },
+    {
+      "path": "logging.file.log_level",
+      "segments": [
+        "logging",
+        "file",
+        "log_level"
+      ]
+    },
+    {
+      "path": "admin_ui.enabled",
+      "segments": [
+        "admin_ui",
+        "enabled"
+      ]
+    },
+    {
+      "path": "agents.test_case_set_reviewer.enabled",
+      "segments": [
+        "agents",
+        "test_case_set_reviewer",
+        "enabled"
+      ]
+    },
+    {
+      "path": "projects.My Project.language",
+      "segments": [
+        "projects",
+        "My Project",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.Prufprojekt üäö.language",
+      "segments": [
+        "projects",
+        "Prufprojekt üäö",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.\"Release 2.0\".language",
+      "segments": [
+        "projects",
+        "Release 2.0",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.\"a.b.c\".agents.reviewer.enabled",
+      "segments": [
+        "projects",
+        "a.b.c",
+        "agents",
+        "reviewer",
+        "enabled"
+      ]
+    },
+    {
+      "path": "projects.\" leading\".language",
+      "segments": [
+        "projects",
+        " leading",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.\"trailing \".language",
+      "segments": [
+        "projects",
+        "trailing ",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.\"He said \\\"hi\\\"\".language",
+      "segments": [
+        "projects",
+        "He said \"hi\"",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.\"C:\\\\temp\".language",
+      "segments": [
+        "projects",
+        "C:\\temp",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.\"a.\\\"b\\\".c\\\\d\".language",
+      "segments": [
+        "projects",
+        "a.\"b\".c\\d",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.\"Release 2.0\".agents.reviewer.prompt.vars.max_findings",
+      "segments": [
+        "projects",
+        "Release 2.0",
+        "agents",
+        "reviewer",
+        "prompt",
+        "vars",
+        "max_findings"
+      ]
+    }
+  ],
+  "split_only": [
+    {
+      "path": "\"port\"",
+      "segments": [
+        "port"
+      ],
+      "joins_to": "port"
+    },
+    {
+      "path": "projects.\"My Project\".language",
+      "segments": [
+        "projects",
+        "My Project",
+        "language"
+      ],
+      "joins_to": "projects.My Project.language"
+    }
+  ],
+  "invalid": [
+    "",
+    " ",
+    ".",
+    "..",
+    "port.",
+    ".port",
+    "llm_config..model",
+    "\"\"",
+    "projects.\"\".language",
+    " port",
+    "port ",
+    " port ",
+    "port\u0000",
+    "projects.\"a\u0000b\".language",
+    "\"unterminated",
+    "projects.\"unterminated.language",
+    "\"a\"b",
+    "projects.\"a\"b.language",
+    "a\"b",
+    "a\\b",
+    "projects.\"bad\\escape\".language",
+    "projects.\"trailing\\\".language"
+  ]
+}
