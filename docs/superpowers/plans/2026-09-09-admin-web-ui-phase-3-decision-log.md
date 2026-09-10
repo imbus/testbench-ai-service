@@ -196,38 +196,121 @@ nothing" is true of the agent *settings* but not of a prompt *variable*, which i
 the prompt YAML's own `default_value` even globally. The test was narrowed to the settings
 block and a second one added for the prompt default.
 
-## 5. Verification
+## 5. Review
 
-| Suite | Base `839c98b` | Phase 3 |
+Two reviewers went over the branch at `839c98b..a283a4e`, one per language half,
+each with the design and this record as the statement of intent. Every finding below
+was reproduced before it was fixed; the two that were not defects are recorded as
+such, because the reasoning is the useful part.
+
+### 5.1 What had to change
+
+**The tokenizer was never wired into the write path.** `webui/document.py`'s
+`apply_edits` still split on `.` while `merge_edits` tokenized. Preview is built from
+the merged dict and apply writes the document, so `projects."Release 2.0".language`
+previewed as valid and reached `config.toml` as two nested tables under
+`"\"Release 2"` and `"0\""`. Removing such a block was worse: a silent no-op
+reported as a successful write. This is the phase's headline capability failing
+exactly where it matters, and the design's own call-site table (§5.2) omitted
+`document.py` — the implementation followed the design and the design was wrong. The
+missing test was structural: a `merge_edits` unit test cannot catch it. The new ones
+write through `apply_edits` and re-read the rendered file with `tomllib`.
+
+**The agents merge could stop a booting config from booting.** Since every config now
+carries all three built-ins, `validate_prompt_paths` validates all three — so an
+operator with a custom `prompts_dir` who declared only their own agent got a startup
+failure naming `test_case_set_reviewer.prompt.file`, an agent they never configured.
+Reproduced against both `839c98b` and the branch. A built-in left at its default whose
+prompt file cannot be found is now dropped with a warning, and a disabled agent is not
+checked at all — which is what makes `enabled = false`, the documented off switch,
+actually work under a custom `prompts_dir`. A prompt file the operator did configure
+is still a hard error. `CHANGELOG.md` states both.
+
+**The browser read a payload shape the server does not send.** `running` is
+`model_dump(mode="json")`, so every unset optional field arrives as an explicit
+`null`; every screen fixture used the raw TOML shape instead. Two live bugs hid behind
+that: a project with no `llm_config` rendered the read-only panel containing the
+literal text `null`, and `deepMerge` treated an override's `null` as a value, so a
+project overriding only `enabled` lost its inherited `prompt` — after which the
+variant select showed one variant's variables under a field naming another.
+
+**`vars` merged in the browser and is replaced by the runtime.**
+`utils/config.py::merge_prompt_configs` replaces the whole map when a project declares
+one; `effectiveAgent` merged it per key, so the console promised inherited variables
+the agent would never receive. The browser now mirrors the runtime, the screen says so
+when it applies, and `docs/configuration.md` documents it. Whether per-key inheritance
+would be the better semantic is a real question — it is what the global merge does one
+level up — but the console previewing something other than what applies is not a
+defensible way to leave it. Phase 4 owns the answer.
+
+**Smaller, all reproduced:** an overlay could carry two spellings of one address and
+silently keep the last; `ConfigIssue.path` was joined with a plain `.`, so a validation
+error inside a quoted project name never attached to its field; `fetch_projects_with_token`
+could 5xx out of a function documented never to raise, because `harden_connection` — where
+an unreachable server actually fails — sat outside the guard; `POST /session` blocked the
+event loop for two TestBench calls as an `async def` that awaits nothing; prompt-metadata
+errors echoed absolute server paths and, through pydantic, fragments of the file's own
+content to any signed-in user; "Remove all overrides" left the edits queued inside the
+subtree, which the server refuses as a path-and-prefix collision; the matrix resolved
+"inherited" from the saved config, contradicting the draft it was rendering; `Field` built
+`aria-labelledby` from the raw path, so a project called `My Project` produced a
+two-token IDREF list and a switch with no accessible name; and the two tokenizers
+disagreed about edge whitespace, `str.strip()` against `trim()`, in exactly the silent
+way the shared vectors exist to prevent.
+
+### 5.2 What did not change, and why
+
+**A value equal to the inherited one is still written as an explicit override.** The
+review read the redundant edit as noise. It is a pin: an override saying what the
+global table says today stops following it tomorrow, and the way back to inheriting is
+"Clear override", offered the moment a row is overridden. Removing it would make
+"inherit global from now on" and "hold this value" the same gesture. The existing test
+asserting the pin was right; a test now says why.
+
+**Per-session rate limiting on `POST /projects/refresh`** was suggested because the
+route spends a stored credential. It is admin-only and CSRF-gated, the cost is one
+TestBench call, and a limit is a new mechanism with its own failure mode. Noted for
+phase 4 rather than added here.
+
+## 6. Verification
+
+| Suite | Base `839c98b` | Phase 3, after review |
 |---|---|---|
-| `tests/unit/webui` | 298 passed | **451 passed**, 0 failed |
-| `tests/unit` | 816 passed, 54 failed, 3 errors | **988 passed**, 54 failed, 3 errors |
-| frontend `vitest run` | 229 passed, 18 files (as recorded at phase-2 completion) | **401 passed**, 26 files |
+| `tests/unit/webui` | 298 passed | **470 passed**, 0 failed |
+| `tests/unit` | 816 passed, 54 failed, 3 errors | **1012 passed**, 54 failed, 3 errors |
+| frontend `vitest run` | 229 passed, 18 files (as recorded at phase-2 completion) | **426 passed**, 26 files |
 | `tsc -b`, `npm run build` | — | clean |
 | ruff check / ruff format / mypy | — | clean on every touched file |
 | OpenAPI generation | — | all three new routes present; response schemas match the design's shapes field for field |
 
-Both Python rows were measured on the same machine in the same session, the base column from
-a `git worktree` at `839c98b`; the frontend base is the figure recorded when phase 2 finished,
-not re-measured (the worktree has no `node_modules`). The 54 failures and 3 errors are byte-identical between the two
-and all live under `tests/unit/agents/` and `tests/unit/utils/` — prompt-template and agent
-fixtures this branch does not touch. Phase 3 adds 172 passing backend tests and 172 passing
-frontend ones, and removes none.
+Both Python rows were measured on the same machine in the same session, the base column
+from a `git worktree` at `839c98b`; the frontend base is the figure recorded when phase 2
+finished, not re-measured (the worktree has no `node_modules`). The 54 failures and 3
+errors are byte-identical between the two columns and all live under
+`tests/unit/agents/` and `tests/unit/utils/` — prompt-template and agent fixtures this
+branch does not touch.
 
-One caveat on the `tests/unit/webui` row: it is green in both columns only because a TestBench
-was listening on `localhost:9443` while it ran. See §6.
+The `tests/unit/webui` suite no longer depends on a TestBench being reachable. It did:
+`AppConfig` validation probes `tb_server_url` with a real HTTP request and the
+preview/apply/status routes build an `AppConfig` from the operator's edits, so 17 tests
+in `test_config_routes.py` passed on a developer machine running TestBench and failed
+everywhere else, CI included. An autouse fixture patches the probe for the package.
+Verified by simulating the outage — with `validators.requests.get` forced to raise, the
+suite was 17 failed / 434 passed before the fixture and green after it.
 
 Pre-existing ruff findings in `testbench_ai_service/agents/defect_explainer/agent.py`
 (4×F401, I001, W293) are untouched — not this branch's work.
 
-## 6. Left open
+## 7. Left open
 
 - **Phase 4** owns the prompt editor, the fork (D1) and per-project `llm_config` editing (D8).
-- **17 environment-dependent failures in `tests/unit/webui/test_config_routes.py`.**
-  `validate_config_dict` → `AppConfig` → `validate_tb_server_url` makes a **real network call**
-  to the configured `tb_server_url`. The tests patch `validate_tb_server_url` only around
-  `create_app`, not around the preview/apply/status routes, so the suite passes or fails
-  depending on whether something is listening on `localhost:9443`. Not phase 3's to fix, but it
-  should not stay that way; worth doing before phase 4.
+- **Whether a project's `vars` should merge per key or replace wholesale** (§5.1). The console
+  now mirrors the runtime, which replaces. The runtime contradicts itself — the global merge
+  onto the built-ins is per key — and phase 4, which owns the prompt editor, is where that gets
+  settled.
+- **No duplicate-`endpoint_path` detection.** An operator who "removed" a built-in by omission
+  and reused its endpoint path for a custom agent now gets both registered, first match
+  winning, silently. Pre-existing, and adjacent to the merge, so worth naming here.
+- **`POST /projects/refresh` has no rate limit** (§5.2).
 - Two phase-2 leftovers, untouched: the CRLF→LF rewrite on first save of a CRLF `config.toml`,
   and `main.py:107`'s relative `Path("config.toml")` fallback.
