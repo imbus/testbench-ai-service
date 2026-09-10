@@ -38,6 +38,25 @@ job -- ``webui/edits.py`` raises the 400.
 # '\' is the escape character; NUL has no business in a config key.
 _BARE_FORBIDDEN = frozenset('."\\\x00')
 
+# What counts as whitespace at a segment's edge, spelled out rather than left
+# to ``str.strip()``. Python's default and JavaScript's ``trim()`` do not agree
+# -- Python strips \x1c-\x1f and \x85, JavaScript strips the BOM -- so a segment
+# ending in one of those would be quoted by one tokenizer and left bare by the
+# other. That is exactly the silent divergence the shared vectors exist to
+# prevent, so the set is the union of both and either side quotes it.
+_EDGE_WHITESPACE = frozenset(
+    " \t\n\v\f\r"
+    "\x1c\x1d\x1e\x1f\x85"
+    "\u00a0\u1680"
+    "\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a"
+    "\u2028\u2029\u202f\u205f\u3000\ufeff"
+)
+
+
+def _has_edge_whitespace(segment: str) -> bool:
+    """Whether *segment* starts or ends with a character either side trims."""
+    return bool(segment) and (segment[0] in _EDGE_WHITESPACE or segment[-1] in _EDGE_WHITESPACE)
+
 
 def split_path(path: str) -> list[str]:
     """Split a dotted edit path into its segments.
@@ -87,7 +106,7 @@ def _read_bare(path: str, start: int) -> tuple[str, int]:
         index += 1
 
     segment = path[start:index]
-    if segment != segment.strip():
+    if _has_edge_whitespace(segment):
         raise ValueError(
             f"Edit path {path!r} has a segment with leading or trailing whitespace; "
             "quote it if the whitespace is intentional"
@@ -158,7 +177,7 @@ def join_path(segments: list[str]) -> str:
 
 
 def _render_segment(segment: str) -> str:
-    needs_quotes = any(char in _BARE_FORBIDDEN for char in segment) or segment != segment.strip()
+    needs_quotes = any(char in _BARE_FORBIDDEN for char in segment) or _has_edge_whitespace(segment)
     if not needs_quotes:
         return segment
     escaped = segment.replace("\\", "\\\\").replace('"', '\\"')

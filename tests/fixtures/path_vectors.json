@@ -122,6 +122,35 @@
         "vars",
         "max_findings"
       ]
+    },
+    {
+      "path": "\"﻿bom\".language",
+      "segments": [
+        "﻿bom",
+        "language"
+      ]
+    },
+    {
+      "path": "\"\u001funit\".language",
+      "segments": [
+        "\u001funit",
+        "language"
+      ]
+    },
+    {
+      "path": "\"nextline\".language",
+      "segments": [
+        "nextline",
+        "language"
+      ]
+    },
+    {
+      "path": "projects.\"nbsp \".language",
+      "segments": [
+        "projects",
+        "nbsp ",
+        "language"
+      ]
     }
   ],
   "split_only": [

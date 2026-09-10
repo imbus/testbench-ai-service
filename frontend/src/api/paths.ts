@@ -37,8 +37,29 @@
  */
 const BARE_FORBIDDEN = new Set(['.', '"', '\\', '\0'])
 
+/**
+ * What counts as whitespace at a segment's edge, spelled out rather than
+ * left to `trim()`.
+ *
+ * `String.prototype.trim()` and Python's `str.strip()` do not agree --
+ * Python strips \x1c-\x1f and \x85, JavaScript strips the BOM -- so
+ * a segment ending in one of those would be quoted by one tokenizer and
+ * left bare by the other. The set is the union of both, so either side
+ * quotes it, and `tests/fixtures/path_vectors.json` carries a case for each.
+ */
+const EDGE_WHITESPACE = new Set(
+  ' \t\n\v\f\r' +
+    '\x1c\x1d\x1e\x1f\x85' +
+    '\xa0\u1680' +
+    '\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a' +
+    '\u2028\u2029\u202f\u205f\u3000\ufeff',
+)
+
 function hasEdgeWhitespace(segment: string): boolean {
-  return segment !== segment.trim()
+  return (
+    segment.length > 0 &&
+    (EDGE_WHITESPACE.has(segment[0]) || EDGE_WHITESPACE.has(segment[segment.length - 1]))
+  )
 }
 
 /**
