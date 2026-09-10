@@ -1,7 +1,7 @@
 import asyncio
 
-from jwt import warnings
 import requests
+from jwt import warnings
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -31,9 +31,9 @@ from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_project_details,
-    get_tov_details,
     get_test_case_set_catalog,
     get_test_case_set_nodes,
+    get_tov_details,
     is_json_based_tov,
 )
 
@@ -161,7 +161,8 @@ class DefectExplainer(Agent):
 
         test_case_set_catalog = {}
         try:
-            test_case_set_catalog = get_test_case_set_catalog(
+            test_case_set_catalog = await asyncio.to_thread(
+                get_test_case_set_catalog,
                 conn=conn,
                 project_key=context.project_key,
                 tov_key=context.tov_key,
