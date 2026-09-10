@@ -127,9 +127,10 @@ def resolve_prompt_file(prompts_dir: Path, lang: str, file: str | Path) -> Path:
         if path.is_file():
             return path
 
+    logger.warning("No prompt file for %r under %s", candidate, base)
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail=f"No prompt file for {candidate!r} under {base}",
+        detail=f"No prompt file for {candidate!r}",
     )
 
 
@@ -145,7 +146,23 @@ def _variant_meta(definition: PromptDefinition) -> list[PromptVariantMeta]:
     ]
 
 
-def read_prompt_meta(path: Path) -> PromptMetaResponse:
+def _display_name(path: Path, prompts_dir: Path | None) -> str:
+    """How a prompt file is named back to the browser.
+
+    Relative to ``prompts_dir`` when it lives there, which is the spelling the
+    operator wrote in ``config.toml``. The absolute path is a detail of the
+    server's filesystem, and this endpoint is open to every signed-in user,
+    not only an administrator.
+    """
+    if prompts_dir is not None:
+        try:
+            return path.relative_to(prompts_dir).as_posix()
+        except ValueError:
+            pass
+    return path.name
+
+
+def read_prompt_meta(path: Path, prompts_dir: Path | None = None) -> PromptMetaResponse:
     """Parse *path* into console metadata.
 
     Raises:
@@ -153,16 +170,20 @@ def read_prompt_meta(path: Path) -> PromptMetaResponse:
             a ``prompts_dir`` that moved since boot must give a clean 404 rather
             than a 500 the operator cannot interpret.
         HTTPException 422: the file is there but is not a usable prompt
-            definition. The reason is passed through -- the operator is the only
-            person who can fix the file, so hiding it behind a bare 500 would
-            leave them guessing.
+            definition. The response names the file and what is wrong with it
+            structurally -- which fields, or where the YAML broke -- but never
+            the offending values: a pydantic error embeds its input, and
+            ``?file=`` can be aimed at any YAML under ``prompts_dir``. The full
+            error goes to the log, where the operator can already read the file
+            itself.
     """
+    display = _display_name(path, prompts_dir)
     try:
         definition = get_prompt_definition(path)
     except (FileNotFoundError, IsADirectoryError, PermissionError, NotADirectoryError) as e:
         logger.warning("Prompt metadata unavailable at %s: %s", path, e)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"No prompt file at {path}"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"No prompt file at {display}"
         ) from e
     except OSError as e:
         # A directory where the file should be surfaces as PermissionError on
@@ -170,13 +191,32 @@ def read_prompt_meta(path: Path) -> PromptMetaResponse:
         # raises is still "we could not read it", not a bug in the console.
         logger.warning("Could not read the prompt file at %s: %s", path, e)
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=f"No prompt file at {path}"
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"No prompt file at {display}"
         ) from e
-    except (yaml.YAMLError, ValidationError, ValueError) as e:
+    except yaml.YAMLError as e:
+        logger.warning("Prompt file %s is not valid YAML: %s", path, e)
+        mark = getattr(e, "problem_mark", None)
+        where = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"The prompt file {display} is not valid YAML{where}",
+        ) from e
+    except ValidationError as e:
+        logger.warning("Prompt file %s is not a usable prompt definition: %s", path, e)
+        fields = ", ".join(
+            sorted(
+                {".".join(str(part) for part in error["loc"]) or "(root)" for error in e.errors()}
+            )
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"The prompt file {display} is not a usable prompt definition: {fields}",
+        ) from e
+    except ValueError as e:
         logger.warning("Prompt file %s is not a usable prompt definition: %s", path, e)
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"The prompt file at {path} could not be read: {e}",
+            detail=f"The prompt file {display} is not a usable prompt definition",
         ) from e
 
     return PromptMetaResponse(

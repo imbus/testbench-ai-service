@@ -122,11 +122,22 @@ def fetch_projects_with_token(config: AppConfig, token: str) -> ProjectFetch:
         return ProjectFetch(projects=[], fetched_at=_now(), error=str(e))
 
     try:
+        # harden_connection reads conn.session, which is what completes the
+        # vendored client's lazy setup -- server version, authentication,
+        # heartbeat. An unreachable server or a token TestBench no longer
+        # accepts fails here, not in get_all_projects, so this needs the same
+        # catch fetch_projects has rather than propagating into a 500.
         harden_connection(
             conn,
             connect_timeout=DEFAULT_CONNECT_TIMEOUT,
             read_timeout=DEFAULT_READ_TIMEOUT,
         )
+    except Exception as e:  # see fetch_projects: a narrower tuple would not hold
+        logger.warning("Could not open a TestBench connection to list projects: %s", e)
+        conn.close()
+        return ProjectFetch(projects=[], fetched_at=_now(), error=str(e) or type(e).__name__)
+
+    try:
         return fetch_projects(conn)
     finally:
         conn.close()

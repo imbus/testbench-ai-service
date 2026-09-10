@@ -153,7 +153,7 @@ async def read_meta(config: AppConfig = Depends(get_app_config)) -> MetaResponse
 
 
 @router.post("/session", response_model=SessionResponse)
-async def sign_in(
+def sign_in(
     body: LoginRequest,
     response: Response,
     config: AppConfig = Depends(get_app_config),
@@ -166,6 +166,11 @@ async def sign_in(
     recorded rather than raised (design D3/D4). The payload stays identity-only
     -- the list is served by ``GET /projects`` so a stale cache can be replaced
     without signing in again.
+
+    A sync ``def`` for the same reason ``read_projects`` is: everything it
+    calls is the blocking TestBench client, and it now makes two calls
+    rather than one -- the authentication and the project list. Awaiting
+    nothing, it would otherwise hold the event loop for both.
     """
     login = authenticate(config, body.username, body.password)
     session = store.create(
@@ -340,7 +345,9 @@ def read_prompt_metadata(
             detail=f"No agent named {agent!r} declares a prompt file",
         )
 
-    return read_prompt_meta(resolve_prompt_file(config.prompts_dir, lang, candidate))
+    return read_prompt_meta(
+        resolve_prompt_file(config.prompts_dir, lang, candidate), config.prompts_dir
+    )
 
 
 @router.get("/logs", response_model=list[LogLine])

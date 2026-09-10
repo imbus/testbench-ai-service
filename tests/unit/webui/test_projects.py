@@ -178,6 +178,29 @@ def test_fetch_with_token_reports_an_unusable_server_url_as_an_error(config):
     assert "Invalid server URL" in (result.error or "")
 
 
+def test_fetch_with_token_survives_a_connection_that_cannot_be_hardened(config):
+    """Setting up the connection is where an unreachable server shows up.
+
+    Reading ``conn.session`` completes the vendored client's lazy setup -- the
+    server version read, the authentication, the heartbeat -- so a TestBench
+    that is down, or a stored token it no longer accepts, raises there rather
+    than in ``get_all_projects``. That must still be a reported failure, not a
+    500 out of a function documented never to raise.
+    """
+    with (
+        patch("testbench_ai_service.webui.projects.TBConnection") as conn_cls,
+        patch(
+            "testbench_ai_service.webui.projects.harden_connection",
+            side_effect=requests.exceptions.ConnectionError("server down"),
+        ),
+    ):
+        result = fetch_projects_with_token(config, "tb-token")
+
+    assert result.projects == []
+    assert "server down" in (result.error or "")
+    conn_cls.return_value.close.assert_called_once()
+
+
 # --- record_projects / projects_response ---------------------------------
 
 

@@ -1,10 +1,12 @@
 """``GET /projects`` and ``POST /projects/refresh``, plus the login-time fetch."""
 
+import inspect
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
+from testbench_ai_service.webui.routes import sign_in
 from testbench_ai_service.webui.session import CSRF_COOKIE, CSRF_HEADER
 
 
@@ -187,3 +189,14 @@ def test_a_failed_refresh_keeps_the_list_it_could_not_replace(client, login):
     with patch("testbench_ai_service.webui.projects.TBConnection", return_value=conn):
         body = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf}).json()
     assert [p["name"] for p in body["projects"]] == ["Alpha", "Release 2.0"]
+
+
+def test_the_login_route_runs_in_the_threadpool():
+    """Not a style point: the route makes two blocking TestBench calls.
+
+    Phase 3 added the project fetch to a login that was already blocking, so
+    an `async def` would hold the event loop for the authentication *and* the
+    list -- with retries, up to minutes. Starlette runs a sync `def` endpoint
+    in the threadpool instead.
+    """
+    assert not inspect.iscoroutinefunction(sign_in)

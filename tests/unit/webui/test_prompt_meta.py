@@ -16,7 +16,11 @@ from fastapi.testclient import TestClient
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.main import create_app
-from testbench_ai_service.webui.prompts import declared_prompt_file, resolve_prompt_file
+from testbench_ai_service.webui.prompts import (
+    declared_prompt_file,
+    read_prompt_meta,
+    resolve_prompt_file,
+)
 
 TB_URL = "https://localhost:9443/api/"
 
@@ -439,3 +443,43 @@ def test_the_suffix_check_is_applied_to_the_resolved_path(client, signed_in, pro
     the resolved path instead."""
     signed_in()
     assert _meta(client, file="test_case_set_reviewer/prompt.yaml.").status_code == 400
+
+
+class TestErrorsDoNotLeakTheFilesystem:
+    """`/prompts/.../meta` is session-gated, not admin-gated (design D7).
+
+    Every signed-in user reaches it, and `?file=` can be aimed at any YAML
+    under `prompts_dir`, so a failure must name the file the operator wrote
+    rather than the server's absolute path or the file's own contents.
+    """
+
+    def test_a_404_names_the_file_relative_to_prompts_dir(self, tmp_path):
+        with pytest.raises(HTTPException) as exc:
+            read_prompt_meta(tmp_path / "de" / "gone.yaml", tmp_path)
+
+        assert exc.value.status_code == 404
+        assert exc.value.detail == "No prompt file at de/gone.yaml"
+        assert str(tmp_path) not in exc.value.detail
+
+    def test_a_422_names_the_broken_fields_but_not_their_values(self, tmp_path):
+        prompt = tmp_path / "secrets.yaml"
+        prompt.write_text("name: 1\nsummary: s3cret-looking-value\n", encoding="utf-8")
+
+        with pytest.raises(HTTPException) as exc:
+            read_prompt_meta(prompt, tmp_path)
+
+        assert exc.value.status_code == 422
+        assert "secrets.yaml" in exc.value.detail
+        assert "s3cret-looking-value" not in exc.value.detail
+        assert str(tmp_path) not in exc.value.detail
+
+    def test_a_yaml_error_says_where_without_quoting_the_line(self, tmp_path):
+        prompt = tmp_path / "broken.yaml"
+        prompt.write_text("name: [unterminated\nsummary: confidential\n", encoding="utf-8")
+
+        with pytest.raises(HTTPException) as exc:
+            read_prompt_meta(prompt, tmp_path)
+
+        assert exc.value.status_code == 422
+        assert "not valid YAML" in exc.value.detail
+        assert "confidential" not in exc.value.detail
