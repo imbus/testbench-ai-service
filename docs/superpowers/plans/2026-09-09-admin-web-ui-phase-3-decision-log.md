@@ -272,13 +272,62 @@ route spends a stored credential. It is admin-only and CSRF-gated, the cost is o
 TestBench call, and a limit is a new mechanism with its own failure mode. Noted for
 phase 4 rather than added here.
 
-## 6. Verification
+## 6. Design fidelity
+
+The screens shipped looking wrong, and the reason is structural rather than
+careless: **the source design was never opened while phase 3 was implemented.**
+
+The console's source design is the Claude Design artboard
+`TestBench AI Service Console.dc.html` (project `474074a4-…`, "Testbench AI Service
+Configuration"), which the master spec §2 calls the functional spec for this work.
+Phase 1 was built against it directly — its task briefs quote the artboard's file
+paths and instruct copying its design system in verbatim, which is why
+`styles/industry.css` is a faithful copy and Status and Login compose it properly.
+
+Phase 3 had no task briefs. It was implemented from §5.4 of its own design
+document, and §5.4 describes these three screens purely as behaviour — which
+paths they write, which states a control has, what inherits from what. It says
+nothing about layout, and nobody re-read the artboard. So the visual decisions
+fell to the implementation and came out as ad-hoc inline styles: `Agents.tsx`
+carried 6 design-system classes against 29 inline style objects, `Projects.tsx`
+11 against 28. The right tokens — the TestBench green, Barlow, soft corners, all
+correctly stamped by `theme.ts` — arranged in invented containers.
+
+Nothing caught it. Every phase verified behaviour and none of them compared a
+rendered screen against the design; visual fidelity was never in the loop.
+
+**The correction.** The artboard's markup for the three screens is extracted to
+`.superpowers/sdd/2026-09-09-admin-web-ui-phase-3/artboard-agents-projects.md`,
+and the screens were rebuilt against it: `blueprint` frames with their corner
+marks, the Projects card grid, `.seg` controls, accent and neutral state tags,
+the small-caps header strips, the surface-filled drawer, per-cell rules and the
+accent tint on an override.
+
+Two deliberate departures from the artboard, both chosen for semantics the
+prototype does not carry:
+
+- **The matrix stays a `<table>`.** The artboard draws it as one CSS grid, which
+  gives a screen reader no way to say which agent and which project a cell
+  belongs to. Ours keeps `columnheader`/`rowheader` and takes the frame, the
+  two-line headers, the rules and the tint.
+- **The scope switcher stays a tablist**, wearing the artboard's chips.
+
+The `.seg` control does replace two of our own inventions, because it is both
+the artboard's shape and the better semantic: the project language override and
+the list/matrix switch are now real radio groups. Six tests moved with them —
+three from select queries, three from `tab` to `radio`.
+
+**For phase 4:** read the artboard before writing the screen, and put its markup
+in the task brief the way phase 1 did. A behaviour-only design document produces
+a behaviour-only implementation.
+
+## 7. Verification
 
 | Suite | Base `839c98b` | Phase 3, after review |
 |---|---|---|
 | `tests/unit/webui` | 298 passed | **470 passed**, 0 failed |
 | `tests/unit` | 816 passed, 54 failed, 3 errors | **1012 passed**, 54 failed, 3 errors |
-| frontend `vitest run` | 229 passed, 18 files (as recorded at phase-2 completion) | **426 passed**, 26 files |
+| frontend `vitest run` | 229 passed, 18 files (as recorded at phase-2 completion) | **427 passed**, 26 files |
 | `tsc -b`, `npm run build` | — | clean |
 | ruff check / ruff format / mypy | — | clean on every touched file |
 | OpenAPI generation | — | all three new routes present; response schemas match the design's shapes field for field |
@@ -301,7 +350,7 @@ suite was 17 failed / 434 passed before the fixture and green after it.
 Pre-existing ruff findings in `testbench_ai_service/agents/defect_explainer/agent.py`
 (4×F401, I001, W293) are untouched — not this branch's work.
 
-## 7. Left open
+## 8. Left open
 
 - **Phase 4** owns the prompt editor, the fork (D1) and per-project `llm_config` editing (D8).
 - **Whether a project's `vars` should merge per key or replace wholesale** (§5.1). The console
