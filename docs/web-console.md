@@ -16,9 +16,10 @@ With the default `host` and `port` that is <http://127.0.0.1:8010/admin>.
 The console shows the current service status, a tail of the log file, and the
 effective Service, LLM and Logging configuration.
 
-The console can change the Service, LLM provider and Logging settings. Agents,
-per-project overrides and prompts are still read-only from the browser and
-arrive in a later release.
+The console can change the Service, LLM provider and Logging settings, which
+agents run and which prompt each one uses, and which of those decisions a given
+TestBench project overrides. Editing prompt files themselves is still read-only
+from the browser and arrives in a later release.
 
 :::caution
 Changing configuration from the console rewrites `config.toml` on the server.
@@ -146,6 +147,93 @@ and their hyphenated and dot-separated variants like `api-key`, `x-api-key`,
 on disk keeps the real values, and applying changes never writes the placeholder.
 Without this redaction, credentials would leak on the Raw screen and in the
 preview diff.
+
+## Agents
+
+The **Agents** screen lists every agent the service knows about, with a switch
+for each one, its endpoint path, and how many projects override it. Expanding a
+row names those projects.
+
+The **Matrix** view is the same information as a grid of agents against
+projects, which is the only place the whole override picture is visible at once.
+
+A partial `[testbench-ai-service.agents.<key>]` block overrides only the
+settings it names, so switching one agent off writes exactly one line and leaves
+every other agent alone.
+
+### Agent detail
+
+Selecting an agent opens its own screen, with a scope switcher across the top:
+**Global**, then one tab per project that overrides this agent, plus a picker
+for adding an override to a project that does not have one yet. Choosing a scope
+only changes what you are looking at — nothing is written until you apply.
+
+In each scope you can set:
+
+- whether the agent is **enabled**;
+- the **prompt file**, relative to `prompts_dir/<language>/`;
+- the prompt **variant**, as a list of the variants that prompt actually
+  declares;
+- the prompt **variables**, each rendered as the control its declaration calls
+  for — a number box, a checkbox, a list of allowed values, or a text area.
+
+The variant list and the variable types come from the prompt YAML itself, not
+from `config.toml`. If the prompt file cannot be read the console says so and
+leaves the variant as a free-text field, so you can still correct the path that
+caused it.
+
+A variable that is set in `config.toml` but not declared by the selected variant
+is still shown, flagged, so a value the prompt will ignore cannot hide in the
+file.
+
+`endpoint_path` and `class_path` are shown but not editable. Defining an agent
+means shipping a Python class, which is a deployment rather than a
+configuration change, and a typo in either one stops the service from starting.
+Edit them in `config.toml` directly; both need a restart to take effect.
+
+:::note
+An agent cannot be removed by leaving it out of `config.toml` — every built-in
+agent is always present. Set `enabled = false` instead. A disabled agent
+registers no endpoint, so the effect is the same.
+:::
+
+## Projects
+
+The **Projects** screen shows one card per project, over the union of the
+projects TestBench reports and the projects `config.toml` mentions. A project
+that is in your configuration but not in TestBench is flagged: usually it has
+been renamed or deleted there, and its overrides are no longer doing anything.
+
+Each card carries the project's `language` override, a three-state toggle per
+agent, and **Remove all overrides**, which deletes the whole project block in a
+single change.
+
+The three states of an agent toggle are deliberate and different:
+
+| State       | Meaning                                                      |
+| ----------- | ------------------------------------------------------------ |
+| Inherited   | The project says nothing; the global setting applies         |
+| Off         | The project explicitly disables this agent                   |
+| On          | The project explicitly enables this agent                    |
+
+Clicking cycles through all three, so an override can always be taken back off.
+The same distinction applies to every field on the agent screens: a field that
+is inherited shows what it inherits and from where, and **Clear override**
+returns it to inheriting.
+
+Per-project `llm_config` is not editable here. A project that already has one is
+shown read-only, and you can change it in `config.toml`.
+
+### The project list
+
+The project list is read from TestBench once, when you sign in, and cached for
+the session — the console avoids re-using your TestBench credentials any more
+than it has to. The card header shows when it was fetched; **Refresh** reads it
+again.
+
+If TestBench could not be asked, the console says so and offers a free-text
+field for typing a project name by hand. The name must match the name in
+TestBench exactly, including spaces and punctuation.
 
 ### Apply result
 

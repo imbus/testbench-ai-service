@@ -13,8 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - A web console at `/admin`, served by the service itself and bundled in the release
   binary. Sign in with TestBench credentials against the server configured as `tb_server_url`;
   the console then shows service status, a tail of the log file, and the effective Service, LLM
-  and Logging configuration. Agents, per-project overrides and prompts are still read-only from
-  the browser.
+  and Logging configuration. Prompt files themselves are still read-only from the browser.
 - `[testbench-ai-service.admin_ui]` with `enabled` (default `true`) and `require_loopback`
   (default `false`). Set `enabled = false` to switch the console off entirely: `/admin` and the
   console API then return `404` and the agent endpoints are unaffected. Documented in
@@ -30,9 +29,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   in a "restart needed" banner. A new **Raw config.toml** screen shows the file the pending
   changes would produce. Editing requires the global `Administrator` role; every other session
   keeps the read-only console. Documented in `docs/web-console.md`.
+- Agent and per-project editing in the web console, for administrators. A new **Agents** screen
+  lists every agent with a switch, its endpoint and which projects override it, plus a matrix
+  view of agents against projects. Each agent has its own screen with a scope switcher — global,
+  or any project that overrides it — for its `enabled` flag, prompt file, prompt variant and
+  prompt variables. The variant list and each variable's control (number, checkbox, list of
+  allowed values, text area) come from the prompt YAML's own declarations, so a variant name can
+  no longer be a silent typo and a variable can no longer be an untyped string. A variable set in
+  `config.toml` that the selected variant does not declare is shown and flagged rather than
+  hidden. `endpoint_path` and `class_path` are displayed read-only: defining an agent means
+  shipping a Python class, and a typo in either stops the service booting.
+- A new **Projects** screen, one card per project over the union of the projects TestBench
+  reports and the projects `config.toml` mentions — a project in the configuration but not in
+  TestBench is flagged. Each card carries the project's `language` override, a three-state
+  toggle per agent (inherited · off · on, so an override can always be taken back off) and
+  "Remove all overrides". A per-project `llm_config` block is shown read-only. The project list
+  is read from TestBench once per session and cached, with its age shown and a **Refresh**
+  action; if TestBench cannot be reached the console says so and lets the project name be typed
+  by hand. Documented in `docs/web-console.md`.
 - `[testbench-ai-service.llm_config]` gains `timeout` and `max_retries`. Both were already
   forwarded to the provider SDKs when present in the file; declaring them makes them validated,
   documented, and editable from the console.
+- Prompt variables may now hold numbers and booleans, not only strings. `vars` under both
+  `[testbench-ai-service.agents.<key>.prompt]` and a project's prompt override accepts
+  `str`, `bool`, `int` and `float`, matching the `number` and `boolean` value types that
+  `prompt.yaml` has always been able to declare. Writing `max_findings = 10` previously failed
+  validation at startup with "Input should be a valid string".
+
+### Changed
+
+- A partial `[testbench-ai-service.agents.<key>]` block now overrides only the settings it
+  names, instead of replacing the whole agent table. Writing just `enabled = false` for a
+  built-in agent is now valid and leaves the other agents alone; nested blocks merge too, so
+  `[testbench-ai-service.agents.<key>.prompt] variant = "..."` keeps the agent's `prompt.file`.
+  An agent key that is not built in must still be declared in full -- there is nothing for it
+  to inherit from.
+
+  **This changes behaviour for one undocumented usage.** Previously, declaring a single agent
+  in full silently dropped every agent you did not mention, which was the only way to express
+  "run just this one". Those configurations now get the other built-in agents back. To turn an
+  agent off, set `enabled = false` on it -- a disabled agent registers no endpoint, so the
+  effect is the same as its removal.
 
 ### Fixed
 
