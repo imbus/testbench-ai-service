@@ -22,6 +22,7 @@ from tomlkit.items import InlineTable, Table
 from testbench_ai_service.log import logger
 from testbench_ai_service.utils.config import CONFIG_PREFIX
 from testbench_ai_service.webui.edits import ConfigEdits
+from testbench_ai_service.webui.paths import split_path
 
 
 def load_document(path: Path) -> tomlkit.TOMLDocument:
@@ -130,7 +131,10 @@ def apply_edits(document: tomlkit.TOMLDocument, edits: ConfigEdits) -> None:
     """
     root: Table | OutOfOrderTableProxy = service_table(document)
     for path, value in edits.items():
-        segments = path.split(".")
+        # The same tokenizer merge_edits uses. Splitting on "." here instead
+        # would write a project named "Release 2.0" as two nested tables --
+        # and the preview, built from the merged dict, would not show it.
+        segments = split_path(path)
         if value is None:
             _remove_key(root, segments)
         else:

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 import tomlkit
+import tomllib
 from fastapi import HTTPException
 
 from testbench_ai_service.webui.config_io import read_config_file
@@ -373,3 +374,42 @@ def test_apply_edits_and_merge_edits_agree_on_refusing_a_scalar_parent(tmp_path:
     with pytest.raises(HTTPException) as dict_exc:
         merge_edits({"logging": "yes"}, edits)
     assert dict_exc.value.status_code == 400
+
+
+class TestQuotedPaths:
+    """A project name is whatever TestBench calls the project.
+
+    ``apply_edits`` writes what ``merge_edits`` validated, so both have to read
+    an edit path the same way. When only ``merge_edits`` tokenized, a project
+    whose name contains a dot previewed as valid and was written to the file as
+    two nested tables under the wrong keys -- and its removal wrote nothing at
+    all while reporting success.
+    """
+
+    def test_a_dotted_project_name_is_written_as_one_key(self, config_file: Path):
+        document = load_document(config_file)
+
+        apply_edits(document, {'projects."Release 2.0".language': "de"})
+
+        written = tomllib.loads(render_document(document))
+        projects = written["testbench-ai-service"]["projects"]
+        assert projects == {"Release 2.0": {"language": "de"}}
+
+    def test_a_dotted_project_name_can_be_removed_again(self, config_file: Path):
+        document = load_document(config_file)
+        apply_edits(document, {'projects."Release 2.0".language': "de"})
+
+        apply_edits(document, {'projects."Release 2.0"': None})
+
+        written = tomllib.loads(render_document(document))
+        assert written["testbench-ai-service"].get("projects", {}) == {}
+
+    def test_the_document_and_the_dict_agree_on_a_quoted_path(self, config_file: Path):
+        """Preview shows the merged dict; apply writes the document."""
+        edits = {'projects."Release 2.0".agents.reviewer.enabled': False}
+        document = load_document(config_file)
+
+        apply_edits(document, edits)
+
+        merged = merge_edits(read_config_file(config_file), edits)
+        assert tomllib.loads(render_document(document))["testbench-ai-service"] == merged
