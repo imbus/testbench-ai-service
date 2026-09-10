@@ -69,7 +69,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   in full silently dropped every agent you did not mention, which was the only way to express
   "run just this one". Those configurations now get the other built-in agents back. To turn an
   agent off, set `enabled = false` on it -- a disabled agent registers no endpoint, so the
-  effect is the same as its removal.
+  effect is the same as its removal. An empty `[testbench-ai-service.agents]` block, or none
+  at all, likewise leaves all three built-ins enabled.
+
+  Two consequences for a custom `prompts_dir` that does not hold the built-in prompt files.
+  A built-in agent you never configured is now skipped at startup with a warning instead of
+  refusing to boot over a prompt file you never wrote; and a **disabled** agent is no longer
+  checked at all -- neither its prompt file nor its `class_path` has to resolve. Both keep a
+  configuration that started before this release starting after it.
 
 ### Fixed
 

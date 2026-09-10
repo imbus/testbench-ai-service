@@ -1,3 +1,5 @@
+import logging
+import shutil
 from pathlib import Path
 from unittest.mock import patch
 
@@ -430,3 +432,105 @@ class TestAgentsMergeOntoDefaults:
         )
 
         assert cfg.agents["test_case_set_reviewer"].endpoint_path == "/x"
+
+
+class TestBuiltinsWithNoPromptFile:
+    """A built-in the operator never configured must not stop the service.
+
+    Merging the ``agents`` table onto the built-ins means every built-in is now
+    present in every config -- including one whose ``prompts_dir`` holds only
+    the operator's own prompt files. Validating a built-in's prompt file into a
+    hard error there would turn a config that booted before the merge into one
+    that refuses to start, naming an agent the operator never wrote down.
+    """
+
+    REVIEWER = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
+
+    @pytest.fixture
+    def prompts_dir(self, tmp_path):
+        """A prompts_dir holding one prompt file, and none of the built-ins'."""
+        for language in ("de", "en"):
+            (tmp_path / language).mkdir()
+            shutil.copy(
+                PROMPTS_DIR / language / "test_case_set_reviewer" / "prompt.yaml",
+                tmp_path / language / "mine.yaml",
+            )
+        return tmp_path
+
+    def _config(self, prompts_dir, **kwargs):
+        with patch("testbench_ai_service.config.validate_tb_server_url"):
+            return AppConfig(
+                tb_server_url="https://localhost:9443/api/", prompts_dir=prompts_dir, **kwargs
+            )
+
+    def test_a_custom_agent_set_with_its_own_prompts_dir_still_boots(self, prompts_dir):
+        cfg = self._config(
+            prompts_dir,
+            agents={
+                "my_agent": {
+                    "enabled": True,
+                    "endpoint_path": "/mine",
+                    "class_path": self.REVIEWER,
+                    "prompt": {"file": "mine.yaml"},
+                }
+            },
+        )
+
+        assert set(cfg.agents) == {"my_agent"}
+
+    def test_disabling_a_builtin_does_not_require_its_prompt_file(self, prompts_dir):
+        """The documented way to switch an agent off has to work everywhere."""
+        cfg = self._config(
+            prompts_dir,
+            agents={
+                "test_case_set_reviewer": {"enabled": False},
+                "test_case_set_describer": {"enabled": False},
+                "defect_explainer": {"enabled": False},
+                "my_agent": {
+                    "enabled": True,
+                    "endpoint_path": "/mine",
+                    "class_path": self.REVIEWER,
+                    "prompt": {"file": "mine.yaml"},
+                },
+            },
+        )
+
+        assert cfg.agents["test_case_set_reviewer"].enabled is False
+        assert cfg.agents["my_agent"].enabled is True
+
+    def test_a_configured_prompt_file_that_is_missing_is_still_an_error(self, prompts_dir):
+        """Leniency covers what the operator did not write, not what they did."""
+        with pytest.raises(ValidationError) as excinfo:
+            self._config(
+                prompts_dir,
+                agents={"test_case_set_reviewer": {"prompt": {"file": "nope.yaml"}}},
+            )
+
+        assert excinfo.value.errors()[0]["loc"] == (
+            "agents",
+            "test_case_set_reviewer",
+            "prompt",
+            "file",
+        )
+
+    def test_the_builtins_survive_when_their_prompt_files_are_there(self):
+        with patch("testbench_ai_service.config.validate_tb_server_url"):
+            cfg = AppConfig(tb_server_url="https://localhost:9443/api/")
+
+        assert set(cfg.agents) == set(DEFAULT_AGENTS)
+
+    def test_a_dropped_builtin_is_logged(self, prompts_dir, caplog):
+        with caplog.at_level(logging.WARNING):
+            self._config(
+                prompts_dir,
+                agents={
+                    "my_agent": {
+                        "enabled": True,
+                        "endpoint_path": "/mine",
+                        "class_path": self.REVIEWER,
+                        "prompt": {"file": "mine.yaml"},
+                    }
+                },
+            )
+
+        assert "test_case_set_reviewer" in caplog.text

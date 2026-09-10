@@ -26,6 +26,7 @@ from testbench_ai_service.utils.prompt_utils import (
 )
 from testbench_ai_service.validators import (
     raise_field_validation_error,
+    resolve_prompt_file_path,
     validate_prompt_file,
     validate_tb_server_url,
 )
@@ -61,6 +62,20 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         ),
     ),
 }
+
+
+def _prompt_file_is_absent(file: Path, prompts_dir: Path | None, language: str) -> bool:
+    """Whether *file* cannot be found at all, as opposed to being unreadable.
+
+    ``validate_prompt_file`` raises the same ``ValueError`` for a file that is
+    missing and for one that is present but malformed. Only the first is a
+    reason to treat an agent as simply not installed.
+    """
+    try:
+        resolve_prompt_file_path(file, prompts_dir=prompts_dir, language=language)
+    except ValueError:
+        return True
+    return False
 
 
 def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
@@ -246,10 +261,36 @@ class AppConfig(BaseModel):
                 raise ValueError(f"Templates path is not a directory: '{v.resolve()}'")
         return v
 
+    def _is_untouched_builtin(self, agent_key: str, agent: AgentConfig) -> bool:
+        """Whether *agent* is a built-in the operator's config left alone.
+
+        Compares the merged entry against the built-in rather than tracking
+        which keys the operator wrote: a block that spells the default out
+        again means the same thing as no block at all.
+        """
+        return agent == DEFAULT_AGENTS.get(agent_key)
+
     @model_validator(mode="after")
     def validate_prompt_paths(self):
-        """Validate and resolve all prompt file paths."""
-        for agent_key, agent in self.agents.items():
+        """Validate and resolve all prompt file paths.
+
+        Two agents are exempt, because for them a prompt file is not something
+        the operator asked for:
+
+        * a **disabled** agent -- it gets no endpoint, so requiring its prompt
+          file to exist would make ``enabled = false`` an incomplete off
+          switch, and that is the documented way to withdraw an agent;
+        * an **untouched built-in whose prompt file is absent** -- since the
+          ``agents`` table merges onto the built-ins, every config carries all
+          three, including one whose ``prompts_dir`` holds only the operator's
+          own prompts. Failing there would refuse to start a service that
+          started before the merge, naming an agent the operator never wrote
+          down. It is dropped with a warning instead: it cannot run, and that
+          is exactly the state such a config was in before.
+        """
+        for agent_key, agent in list(self.agents.items()):
+            if not agent.enabled:
+                continue
             try:
                 validate_prompt_file(
                     agent.prompt.file,
@@ -257,6 +298,19 @@ class AppConfig(BaseModel):
                     language=self.language.value,
                 )
             except ValueError as e:
+                if self._is_untouched_builtin(agent_key, agent) and _prompt_file_is_absent(
+                    agent.prompt.file, self.prompts_dir, self.language.value
+                ):
+                    logger.warning(
+                        "Built-in agent '%s' is not configured and its prompt file '%s' was not "
+                        "found under '%s'. The agent is unavailable. Configure it explicitly if "
+                        "you meant to run it; otherwise this message can be ignored.",
+                        agent_key,
+                        agent.prompt.file,
+                        self.prompts_dir,
+                    )
+                    del self.agents[agent_key]
+                    continue
                 raise_field_validation_error(self, ("agents", agent_key, "prompt", "file"), e)
         for proj_key, project in self.projects.items():
             for agent_key, agent_override in (project.agents or {}).items():
@@ -279,6 +333,13 @@ class AppConfig(BaseModel):
     @model_validator(mode="after")
     def validate_config(self):
         for _, agent in self.agents.items():
+            # A disabled agent gets no router, so nothing here can go wrong at
+            # runtime: importing its class and matching its template variables
+            # would only be able to refuse a boot over an agent that is
+            # switched off. Same reasoning as validate_prompt_paths.
+            if not agent.enabled:
+                continue
+
             if not agent.class_path:
                 raise ValueError("'class_path' must be set.")
 

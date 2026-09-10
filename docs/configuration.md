@@ -380,7 +380,9 @@ enabled = false
 
 Nested blocks merge the same way — setting `prompt.variant` keeps the built-in `prompt.file`. A **new** agent key has nothing to inherit from, so it must declare `enabled`, `endpoint_path`, `class_path` and `prompt.file` in full.
 
-A disabled agent registers no HTTP endpoint at all.
+Because the table merges, the built-in agents are always present: an empty `[testbench-ai-service.agents]` block, or none at all, leaves all three enabled. An agent cannot be removed by omission — set `enabled = false`.
+
+A disabled agent registers no HTTP endpoint at all, and is exempt from the startup checks on its prompt file and `class_path`. If you point `prompts_dir` at a directory that holds only your own prompts, a built-in you never configured is skipped with a warning rather than stopping the service: it has no prompt file to run.
 
 | Option            | Type    | Description                                                 | Required |
 | ----------------- | ------- | ----------------------------------------------------------- | -------- |
@@ -399,6 +401,8 @@ The `name`, `summary`, and `description` shown in the OpenAPI UI and in TestBenc
 | `file`    | String | Path to the prompt YAML file (relative to `prompts_dir/<language>/`).                              | For a new agent |
 | `variant` | String | Prompt variant to use (falls back to `default_variant` in the YAML file).                          | No       |
 | `vars`    | Table  | Key-value pairs for user-provided variables, accessible as `{{ vars.<key> }}` in prompt templates. Values may be strings, numbers or booleans, matching the `value_type` the variant declares. | No       |
+
+A boolean renders as Python spells it — `{{ vars.strict }}` with `strict = true` produces `True`. Use it in a condition (`{% if vars.strict %}`) rather than interpolating it directly.
 
 For details on how prompts work, see the [Prompts](prompts.md) page.
 
@@ -431,7 +435,9 @@ Any global setting can be overridden per TestBench project. The project name mus
 | `agents.<key>.enabled`        | Boolean | Enable or disable a specific agent.             |
 | `agents.<key>.prompt.file`    | String  | Override the prompt file.                       |
 | `agents.<key>.prompt.variant` | String  | Override the prompt variant.                    |
-| `agents.<key>.prompt.vars`    | Table   | Override prompt variables.                      |
+| `agents.<key>.prompt.vars`    | Table   | Override prompt variables — see the note below. |
+
+Unlike the other rows, `vars` is replaced rather than merged: a project that sets one variable overrides the whole table, and every variable it does not name falls back to the prompt's own `default_value` rather than to the global setting.
 
 **Example:**
 
