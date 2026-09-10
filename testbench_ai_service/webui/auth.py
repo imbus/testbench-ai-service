@@ -2,6 +2,7 @@
 
 import math
 import secrets
+from dataclasses import dataclass
 
 import requests
 from fastapi import Cookie, Depends, Header, HTTPException, Request, Response, status
@@ -16,6 +17,7 @@ from testbench_ai_service.transport import (
     DEFAULT_READ_TIMEOUT,
     harden_connection,
 )
+from testbench_ai_service.webui.projects import ProjectFetch, fetch_projects
 from testbench_ai_service.webui.session import (
     CSRF_COOKIE,
     CSRF_HEADER,
@@ -39,8 +41,23 @@ def is_admin_role(roles: list[str]) -> bool:
     return GlobalHumanRole.Administrator.value in roles
 
 
-def authenticate(config: AppConfig, username: str, password: str) -> tuple[str, list[str]]:
-    """Log in to TestBench and return ``(session_token, roles)``.
+@dataclass(frozen=True)
+class LoginResult:
+    """Everything one login connection yields before it is closed again.
+
+    ``projects`` rides along because this is the only moment the console has an
+    authenticated TestBench connection in hand (design D3). It always carries a
+    result -- a failed fetch is an ``error`` on it, never an exception, so an
+    unreachable project endpoint cannot fail the login (D4).
+    """
+
+    token: str
+    roles: list[str]
+    projects: ProjectFetch
+
+
+def authenticate(config: AppConfig, username: str, password: str) -> LoginResult:
+    """Log in to TestBench and read everything the connection can give us.
 
     Raises:
         HTTPException 401: TestBench rejected the credentials.
@@ -84,7 +101,11 @@ def authenticate(config: AppConfig, username: str, password: str) -> tuple[str, 
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
             )
-        return token, list(roles)
+        # Inside the try, before the finally closes the connection: the project
+        # list is the one thing the console needs that requires an outbound
+        # call, and this is the only place it can be had without spending the
+        # stored token a second time.
+        return LoginResult(token=token, roles=list(roles), projects=fetch_projects(conn))
     except requests.exceptions.HTTPError as e:
         response_status = e.response.status_code if e.response is not None else None
         if response_status in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):

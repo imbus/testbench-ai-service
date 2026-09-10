@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from testbench_ai_service.webui.models import ProjectRef
 from testbench_ai_service.webui.session import (
     ABSOLUTE_TIMEOUT,
     IDLE_TIMEOUT,
@@ -118,3 +119,21 @@ def test_defaults_match_the_spec():
     # Constant-first form is what ruff's SIM300 requires for comparing constants.
     assert timedelta(minutes=60) == IDLE_TIMEOUT
     assert timedelta(hours=8) == ABSOLUTE_TIMEOUT
+
+
+def test_a_new_session_has_no_cached_project_list(store: SessionStore):
+    """The list is fetched at login and written onto the session afterwards, so
+    a freshly created session must start empty rather than absent."""
+    session = _create(store)
+    assert session.projects == []
+    assert session.projects_fetched_at is None
+    assert session.projects_error is None
+
+
+def test_the_project_cache_is_per_session(store: SessionStore):
+    """A mutable default shared between sessions would leak one operator's
+    project list into every other session in the process."""
+    first = _create(store)
+    second = _create(store)
+    first.projects.append(ProjectRef(name="Alpha", key="1"))
+    assert second.projects == []

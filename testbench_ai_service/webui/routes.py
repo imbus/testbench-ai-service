@@ -35,8 +35,20 @@ from testbench_ai_service.webui.models import (
     LogLine,
     MetaResponse,
     PreviewResponse,
+    ProjectsResponse,
+    PromptMetaResponse,
     SessionResponse,
     StatusResponse,
+)
+from testbench_ai_service.webui.projects import (
+    fetch_projects_with_token,
+    projects_response,
+    record_projects,
+)
+from testbench_ai_service.webui.prompts import (
+    declared_prompt_file,
+    read_prompt_meta,
+    resolve_prompt_file,
 )
 from testbench_ai_service.webui.reload import hot_reload, restart_required
 from testbench_ai_service.webui.security import require_loopback
@@ -147,14 +159,22 @@ async def sign_in(
     config: AppConfig = Depends(get_app_config),
     store: SessionStore = Depends(get_session_store),
 ) -> SessionResponse:
-    """Exchange TestBench credentials for a console session."""
-    token, roles = authenticate(config, body.username, body.password)
+    """Exchange TestBench credentials for a console session.
+
+    Also caches the TestBench project list on the new session: ``authenticate``
+    reads it inside the connection it already has, and a failure there is
+    recorded rather than raised (design D3/D4). The payload stays identity-only
+    -- the list is served by ``GET /projects`` so a stale cache can be replaced
+    without signing in again.
+    """
+    login = authenticate(config, body.username, body.password)
     session = store.create(
         username=body.username,
-        roles=roles,
-        is_admin=is_admin_role(roles),
-        tb_session_token=token,
+        roles=login.roles,
+        is_admin=is_admin_role(login.roles),
+        tb_session_token=login.token,
     )
+    record_projects(session, login.projects)
     set_session_cookies(response, session, config)
     return SessionResponse(
         username=session.username,
@@ -176,6 +196,42 @@ async def read_session(
         is_admin=session.is_admin,
         tb_server_url=config.tb_server_url,
     )
+
+
+@router.get("/projects", response_model=ProjectsResponse)
+def read_projects(session: Session = Depends(current_session)) -> ProjectsResponse:
+    """The project list cached at login. A pure read -- no outbound call.
+
+    Open to any signed-in user, like every other read: only ``refresh`` and the
+    config write routes require the admin role. ``source == "unavailable"`` is
+    how the Projects screen learns that an empty list means "we could not ask",
+    at which point it offers a free-text project name instead.
+    """
+    return projects_response(session)
+
+
+@router.post("/projects/refresh", response_model=ProjectsResponse)
+def refresh_projects(
+    config: AppConfig = Depends(get_app_config),
+    session: Session = Depends(require_admin),
+    _: None = Depends(require_csrf),
+) -> ProjectsResponse:
+    """Re-read the project list from TestBench and replace the cache.
+
+    Admin-gated and CSRF-guarded despite writing nothing to disk: it spends the
+    stored TestBench credential on an outbound call, which is not something a
+    cross-site page may trigger on the operator's behalf.
+
+    A sync ``def`` on purpose -- the vendored TestBench client is blocking, so
+    this belongs in the threadpool rather than stalling the event loop for
+    however long TestBench takes to answer.
+
+    Never fails with a 5xx: a TestBench that cannot answer is reported as
+    ``source == "unavailable"`` on a 200, and the previously cached list is
+    kept rather than being replaced with an empty one.
+    """
+    record_projects(session, fetch_projects_with_token(config, session.tb_session_token))
+    return projects_response(session)
 
 
 @router.delete("/session", status_code=status.HTTP_204_NO_CONTENT)
@@ -229,6 +285,62 @@ async def read_config(
     role.
     """
     return build_config_response(config, request.app.state.config_path)
+
+
+@router.get("/prompts/{lang}/{agent}/meta", response_model=PromptMetaResponse)
+def read_prompt_metadata(
+    lang: str,
+    agent: str,
+    request: Request,
+    file: str | None = Query(
+        default=None,
+        description=(
+            "Read this prompt file instead of the one the agent key declares. "
+            "Relative to prompts_dir/<lang>/, and still contained within prompts_dir."
+        ),
+    ),
+    _: Session = Depends(current_session),
+    config: AppConfig = Depends(get_app_config),
+) -> PromptMetaResponse:
+    """Variant names and variable declarations for one agent's prompt.
+
+    A read, so a session is enough -- the form has to render for anyone signed
+    in, even though only an admin can apply what they type into it.
+
+    The route does not resolve scope itself: the caller names both segments, so
+    one endpoint serves global and per-project scope alike. ``lang`` is the
+    effective language for the scope being edited (a project's ``language``
+    override, otherwise the global one), and ``file`` carries the prompt file
+    the *draft* points at -- a project override, or a switch the operator has
+    made in the form but not yet applied. Without ``file``, a project pointing
+    at a different prompt would be edited against the global prompt's variants
+    and variable declarations: wrong metadata, with no symptom until the agent
+    runs.
+
+    A sync ``def``: it reads and parses a YAML file plus config.toml, so it
+    belongs in the threadpool.
+    """
+    if config.prompts_dir is None:
+        # There is no base directory to contain a request-supplied path
+        # against, so the endpoint refuses to look rather than reading a path
+        # relative to the process's working directory.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No prompts directory is configured, so prompt metadata cannot be read",
+        )
+
+    candidate: str | Path | None = file
+    if candidate is None:
+        candidate = declared_prompt_file(
+            agent, read_config_file(Path(request.app.state.config_path)), config
+        )
+    if candidate is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No agent named {agent!r} declares a prompt file",
+        )
+
+    return read_prompt_meta(resolve_prompt_file(config.prompts_dir, lang, candidate))
 
 
 @router.get("/logs", response_model=list[LogLine])

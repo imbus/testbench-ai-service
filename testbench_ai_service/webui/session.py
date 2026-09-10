@@ -15,6 +15,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
+from testbench_ai_service.webui.models import ProjectRef
+
 IDLE_TIMEOUT = timedelta(minutes=60)
 ABSOLUTE_TIMEOUT = timedelta(hours=8)
 
@@ -39,6 +41,17 @@ class Session:
     tb_session_token: str = field(repr=False)
     created_at: datetime
     last_seen: datetime
+
+    # The TestBench project list, fetched once inside the login connection and
+    # cached here for the life of the session (design D3): the token that would
+    # be needed to re-fetch it may be the operator's plaintext password, so it
+    # is used as rarely as the console can manage. ``projects_error`` records a
+    # failed fetch without failing the login (D4) -- editing service, LLM and
+    # logging settings must not depend on an unrelated TestBench endpoint.
+    # ``POST /projects/refresh`` replaces all three.
+    projects: list[ProjectRef] = field(default_factory=list)
+    projects_fetched_at: datetime | None = None
+    projects_error: str | None = None
 
 
 class SessionStore:

@@ -45,6 +45,10 @@ def tb_connection():
     conn.session_token = "tb-token-abc"
     conn.read_user_roles.return_value = ["Administrator"]
     conn.session = MagicMock()
+    # The login also reads the project list from this connection. An explicit
+    # empty answer rather than the default MagicMock, so tests that do not care
+    # about projects get a realistic payload instead of an unparseable one.
+    conn.get_all_projects.return_value = {"projects": []}
     return conn
 
 
