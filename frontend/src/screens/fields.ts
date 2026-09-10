@@ -1,4 +1,6 @@
-export type FieldType = 'text' | 'number' | 'bool' | 'select' | 'list'
+import { splitPath } from '../api/paths'
+
+export type FieldType = 'text' | 'textarea' | 'number' | 'bool' | 'select' | 'list'
 
 export interface FieldSpec {
   /** Dotted path into the config object returned by GET /config. */
@@ -6,6 +8,14 @@ export interface FieldSpec {
   type: FieldType
   hint: string
   options?: string[]
+  /**
+   * Label to show instead of the path's last segment.
+   *
+   * Only prompt variables use it: their key is `max_findings` but the prompt
+   * author named them "Maximum findings", and that declared name is what the
+   * operator should read.
+   */
+  label?: string
 }
 
 export interface ServiceTab {
@@ -111,7 +121,17 @@ export const LOGGING_FIELDS: FieldSpec[] = [
 
 /** Read a dotted path out of the config object, tolerating absent branches. */
 export function valueAt(config: Record<string, unknown>, path: string): unknown {
-  return path.split('.').reduce<unknown>((node, key) => {
+  // Tokenized, not split on '.': a segment can be a TestBench project name,
+  // and those may contain dots. A malformed path addresses nothing rather
+  // than throwing -- `prune` calls this for every stored edit, including one
+  // left behind by an older console.
+  let segments: string[]
+  try {
+    segments = splitPath(path)
+  } catch {
+    return undefined
+  }
+  return segments.reduce<unknown>((node, key) => {
     if (node === null || typeof node !== 'object') return undefined
     return (node as Record<string, unknown>)[key]
   }, config)

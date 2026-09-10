@@ -60,3 +60,26 @@ test('offers the declared LLM timeout and retry options', () => {
   expect(keys).toContain('llm_config.timeout')
   expect(keys).toContain('llm_config.max_retries')
 })
+
+// Phase 3: a config path can address a TestBench project by name, and those
+// names are arbitrary strings.
+
+const PROJECT_CONFIG = {
+  projects: {
+    'Release 2.0': { language: 'en' },
+    'My Project': { language: 'de' },
+  },
+}
+
+test('reads through a project name containing a dot', () => {
+  expect(valueAt(PROJECT_CONFIG, 'projects."Release 2.0".language')).toBe('en')
+})
+
+test('reads through a project name containing a space, unquoted', () => {
+  // Unchanged from phase 2: a space is not a delimiter, so it needs no quoting.
+  expect(valueAt(PROJECT_CONFIG, 'projects.My Project.language')).toBe('de')
+})
+
+test('a dotted project name is not read as nested tables', () => {
+  expect(valueAt({ projects: { a: { b: 'wrong' } } }, 'projects."a.b"')).toBeUndefined()
+})

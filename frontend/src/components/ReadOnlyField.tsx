@@ -1,3 +1,4 @@
+import { lastSegment } from '../api/paths'
 import type { FieldSpec } from '../screens/fields'
 
 /** Renders one config value as text. Phase 2 replaces this with real inputs. */
@@ -14,7 +15,7 @@ export function ReadOnlyField({ spec, value }: { spec: FieldSpec; value: unknown
     >
       <div>
         <div style={{ fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace' }}>
-          {spec.key.split('.').pop()}
+          {spec.label ?? lastSegment(spec.key)}
         </div>
         <div className="text-muted" style={{ fontSize: 11 }}>
           {spec.hint}

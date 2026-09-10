@@ -40,6 +40,22 @@ export const NAV_ITEMS: NavItem[] = [
     adminOnly: true,
   },
   {
+    key: 'agents',
+    path: '/admin/agents',
+    labelKey: 'agents',
+    icon: 'M12 2a5 5 0 0 1 5 5v1a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5zM4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1',
+    // Read-only for a non-admin, like Status: gating the link would hide
+    // information the operator is allowed to see.
+    adminOnly: false,
+  },
+  {
+    key: 'projects',
+    path: '/admin/projects',
+    labelKey: 'projects',
+    icon: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
+    adminOnly: false,
+  },
+  {
     key: 'raw',
     path: '/admin/raw',
     labelKey: 'raw',

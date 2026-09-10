@@ -90,3 +90,55 @@ export interface ApplyResponse {
   in_flight_tasks: number
   reload_detail: string | null
 }
+
+/** One TestBench project, named the way a `[projects."<name>"]` block keys it. */
+export interface ProjectRef {
+  name: string
+  key: string
+}
+
+export interface ProjectsResponse {
+  projects: ProjectRef[]
+  fetched_at: string | null
+  /**
+   * `'unavailable'` means the server could not ask TestBench — either the
+   * login-time fetch failed or none has happened. An empty list is then an
+   * absence of information, not an answer, which is what unlocks the Projects
+   * screen's free-text "add project by name" field.
+   */
+  source: 'testbench' | 'unavailable'
+  error: string | null
+}
+
+/** Declared type of one prompt variable, straight from the prompt YAML. */
+export type PromptVarType = 'string' | 'text' | 'boolean' | 'number' | 'enum'
+
+export interface PromptVarDefinition {
+  name: string
+  description: string | null
+  value_type: PromptVarType
+  choices: string[] | null
+  default_value: unknown
+  required: boolean
+}
+
+export interface PromptVariantMeta {
+  name: string
+  description: string | null
+  /** As the variant declares it. `null` means "fall back to default_model". */
+  model: string | null
+  vars: Record<string, PromptVarDefinition>
+}
+
+/**
+ * Read-only prompt metadata. Carries no message bodies — the variant list and
+ * the variable declarations are all the agent form needs.
+ */
+export interface PromptMeta {
+  name: string
+  summary: string | null
+  description: string | null
+  default_model: string
+  default_variant: string
+  variants: PromptVariantMeta[]
+}

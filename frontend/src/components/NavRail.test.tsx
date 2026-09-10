@@ -54,3 +54,41 @@ it('marks the raw config screen restricted for a non-admin', () => {
     'true',
   )
 })
+
+it('offers the agents and projects screens to an admin', () => {
+  renderNav(true)
+
+  expect(screen.getByRole('link', { name: /Agenten/ })).toHaveAttribute(
+    'href',
+    '/admin/agents',
+  )
+  expect(screen.getByRole('link', { name: /Projekte/ })).toHaveAttribute(
+    'href',
+    '/admin/projects',
+  )
+})
+
+it('keeps agents and projects readable for a non-admin', () => {
+  // Both screens render read-only for a session without the admin role, the
+  // same way Status does — so gating the link would hide information the
+  // operator is allowed to see.
+  renderNav(false)
+
+  for (const label of [/Agenten/, /Projekte/]) {
+    expect(screen.getByRole('link', { name: label })).not.toHaveAttribute(
+      'aria-disabled',
+      'true',
+    )
+  }
+})
+
+it('orders agents and projects after the config sections and before the raw file', () => {
+  renderNav(true)
+  const labels = screen.getAllByRole('link').map((link) => link.textContent ?? '')
+  expect(labels.findIndex((l) => l.includes('Agenten'))).toBeGreaterThan(
+    labels.findIndex((l) => l.includes('Protokollierung')),
+  )
+  expect(labels.findIndex((l) => l.includes('Projekte'))).toBeLessThan(
+    labels.findIndex((l) => l.includes('config.toml')),
+  )
+})

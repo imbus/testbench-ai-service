@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Edits } from '../state/draft'
 import { apiFetch } from './client'
-import type { ApplyResponse, PreviewResponse } from './types'
+import type { ApplyResponse, PreviewResponse, ProjectsResponse } from './types'
 
 /**
  * What applying the current draft would do — diff, validity, restart need.
@@ -39,5 +39,24 @@ export function useApply() {
       void queries.invalidateQueries({ queryKey: ['config'] })
       void queries.invalidateQueries({ queryKey: ['status'] })
     },
+  })
+}
+
+/**
+ * Re-read the TestBench project list and replace the server's cache.
+ *
+ * The response is written straight into the `projects` query rather than
+ * invalidating it: an invalidation would refetch `GET /projects`, which returns
+ * the very cache this call just replaced — a second round trip for an answer
+ * already in hand.
+ *
+ * Never rejects on an unreachable TestBench: the route answers 200 with
+ * `source: 'unavailable'`, and the screen shows that next to the list it kept.
+ */
+export function useRefreshProjects() {
+  const queries = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<ProjectsResponse>('/projects/refresh', { method: 'POST' }),
+    onSuccess: (data) => queries.setQueryData(['projects'], data),
   })
 }

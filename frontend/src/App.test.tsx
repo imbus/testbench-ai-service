@@ -435,3 +435,35 @@ it('clears the marker when the session ends', async () => {
   await screen.findByRole('navigation')
   expect(screen.getByLabelText('port')).not.toHaveAttribute('aria-invalid', 'true')
 })
+
+describe('the phase 3 routes', () => {
+  it('renders the Agents screen at /admin/agents', async () => {
+    renderApp({ isAdmin: true, route: '/admin/agents' })
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Agenten' })).toBeInTheDocument(),
+    )
+  })
+
+  it('renders the Projects screen at /admin/projects', async () => {
+    renderApp({ isAdmin: true, route: '/admin/projects' })
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Projekte' })).toBeInTheDocument(),
+    )
+  })
+
+  it('renders agent detail at /admin/agents/:agentKey', async () => {
+    renderApp({ isAdmin: true, route: '/admin/agents/reviewer' })
+    // The stubbed fetch answers every call with the /meta payload, so the
+    // config resolves to an object with no `agents` at all and the screen
+    // takes its unknown-agent branch. That branch only renders if the route
+    // matched AgentDetail rather than falling through to the Status redirect.
+    await waitFor(() => expect(screen.getByTestId('unknown-agent')).toBeInTheDocument())
+  })
+
+  it('keeps both screens reachable for a non-admin session', async () => {
+    renderApp({ isAdmin: false, route: '/admin/agents' })
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Agenten' })).toBeInTheDocument(),
+    )
+  })
+})

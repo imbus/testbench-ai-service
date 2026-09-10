@@ -4,8 +4,11 @@ import { NavRail } from './components/NavRail'
 import { PendingBanner } from './components/PendingBanner'
 import { RestartBanner } from './components/RestartBanner'
 import { TopBar } from './components/TopBar'
+import { AgentDetail } from './screens/AgentDetail'
+import { Agents } from './screens/Agents'
 import { ConfigSection } from './screens/ConfigSection'
 import { Login } from './screens/Login'
+import { Projects } from './screens/Projects'
 import { Raw } from './screens/Raw'
 import { Status } from './screens/Status'
 import type { ConfigIssue } from './api/types'
@@ -138,6 +141,25 @@ export function App() {
                     isAdmin={session.is_admin}
                     issues={issues}
                   />
+                }
+              />
+              {/* Both read-only for a non-admin, like Status -- so neither
+                  route is gated; each screen renders through ReadOnlyField
+                  instead. */}
+              <Route
+                path="/admin/agents"
+                element={<Agents lang={lang} isAdmin={session.is_admin} />}
+              />
+              <Route
+                path="/admin/agents/:agentKey"
+                element={
+                  <AgentDetail lang={lang} isAdmin={session.is_admin} issues={issues} />
+                }
+              />
+              <Route
+                path="/admin/projects"
+                element={
+                  <Projects lang={lang} isAdmin={session.is_admin} issues={issues} />
                 }
               />
               <Route path="/admin/raw" element={<Raw lang={lang} />} />
