@@ -498,6 +498,42 @@ rather than folded into an agents-and-prompts push. Agents are configured *in*
 mean a single unreviewable change that can corrupt an operator's config file. The
 deviations in section 3.1 are re-confirmed as approved and unchanged.
 
+### 12.2 Amendments after phase 3, 2026-09-10
+
+Phase 3 shipped, and it moved a few things. Where this document and the list below
+disagree, the list is right; the sections themselves are left as written so the
+record of what was planned stays readable.
+
+- **The prompt fork moves to phase 4.** Section 2.1's last paragraph folds it into
+  phase 3. A fork writes a *second* file that has to land in the same transaction as
+  the `config.toml` key pointing at it, and the phase-2 `write_atomic` is single-file
+  by construction. Multi-file atomicity belongs with the prompt editor that exercises
+  it, so phase 4 gains the fork.
+- **Phase 3 widened `ProjectPromptConfig.vars` as well** as `PromptConfig.vars`
+  (section 11.1 names only the latter). A project's prompt override accepts the same
+  `str | bool | int | float` the global one does; the two models are edited by the
+  same form.
+- **Phase 3 added a fifth backend change outside the admin package**, beyond the four
+  section 11 lists: `AppConfig.merge_agents_onto_defaults`. `agents` was a plain
+  replacement with every `AgentConfig` field required, so "turn this one agent off"
+  could not be written into `config.toml` at all — the partial block failed
+  validation and the complete one deleted the agents it did not mention. The Agents
+  screen's primary verb needed the merge to exist first.
+- **The project list is fetched at login and cached on the session.** Section 8
+  describes `GET /projects` as a live `get_all_projects()` call. The console holds no
+  TestBench connection after login, so the fetch happens while that connection is
+  still open; `GET /projects` reads the cache, and `POST /projects/refresh` (added,
+  admin + CSRF) re-fetches on demand. Neither route can fail the request: an
+  unreachable TestBench yields a 200 with `source: "unavailable"` and the previously
+  known list.
+- **A read-only prompt-metadata endpoint landed in phase 3**, not phase 4:
+  `GET /prompts/{lang}/{agent}/meta`. The agent detail form needs the variant list
+  and the variables' declared types to render a variant select and a typed control
+  per variable; without it a variant name is a free-text field and a silent typo.
+  Phase 3 therefore reads `prompts_dir` through `resolve_within` one increment
+  earlier than section 9.1 planned. It writes nothing there.
+
+
 ## 13. Testing
 
 Test-driven, using the existing pytest setup.
