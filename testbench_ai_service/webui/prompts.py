@@ -31,7 +31,13 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import PromptDefinition
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
-from testbench_ai_service.webui.models import PromptMetaResponse, PromptVariantMeta
+from testbench_ai_service.webui.models import (
+    PromptMetaResponse,
+    PromptTreeEntry,
+    PromptTreeLanguage,
+    PromptTreeResponse,
+    PromptVariantMeta,
+)
 from testbench_ai_service.webui.security import resolve_within
 
 #: Prompt metadata is YAML. ``prompts_dir`` also holds the Jinja templates the
@@ -284,3 +290,47 @@ def resolve_template_file(prompts_dir: Path, prompt_path: Path, ref: str) -> Pat
             status_code=status.HTTP_404_NOT_FOUND, detail=f"No template file for {ref!r}"
         )
     return target
+
+
+def build_tree(prompts_dir: Path) -> PromptTreeResponse:
+    """Every ``<lang>/<agent>/prompt.yaml`` under *prompts_dir*.
+
+    A file that does not parse is listed with ``ok=False`` and a reason rather
+    than omitted or raised: one broken prompt must not hide the other seven,
+    and an operator who cannot see a broken prompt in the console cannot fix it
+    there either.
+    """
+    base = Path(prompts_dir)
+    if not base.is_dir():
+        logger.warning("No prompts directory at %s", base)
+        return PromptTreeResponse(languages=[])
+
+    languages: list[PromptTreeLanguage] = []
+    for language_dir in sorted(p for p in base.iterdir() if p.is_dir()):
+        entries: list[PromptTreeEntry] = []
+        for agent_dir in sorted(p for p in language_dir.iterdir() if p.is_dir()):
+            prompt_path = agent_dir / "prompt.yaml"
+            if not prompt_path.is_file():
+                continue
+            entries.append(_tree_entry(agent_dir.name, prompt_path, base))
+        if entries:
+            languages.append(PromptTreeLanguage(lang=language_dir.name, prompts=entries))
+
+    return PromptTreeResponse(languages=languages)
+
+
+def _tree_entry(agent: str, prompt_path: Path, prompts_dir: Path) -> PromptTreeEntry:
+    relative = prompt_path.relative_to(prompts_dir).as_posix()
+    try:
+        meta = read_prompt_meta(prompt_path, prompts_dir)
+    except HTTPException as e:
+        return PromptTreeEntry(
+            agent=agent, file=relative, ok=False, error=str(e.detail), variants=[]
+        )
+    return PromptTreeEntry(
+        agent=agent,
+        file=relative,
+        name=meta.name,
+        variants=[variant.name for variant in meta.variants],
+        ok=True,
+    )

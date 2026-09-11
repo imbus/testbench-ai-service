@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from testbench_ai_service.models.config import PromptVarValue
 from testbench_ai_service.models.prompt import PromptVariableDefinition
 
 
@@ -252,3 +253,73 @@ class RenderedMessage(BaseModel):
 
 class RenderResponse(BaseModel):
     messages: list[RenderedMessage] = []
+
+
+class PromptTreeEntry(BaseModel):
+    """One agent's prompt, as the tree screen lists it."""
+
+    agent: str
+    #: Relative to prompts_dir -- the spelling an operator writes in config.toml.
+    file: str
+    name: str | None = None
+    variants: list[str] = []
+    #: False when the file is there but did not parse. The entry is still
+    #: listed: an operator who cannot see a broken prompt cannot fix it either.
+    ok: bool = True
+    error: str | None = None
+
+
+class PromptTreeLanguage(BaseModel):
+    lang: str
+    prompts: list[PromptTreeEntry] = []
+
+
+class PromptTreeResponse(BaseModel):
+    languages: list[PromptTreeLanguage] = []
+
+
+class PromptVariantDoc(BaseModel):
+    name: str
+    description: str | None = None
+    model: str | None = None
+    vars: dict[str, PromptVariableDefinition] = {}
+    messages: list[PromptMessageDoc] = []
+
+
+class PromptDocumentResponse(BaseModel):
+    lang: str
+    agent: str
+    file: str
+    name: str
+    summary: str | None = None
+    description: str | None = None
+    default_model: str
+    default_variant: str
+    variants: list[PromptVariantDoc] = []
+    #: Nested skeleton of every agent.* path the templates reference, for the
+    #: render pane to prefill. Computed from the real Jinja AST server-side.
+    agent_context_skeleton: dict[str, Any] = {}
+
+
+class PromptSaveRequest(BaseModel):
+    name: str
+    summary: str | None = None
+    description: str | None = None
+    default_model: str
+    default_variant: str
+    variants: list[PromptVariantDoc] = []
+
+
+class PromptSaveResponse(BaseModel):
+    written: list[str] = []
+    backups: list[str] = []
+
+
+class LintRequest(BaseModel):
+    content: str
+
+
+class RenderRequest(BaseModel):
+    messages: list[PromptMessageDoc] = []
+    vars: dict[str, PromptVarValue] = {}
+    agent_context: dict[str, Any] = {}
