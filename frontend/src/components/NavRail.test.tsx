@@ -98,9 +98,9 @@ it('leaves the badge off when nothing is overridden', () => {
   expect(screen.getByRole('link', { name: /Projekte/ })).toHaveTextContent(/^Projekte$/)
 })
 
-it('offers the prompt editor at /prompts', () => {
+it('offers the prompt editor at /admin/prompts', () => {
   renderNav(true)
-  expect(screen.getByRole('link', { name: /Prompts/ })).toHaveAttribute('href', '/prompts')
+  expect(screen.getByRole('link', { name: /Prompts/ })).toHaveAttribute('href', '/admin/prompts')
 })
 
 it('keeps the prompt editor readable for a non-admin', () => {

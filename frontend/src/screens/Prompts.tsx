@@ -68,10 +68,15 @@ export function Prompts({ lang = 'de' }: { lang?: Lang }) {
                     borderBottom: '1px solid var(--color-divider)',
                   }}
                 >
-                  {/* A broken prompt still links to its editor: an operator
-                      who cannot open it cannot fix it either. */}
+                  {/* A broken prompt is still listed, with its file and the
+                      parse error beside it, so the operator knows which file
+                      to repair on disk. The link goes to the editor like any
+                      other row, but the editor cannot OPEN an unparseable
+                      prompt -- the document endpoint 422s and the screen
+                      shows that error, which is why the tree carries the
+                      reason here rather than only behind the link. */}
                   <Link
-                    to={`/prompts/${encodeURIComponent(language.lang)}/${encodeURIComponent(prompt.agent)}`}
+                    to={`/admin/prompts/${encodeURIComponent(language.lang)}/${encodeURIComponent(prompt.agent)}`}
                   >
                     {prompt.name ?? prompt.agent}
                   </Link>

@@ -113,7 +113,7 @@ describe('Prompts', () => {
     renderPrompts()
     await waitFor(() => expect(screen.getByTestId('prompt-agent-de-reviewer')).toBeInTheDocument())
     const link = within(screen.getByTestId('prompt-agent-de-reviewer')).getByRole('link')
-    expect(link).toHaveAttribute('href', '/prompts/de/reviewer')
+    expect(link).toHaveAttribute('href', '/admin/prompts/de/reviewer')
   })
 
   it('shows a badge with the error for a broken prompt, and still links to it', async () => {
@@ -124,7 +124,7 @@ describe('Prompts', () => {
     const row = screen.getByTestId('prompt-agent-de-explainer')
     expect(row.textContent).toMatch(/Invalid YAML at line 4/)
     const link = within(row).getByRole('link')
-    expect(link).toHaveAttribute('href', '/prompts/de/explainer')
+    expect(link).toHaveAttribute('href', '/admin/prompts/de/explainer')
   })
 
   it('shows an empty state for an empty tree', async () => {

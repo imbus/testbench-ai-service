@@ -174,14 +174,16 @@ export function App() {
                 }
               />
               <Route path="/admin/raw" element={<Raw lang={lang} />} />
-              {/* Not under /admin: Prompts.tsx's own links already point here
-                  (task 14), matching the brief's routing. Both ungated, like
-                  Agents and Projects -- a non-admin sees the tree and the
-                  editor read-only rather than losing the nav entry, which
-                  would conceal information they are allowed to read. */}
-              <Route path="/prompts" element={<Prompts lang={lang} />} />
+              {/* Under /admin like every other screen: vite's `base` is
+                  `/admin/` and static.py mounts the SPA at `/admin`, so a
+                  route outside it click-throughs fine but 404s on a refresh,
+                  a bookmark or an open-in-new-tab. Both ungated, like Agents
+                  and Projects -- a non-admin sees the tree and the editor
+                  read-only rather than losing the nav entry, which would
+                  conceal information they are allowed to read. */}
+              <Route path="/admin/prompts" element={<Prompts lang={lang} />} />
               <Route
-                path="/prompts/:lang/:agent"
+                path="/admin/prompts/:lang/:agent"
                 element={<PromptEditor lang={lang} isAdmin={session.is_admin} />}
               />
               <Route path="*" element={<Navigate to="/admin/status" replace />} />

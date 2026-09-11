@@ -34,7 +34,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 // A data router, not `<MemoryRouter>`: `PromptEditor`'s `useBlocker` (Task 15
-// fix round, Finding 2) only works inside one, and the two `/prompts` route
+// fix round, Finding 2) only works inside one, and the two `/admin/prompts` route
 // tests below mount it. `App`'s own nested `<Routes>` tree needs no change to
 // sit under this single catch-all data route -- see main.tsx's own comment.
 const renderApp = ({
@@ -480,15 +480,15 @@ describe('the phase 3 routes', () => {
 })
 
 describe('the phase 4a prompt routes', () => {
-  it('renders the prompt tree at /prompts', async () => {
-    renderApp({ isAdmin: true, route: '/prompts' })
+  it('renders the prompt tree at /admin/prompts', async () => {
+    renderApp({ isAdmin: true, route: '/admin/prompts' })
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Prompts' })).toBeInTheDocument(),
     )
   })
 
-  it('renders the prompt editor at /prompts/:lang/:agent', async () => {
-    renderApp({ isAdmin: true, route: '/prompts/de/explainer' })
+  it('renders the prompt editor at /admin/prompts/:lang/:agent', async () => {
+    renderApp({ isAdmin: true, route: '/admin/prompts/de/explainer' })
     // The stubbed fetch answers every call with the /meta payload, so the
     // document query resolves to a 200 whose body has none of PromptDocument's
     // fields -- the same "malformed but truthy" shape the tree screen's own
@@ -499,7 +499,7 @@ describe('the phase 4a prompt routes', () => {
   })
 
   it('keeps the prompt editor reachable for a non-admin session', async () => {
-    renderApp({ isAdmin: false, route: '/prompts/de/explainer' })
+    renderApp({ isAdmin: false, route: '/admin/prompts/de/explainer' })
     await waitFor(() => expect(screen.getByTestId('prompt-editor')).toBeInTheDocument())
   })
 })
