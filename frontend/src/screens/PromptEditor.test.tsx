@@ -89,6 +89,42 @@ const DOC: PromptDocument = {
   agent_context_skeleton: { defect: '' },
 }
 
+/**
+ * A copy of `DOC` whose 'Thorough' variant has three inline messages instead
+ * of two, one per role so each has a distinct, unambiguous `aria-label`
+ * (`editorLabel` renders a file-less message's own `role`).
+ *
+ * Needed for the diagnostics-invalidation-on-remove test: with only two
+ * messages, removing the one BEFORE the flagged message shifts the flagged
+ * one to index 0 and leaves nothing at its old index -- a stale (uncleared)
+ * diagnostics map then points at an index past the end of the array, which
+ * renders as "no alert" for the same reason a correctly-cleared map does.
+ * That test cannot tell "cleared" from "silently out of range" apart, which
+ * is exactly the misattribution bug it exists to catch. With three messages,
+ * flagging the MIDDLE one and removing the FIRST leaves the flagged one's
+ * old index (1) occupied by a DIFFERENT, real, rendered message (the one
+ * that was last) -- a stale map now visibly (and wrongly) flags that one.
+ */
+function docWithThreeMessages(): PromptDocument {
+  return {
+    ...DOC,
+    variants: [
+      {
+        name: 'Thorough',
+        description: 'The careful one',
+        model: null,
+        vars: {},
+        messages: [
+          { role: 'system', source: 'inline', file: null, content: 'First message', readable: true },
+          { role: 'user', source: 'inline', file: null, content: 'Middle message', readable: true },
+          { role: 'assistant', source: 'inline', file: null, content: 'Last message', readable: true },
+        ],
+      },
+      DOC.variants[1],
+    ],
+  }
+}
+
 const CONFIG: ConfigResponse = {
   running: {},
   disk: { agents: { explainer: { prompt: { variant: 'Thorough' } } } },
@@ -694,6 +730,14 @@ describe('linting', () => {
     })
 
     it('clears every diagnostic when a message is removed, rather than shifting them onto the wrong message', async () => {
+      // Three messages (see `docWithThreeMessages`'s own comment for why two
+      // is not enough): the error is flagged on the MIDDLE one, and the
+      // FIRST is removed. If `clearDiagnostics()` were missing, the stale
+      // map (still keyed at index 1) would land on the message that shifts
+      // INTO index 1 after the removal -- the one that was LAST, which never
+      // had an error -- a surviving, rendered row, not an index the bug
+      // could hide behind by falling off the end of the array.
+      docBody = docWithThreeMessages()
       flagBroken()
       renderEditor({ lang: 'en' })
       await ready()
@@ -702,8 +746,6 @@ describe('linting', () => {
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
       await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
 
-      // Remove the OTHER message -- proves the whole map is cleared, not
-      // merely reindexed around the one actually removed.
       const rows = screen.getAllByTestId('message-row')
       await userEvent.click(within(rows[0]).getByRole('button', { name: /^remove$/i }))
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
