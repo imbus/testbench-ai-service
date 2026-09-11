@@ -1,7 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Edits } from '../state/draft'
 import { apiFetch } from './client'
-import type { ApplyResponse, PreviewResponse, ProjectsResponse } from './types'
+import type {
+  ApplyResponse,
+  LintResponse,
+  PreviewResponse,
+  ProjectsResponse,
+  PromptMessageDoc,
+  PromptSaveResponse,
+  RenderResponse,
+} from './types'
 
 /**
  * What applying the current draft would do — diff, validity, restart need.
@@ -58,5 +66,52 @@ export function useRefreshProjects() {
   return useMutation({
     mutationFn: () => apiFetch<ProjectsResponse>('/projects/refresh', { method: 'POST' }),
     onSuccess: (data) => queries.setQueryData(['projects'], data),
+  })
+}
+
+/** Check one message body's Jinja syntax, for an editor gutter. */
+export function useLintTemplate() {
+  return useMutation({
+    mutationFn: (content: string) =>
+      apiFetch<LintResponse>('/prompts/lint', {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      }),
+  })
+}
+
+/** Render every message of a draft variant against sample vars and context. */
+export function useRenderPrompt() {
+  return useMutation({
+    mutationFn: (body: {
+      messages: PromptMessageDoc[]
+      vars: Record<string, unknown>
+      agent_context: Record<string, unknown>
+    }) =>
+      apiFetch<RenderResponse>('/prompts/render', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  })
+}
+
+/**
+ * Write the edited prompt document back to disk.
+ *
+ * On success both the tree and the document are stale, since the file on disk
+ * changed underneath them.
+ */
+export function useSavePrompt(lang: string, agent: string) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<PromptSaveResponse>(
+        `/prompts/${encodeURIComponent(lang)}/${encodeURIComponent(agent)}`,
+        { method: 'PUT', body: JSON.stringify(body) },
+      ),
+    onSuccess: () => {
+      // The document on disk changed, so both the tree and the document are stale.
+      queryClient.invalidateQueries({ queryKey: ['prompts'] })
+    },
   })
 }

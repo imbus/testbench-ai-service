@@ -5,7 +5,9 @@ import type {
   LogLine,
   MetaResponse,
   ProjectsResponse,
+  PromptDocument,
   PromptMeta,
+  PromptTreeResponse,
   StatusResponse,
 } from './types'
 
@@ -95,5 +97,32 @@ export function usePromptMeta(
     // An empty agent key is a guaranteed 404: agent detail renders before a
     // scope is settled, and asking anyway would 404 on every such render.
     enabled: enabled && !!lang && !!agent,
+  })
+}
+
+/** The full prompt tree, grouped by language, for the prompt editor's browser. */
+export function usePromptTree() {
+  return useQuery({
+    queryKey: ['prompts', 'tree'],
+    queryFn: () => apiFetch<PromptTreeResponse>('/prompts'),
+  })
+}
+
+/**
+ * The full editable prompt document -- every variant, every message body.
+ *
+ * Every segment is percent-encoded, matching `usePromptMeta`. A 404 (no such
+ * prompt file) is a real answer the editor renders around, so it is surfaced
+ * rather than retried.
+ */
+export function usePromptDocument(lang: string | undefined, agent: string | undefined) {
+  return useQuery({
+    queryKey: ['prompts', 'doc', lang, agent],
+    queryFn: () =>
+      apiFetch<PromptDocument>(
+        `/prompts/${encodeURIComponent(lang!)}/${encodeURIComponent(agent!)}`,
+      ),
+    enabled: Boolean(lang && agent),
+    retry: false,
   })
 }

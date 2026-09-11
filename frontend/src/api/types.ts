@@ -142,3 +142,61 @@ export interface PromptMeta {
   default_variant: string
   variants: PromptVariantMeta[]
 }
+
+export type PromptTreeEntry = {
+  agent: string
+  file: string
+  name: string | null
+  variants: string[]
+  ok: boolean
+  error: string | null
+}
+export type PromptTreeLanguage = { lang: string; prompts: PromptTreeEntry[] }
+export type PromptTreeResponse = { languages: PromptTreeLanguage[] }
+
+export type MessageRole = 'system' | 'user' | 'assistant'
+export type MessageSource = 'inline' | 'file'
+export type PromptMessageDoc = {
+  role: MessageRole
+  source: MessageSource
+  file: string | null
+  content: string
+  readable: boolean
+}
+
+export type VarValueType = 'string' | 'text' | 'boolean' | 'number' | 'enum'
+export type PromptVarDecl = {
+  name: string
+  description: string | null
+  value_type: VarValueType
+  choices: string[] | null
+  default_value: unknown
+  required: boolean
+}
+
+export type PromptVariantDoc = {
+  name: string
+  description: string | null
+  model: string | null
+  vars: Record<string, PromptVarDecl>
+  messages: PromptMessageDoc[]
+}
+
+export type PromptDocument = {
+  lang: string
+  agent: string
+  file: string
+  name: string
+  summary: string | null
+  description: string | null
+  default_model: string
+  default_variant: string
+  variants: PromptVariantDoc[]
+  agent_context_skeleton: Record<string, unknown>
+}
+
+export type LintError = { line: number; column: number; message: string }
+export type LintResponse = { ok: boolean; errors: LintError[] }
+export type RenderedMessage = { role: string; content: string; error: string | null }
+export type RenderResponse = { messages: RenderedMessage[] }
+export type PromptSaveResponse = { written: string[]; backups: string[] }
