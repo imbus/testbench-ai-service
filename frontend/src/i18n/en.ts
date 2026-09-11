@@ -146,4 +146,7 @@ export const en = {
   unsavedNavTitle: 'Unsaved changes',
   unsavedNavBody: 'You have unsaved changes. Leave without saving?',
   leaveAnyway: 'Leave anyway',
+  lint: 'Lint',
+  linting: 'Linting…',
+  lintClean: 'No syntax errors.',
 } as const

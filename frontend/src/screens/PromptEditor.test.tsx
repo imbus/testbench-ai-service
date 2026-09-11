@@ -9,31 +9,43 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConfigResponse, PromptDocument, PromptSaveResponse } from '../api/types'
+import type { ConfigResponse, LintError, PromptDocument, PromptSaveResponse } from '../api/types'
 import type { Lang } from '../i18n'
 import { PromptEditor } from './PromptEditor'
 
 // CM6 needs DOM APIs jsdom lacks; the wrapper holds no logic (Task 10/13's
 // ruling), so replacing it with a textarea costs no coverage. Mocked at the
-// path MessageList itself resolves `./CodeEditor` to.
+// path MessageList itself resolves `./CodeEditor` to. Also renders
+// `diagnostics` as its own alert text -- the real CodeEditor feeds them into
+// CodeMirror's lint gutter, which jsdom cannot render, but a screen test
+// still needs *some* observable proof that a diagnostic reached this deep.
 vi.mock('../components/CodeEditor', () => ({
   CodeEditor: ({
     value,
     onChange,
     ariaLabel,
     readOnly,
+    diagnostics,
   }: {
     value: string
     onChange: (value: string) => void
     ariaLabel: string
     readOnly?: boolean
+    diagnostics?: LintError[]
   }) => (
-    <textarea
-      aria-label={ariaLabel}
-      value={value}
-      readOnly={readOnly}
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <div>
+      <textarea
+        aria-label={ariaLabel}
+        value={value}
+        readOnly={readOnly}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {(diagnostics ?? []).map((error, index) => (
+        <div key={index} role="alert">
+          {error.message}
+        </div>
+      ))}
+    </div>
   ),
 }))
 
@@ -104,13 +116,21 @@ function deferredResponse() {
 let fetchMock: ReturnType<typeof vi.fn>
 let docBody: PromptDocument | null
 let putResult: { status: 200 } | { status: 409; detail: string } | { status: 422; detail: string }
+/** What `POST /prompts/lint` answers for a given message body. Defaults to
+ * clean; a test overrides it to make one message's content report an error. */
+let lintResponder: (content: string) => { ok: boolean; errors: LintError[] }
 
 beforeEach(() => {
   docBody = DOC
   putResult = { status: 200 }
+  lintResponder = () => ({ ok: true, errors: [] })
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = (init?.method ?? 'GET').toUpperCase()
     if (url.startsWith('/admin/api/config')) return ok(CONFIG)
+    if (method === 'POST' && url.startsWith('/admin/api/prompts/lint')) {
+      const body = init?.body ? (JSON.parse(String(init.body)) as { content: string }) : { content: '' }
+      return ok(lintResponder(body.content))
+    }
     if (method === 'PUT' && url.startsWith('/admin/api/prompts/')) {
       if (putResult.status === 200) return ok(SAVE_OK)
       return fail(putResult.status, putResult.detail)
@@ -200,6 +220,10 @@ function putCalls() {
   return fetchMock.mock.calls.filter(
     (call) => String((call[1] as RequestInit | undefined)?.method).toUpperCase() === 'PUT',
   )
+}
+
+function lintCalls() {
+  return fetchMock.mock.calls.filter((call) => String(call[0]).includes('/prompts/lint'))
 }
 
 describe('loading a document', () => {
@@ -582,6 +606,65 @@ describe('variant controls', () => {
 
     await userEvent.type(screen.getByLabelText('Variant model'), 'gpt-5.5-mini')
     expect(screen.getByLabelText('Variant model')).toHaveValue('gpt-5.5-mini')
+  })
+})
+
+describe('linting', () => {
+  it('surfaces a Jinja syntax error to the operator', async () => {
+    lintResponder = (content) =>
+      content.includes('{% bad')
+        ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+        : { ok: true, errors: [] }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    // The 'Thorough' variant's inline ("user") message -- unique among its
+    // two messages, unlike the file-backed one ("system (sys.jinja)").
+    // userEvent.type treats `{`/`}` as special-key syntax, so a literal `{`
+    // must be escaped as `{{`.
+    await userEvent.type(screen.getByLabelText('user'), '{{% bad')
+    await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Unexpected end of template'),
+    )
+    // Not just the UI state -- the request that produced it.
+    expect(lintCalls().length).toBeGreaterThan(0)
+  })
+
+  it('is available to a non-admin session', async () => {
+    // Session-gated, not admin-gated (unlike Render): a read-only operator
+    // must still be able to check a template's syntax.
+    renderEditor({ lang: 'en', isAdmin: false })
+    await ready()
+
+    const button = screen.getByRole('button', { name: /^lint$/i })
+    await userEvent.click(button)
+
+    await waitFor(() => expect(lintCalls().length).toBeGreaterThan(0))
+  })
+
+  it('reports no errors for a clean template', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+
+    await waitFor(() => expect(screen.getByText('No syntax errors.')).toBeInTheDocument())
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('makes one lint request per message in the selected variant', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+
+    // The 'Thorough' variant (selected by default) has two messages.
+    await waitFor(() => expect(lintCalls()).toHaveLength(2))
+    expect(
+      lintCalls().every((call) => (call[1] as RequestInit | undefined)?.method === 'POST'),
+    ).toBe(true)
   })
 })
 

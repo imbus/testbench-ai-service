@@ -142,6 +142,9 @@ export const de = {
   unsavedNavTitle: 'Ungespeicherte Änderungen',
   unsavedNavBody: 'Sie haben ungespeicherte Änderungen. Ohne Speichern verlassen?',
   leaveAnyway: 'Trotzdem verlassen',
+  lint: 'Prüfen',
+  linting: 'Wird geprüft…',
+  lintClean: 'Keine Syntaxfehler.',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German

@@ -2,10 +2,10 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import { useBlocker, useParams } from 'react-router-dom'
 import type { Scope } from '../api/agents'
 import { ApiError } from '../api/client'
-import { useSavePrompt } from '../api/mutations'
+import { useLintTemplate, useSavePrompt } from '../api/mutations'
 import { agentsUsingVariant } from '../api/prompts'
 import { useConfig, usePromptDocument } from '../api/queries'
-import type { MessageRole, PromptDocument, PromptVarDecl } from '../api/types'
+import type { LintError, MessageRole, PromptDocument, PromptVarDecl } from '../api/types'
 import { MessageList } from '../components/MessageList'
 import { RenderPreview } from '../components/RenderPreview'
 import { VarDeclTable } from '../components/VarDeclTable'
@@ -111,6 +111,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const document = usePromptDocument(docLang || undefined, agentKey || undefined)
   const config = useConfig()
   const save = useSavePrompt(docLang, agentKey)
+  const lint = useLintTemplate()
 
   const [draft, dispatch] = useReducer(promptDraftReducer, undefined, () =>
     emptyDocument(docLang, agentKey),
@@ -119,6 +120,14 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const [newVariantName, setNewVariantName] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [saveFieldError, setSaveFieldError] = useState<SaveFieldError | null>(null)
+  // Per-message lint results for the CURRENTLY SELECTED variant, keyed by
+  // that variant's own message index -- `MessageList`'s own `diagnostics`
+  // shape. Cleared on a variant switch (an index means something different
+  // in a different variant's message list) and on a document reset, so
+  // nothing here ever survives being stale or belonging to the wrong variant.
+  const [diagnostics, setDiagnosticsMap] = useState<Record<number, LintError[]>>({})
+  const [linting, setLinting] = useState(false)
+  const [lintChecked, setLintChecked] = useState(false)
   // The normalized document the reducer was last `reset` from -- what the
   // draft is diffed against. NOT `document.data` directly: on the very render
   // where the query first resolves, `document.data` is already the loaded
@@ -144,6 +153,8 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     const normalized = normalizeDocument(document.data, docLang, agentKey)
     originalRef.current = normalized
     dispatch({ type: 'reset', document: normalized })
+    setDiagnosticsMap({})
+    setLintChecked(false)
   }, [document.data, docLang, agentKey])
 
   const original = originalRef.current
@@ -260,6 +271,34 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
 
   const headerReadOnly = !isAdmin
 
+  /**
+   * Lints every message of the SELECTED variant, on demand.
+   *
+   * Not per-keystroke and not on blur: `POST /prompts/lint` is a real
+   * network round trip, and `CodeEditor` is deliberately free of behaviour
+   * (Task 10's ruling) -- it exposes no blur hook to drive lint-on-blur from
+   * without giving that finished, tested component a new job. A single
+   * button lints the whole variant in one action, matching how Save and
+   * Render are already the screen's other on-demand actions. Open to a
+   * non-admin: `POST /prompts/lint` is session-gated, not admin-gated
+   * (unlike render), so a read-only operator must still be able to run it.
+   */
+  const runLint = async () => {
+    setLinting(true)
+    setLintChecked(false)
+    try {
+      const results = await Promise.all(messages.map((message) => lint.mutateAsync(message.content)))
+      const next: Record<number, LintError[]> = {}
+      results.forEach((result, index) => {
+        if (result.errors.length > 0) next[index] = result.errors
+      })
+      setDiagnosticsMap(next)
+      setLintChecked(true)
+    } finally {
+      setLinting(false)
+    }
+  }
+
   return (
     <div
       data-testid="prompt-editor"
@@ -369,7 +408,13 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
                 className="tb-chip"
                 aria-selected={v.name === variantName}
                 aria-invalid={flagged || undefined}
-                onClick={() => setSelectedVariant(v.name)}
+                onClick={() => {
+                  setSelectedVariant(v.name)
+                  // A message index means something different in a
+                  // different variant's own message list.
+                  setDiagnosticsMap({})
+                  setLintChecked(false)
+                }}
                 style={{
                   border: flagged ? '1px solid #a33a2b' : '1px solid var(--color-divider)',
                   padding: '4px 12px',
@@ -473,6 +518,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
           messages={messages}
           readOnly={!isAdmin}
           lang={lang}
+          diagnostics={diagnostics}
           onAdd={() => dispatch({ type: 'addMessage', variant: variantName })}
           onRemove={(index) => dispatch({ type: 'removeMessage', variant: variantName, index })}
           onMove={(from, to) => dispatch({ type: 'moveMessage', variant: variantName, index: from, to })}
@@ -483,6 +529,17 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
             dispatch({ type: 'setMessageContent', variant: variantName, index, content })
           }
         />
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button type="button" className="btn btn-ghost" disabled={linting} onClick={() => void runLint()}>
+            {linting ? t.linting : t.lint}
+          </button>
+          {lintChecked && Object.keys(diagnostics).length === 0 && (
+            <span className="text-muted" style={{ fontSize: 12 }}>
+              {t.lintClean}
+            </span>
+          )}
+        </div>
       </section>
 
       <RenderPreview
