@@ -116,4 +116,9 @@ export const en = {
   moveDown: 'Move down',
   addMessage: 'Add message',
   messageUnreadable: 'Template unreadable:',
+  render: 'Render',
+  rendering: 'Rendering…',
+  renderInvalidJson: 'The context is not valid JSON.',
+  promptsError: 'The prompt tree could not be loaded.',
+  noPromptTree: 'No prompts found.',
 } as const

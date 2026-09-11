@@ -112,6 +112,11 @@ export const de = {
   moveDown: 'Nach unten',
   addMessage: 'Nachricht hinzufügen',
   messageUnreadable: 'Vorlage nicht lesbar:',
+  render: 'Rendern',
+  rendering: 'Wird gerendert…',
+  renderInvalidJson: 'Der Kontext ist kein gültiges JSON.',
+  promptsError: 'Der Prompt-Baum konnte nicht geladen werden.',
+  noPromptTree: 'Keine Prompts gefunden.',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German
