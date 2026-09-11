@@ -52,11 +52,43 @@ function normalizeDocument(doc: PromptDocument, lang: string, agent: string): Pr
   }
 }
 
-/** Sample values a render preview can send: each declared default, or `null`. */
+/**
+ * Sample values a render preview can send: each declared default.
+ *
+ * A var with no `default_value` is OMITTED, never sent as `null`.
+ * `RenderRequest.vars` is `dict[str, PromptVarValue]` (`str | bool | int |
+ * float`), so a single `null` 422s the whole request -- and FastAPI's 422
+ * `detail` is a list, which `apiFetch` cannot render, so the operator would
+ * see only "Request failed with status 422" for four of this repo's eight
+ * prompts. Left out, `StrictUndefined` reports the missing variable against
+ * the one message that actually uses it, which is the useful feedback.
+ */
 function sampleVars(vars: Record<string, PromptVarDecl>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  for (const [key, decl] of Object.entries(vars)) out[key] = decl.default_value ?? null
+  for (const [key, decl] of Object.entries(vars)) {
+    if (decl.default_value === null || decl.default_value === undefined) continue
+    out[key] = decl.default_value
+  }
   return out
+}
+
+/**
+ * Every variant holding an enum var with no `choices`, by name.
+ *
+ * `PromptVariableDefinition.validate_choices` refuses an empty `choices` on an
+ * enum, so such a document round-trips to a 422. Design §6 says the form
+ * "enforces both edges": `VarDeclTable` already shows the row-level alert, and
+ * this is what stops Save from firing a request that cannot succeed. Walks
+ * EVERY variant, not just the selected one -- the save sends all of them.
+ */
+function variantsWithEmptyEnum(doc: PromptDocument): string[] {
+  return doc.variants
+    .filter((variant) =>
+      Object.values(variant.vars ?? {}).some(
+        (decl) => decl.value_type === 'enum' && (decl.choices ?? []).length === 0,
+      ),
+    )
+    .map((variant) => variant.name)
 }
 
 /** What `PUT /prompts/{lang}/{agent}` actually accepts -- the draft minus its read-only metadata. */
@@ -128,6 +160,10 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const [diagnostics, setDiagnosticsMap] = useState<Record<number, LintError[]>>({})
   const [linting, setLinting] = useState(false)
   const [lintChecked, setLintChecked] = useState(false)
+  // Why the last lint run produced no results: a 403, a 500, a dropped
+  // connection. Without it a failed request just stopped the spinner and said
+  // nothing, unlike every other action on this screen.
+  const [lintError, setLintError] = useState<string | null>(null)
 
   /** Every prior lint result is invalid: a variant switch, a document reset,
    * a removed message, or a reordering (`diagnostics` is keyed by index, so
@@ -137,6 +173,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const clearDiagnostics = () => {
     setDiagnosticsMap({})
     setLintChecked(false)
+    setLintError(null)
   }
 
   /** Only the edited message's own result is invalid -- the operator changed
@@ -268,6 +305,10 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const saveErrorMessage =
     save.isError && save.error instanceof ApiError ? save.error.message : null
 
+  // Any variant -- not only the selected one -- holding an enum var with no
+  // choices. The save sends every variant, so any one of them 422s it.
+  const emptyEnumVariants = variantsWithEmptyEnum(draft)
+
   const confirmSave = () => {
     save.mutate(toSaveRequest(draft), {
       onSuccess: () => {
@@ -309,6 +350,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const runLint = async () => {
     setLinting(true)
     setLintChecked(false)
+    setLintError(null)
     try {
       const results = await Promise.all(messages.map((message) => lint.mutateAsync(message.content)))
       const next: Record<number, LintError[]> = {}
@@ -317,6 +359,15 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       })
       setDiagnosticsMap(next)
       setLintChecked(true)
+    } catch (error) {
+      // A 403, a 500 or a dropped connection. Surfaced the way
+      // `RenderPreview` surfaces its own mutation error -- the message from
+      // the failure itself, not a generic one. Any partial result is dropped:
+      // `Promise.all` rejects on the first failure, so the results that did
+      // arrive cover an unknown subset of the messages, and a diagnostics map
+      // missing entries reads exactly like "these messages are clean".
+      setDiagnosticsMap({})
+      setLintError((error as Error)?.message || t.lintFailed)
     } finally {
       setLinting(false)
     }
@@ -419,7 +470,15 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       </section>
 
       <section className="blueprint" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <div role="tablist" aria-label={t.variants} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {/* Plain toggle buttons, deliberately NOT role="tablist"/role="tab":
+            there is no `aria-controls`, no `tabpanel`, and no arrow-key
+            roving focus here, and a tab role that keeps none of those
+            promises misleads a screen reader worse than no role at all. A
+            real tablist (with its focus management) is deferred work. The
+            container keeps `role="group"`, which promises only "these
+            controls belong together" -- true, and it keeps the set's
+            accessible name. */}
+        <div role="group" aria-label={t.variants} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {draft.variants.map((v) => {
             const flagged =
               saveFieldError?.kind === 'emptyVariants' && saveFieldError.names.includes(v.name)
@@ -427,9 +486,9 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
               <button
                 key={v.name}
                 type="button"
-                role="tab"
                 className="tb-chip"
-                aria-selected={v.name === variantName}
+                data-testid="variant-chip"
+                aria-pressed={v.name === variantName}
                 aria-invalid={flagged || undefined}
                 onClick={() => {
                   setSelectedVariant(v.name)
@@ -471,9 +530,20 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
                 className="input"
                 id="variant-name"
                 value={selectedVariantObj.name}
-                onChange={(event) =>
-                  dispatch({ type: 'renameVariant', from: selectedVariantObj.name, to: event.target.value })
-                }
+                onChange={(event) => {
+                  dispatch({
+                    type: 'renameVariant',
+                    from: selectedVariantObj.name,
+                    to: event.target.value,
+                  })
+                  // The selection is resolved BY NAME, so it has to follow the
+                  // rename. Without this, the first keystroke makes the old
+                  // name unresolvable, the selection falls through to
+                  // `variants[0]`, and every later keystroke renames THAT
+                  // variant instead -- leaving the intended one named after
+                  // whatever the field held when the fall-through happened.
+                  setSelectedVariant(event.target.value)
+                }}
               />
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -573,6 +643,11 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
               {t.lintClean}
             </span>
           )}
+          {lintError && (
+            <span role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
+              {lintError}
+            </span>
+          )}
         </div>
       </section>
 
@@ -586,10 +661,15 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
 
       {isAdmin && (
         <div>
+          {/* Blocked, not merely flagged: design §6 has the form enforce both
+              edges, and an enum with no `choices` is refused by
+              `PromptVariableDefinition.validate_choices`, so Save could only
+              ever produce a 422. `VarDeclTable` already renders the row-level
+              alert that says why. */}
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!dirty}
+            disabled={!dirty || emptyEnumVariants.length > 0}
             onClick={() => setConfirmOpen(true)}
           >
             {t.save}

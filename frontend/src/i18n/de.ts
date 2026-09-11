@@ -145,6 +145,7 @@ export const de = {
   lint: 'Prüfen',
   linting: 'Wird geprüft…',
   lintClean: 'Keine Syntaxfehler.',
+  lintFailed: 'Die Syntaxprüfung konnte nicht ausgeführt werden.',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German

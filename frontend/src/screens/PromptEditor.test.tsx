@@ -155,17 +155,24 @@ let putResult: { status: 200 } | { status: 409; detail: string } | { status: 422
 /** What `POST /prompts/lint` answers for a given message body. Defaults to
  * clean; a test overrides it to make one message's content report an error. */
 let lintResponder: (content: string) => { ok: boolean; errors: LintError[] }
+/** Set by a test to make `POST /prompts/lint` fail instead of answering. */
+let lintFailure: { status: number; detail: string } | null
 
 beforeEach(() => {
   docBody = DOC
   putResult = { status: 200 }
   lintResponder = () => ({ ok: true, errors: [] })
+  lintFailure = null
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = (init?.method ?? 'GET').toUpperCase()
     if (url.startsWith('/admin/api/config')) return ok(CONFIG)
     if (method === 'POST' && url.startsWith('/admin/api/prompts/lint')) {
+      if (lintFailure) return fail(lintFailure.status, lintFailure.detail)
       const body = init?.body ? (JSON.parse(String(init.body)) as { content: string }) : { content: '' }
       return ok(lintResponder(body.content))
+    }
+    if (method === 'POST' && url.startsWith('/admin/api/prompts/render')) {
+      return ok({ messages: [] })
     }
     if (method === 'PUT' && url.startsWith('/admin/api/prompts/')) {
       if (putResult.status === 200) return ok(SAVE_OK)
@@ -197,8 +204,8 @@ function renderEditor({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   const router = createMemoryRouter(
-    [{ path: '/prompts/:lang/:agent', element: <PromptEditor lang={lang} isAdmin={isAdmin} /> }],
-    { initialEntries: [`/prompts/${docLang}/${agent}`] },
+    [{ path: '/admin/prompts/:lang/:agent', element: <PromptEditor lang={lang} isAdmin={isAdmin} /> }],
+    { initialEntries: [`/admin/prompts/${docLang}/${agent}`] },
   )
   return render(
     <QueryClientProvider client={client}>
@@ -221,7 +228,7 @@ function renderEditorWithNav({
   const router = createMemoryRouter(
     [
       {
-        path: '/prompts/:lang/:agent',
+        path: '/admin/prompts/:lang/:agent',
         element: (
           <div>
             <Link to="/elsewhere">Elsewhere</Link>
@@ -231,7 +238,7 @@ function renderEditorWithNav({
       },
       { path: '/elsewhere', element: <div data-testid="elsewhere">Elsewhere page</div> },
     ],
-    { initialEntries: [`/prompts/${docLang}/${agent}`] },
+    { initialEntries: [`/admin/prompts/${docLang}/${agent}`] },
   )
   return render(
     <QueryClientProvider client={client}>
@@ -262,6 +269,10 @@ function lintCalls() {
   return fetchMock.mock.calls.filter((call) => String(call[0]).includes('/prompts/lint'))
 }
 
+function renderCalls() {
+  return fetchMock.mock.calls.filter((call) => String(call[0]).includes('/prompts/render'))
+}
+
 describe('loading a document', () => {
   it('renders the header fields, variant selector, VarDeclTable and MessageList', async () => {
     renderEditor({ lang: 'en' })
@@ -273,8 +284,8 @@ describe('loading a document', () => {
     expect(screen.getByLabelText('Default model')).toHaveValue('gpt-5.5')
     expect(screen.getByLabelText('Default variant')).toHaveValue('Thorough')
 
-    expect(screen.getByRole('tab', { name: 'Thorough' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Quick' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Quick' })).toBeInTheDocument()
 
     expect(screen.getAllByTestId('var-row')).toHaveLength(1)
     expect(screen.getAllByTestId('message-row')).toHaveLength(2)
@@ -307,7 +318,7 @@ describe('loading a document', () => {
     docBody = { ...DOC, variants: [], default_variant: '' }
     renderEditor({ lang: 'en' })
     await ready()
-    expect(screen.queryAllByRole('tab')).toHaveLength(0)
+    expect(screen.queryAllByTestId('variant-chip')).toHaveLength(0)
     expect(screen.queryAllByTestId('var-row')).toHaveLength(0)
     expect(screen.queryAllByTestId('message-row')).toHaveLength(0)
   })
@@ -445,9 +456,9 @@ describe('saving', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
 
     await waitFor(() =>
-      expect(screen.getByRole('tab', { name: 'Quick' })).toHaveAttribute('aria-invalid', 'true'),
+      expect(screen.getByRole('button', { name: 'Quick' })).toHaveAttribute('aria-invalid', 'true'),
     )
-    expect(screen.getByRole('tab', { name: 'Thorough' })).not.toHaveAttribute('aria-invalid')
+    expect(screen.getByRole('button', { name: 'Thorough' })).not.toHaveAttribute('aria-invalid')
     expect(within(screen.getByRole('dialog')).getByText(/needs at least one message/)).toBeInTheDocument()
   })
 
@@ -610,20 +621,20 @@ describe('variant controls', () => {
 
     await userEvent.type(screen.getByLabelText('New variant name'), 'Extra')
     await userEvent.click(screen.getByRole('button', { name: /^add variant$/i }))
-    expect(screen.getByRole('tab', { name: 'Extra' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Extra' })).toBeInTheDocument()
   })
 
   it('removes the selected variant', async () => {
     renderEditor({ lang: 'en' })
     await ready()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Quick' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Quick' }))
     // Scoped: MessageList renders its own per-row "Remove" button, and
     // `Quick`'s one message means there is one on screen at the same time.
     const actions = screen.getByTestId('variant-actions')
     await userEvent.click(within(actions).getByRole('button', { name: /^remove$/i }))
-    expect(screen.queryByRole('tab', { name: 'Quick' })).not.toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Thorough' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Quick' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
   })
 
   it('renames the selected variant', async () => {
@@ -632,8 +643,28 @@ describe('variant controls', () => {
 
     await userEvent.clear(screen.getByLabelText('Variant name'))
     await userEvent.type(screen.getByLabelText('Variant name'), 'Renamed')
-    expect(screen.getByRole('tab', { name: 'Renamed' })).toBeInTheDocument()
-    expect(screen.queryByRole('tab', { name: 'Thorough' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Renamed' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Thorough' })).not.toBeInTheDocument()
+  })
+
+  // The test above passes even with the selection-by-name bug, because the
+  // fixture's 'Thorough' happens to be BOTH `variants[0]` and
+  // `default_variant` -- the two things the resolution falls back to. This
+  // renames the one variant that is neither.
+  it('renames a variant that is neither the first nor the default', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quick' }))
+    await userEvent.clear(screen.getByLabelText('Variant name'))
+    await userEvent.type(screen.getByLabelText('Variant name'), 'Speedy')
+
+    expect(screen.getByRole('button', { name: 'Speedy' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Quick' })).not.toBeInTheDocument()
+    // The OTHER variant is untouched -- the bug renamed this one instead and
+    // left 'Quick' named ''.
+    expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Default variant')).toHaveValue('Thorough')
   })
 
   it('sets the selected variant model', async () => {
@@ -678,6 +709,23 @@ describe('linting', () => {
     await userEvent.click(button)
 
     await waitFor(() => expect(lintCalls().length).toBeGreaterThan(0))
+  })
+
+  it('surfaces a failed lint request rather than just stopping the spinner', async () => {
+    // A 403, a 500 or a dropped connection used to leave the operator with
+    // no feedback at all -- every other action on this screen reports one.
+    lintFailure = { status: 500, detail: 'Lint is unavailable' }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Lint is unavailable'),
+    )
+    // And no false "clean" verdict alongside it.
+    expect(screen.queryByText('No syntax errors.')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^lint$/i })).not.toBeDisabled()
   })
 
   it('reports no errors for a clean template', async () => {
@@ -774,6 +822,90 @@ describe('linting', () => {
       await userEvent.type(screen.getByLabelText('user'), '!')
       expect(screen.queryByText('No syntax errors.')).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('the enum edge', () => {
+  it('disables Save while ANY variant declares an enum var with no choices', async () => {
+    // The offending var sits in 'Quick', which is NOT the selected variant --
+    // the save sends every variant, so any one of them 422s it.
+    docBody = {
+      ...DOC,
+      variants: [
+        DOC.variants[0],
+        {
+          ...DOC.variants[1],
+          vars: {
+            mode: {
+              name: 'mode',
+              description: null,
+              value_type: 'enum',
+              choices: [],
+              default_value: null,
+              required: false,
+            },
+          },
+        },
+      ],
+    }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    // Dirty, so `!dirty` is not what is keeping Save disabled.
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+  })
+
+  it('leaves Save enabled once the enum has choices', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  })
+})
+
+describe('sample vars for the render preview', () => {
+  it('omits a var with no default rather than sending null', async () => {
+    // `RenderRequest.vars` is dict[str, str | bool | int | float]; a single
+    // null 422s the whole request, and FastAPI's 422 detail is a LIST, which
+    // `apiFetch` cannot render -- the operator saw only "Request failed with
+    // status 422". Four of this repo's eight prompts declare such a var.
+    docBody = {
+      ...DOC,
+      variants: [
+        {
+          ...DOC.variants[0],
+          vars: {
+            ...DOC.variants[0].vars,
+            glossary: {
+              name: 'glossary',
+              description: null,
+              value_type: 'text',
+              choices: null,
+              default_value: null,
+              required: false,
+            },
+          },
+        },
+        DOC.variants[1],
+      ],
+    }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+
+    await waitFor(() => expect(renderCalls()).toHaveLength(1))
+    const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
+      vars: Record<string, unknown>
+    }
+    expect(body.vars).toEqual({ tone: 'neutral' })
+    expect(Object.values(body.vars)).not.toContain(null)
   })
 })
 

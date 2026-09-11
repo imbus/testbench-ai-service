@@ -149,4 +149,5 @@ export const en = {
   lint: 'Lint',
   linting: 'Linting…',
   lintClean: 'No syntax errors.',
+  lintFailed: 'The syntax check could not be run.',
 } as const

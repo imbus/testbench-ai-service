@@ -323,6 +323,13 @@ which is already stored in an external file (`source: "file"`), that file —
 both replaced in place, with the previous contents kept as `<file>.bak`
 next to it.
 
+A message whose template file could **not** be read when the prompt was
+loaded — it is missing, or it is not valid UTF-8 (an old latin-1 file, say) —
+is shown with its reference and an empty body, so you can see which reference
+is broken. Saving is then refused, naming that file: the editor is holding a
+placeholder, not the file's text, and writing it back would leave the real
+file empty. Repair the file on disk first, then reload the prompt.
+
 Phase 4a never creates or deletes a file. A message already stored externally
 can be edited but not switched to inline text, and a new message is always
 inline; moving a message's text out to its own file, and forking a whole
