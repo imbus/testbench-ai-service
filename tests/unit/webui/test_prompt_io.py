@@ -74,3 +74,38 @@ def test_every_repo_prompt_round_trips():
     for path in sorted(Path("testbench_ai_service/prompts").rglob("prompt.yaml")):
         original = yaml.safe_load(path.read_text(encoding="utf-8"))
         assert yaml.safe_load(document_to_yaml(original)) == prune_none(original), path
+
+
+def test_multiline_strings_are_emitted_as_literal_blocks():
+    text = document_to_yaml(DOC)
+    assert "text: |" in text
+    assert "'" not in text
+
+
+def test_a_string_with_trailing_whitespace_falls_back_to_quoting_but_still_round_trips():
+    """PyYAML cannot represent trailing-line whitespace as a literal block; that
+    fallback to quoting is correct, not a bug -- only the round trip matters."""
+    doc = {"messages": [{"text": "line one \nline two"}]}
+    text = document_to_yaml(doc)
+    assert yaml.safe_load(text) == prune_none(doc)
+
+
+def test_sequence_items_are_indented_under_their_key():
+    text = document_to_yaml(DOC)
+    assert "\nvariants:\n  - name:" in text
+    assert "\n    messages:\n      - role:" in text
+
+
+def test_prune_none_drops_only_none_never_other_falsy_values():
+    assert prune_none({"a": None, "b": False, "c": 0, "d": "", "e": []}) == {
+        "b": False,
+        "c": 0,
+        "d": "",
+        "e": [],
+    }
+
+
+def test_prune_none_recurses_through_lists_of_mappings():
+    assert prune_none({"variants": [{"name": "A", "model": None, "required": False}]}) == {
+        "variants": [{"name": "A", "required": False}]
+    }
