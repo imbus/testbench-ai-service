@@ -36,50 +36,50 @@ const handlers = () => ({
 
 describe('MessageList', () => {
   it('renders an editor per message', () => {
-    render(<MessageList messages={messages} {...handlers()} />)
+    render(<MessageList messages={messages} lang="en" {...handlers()} />)
     expect(screen.getAllByRole('textbox')).toHaveLength(2)
   })
 
   it('names the file a message comes from', () => {
-    render(<MessageList messages={messages} {...handlers()} />)
+    render(<MessageList messages={messages} lang="en" {...handlers()} />)
     expect(screen.getByText('sys.jinja')).toBeInTheDocument()
   })
 
   it('marks an unreadable template', () => {
     const broken = [{ ...messages[0], readable: false, content: '' }]
-    render(<MessageList messages={broken} {...handlers()} />)
+    render(<MessageList messages={broken} lang="en" {...handlers()} />)
     expect(screen.getByRole('alert')).toHaveTextContent(/sys\.jinja/)
   })
 
   it('emits a content change', async () => {
     const h = handlers()
-    render(<MessageList messages={messages} {...h} />)
+    render(<MessageList messages={messages} lang="en" {...h} />)
     await userEvent.type(screen.getAllByRole('textbox')[1], '!')
     expect(h.onContent).toHaveBeenCalledWith(1, 'U!')
   })
 
   it('emits a role change', async () => {
     const h = handlers()
-    render(<MessageList messages={messages} {...h} />)
+    render(<MessageList messages={messages} lang="en" {...h} />)
     await userEvent.selectOptions(screen.getAllByLabelText(/role/i)[1], 'assistant')
     expect(h.onRole).toHaveBeenCalledWith(1, 'assistant')
   })
 
   it('emits a move', async () => {
     const h = handlers()
-    render(<MessageList messages={messages} {...h} />)
+    render(<MessageList messages={messages} lang="en" {...h} />)
     await userEvent.click(screen.getAllByRole('button', { name: /move down/i })[0])
     expect(h.onMove).toHaveBeenCalledWith(0, 1)
   })
 
   it('does not offer move up on the first or move down on the last', () => {
-    render(<MessageList messages={messages} {...handlers()} />)
+    render(<MessageList messages={messages} lang="en" {...handlers()} />)
     expect(screen.getAllByRole('button', { name: /move up/i })).toHaveLength(1)
     expect(screen.getAllByRole('button', { name: /move down/i })).toHaveLength(1)
   })
 
   it('offers no editing controls when read-only', () => {
-    render(<MessageList messages={messages} readOnly {...handlers()} />)
+    render(<MessageList messages={messages} lang="en" readOnly {...handlers()} />)
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
   })
 
@@ -92,14 +92,27 @@ describe('MessageList', () => {
   // after the message it belongs to changes position.
   it('keeps a message editor accessible name stable across a reorder', () => {
     const h = handlers()
-    const { rerender } = render(<MessageList messages={messages} {...h} />)
+    const { rerender } = render(<MessageList messages={messages} lang="en" {...h} />)
     const beforeLabel = screen.getAllByRole('textbox')[1].getAttribute('aria-label')
 
     // Simulate the reorder a move-up/move-down action produces: same two
     // messages, swapped positions.
-    rerender(<MessageList messages={[messages[1], messages[0]]} {...h} />)
+    rerender(<MessageList messages={[messages[1], messages[0]]} lang="en" {...h} />)
     const afterLabel = screen.getAllByRole('textbox')[0].getAttribute('aria-label')
 
     expect(afterLabel).toBe(beforeLabel)
+  })
+
+  // The component defaults to German (matching Field.tsx/TriState.tsx's own
+  // `lang = 'de'` default) -- every other test above pins lang="en" to keep
+  // its English-regex assertions meaningful. This test is the one that
+  // actually exercises the German dictionary, so a key present in en.ts but
+  // missing (or untranslated) from de.ts would be caught here rather than
+  // only by i18n.test.ts's key-parity check.
+  it('renders German labels by default', () => {
+    render(<MessageList messages={messages} {...handlers()} />)
+    expect(screen.getAllByLabelText('Rolle')).toHaveLength(2)
+    expect(screen.getByRole('button', { name: 'Nach unten' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Nachricht hinzufügen' })).toBeInTheDocument()
   })
 })

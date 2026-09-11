@@ -1,7 +1,10 @@
 import { useState } from 'react'
 
+import { useTranslations, type Lang } from '../i18n'
 import type { PromptVarDecl, VarValueType } from '../api/types'
 
+// Wire tokens round-tripped through the API, not prose -- kept in English
+// regardless of `lang`, matching how Field.tsx never translates `spec.key`.
 const VALUE_TYPES: VarValueType[] = ['string', 'text', 'boolean', 'number', 'enum']
 
 /** Comma-separated choices as typed, trimmed and stripped of blanks. */
@@ -17,7 +20,9 @@ function parseChoices(raw: string): string[] {
  *
  * Kept as one control per type (rather than always a text box) so a boolean
  * default can't be typed as the string "false" and an enum default can't
- * drift from its own `choices`.
+ * drift from its own `choices`. The boolean face reads literal `true`/`false`
+ * -- it represents the serialized value, not an on/off UI state -- so it
+ * isn't translated either.
  */
 function DefaultValueControl({
   id,
@@ -125,15 +130,19 @@ function VarRow({
   name,
   decl,
   readOnly,
+  lang,
   onEdit,
   onRemove,
 }: {
   name: string
   decl: PromptVarDecl
   readOnly?: boolean
+  lang: Lang
   onEdit: (decl: PromptVarDecl) => void
   onRemove: () => void
 }) {
+  const t = useTranslations(lang)
+
   // A path is not a DOM id (mirrors Field.tsx's own note on the same hazard);
   // a variable name is a plain identifier in practice, but this keeps every
   // id well-formed regardless.
@@ -164,14 +173,14 @@ function VarRow({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
         <input
           className="input"
-          aria-label="Name"
+          aria-label={t.varName}
           value={name}
           readOnly
           style={{ width: 140, fontFamily: 'ui-monospace, Menlo, monospace' }}
         />
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 160 }}>
           <label htmlFor={descriptionId} style={{ fontSize: 11 }}>
-            Description
+            {t.varDescription}
           </label>
           <input
             className="input"
@@ -183,7 +192,7 @@ function VarRow({
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <label htmlFor={typeId} style={{ fontSize: 11 }}>
-            Type
+            {t.varType}
           </label>
           <select
             className="input"
@@ -211,12 +220,12 @@ function VarRow({
         {decl.value_type === 'enum' && (
           <div style={{ display: 'flex', flexDirection: 'column', minWidth: 160 }}>
             <label htmlFor={choicesId} style={{ fontSize: 11 }}>
-              Choices
+              {t.varChoices}
             </label>
             <input
               className="input"
               id={choicesId}
-              placeholder="a, b, c"
+              placeholder={t.varChoicesPlaceholder}
               disabled={readOnly}
               value={(decl.choices ?? []).join(', ')}
               onChange={(event) => onEdit({ ...decl, choices: parseChoices(event.target.value) })}
@@ -225,7 +234,7 @@ function VarRow({
         )}
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span id={defaultLabelId} style={{ fontSize: 11 }}>
-            Default value
+            {t.varDefaultValue}
           </span>
           <DefaultValueControl
             id={defaultId}
@@ -237,7 +246,7 @@ function VarRow({
         </div>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <span id={requiredLabelId} style={{ fontSize: 11 }}>
-            Required
+            {t.varRequired}
           </span>
           <button
             type="button"
@@ -248,18 +257,18 @@ function VarRow({
             className="btn btn-ghost"
             onClick={() => onEdit({ ...decl, required: !decl.required })}
           >
-            {decl.required ? 'required' : 'optional'}
+            {decl.required ? t.varRequiredOn : t.varRequiredOff}
           </button>
         </div>
         {!readOnly && (
           <button type="button" className="btn btn-ghost" onClick={onRemove}>
-            Remove
+            {t.remove}
           </button>
         )}
       </div>
       {invalidEnum && (
         <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
-          An enum variable needs at least one entry in choices.
+          {t.varEnumNeedsChoices}
         </span>
       )}
     </div>
@@ -269,16 +278,19 @@ function VarRow({
 export function VarDeclTable({
   vars,
   readOnly,
+  lang = 'de',
   onAdd,
   onEdit,
   onRemove,
 }: {
   vars: Record<string, PromptVarDecl>
   readOnly?: boolean
+  lang?: Lang
   onAdd: (key: string) => void
   onEdit: (key: string, decl: PromptVarDecl) => void
   onRemove: (key: string) => void
 }) {
+  const t = useTranslations(lang)
   const [pending, setPending] = useState('')
 
   return (
@@ -289,6 +301,7 @@ export function VarDeclTable({
           name={name}
           decl={decl}
           readOnly={readOnly}
+          lang={lang}
           onEdit={(next) => onEdit(name, next)}
           onRemove={() => onRemove(name)}
         />
@@ -297,8 +310,8 @@ export function VarDeclTable({
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingTop: 10 }}>
           <input
             className="input"
-            aria-label="New variable name"
-            placeholder="New variable name"
+            aria-label={t.varNewName}
+            placeholder={t.varNewName}
             value={pending}
             onChange={(event) => setPending(event.target.value)}
           />
@@ -312,7 +325,7 @@ export function VarDeclTable({
               setPending('')
             }}
           >
-            Add
+            {t.add}
           </button>
         </div>
       )}

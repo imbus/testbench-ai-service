@@ -1,6 +1,9 @@
 import { CodeEditor } from './CodeEditor'
+import { useTranslations, type Lang } from '../i18n'
 import type { LintError, MessageRole, PromptMessageDoc } from '../api/types'
 
+// A wire token round-tripped through the API, not prose -- kept in English
+// regardless of `lang`, matching how Field.tsx never translates `spec.key`.
 const ROLES: MessageRole[] = ['system', 'user', 'assistant']
 
 /**
@@ -25,6 +28,7 @@ function MessageRow({
   message,
   count,
   readOnly,
+  lang,
   diagnostics,
   onRemove,
   onMove,
@@ -35,12 +39,14 @@ function MessageRow({
   message: PromptMessageDoc
   count: number
   readOnly?: boolean
+  lang: Lang
   diagnostics?: LintError[]
   onRemove: () => void
   onMove: (to: number) => void
   onRole: (role: MessageRole) => void
   onContent: (content: string) => void
 }) {
+  const t = useTranslations(lang)
   const roleId = `message-${index}-role`
 
   return (
@@ -57,7 +63,7 @@ function MessageRow({
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column' }}>
           <label htmlFor={roleId} style={{ fontSize: 11 }}>
-            Role
+            {t.messageRole}
           </label>
           <select
             className="input"
@@ -84,23 +90,23 @@ function MessageRow({
         <div style={{ flex: 1 }} />
         {!readOnly && index > 0 && (
           <button type="button" className="btn btn-ghost" onClick={() => onMove(index - 1)}>
-            Move up
+            {t.moveUp}
           </button>
         )}
         {!readOnly && index < count - 1 && (
           <button type="button" className="btn btn-ghost" onClick={() => onMove(index + 1)}>
-            Move down
+            {t.moveDown}
           </button>
         )}
         {!readOnly && (
           <button type="button" className="btn btn-ghost" onClick={onRemove}>
-            Remove
+            {t.remove}
           </button>
         )}
       </div>
       {!message.readable && message.file && (
         <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
-          {`Could not read ${message.file}.`}
+          {t.messageUnreadable} <code>{message.file}</code>
         </span>
       )}
       <CodeEditor
@@ -117,6 +123,7 @@ function MessageRow({
 export function MessageList({
   messages,
   readOnly,
+  lang = 'de',
   diagnostics,
   onAdd,
   onRemove,
@@ -126,6 +133,7 @@ export function MessageList({
 }: {
   messages: PromptMessageDoc[]
   readOnly?: boolean
+  lang?: Lang
   /** Lint errors for a message's own template body, keyed by its index. */
   diagnostics?: Record<number, LintError[]>
   onAdd: () => void
@@ -134,6 +142,8 @@ export function MessageList({
   onRole: (index: number, role: MessageRole) => void
   onContent: (index: number, content: string) => void
 }) {
+  const t = useTranslations(lang)
+
   return (
     <div>
       {messages.map((message, index) => (
@@ -143,6 +153,7 @@ export function MessageList({
           message={message}
           count={messages.length}
           readOnly={readOnly}
+          lang={lang}
           diagnostics={diagnostics?.[index]}
           onRemove={() => onRemove(index)}
           onMove={(to) => onMove(index, to)}
@@ -152,7 +163,7 @@ export function MessageList({
       ))}
       {!readOnly && (
         <button type="button" className="btn btn-ghost" onClick={onAdd} style={{ marginTop: 10 }}>
-          Add message
+          {t.addMessage}
         </button>
       )}
     </div>

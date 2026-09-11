@@ -95,6 +95,23 @@ export const de = {
   add: 'Hinzufügen',
   editInConfigToml: 'in config.toml bearbeiten',
   removedWithProject: 'Wird von „Alle Überschreibungen entfernen“ zusammen mit dem Projektblock gelöscht',
+  varName: 'Name',
+  varDescription: 'Beschreibung',
+  varType: 'Typ',
+  varChoices: 'Werte',
+  varChoicesPlaceholder: 'a, b, c',
+  varDefaultValue: 'Standardwert',
+  varRequired: 'Pflichtfeld',
+  varRequiredOn: 'erforderlich',
+  varRequiredOff: 'optional',
+  remove: 'Entfernen',
+  varNewName: 'Neuer Variablenname',
+  varEnumNeedsChoices: 'Eine Aufzählung benötigt mindestens einen Eintrag bei den Werten.',
+  messageRole: 'Rolle',
+  moveUp: 'Nach oben',
+  moveDown: 'Nach unten',
+  addMessage: 'Nachricht hinzufügen',
+  messageUnreadable: 'Vorlage nicht lesbar:',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German
