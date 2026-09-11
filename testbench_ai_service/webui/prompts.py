@@ -430,10 +430,12 @@ def build_write_set(
 
     Raises:
         HTTPException 422: the document is not a usable ``PromptDefinition``,
-            or ``default_variant`` names no variant.
+            ``default_variant`` names no variant, or a variant has no messages.
         HTTPException 400/404: a ``file`` message points outside ``prompts_dir``,
             at a disallowed suffix, or at a file that does not exist. Phase 4a
             never creates a file.
+        HTTPException 409: two messages reference the same template file with
+            different content -- a file has one body.
     """
     base = Path(prompts_dir)
     files: dict[Path, str] = {}
@@ -458,6 +460,16 @@ def build_write_set(
                     )
                 # Raises 400/404 when it escapes, is disallowed, or is absent.
                 target = resolve_template_file(base, prompt_path, message.file)
+                existing = files.get(target)
+                if existing is not None and existing != message.content:
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=(
+                            f"Two messages give different content for the same template "
+                            f"file {message.file!r}. A file has one body: point one of "
+                            f"them at a different file, or make the two bodies identical."
+                        ),
+                    )
                 files[target] = message.content
                 messages.append({"role": message.role, "file": message.file})
             else:
@@ -502,4 +514,11 @@ def _validate_document(document: dict[str, Any]) -> None:
                 f"default_variant {definition.default_variant!r} names no variant. "
                 f"Available: {', '.join(sorted(names)) or 'none'}"
             ),
+        )
+
+    empty = sorted(v.name for v in definition.variants if not v.messages)
+    if empty:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(f"Every variant needs at least one message. Empty: {', '.join(empty)}"),
         )

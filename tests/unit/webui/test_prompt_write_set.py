@@ -106,3 +106,59 @@ def test_nothing_is_written_to_disk_by_building_the_set(prompt):
         prompt,
     )
     assert (prompt / "de/explainer/system.jinja").read_text(encoding="utf-8") == "old body"
+
+
+def test_two_messages_giving_different_content_for_the_same_file_are_refused(prompt):
+    request = PromptSaveRequest(
+        name="Erklärer",
+        default_model="gpt-5.5",
+        default_variant="A",
+        variants=[
+            PromptVariantDoc(
+                name="A",
+                messages=[external("system.jinja", "FIRST"), inline("x")],
+            ),
+            PromptVariantDoc(
+                name="B",
+                messages=[external("system.jinja", "SECOND")],
+            ),
+        ],
+    )
+    with pytest.raises(HTTPException) as e:
+        build_write_set(request, prompt / "de/explainer/prompt.yaml", prompt)
+    assert e.value.status_code == 409
+
+
+def test_two_messages_sharing_the_same_file_with_identical_content_is_fine(prompt):
+    request = PromptSaveRequest(
+        name="Erklärer",
+        default_model="gpt-5.5",
+        default_variant="A",
+        variants=[
+            PromptVariantDoc(
+                name="A",
+                messages=[external("system.jinja", "same body")],
+            ),
+            PromptVariantDoc(
+                name="B",
+                messages=[external("system.jinja", "same body")],
+            ),
+        ],
+    )
+    files = build_write_set(request, prompt / "de/explainer/prompt.yaml", prompt)
+    matching = [p for p in files if p == prompt / "de/explainer/system.jinja"]
+    assert matching == [prompt / "de/explainer/system.jinja"]
+    assert files[prompt / "de/explainer/system.jinja"] == "same body"
+
+
+def test_a_variant_with_no_messages_is_refused(prompt):
+    request = PromptSaveRequest(
+        name="Erklärer",
+        default_model="gpt-5.5",
+        default_variant="A",
+        variants=[PromptVariantDoc(name="A", messages=[])],
+    )
+    with pytest.raises(HTTPException) as e:
+        build_write_set(request, prompt / "de/explainer/prompt.yaml", prompt)
+    assert e.value.status_code == 422
+    assert "A" in str(e.value.detail)
