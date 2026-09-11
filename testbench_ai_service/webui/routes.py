@@ -31,22 +31,36 @@ from testbench_ai_service.webui.models import (
     ApplyResponse,
     ConfigEditsRequest,
     ConfigResponse,
+    LintRequest,
+    LintResponse,
     LoginRequest,
     LogLine,
     MetaResponse,
     PreviewResponse,
     ProjectsResponse,
+    PromptDocumentResponse,
     PromptMetaResponse,
+    PromptSaveRequest,
+    PromptSaveResponse,
+    PromptTreeResponse,
+    RenderRequest,
+    RenderResponse,
     SessionResponse,
     StatusResponse,
 )
+from testbench_ai_service.webui.multi_write import write_all
 from testbench_ai_service.webui.projects import (
     fetch_projects_with_token,
     projects_response,
     record_projects,
 )
+from testbench_ai_service.webui.prompt_refs import variant_references
+from testbench_ai_service.webui.prompt_render import lint_template, render_messages
 from testbench_ai_service.webui.prompts import (
+    build_tree,
+    build_write_set,
     declared_prompt_file,
+    read_prompt_document,
     read_prompt_meta,
     resolve_prompt_file,
 )
@@ -508,4 +522,114 @@ async def apply_config(
         reloaded=reloaded,
         reload_detail=reload_detail,
         in_flight_tasks=registry.count,
+    )
+
+
+@router.get("/prompts", response_model=PromptTreeResponse)
+def read_prompt_tree(
+    _session: Session = Depends(current_session),
+    config: AppConfig = Depends(get_app_config),
+) -> PromptTreeResponse:
+    """Every prompt on disk, including the ones that do not parse."""
+    if config.prompts_dir is None:
+        return PromptTreeResponse(languages=[])
+    return build_tree(config.prompts_dir)
+
+
+@router.get("/prompts/{lang}/{agent}", response_model=PromptDocumentResponse)
+def read_prompt_doc(
+    lang: str,
+    agent: str,
+    _session: Session = Depends(current_session),
+    config: AppConfig = Depends(get_app_config),
+) -> PromptDocumentResponse:
+    """The full editable document for one agent's prompt."""
+    prompts_dir = _require_prompts_dir(config)
+    path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
+    return read_prompt_document(path, prompts_dir, lang, agent)
+
+
+@router.post("/prompts/lint", response_model=LintResponse)
+def lint_prompt_template(
+    body: LintRequest,
+    _session: Session = Depends(current_session),
+    _csrf: None = Depends(require_csrf),
+) -> LintResponse:
+    """A real Jinja parse. Open to every signed-in user: it executes nothing."""
+    return lint_template(body.content)
+
+
+@router.post("/prompts/render", response_model=RenderResponse)
+def render_prompt_preview(
+    body: RenderRequest,
+    _session: Session = Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+) -> RenderResponse:
+    """Render the messages against a sample context.
+
+    Admin-only **and** sandboxed (design D3). Rendering evaluates operator
+    text, and an unsandboxed environment here would be remote code execution
+    against the service; admin is the second layer, not the only one.
+    """
+    return RenderResponse(
+        messages=render_messages(body.messages, dict(body.vars), body.agent_context)
+    )
+
+
+@router.put("/prompts/{lang}/{agent}", response_model=PromptSaveResponse)
+def save_prompt(
+    lang: str,
+    agent: str,
+    body: PromptSaveRequest,
+    request: Request,
+    _session: Session = Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+    config: AppConfig = Depends(get_app_config),
+) -> PromptSaveResponse:
+    """Validate and write the prompt document and its templates."""
+    prompts_dir = _require_prompts_dir(config)
+    path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
+
+    # There is no `get_config_path` dependency: routes.py reads the path off
+    # app.state, the way `read_config` and `read_prompt_metadata` already do.
+    _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
+
+    files = build_write_set(body, path, prompts_dir)
+    result = write_all(files)
+    return PromptSaveResponse(
+        written=[str(p) for p in result.written],
+        backups=[str(p) for p in result.backups.values()],
+    )
+
+
+def _require_prompts_dir(config: AppConfig) -> Path:
+    if config.prompts_dir is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No prompts directory is configured",
+        )
+    return Path(config.prompts_dir)
+
+
+def _refuse_orphaned_variants(agent: str, body: PromptSaveRequest, config_path: Path) -> None:
+    """Refuse a save that would leave a config key naming a variant that is gone.
+
+    ``get_prompt_variant`` falls back to ``default_variant`` on a miss, so an
+    orphaned reference is a wrong-output bug with no error anywhere. Repointing
+    the agent means writing ``config.toml`` in the same transaction, which is
+    phase 4b's fork work -- so 4a refuses and names what to fix.
+    """
+    on_disk = read_config_file(config_path)
+    surviving = {variant.name for variant in body.variants}
+    orphaned = [ref for ref in variant_references(agent, on_disk) if ref.variant not in surviving]
+    if not orphaned:
+        return
+
+    where = "; ".join(f"{ref.variant!r} in {ref.label()}" for ref in orphaned)
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            f"This save would remove a variant that is still in use: {where}. "
+            "Point the agent at a different variant first, then rename or remove this one."
+        ),
     )
