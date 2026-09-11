@@ -42,9 +42,10 @@ _MIN_AGENT_PATH_LENGTH = 2
 
 
 def _lint_env() -> Environment:
-    # trim_blocks/lstrip_blocks match utils/build_prompt_utils.py:34, so the
-    # lint pane agrees with what the runtime actually emits. Prompts are
-    # rendered as plain text, never HTML, so autoescape is off.
+    # trim_blocks/lstrip_blocks match utils/build_prompt_utils.py:34 (and
+    # _render_env, below) -- keep all three in sync if either changes, or the
+    # lint pane will disagree with what the runtime actually emits. Prompts
+    # are rendered as plain text, never HTML, so autoescape is off.
     return Environment(autoescape=False, trim_blocks=True, lstrip_blocks=True)
 
 
@@ -54,6 +55,9 @@ def _render_env() -> SandboxedEnvironment:
     return SandboxedEnvironment(
         autoescape=False,  # Prompts are plain text, never HTML.
         undefined=StrictUndefined,
+        # trim_blocks/lstrip_blocks match utils/build_prompt_utils.py:34 (and
+        # _lint_env, above) -- keep all three in sync if either changes, or
+        # the preview will disagree with what the agent actually receives.
         trim_blocks=True,
         lstrip_blocks=True,
     )
@@ -134,6 +138,12 @@ def context_skeleton(contents: Iterable[str]) -> dict[str, Any]:
     Uses the real Jinja AST rather than a regex, so it agrees with what the
     renderer will actually look up. An unparseable template contributes nothing
     -- lint is what reports that, and a broken template must not empty the pane.
+
+    Not scope-aware: a template that rebinds ``agent`` locally (e.g.
+    ``{% set agent = 5 %}{{ agent.x }}``) still contributes ``x`` to the
+    skeleton, since the AST walk does not track ``set``/loop bindings. That is
+    acceptable for a preview aid -- it is not a security boundary -- but it
+    means the skeleton can list a path a real render never uses.
     """
     env = _lint_env()
     skeleton: dict[str, Any] = {}

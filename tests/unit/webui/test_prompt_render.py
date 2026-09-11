@@ -60,9 +60,14 @@ class TestRender:
         assert rendered[0].error is None
 
     def test_whitespace_flags_match_the_runtime(self):
-        """build_prompt_utils.py:34 uses trim_blocks and lstrip_blocks."""
-        rendered = render_messages([msg("{% if true %}\nX\n{% endif %}\n")], {}, {})
-        assert rendered[0].content == "X"
+        """build_prompt_utils.py:34 uses trim_blocks and lstrip_blocks.
+
+        The template must differ in INTERIOR whitespace between flagged and
+        unflagged rendering -- render_messages ends in .strip(), so a template
+        that differs only at the edges cannot detect the flags going missing.
+        """
+        rendered = render_messages([msg("A\n{% if true %}\nB\n{% endif %}\nC")], {}, {})
+        assert rendered[0].content == "A\nB\nC"
 
     def test_a_failing_message_does_not_abort_the_batch(self):
         rendered = render_messages([msg("{% if %}"), msg("fine")], {}, {})
