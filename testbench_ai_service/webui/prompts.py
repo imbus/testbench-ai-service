@@ -227,3 +227,60 @@ def read_prompt_meta(path: Path, prompts_dir: Path | None = None) -> PromptMetaR
         default_variant=definition.default_variant,
         variants=_variant_meta(definition),
     )
+
+
+#: Message templates are Jinja. These are exactly the suffixes
+#: ``MessageTemplate``'s docstring names.
+TEMPLATE_SUFFIXES = frozenset({".jinja", ".j2", ".md"})
+
+
+def _require_template_suffix(path: Path) -> None:
+    if path.suffix.lower() not in TEMPLATE_SUFFIXES:
+        logger.warning("Refused a non-template file read: %r", str(path))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A message template must be a .jinja, .j2 or .md file",
+        )
+
+
+def resolve_template_file(prompts_dir: Path, prompt_path: Path, ref: str) -> Path:
+    """Locate a message template *ref* declared by the prompt at *prompt_path*.
+
+    Resolved against the prompt YAML's **own directory**, because that is what
+    ``MessageTemplate.get_content(base_path)`` does at runtime with
+    ``base_path = Path(prompt_config.file).parent``. Resolving anywhere else
+    would mean the console edits a different file from the one the agent reads.
+
+    Containment is then checked against *prompts_dir*, not against the prompt's
+    directory, so a template shared between agents resolves the way it does at
+    runtime while a reference climbing out of ``prompts_dir`` is still refused.
+
+    Raises:
+        HTTPException 400: *ref* is empty, escapes *prompts_dir*, or is not an
+            allowlisted template suffix.
+        HTTPException 404: nothing readable is there.
+    """
+    if not ref.strip():
+        # Path("") is Path("."), which resolves to a directory rather than
+        # raising -- see security.py's module docstring.
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Empty path is not allowed"
+        )
+
+    base = Path(prompts_dir)
+    candidate = Path(ref)
+    target = (
+        resolve_within(base, candidate)
+        if candidate.is_absolute()
+        else resolve_within(base, Path(prompt_path).parent / candidate)
+    )
+
+    # Suffix-checked before it is stat'ed, so a refused extension is refused
+    # whether or not the file happens to exist.
+    _require_template_suffix(target)
+    if not target.is_file():
+        logger.warning("No template file for %r under %s", ref, base)
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"No template file for {ref!r}"
+        )
+    return target
