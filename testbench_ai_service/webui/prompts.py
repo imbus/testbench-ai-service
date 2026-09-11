@@ -7,9 +7,11 @@ whose typos fall back to ``default_variant`` silently at runtime (a
 wrong-output bug with no error anywhere) and ``vars`` is an untyped key/value
 grid.
 
-**Metadata only.** Message templates and template file contents are phase 4's
-prompt editor. This module reads the header, the variant list, and the variable
-declarations, and nothing else.
+**Metadata, and the full editable document.** ``read_prompt_meta`` reads the
+header, the variant list, and the variable declarations, and nothing else.
+``read_prompt_document`` builds on the same parsed definition to also resolve
+every message's body -- inline or from a referenced template file -- for
+phase 4's prompt editor.
 
 Every path this module opens is request-controlled, through three separate
 segments (``{lang}``, the agent's declared ``prompt.file``, and ``?file=``), so
@@ -29,15 +31,19 @@ from pydantic import ValidationError
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.prompt import PromptDefinition
+from testbench_ai_service.models.prompt import MessageTemplate, PromptDefinition
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 from testbench_ai_service.webui.models import (
+    PromptDocumentResponse,
+    PromptMessageDoc,
     PromptMetaResponse,
     PromptTreeEntry,
     PromptTreeLanguage,
     PromptTreeResponse,
+    PromptVariantDoc,
     PromptVariantMeta,
 )
+from testbench_ai_service.webui.prompt_render import context_skeleton
 from testbench_ai_service.webui.security import resolve_within
 
 #: Prompt metadata is YAML. ``prompts_dir`` also holds the Jinja templates the
@@ -168,8 +174,12 @@ def _display_name(path: Path, prompts_dir: Path | None) -> str:
     return path.name
 
 
-def read_prompt_meta(path: Path, prompts_dir: Path | None = None) -> PromptMetaResponse:
-    """Parse *path* into console metadata.
+def _load_definition(path: Path, prompts_dir: Path | None) -> PromptDefinition:
+    """Parse *path* into a :class:`PromptDefinition`.
+
+    Shared by :func:`read_prompt_meta` and :func:`read_prompt_document` --
+    both need the same file parsed the same way, and the same 404/422
+    behaviour is what the caller reports back to the operator.
 
     Raises:
         HTTPException 404: the file is gone, or is not a file at all. Risk 3:
@@ -185,7 +195,7 @@ def read_prompt_meta(path: Path, prompts_dir: Path | None = None) -> PromptMetaR
     """
     display = _display_name(path, prompts_dir)
     try:
-        definition = get_prompt_definition(path)
+        return get_prompt_definition(path)
     except (FileNotFoundError, IsADirectoryError, PermissionError, NotADirectoryError) as e:
         logger.warning("Prompt metadata unavailable at %s: %s", path, e)
         raise HTTPException(
@@ -224,6 +234,17 @@ def read_prompt_meta(path: Path, prompts_dir: Path | None = None) -> PromptMetaR
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"The prompt file {display} is not a usable prompt definition",
         ) from e
+
+
+def read_prompt_meta(path: Path, prompts_dir: Path | None = None) -> PromptMetaResponse:
+    """Parse *path* into console metadata.
+
+    Raises:
+        HTTPException 404: the file is gone, or is not a file at all.
+        HTTPException 422: the file is there but is not a usable prompt
+            definition. See :func:`_load_definition` for the detail.
+    """
+    definition = _load_definition(path, prompts_dir)
 
     return PromptMetaResponse(
         name=definition.name,
@@ -290,6 +311,66 @@ def resolve_template_file(prompts_dir: Path, prompt_path: Path, ref: str) -> Pat
             status_code=status.HTTP_404_NOT_FOUND, detail=f"No template file for {ref!r}"
         )
     return target
+
+
+def read_prompt_document(
+    prompt_path: Path, prompts_dir: Path, lang: str, agent: str
+) -> PromptDocumentResponse:
+    """The full editable document: the YAML plus every referenced template body.
+
+    A template that is missing, unreadable, or points outside ``prompts_dir``
+    yields ``readable=False`` and an empty body rather than failing the whole
+    document. The operator has to *see* a broken reference to repair it.
+    """
+    definition = _load_definition(prompt_path, prompts_dir)
+    base = Path(prompts_dir)
+
+    variants: list[PromptVariantDoc] = []
+    for variant in definition.variants:
+        messages = [_message_doc(m, prompt_path, base) for m in variant.messages]
+        variants.append(
+            PromptVariantDoc(
+                name=variant.name,
+                description=variant.description,
+                model=variant.model,
+                vars=variant.vars,
+                messages=messages,
+            )
+        )
+
+    bodies = [message.content for variant in variants for message in variant.messages]
+    return PromptDocumentResponse(
+        lang=lang,
+        agent=agent,
+        file=_display_name(prompt_path, base),
+        name=definition.name,
+        summary=definition.summary,
+        description=definition.description,
+        default_model=definition.default_model,
+        default_variant=definition.default_variant,
+        variants=variants,
+        agent_context_skeleton=context_skeleton(bodies),
+    )
+
+
+def _message_doc(
+    message: MessageTemplate, prompt_path: Path, prompts_dir: Path
+) -> PromptMessageDoc:
+    if message.file is None:
+        return PromptMessageDoc(
+            role=message.role, source="inline", file=None, content=message.text or ""
+        )
+    try:
+        target = resolve_template_file(prompts_dir, prompt_path, message.file)
+        content = target.read_text(encoding="utf-8")
+    except (HTTPException, OSError, UnicodeDecodeError) as e:
+        logger.warning("Template %r of %s is not readable: %s", message.file, prompt_path, e)
+        return PromptMessageDoc(
+            role=message.role, source="file", file=message.file, content="", readable=False
+        )
+    return PromptMessageDoc(
+        role=message.role, source="file", file=message.file, content=content, readable=True
+    )
 
 
 def build_tree(prompts_dir: Path) -> PromptTreeResponse:
