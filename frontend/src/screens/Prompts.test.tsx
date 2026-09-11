@@ -49,7 +49,10 @@ const TREE: PromptTreeResponse = {
 }
 
 let fetchMock: ReturnType<typeof vi.fn>
-let treeBody: PromptTreeResponse | null
+// `unknown`, not `PromptTreeResponse | null`: one test below sends a 200 body
+// that is missing the `languages` field entirely, which is not a value the
+// real type can express but is exactly the payload shape the guard exists for.
+let treeBody: unknown
 
 beforeEach(() => {
   treeBody = TREE
@@ -79,6 +82,18 @@ function renderPrompts() {
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <Prompts lang="en" />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+/** No `lang` prop -- exercises the console's actual German default. */
+function renderPromptsDefault() {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <Prompts />
       </MemoryRouter>
     </QueryClientProvider>,
   )
@@ -118,9 +133,28 @@ describe('Prompts', () => {
     await waitFor(() => expect(screen.getByText(/no prompts/i)).toBeInTheDocument())
   })
 
+  // A 200 response is not the same guarantee as a 200 response shaped the way
+  // the type says: a payload missing `languages` entirely must still render
+  // the empty state, not throw reading `.length`/`.map` off `undefined`.
+  it('renders the empty state rather than crashing on a payload missing `languages`', async () => {
+    treeBody = {}
+    renderPrompts()
+    await waitFor(() => expect(screen.getByText(/no prompts/i)).toBeInTheDocument())
+  })
+
   it('shows an error rather than a blank screen on a load failure', async () => {
     treeBody = null
     renderPrompts()
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+  })
+
+  // The screen defaults to German (matching every other screen's own
+  // `lang = 'de'` default) -- every test above pins lang="en" to keep its
+  // English-text assertions meaningful. This is the one that actually
+  // exercises the German dictionary for a key THIS screen reads.
+  it('renders the German empty state by default', async () => {
+    treeBody = { languages: [] }
+    renderPromptsDefault()
+    await waitFor(() => expect(screen.getByText('Keine Prompts gefunden.')).toBeInTheDocument())
   })
 })

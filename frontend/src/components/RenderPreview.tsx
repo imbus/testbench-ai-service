@@ -74,15 +74,19 @@ export function RenderPreview({
   return (
     <div data-testid="render-preview" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {/* A wire token (the `agent_context` field of the render request), not
-            prose -- kept as-is regardless of `lang`, matching Field.tsx's own
-            treatment of spec.key. */}
-        <label
-          htmlFor="render-context"
+        <label htmlFor="render-context" style={{ fontSize: 12 }}>
+          {t.renderContext}
+        </label>
+        {/* The wire field name the mutation actually sends -- supplementary,
+            not the accessible label: an ordinary UI word ("context") has an
+            unambiguous German translation, unlike a literal TOML path such as
+            `Field.tsx`'s `spec.key`. */}
+        <span
+          className="text-muted"
           style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
         >
           agent_context
-        </label>
+        </span>
         <textarea
           id="render-context"
           className="input"

@@ -25,10 +25,12 @@ export function Prompts({ lang = 'de' }: { lang?: Lang }) {
     )
   }
 
-  // Defaults to an empty tree rather than crashing on a payload missing the
-  // field -- the same guard phase 3 added to Agents and Projects: an operator
+  // Defaults the FIELD, not the container: `tree.data` can be a truthy `{}`
+  // (a 200 whose body is missing `languages`), and `tree.data ?? {...}` would
+  // never fire in that case. The same guard phase 3 added to Agents and
+  // Projects, after both crashed on a payload missing a field -- an operator
   // who cannot load this screen cannot fix the underlying prompt file either.
-  const { languages } = tree.data ?? { languages: [] }
+  const languages = tree.data?.languages ?? []
 
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 24 }}>

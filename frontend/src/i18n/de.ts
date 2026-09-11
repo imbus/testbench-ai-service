@@ -112,6 +112,7 @@ export const de = {
   moveDown: 'Nach unten',
   addMessage: 'Nachricht hinzufügen',
   messageUnreadable: 'Vorlage nicht lesbar:',
+  renderContext: 'Kontext',
   render: 'Rendern',
   rendering: 'Wird gerendert…',
   renderInvalidJson: 'Der Kontext ist kein gültiges JSON.',

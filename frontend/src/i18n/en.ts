@@ -116,6 +116,7 @@ export const en = {
   moveDown: 'Move down',
   addMessage: 'Add message',
   messageUnreadable: 'Template unreadable:',
+  renderContext: 'Context',
   render: 'Render',
   rendering: 'Rendering…',
   renderInvalidJson: 'The context is not valid JSON.',
