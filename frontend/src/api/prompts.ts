@@ -1,9 +1,5 @@
 import type { Scope } from './agents'
-import type { PromptDocument, PromptMessageDoc, PromptVariantDoc } from './types'
-
-export function variantByName(doc: PromptDocument, name: string): PromptVariantDoc | undefined {
-  return doc.variants.find((variant) => variant.name === name)
-}
+import type { PromptMessageDoc, PromptVariantDoc } from './types'
 
 /** A new message. Always inline: phase 4a never creates a template file. */
 export function emptyMessage(role: PromptMessageDoc['role'] = 'user'): PromptMessageDoc {

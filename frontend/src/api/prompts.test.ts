@@ -1,24 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { agentsUsingVariant, emptyMessage, emptyVariant, mergeContext, variantByName } from './prompts'
-import type { PromptDocument } from './types'
-
-const doc = {
-  lang: 'de', agent: 'explainer', file: 'de/explainer/prompt.yaml',
-  name: 'E', summary: null, description: null,
-  default_model: 'm', default_variant: 'A',
-  variants: [
-    { name: 'A', description: null, model: null, vars: {}, messages: [] },
-    { name: 'B', description: null, model: null, vars: {}, messages: [] },
-  ],
-  agent_context_skeleton: {},
-} satisfies PromptDocument
-
-describe('variantByName', () => {
-  it('finds a variant', () => expect(variantByName(doc, 'B')?.name).toBe('B'))
-  it('returns undefined for an unknown name', () =>
-    expect(variantByName(doc, 'Z')).toBeUndefined())
-})
+import { agentsUsingVariant, emptyMessage, emptyVariant, mergeContext } from './prompts'
 
 describe('emptyVariant / emptyMessage', () => {
   it('makes a variant with one user message', () => {
