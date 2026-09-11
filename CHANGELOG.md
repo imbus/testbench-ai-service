@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - A web console at `/admin`, served by the service itself and bundled in the release
   binary. Sign in with TestBench credentials against the server configured as `tb_server_url`;
   the console then shows service status, a tail of the log file, and the effective Service, LLM
-  and Logging configuration. Prompt files themselves are still read-only from the browser.
+  and Logging configuration.
 - `[testbench-ai-service.admin_ui]` with `enabled` (default `true`) and `require_loopback`
   (default `false`). Set `enabled = false` to switch the console off entirely: `/admin` and the
   console API then return `404` and the agent endpoints are unaffected. Documented in
@@ -57,16 +57,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   validation at startup with "Input should be a valid string".
 - Prompt editing in the web console, for administrators. A new **Prompts** screen lists every
   `<language>/<agent>/prompt.yaml` the service knows about, including any that fail to parse —
-  shown with the error rather than hidden, so a broken prompt can still be opened and fixed.
-  Selecting one opens a document editor for its name, default model, default variant, and each
-  variant's own model, variable declarations and Jinja messages. **Lint** checks a message's
-  Jinja syntax and is available to any signed-in session; **Render** evaluates it against typed
-  variables and the agent's own context and is Administrator-only, since it executes the
-  template text — always inside a sandboxed Jinja environment. Renaming or removing a variant
-  that an agent or project still points at by name is refused with the referencing agent or
-  project named in the response, so it can be repointed in `config.toml` before the rename is
-  retried. Saving writes `prompt.yaml` and any template file already referenced by a message;
-  phase 4a does not create or delete files, so switching a message between inline and an
+  shown with the error rather than hidden, so a broken prompt is never silently missing from the
+  tree, though it must still be repaired on disk before it can be opened. Selecting a prompt that
+  parses opens a document editor for its name, default model, default variant, and each variant's
+  own model, variable declarations and Jinja messages. A **Lint** button checks every message of
+  the selected variant at once and is available to any signed-in session; **Render** evaluates the
+  messages against typed variables and the agent's own context and is Administrator-only, since it
+  executes the template text — always inside a sandboxed Jinja environment. Renaming or removing a
+  variant that an agent or project still points at by name is refused, naming the global agents
+  table or the project holding the reference, so it can be repointed in `config.toml` before the
+  rename is retried. Saving writes `prompt.yaml` and any template file already referenced by a
+  message; phase 4a does not create or delete files, so switching a message between inline and an
   external file, and forking a prompt, remain for a later release. Documented in
   `docs/web-console.md`.
 

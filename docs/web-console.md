@@ -261,13 +261,15 @@ TestBench exactly, including spaces and punctuation.
 
 The **Prompts** screen lists every `<language>/<agent>/prompt.yaml` the
 service knows about, grouped by language, with each agent's name and its
-variants. A prompt that fails to parse is listed too, marked with the error
-instead of its variants — a broken prompt still needs to be opened to be
-fixed, so it is never hidden.
+variants. A prompt that fails to parse is listed too, marked with the reason
+it failed instead of its variants. This is deliberate: the tree shows a broken
+prompt rather than hiding it, so an operator can see which file is broken and
+why — but an unparseable file has to be repaired on disk first. The editor
+cannot open it.
 
-Any signed-in session can browse the tree and open a prompt. Editing is
-Administrator-only, same as the rest of the console: a non-admin sees the same
-document with the values displayed rather than as form fields.
+Any signed-in session can browse the tree and open a prompt that parses.
+Editing is Administrator-only, same as the rest of the console: a non-admin
+sees the same form, with every control read-only.
 
 ### Prompt detail
 
@@ -278,13 +280,14 @@ Selecting a prompt opens an editor for:
 - each **variant**'s own model override, its variable declarations, and its
   Jinja messages, one per role.
 
-A message body is edited in a Jinja-aware code editor. **Lint** checks the
-Jinja syntax and reports the line of the first error; it is available to any
-signed-in session. **Render** evaluates the message against the variant's
-variables and the agent's own context, and is **Administrator-only** —
-unlike lint, it executes the template text, so a non-admin session sees lint
-errors but no Render button. Preview always runs inside a sandboxed Jinja
-environment, whatever the template does.
+A message body is edited in a Jinja-aware code editor. The **Lint** button
+checks every message of the selected variant at once, on demand — it does not
+check continuously as you type — and reports the line of the first error in
+each. It is available to any signed-in session. **Render** evaluates the
+variant's messages against its variables and the agent's own context, and is
+**Administrator-only** — unlike lint, it executes the template text, so a
+non-admin session sees lint errors but no Render button. Preview always runs
+inside a sandboxed Jinja environment, whatever the template does.
 
 The **context** pane that Render fills in is built server-side from the real
 Jinja syntax tree of the variant's messages, not guessed in the browser, so
@@ -292,11 +295,13 @@ it always agrees with what a render will actually look up.
 
 :::note
 Renaming or removing a variant that an agent or a project still points at by
-name is refused. The response names the agent or project holding the
-reference. Repoint that agent's (or project's) `prompt.variant` in
-`config.toml` to a variant that will still exist, apply that change, and only
-then rename or remove the old one — a variant name is a free string
-elsewhere in the configuration, so nothing else catches this at save time.
+name is refused. The response names the global agents table or the project
+holding the reference — not a specific agent, since you are already editing
+this prompt's own agent. Repoint the referencing `prompt.variant` in
+`config.toml` (globally, or on that project) to a variant that will still
+exist, apply that change, and only then rename or remove the old one — a
+variant name is a free string elsewhere in the configuration, so nothing else
+catches this at save time.
 :::
 
 :::caution
