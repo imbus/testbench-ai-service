@@ -149,11 +149,9 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const original = originalRef.current
   const dirty = original ? isDirty(original, draft) : false
 
-  // Warns on an actual tab close/refresh/navigation away from the origin.
-  // react-router v7's `useBlocker` needs a data router (this app renders
-  // through a plain `<BrowserRouter>`, see main.tsx), so an in-app Link click
-  // is not interceptable here without a larger routing change; this covers
-  // the same real data-loss risk `beforeunload` is meant for.
+  // Warns on a tab close or refresh. `useBlocker` below covers an IN-APP
+  // navigation instead -- neither is a router navigation, so this effect is
+  // still needed alongside it, not superseded by it.
   useEffect(() => {
     if (!dirty) return
     const handler = (event: BeforeUnloadEvent) => {

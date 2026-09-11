@@ -139,8 +139,8 @@ export const de = {
   unsavedChangesWarning: 'Sie haben ungespeicherte Änderungen.',
   orphanGlobalTable: 'die globale Agenten-Tabelle',
   orphanProjectPrefix: 'Projekt',
-  unsavedNavTitle: 'Nicht gespeicherte Änderungen',
-  unsavedNavBody: 'Es gibt nicht gespeicherte Änderungen. Ohne Speichern verlassen?',
+  unsavedNavTitle: 'Ungespeicherte Änderungen',
+  unsavedNavBody: 'Sie haben ungespeicherte Änderungen. Ohne Speichern verlassen?',
   leaveAnyway: 'Trotzdem verlassen',
 } as const
 
