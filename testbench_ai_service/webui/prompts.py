@@ -37,12 +37,14 @@ from testbench_ai_service.webui.models import (
     PromptDocumentResponse,
     PromptMessageDoc,
     PromptMetaResponse,
+    PromptSaveRequest,
     PromptTreeEntry,
     PromptTreeLanguage,
     PromptTreeResponse,
     PromptVariantDoc,
     PromptVariantMeta,
 )
+from testbench_ai_service.webui.prompt_io import document_to_yaml, prune_none, schema_header
 from testbench_ai_service.webui.prompt_render import context_skeleton
 from testbench_ai_service.webui.security import resolve_within
 
@@ -415,3 +417,89 @@ def _tree_entry(agent: str, prompt_path: Path, prompts_dir: Path) -> PromptTreeE
         variants=[variant.name for variant in meta.variants],
         ok=True,
     )
+
+
+def build_write_set(
+    request: PromptSaveRequest, prompt_path: Path, prompts_dir: Path
+) -> dict[Path, str]:
+    """Validate *request* and turn it into ``{path: text}``, touching nothing.
+
+    Validation happens here, before any caller reaches ``write_all``, which is
+    how "a multi-file apply with one invalid file writes nothing at all"
+    (master spec §13) is satisfied -- by ordering, not by rollback.
+
+    Raises:
+        HTTPException 422: the document is not a usable ``PromptDefinition``,
+            or ``default_variant`` names no variant.
+        HTTPException 400/404: a ``file`` message points outside ``prompts_dir``,
+            at a disallowed suffix, or at a file that does not exist. Phase 4a
+            never creates a file.
+    """
+    base = Path(prompts_dir)
+    files: dict[Path, str] = {}
+
+    document: dict[str, Any] = {
+        "name": request.name,
+        "summary": request.summary,
+        "description": request.description,
+        "default_model": request.default_model,
+        "default_variant": request.default_variant,
+        "variants": [],
+    }
+
+    for variant in request.variants:
+        messages: list[dict[str, Any]] = []
+        for message in variant.messages:
+            if message.source == "file":
+                if not message.file:
+                    raise HTTPException(
+                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                        detail="A file-backed message must name a file",
+                    )
+                # Raises 400/404 when it escapes, is disallowed, or is absent.
+                target = resolve_template_file(base, prompt_path, message.file)
+                files[target] = message.content
+                messages.append({"role": message.role, "file": message.file})
+            else:
+                messages.append({"role": message.role, "text": message.content})
+
+        document["variants"].append(
+            {
+                "name": variant.name,
+                "description": variant.description,
+                "model": variant.model,
+                "vars": {key: prune_none(decl.model_dump()) for key, decl in variant.vars.items()},
+                "messages": messages,
+            }
+        )
+
+    _validate_document(document)
+
+    files[Path(prompt_path)] = document_to_yaml(
+        document, header=schema_header(Path(prompt_path), base)
+    )
+    return files
+
+
+def _validate_document(document: dict[str, Any]) -> None:
+    """Refuse a document the runtime could not load."""
+    try:
+        definition = PromptDefinition.model_validate(prune_none(document))
+    except ValidationError as e:
+        fields = ", ".join(
+            sorted({".".join(str(p) for p in err["loc"]) or "(root)" for err in e.errors()})
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"This is not a usable prompt definition: {fields}",
+        ) from e
+
+    names = {variant.name for variant in definition.variants}
+    if definition.default_variant not in names:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"default_variant {definition.default_variant!r} names no variant. "
+                f"Available: {', '.join(sorted(names)) or 'none'}"
+            ),
+        )
