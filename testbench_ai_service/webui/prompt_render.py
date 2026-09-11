@@ -70,6 +70,11 @@ def lint_template(content: str) -> LintResponse:
     except TemplateSyntaxError as e:
         return LintResponse(
             ok=False,
+            # column=1 is a PLACEHOLDER, not data: Jinja's TemplateSyntaxError
+            # carries a line number and no column at all, so there is nothing
+            # truthful to put here. The field stays because the response shape
+            # is public (and an editor gutter wants the pair), but nothing
+            # should read this value as "the error is in the first column".
             errors=[LintError(line=e.lineno or 1, column=1, message=e.message or "Syntax error")],
         )
     return LintResponse(ok=True, errors=[])

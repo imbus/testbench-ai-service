@@ -162,3 +162,66 @@ def test_a_variant_with_no_messages_is_refused(prompt):
         build_write_set(request, prompt / "de/explainer/prompt.yaml", prompt)
     assert e.value.status_code == 422
     assert "A" in str(e.value.detail)
+
+
+def test_an_unreadable_file_message_is_refused_rather_than_truncating_it(prompt):
+    """C1: ``readable: false`` means the body is a placeholder, not the file.
+
+    ``_message_doc`` answers ``content="", readable=False`` for a template it
+    could not decode -- a legacy latin-1 file, say. Writing that back would
+    leave the real file at zero bytes, silently, even for a save that only
+    touched the prompt's name.
+    """
+    latin1 = prompt / "de/explainer/system.jinja"
+    latin1.write_bytes("Du bist Prüfer".encode("latin-1"))
+    message = PromptMessageDoc(
+        role="system", source="file", file="system.jinja", content="", readable=False
+    )
+    with pytest.raises(HTTPException) as e:
+        build_write_set(request_with([message]), prompt / "de/explainer/prompt.yaml", prompt)
+    assert e.value.status_code == 409
+    assert "system.jinja" in str(e.value.detail)
+    # Names what to do next, the way _refuse_orphaned_variants does.
+    assert "Repair the file on disk" in str(e.value.detail)
+    assert latin1.read_bytes() == "Du bist Prüfer".encode("latin-1")
+
+
+def test_an_unchanged_template_is_left_out_of_the_write_set(prompt):
+    """I4: no change detection meant every referenced template was rewritten."""
+    path = prompt / "de/explainer/prompt.yaml"
+    files = build_write_set(request_with([external("system.jinja", "old body")]), path, prompt)
+    assert prompt / "de/explainer/system.jinja" not in files
+    # The YAML itself did change, so it is still written.
+    assert path in files
+
+
+def test_an_untouched_crlf_template_is_not_rewritten_to_lf(prompt):
+    """I4: the document loads a CRLF file as LF, so bytes alone are not enough."""
+    template = prompt / "de/explainer/system.jinja"
+    template.write_bytes(b"line one\r\nline two\r\n")
+    files = build_write_set(
+        request_with([external("system.jinja", "line one\nline two\n")]),
+        prompt / "de/explainer/prompt.yaml",
+        prompt,
+    )
+    assert template not in files
+
+
+def test_a_changed_crlf_template_is_still_written(prompt):
+    template = prompt / "de/explainer/system.jinja"
+    template.write_bytes(b"line one\r\nline two\r\n")
+    files = build_write_set(
+        request_with([external("system.jinja", "line one\nline three\n")]),
+        prompt / "de/explainer/prompt.yaml",
+        prompt,
+    )
+    assert files[template] == "line one\nline three\n"
+
+
+def test_an_unchanged_yaml_is_left_out_of_the_write_set(prompt):
+    """A save that changes nothing at all writes nothing at all."""
+    path = prompt / "de/explainer/prompt.yaml"
+    request = request_with([inline("hallo")])
+    first = build_write_set(request, path, prompt)
+    path.write_text(first[path], encoding="utf-8", newline="")
+    assert build_write_set(request, path, prompt) == {}

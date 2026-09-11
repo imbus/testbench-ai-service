@@ -419,6 +419,38 @@ def _tree_entry(agent: str, prompt_path: Path, prompts_dir: Path) -> PromptTreeE
     )
 
 
+def _already_on_disk(target: Path, text: str) -> bool:
+    """True when *target* already holds exactly what a save would stage.
+
+    Read as **bytes**, never through text mode, and compared two ways:
+
+    * byte-for-byte against what :func:`~testbench_ai_service.webui.multi_write._stage`
+      would write (UTF-8, ``newline=""``), and
+    * against the on-disk bytes decoded the way ``_message_doc`` decoded them
+      when the document loaded -- ``read_text``, i.e. universal newlines.
+
+    The second comparison is what makes an **untouched CRLF** template compare
+    equal to itself. Its bytes reach the browser as ``\\n`` and come back as
+    ``\\n``, so a byte-only check would call the file "changed" and rewrite
+    every line ending in it -- reintroducing for untouched files exactly the
+    CRLF->LF rewrite design §2 ring-fenced as an out-of-scope leftover.
+
+    An unreadable target counts as "changed": the caller should attempt the
+    write and report the real failure rather than silently skip it.
+    """
+    try:
+        raw = target.read_bytes()
+    except OSError:
+        return False
+    if raw == text.encode("utf-8"):
+        return True
+    try:
+        decoded = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    return decoded.replace("\r\n", "\n").replace("\r", "\n") == text
+
+
 def build_write_set(
     request: PromptSaveRequest, prompt_path: Path, prompts_dir: Path
 ) -> dict[Path, str]:
@@ -428,6 +460,10 @@ def build_write_set(
     how "a multi-file apply with one invalid file writes nothing at all"
     (master spec §13) is satisfied -- by ordering, not by rollback.
 
+    Only targets whose on-disk bytes actually differ are returned: a save that
+    changes the prompt's name must not rewrite (and back up, and re-line-end)
+    every template the document merely references. See :func:`_already_on_disk`.
+
     Raises:
         HTTPException 422: the document is not a usable ``PromptDefinition``,
             ``default_variant`` names no variant, or a variant has no messages.
@@ -435,10 +471,17 @@ def build_write_set(
             at a disallowed suffix, or at a file that does not exist. Phase 4a
             never creates a file.
         HTTPException 409: two messages reference the same template file with
-            different content -- a file has one body.
+            different content (a file has one body), or a file-backed message
+            arrived with ``readable: false`` -- its ``content`` is the empty
+            placeholder the loader substituted, not the file's body.
     """
     base = Path(prompts_dir)
     files: dict[Path, str] = {}
+    #: Every file-backed body, before the unchanged ones are filtered out.
+    #: Kept separate from *files* so the "one file, one body" check below still
+    #: sees a second message pointing at a template the first one left
+    #: unchanged.
+    bodies: dict[Path, str] = {}
 
     document: dict[str, Any] = {
         "name": request.name,
@@ -458,9 +501,28 @@ def build_write_set(
                         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                         detail="A file-backed message must name a file",
                     )
+                if not message.readable:
+                    # The loader substitutes content="" for a template it could
+                    # not read or decode (a latin-1 file, say). Writing that
+                    # back would truncate the real file to nothing -- silently,
+                    # because a save changing only the prompt's NAME still
+                    # carries every template body along with it. Design §5.1
+                    # sanctions surfacing a broken reference, not overwriting
+                    # it. Refuse, and name what the operator has to fix first.
+                    raise HTTPException(
+                        status_code=status.HTTP_409_CONFLICT,
+                        detail=(
+                            f"The template file {message.file!r} could not be read when "
+                            f"this prompt was loaded, so the editor is holding an empty "
+                            f"body for it, not its real text. Saving would overwrite the "
+                            f"file with nothing. Repair the file on disk -- check that it "
+                            f"exists and is valid UTF-8 -- then reload this prompt and "
+                            f"save again."
+                        ),
+                    )
                 # Raises 400/404 when it escapes, is disallowed, or is absent.
                 target = resolve_template_file(base, prompt_path, message.file)
-                existing = files.get(target)
+                existing = bodies.get(target)
                 if existing is not None and existing != message.content:
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
@@ -470,7 +532,7 @@ def build_write_set(
                             f"them at a different file, or make the two bodies identical."
                         ),
                     )
-                files[target] = message.content
+                bodies[target] = message.content
                 messages.append({"role": message.role, "file": message.file})
             else:
                 messages.append({"role": message.role, "text": message.content})
@@ -487,9 +549,13 @@ def build_write_set(
 
     _validate_document(document)
 
-    files[Path(prompt_path)] = document_to_yaml(
-        document, header=schema_header(Path(prompt_path), base)
-    )
+    for target, text in bodies.items():
+        if not _already_on_disk(target, text):
+            files[target] = text
+
+    yaml_text = document_to_yaml(document, header=schema_header(Path(prompt_path), base))
+    if not _already_on_disk(Path(prompt_path), yaml_text):
+        files[Path(prompt_path)] = yaml_text
     return files
 
 
