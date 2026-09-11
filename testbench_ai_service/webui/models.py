@@ -209,3 +209,46 @@ class ApplyResponse(BaseModel):
     # the failure is the log path itself, the service log may be exactly what
     # cannot be written to -- this field is then the operator's only channel.
     reload_detail: str | None = None
+
+
+class PromptMessageDoc(BaseModel):
+    """One message, with its body resolved whether inline or external.
+
+    Defined here (Task 5) rather than in Task 6, which uses it, because Task 5's
+    renderer needs the type first. Task 6 does not redefine it.
+    """
+
+    role: Literal["system", "user", "assistant"] = "user"
+    source: Literal["inline", "file"] = "inline"
+    #: The reference as written in the YAML, when source is "file".
+    file: str | None = None
+    content: str = ""
+    #: False when source is "file" but the file could not be read. The document
+    #: still loads, so the operator can see and repair the broken reference.
+    readable: bool = True
+
+
+class LintError(BaseModel):
+    """One Jinja syntax error, addressed for an editor gutter."""
+
+    line: int
+    column: int
+    message: str
+
+
+class LintResponse(BaseModel):
+    ok: bool
+    #: Jinja reports one TemplateSyntaxError at a time, so this holds zero or
+    #: one entry. It is a list because that is the shape an editor's diagnostic
+    #: API wants, and widening it later would be a breaking change.
+    errors: list[LintError] = []
+
+
+class RenderedMessage(BaseModel):
+    role: str
+    content: str
+    error: str | None = None
+
+
+class RenderResponse(BaseModel):
+    messages: list[RenderedMessage] = []
