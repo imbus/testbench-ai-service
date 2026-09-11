@@ -28,6 +28,45 @@ function mapVariant(
   }
 }
 
+/**
+ * Set a message's content, propagating to every other message that shares its
+ * template file.
+ *
+ * `build_write_set` guarantees two messages naming the same `file` start out
+ * with identical content, and 409s a save otherwise. A template file has one
+ * body, so editing it through any message that points at it must change every
+ * message across the whole document that points at it -- not just the one at
+ * `(variant, index)` -- or the draft can drift into two bodies for one file
+ * and the save will 409.
+ */
+function setMessageContent(
+  doc: PromptDocument,
+  variantName: string,
+  index: number,
+  content: string,
+): PromptDocument {
+  const target = doc.variants.find((v) => v.name === variantName)?.messages[index]
+  if (!target) return doc
+
+  if (target.source !== 'file' || !target.file) {
+    return mapVariant(doc, variantName, (v) => ({
+      ...v,
+      messages: v.messages.map((m, i) => (i === index ? { ...m, content } : m)),
+    }))
+  }
+
+  const file = target.file
+  return {
+    ...doc,
+    variants: doc.variants.map((v) => ({
+      ...v,
+      messages: v.messages.map((m) =>
+        m.source === 'file' && m.file === file ? { ...m, content } : m,
+      ),
+    })),
+  }
+}
+
 export function promptDraftReducer(
   state: PromptDocument,
   action: PromptDraftAction,
@@ -86,11 +125,14 @@ export function promptDraftReducer(
         ...v,
         vars: {
           ...v.vars,
-          // PromptVariableDefinition refuses `choices` on any non-enum type, so
-          // the reducer clears them rather than letting the save 422.
+          // PromptVariableDefinition.validate_choices enforces both edges: `choices`
+          // is refused on any non-enum type, and required (non-empty) on `enum`. The
+          // reducer clears them on the non-enum side; on the enum side it normalises
+          // null/absent to an empty-but-present array so the form has something to
+          // render and the "enum needs choices" validation (VarDeclTable) can surface.
           [action.key]:
             action.decl.value_type === 'enum'
-              ? action.decl
+              ? { ...action.decl, choices: action.decl.choices ?? [] }
               : { ...action.decl, choices: null },
         },
       }))
@@ -118,6 +160,10 @@ export function promptDraftReducer(
 
     case 'moveMessage':
       return mapVariant(state, action.variant, (v) => {
+        // Both ends must be bounds-checked: an out-of-range `index` makes
+        // `splice(index, 1)` remove nothing, so `moved` is `undefined` and gets
+        // inserted -- corrupting the array with an undefined message.
+        if (action.index < 0 || action.index >= v.messages.length) return v
         if (action.to < 0 || action.to >= v.messages.length) return v
         const messages = [...v.messages]
         const [moved] = messages.splice(action.index, 1)
@@ -132,12 +178,7 @@ export function promptDraftReducer(
       }))
 
     case 'setMessageContent':
-      return mapVariant(state, action.variant, (v) => ({
-        ...v,
-        messages: v.messages.map((m, i) =>
-          i === action.index ? { ...m, content: action.content } : m,
-        ),
-      }))
+      return setMessageContent(state, action.variant, action.index, action.content)
 
     default:
       return state

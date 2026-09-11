@@ -48,6 +48,13 @@ describe('variants', () => {
     // PromptDefinition requires at least one; the UI must not build an invalid doc.
     expect(reduce(base, { type: 'removeVariant', name: 'A' }).variants).toHaveLength(1)
   })
+  it('repoints default_variant to the first remaining variant when the default is removed', () => {
+    const two = reduce(base, { type: 'addVariant', name: 'B' })
+    expect(two.default_variant).toBe('A')
+    const next = reduce(two, { type: 'removeVariant', name: 'A' })
+    expect(next.variants.map((v) => v.name)).toEqual(['B'])
+    expect(next.default_variant).toBe('B')
+  })
 })
 
 describe('variables', () => {
@@ -71,6 +78,17 @@ describe('variables', () => {
     })
     // PromptVariableDefinition rejects choices on a non-enum type.
     expect(next.variants[0].vars.tone.choices).toBeNull()
+  })
+  it('normalises a null choices to an empty array when the type becomes enum', () => {
+    let next = reduce(base, { type: 'addVar', variant: 'A', key: 'tone' })
+    // addVar's default decl has value_type 'string' and choices null.
+    next = reduce(next, {
+      type: 'editVar', variant: 'A', key: 'tone',
+      decl: { ...next.variants[0].vars.tone, value_type: 'enum' },
+    })
+    // PromptVariableDefinition.validate_choices requires non-empty choices on
+    // 'enum'; null would 422 the save, so the reducer must not pass it through.
+    expect(next.variants[0].vars.tone.choices).toEqual([])
   })
 })
 
@@ -96,12 +114,67 @@ describe('messages', () => {
     expect(reduce(base, { type: 'moveMessage', variant: 'A', index: 0, to: -1 })).toEqual(base)
     expect(reduce(base, { type: 'moveMessage', variant: 'A', index: 1, to: 2 })).toEqual(base)
   })
+  it('ignores a move whose source index is out of range, without corrupting the array', () => {
+    const next = reduce(base, { type: 'moveMessage', variant: 'A', index: 5, to: 0 })
+    expect(next).toEqual(base)
+    expect(next.variants[0].messages).toHaveLength(2)
+    expect(next.variants[0].messages.every((m) => m !== undefined)).toBe(true)
+  })
+  it('ignores a move whose source index is negative', () => {
+    // A negative index would otherwise hit JS's negative-splice semantics and
+    // silently move the last message instead of being a no-op.
+    expect(reduce(base, { type: 'moveMessage', variant: 'A', index: -1, to: 0 })).toEqual(base)
+  })
   it('removes a message', () => {
     expect(reduce(base, { type: 'removeMessage', variant: 'A', index: 0 }).variants[0].messages).toHaveLength(1)
   })
   it('refuses to remove the last message', () => {
     const one = reduce(base, { type: 'removeMessage', variant: 'A', index: 0 })
     expect(reduce(one, { type: 'removeMessage', variant: 'A', index: 0 }).variants[0].messages).toHaveLength(1)
+  })
+})
+
+describe('shared template files', () => {
+  // build_write_set guarantees two messages naming the same `file` start out
+  // identical, and 409s otherwise -- so editing one must edit both, or the
+  // draft drifts into a state the backend will refuse to save.
+  const shared: PromptDocument = {
+    ...base,
+    variants: [
+      base.variants[0],
+      {
+        name: 'B', description: null, model: null, vars: {},
+        messages: [
+          { role: 'system', source: 'file', file: 'sys.jinja', content: 'S', readable: true },
+        ],
+      },
+    ],
+  }
+
+  it('editing a file-backed message updates a message in another variant sharing the same file', () => {
+    const next = reduce(shared, { type: 'setMessageContent', variant: 'A', index: 0, content: 'S2' })
+    expect(next.variants[0].messages[0].content).toBe('S2')
+    expect(next.variants[1].messages[0].content).toBe('S2')
+  })
+
+  it('editing an inline message does not touch any other message', () => {
+    const next = reduce(shared, { type: 'setMessageContent', variant: 'A', index: 1, content: 'U2' })
+    expect(next.variants[0].messages[1].content).toBe('U2')
+    expect(next.variants[0].messages[0].content).toBe('S')
+    expect(next.variants[1].messages[0].content).toBe('S')
+  })
+
+  it('names the shared template exactly once after such an edit', () => {
+    const next = reduce(shared, { type: 'setMessageContent', variant: 'B', index: 0, content: 'S3' })
+    expect(changedFiles(shared, next)).toEqual(['sys.jinja'])
+  })
+
+  it('leaves no divergence between the two messages sharing a file after an edit', () => {
+    const next = reduce(shared, { type: 'setMessageContent', variant: 'A', index: 0, content: 'S4' })
+    const contents = next.variants.flatMap((v) =>
+      v.messages.filter((m) => m.source === 'file' && m.file === 'sys.jinja').map((m) => m.content),
+    )
+    expect(contents).toEqual(['S4', 'S4'])
   })
 })
 
