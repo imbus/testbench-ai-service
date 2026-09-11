@@ -128,6 +128,30 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const [diagnostics, setDiagnosticsMap] = useState<Record<number, LintError[]>>({})
   const [linting, setLinting] = useState(false)
   const [lintChecked, setLintChecked] = useState(false)
+
+  /** Every prior lint result is invalid: a variant switch, a document reset,
+   * a removed message, or a reordering (`diagnostics` is keyed by index, so
+   * a shifted index would otherwise annotate a message that never produced
+   * that error -- worse than no marker at all). `lintChecked` goes with it,
+   * so a stale "no syntax errors" cannot survive either. */
+  const clearDiagnostics = () => {
+    setDiagnosticsMap({})
+    setLintChecked(false)
+  }
+
+  /** Only the edited message's own result is invalid -- the operator changed
+   * exactly that text, so every OTHER message's still-correct result (and
+   * still points at the right message, since editing content changes no
+   * index) is worth keeping rather than discarding wholesale. */
+  const dropDiagnostic = (index: number) => {
+    setDiagnosticsMap((current) => {
+      if (!(index in current)) return current
+      const next = { ...current }
+      delete next[index]
+      return next
+    })
+    setLintChecked(false)
+  }
   // The normalized document the reducer was last `reset` from -- what the
   // draft is diffed against. NOT `document.data` directly: on the very render
   // where the query first resolves, `document.data` is already the loaded
@@ -153,8 +177,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     const normalized = normalizeDocument(document.data, docLang, agentKey)
     originalRef.current = normalized
     dispatch({ type: 'reset', document: normalized })
-    setDiagnosticsMap({})
-    setLintChecked(false)
+    clearDiagnostics()
   }, [document.data, docLang, agentKey])
 
   const original = originalRef.current
@@ -412,8 +435,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
                   setSelectedVariant(v.name)
                   // A message index means something different in a
                   // different variant's own message list.
-                  setDiagnosticsMap({})
-                  setLintChecked(false)
+                  clearDiagnostics()
                 }}
                 style={{
                   border: flagged ? '1px solid #a33a2b' : '1px solid var(--color-divider)',
@@ -520,14 +542,26 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
           lang={lang}
           diagnostics={diagnostics}
           onAdd={() => dispatch({ type: 'addMessage', variant: variantName })}
-          onRemove={(index) => dispatch({ type: 'removeMessage', variant: variantName, index })}
-          onMove={(from, to) => dispatch({ type: 'moveMessage', variant: variantName, index: from, to })}
+          onRemove={(index) => {
+            dispatch({ type: 'removeMessage', variant: variantName, index })
+            // Every remaining entry's index now names a different message
+            // than the one it was computed for -- clearing is honest;
+            // remapping would be guessing which message shifted where.
+            clearDiagnostics()
+          }}
+          onMove={(from, to) => {
+            dispatch({ type: 'moveMessage', variant: variantName, index: from, to })
+            clearDiagnostics()
+          }}
           onRole={(index, role: MessageRole) =>
             dispatch({ type: 'setMessageRole', variant: variantName, index, role })
           }
-          onContent={(index, content) =>
+          onContent={(index, content) => {
             dispatch({ type: 'setMessageContent', variant: variantName, index, content })
-          }
+            // Only THIS message's own result is invalid -- it changed no
+            // index, so every other message's result still points correctly.
+            dropDiagnostic(index)
+          }}
         />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

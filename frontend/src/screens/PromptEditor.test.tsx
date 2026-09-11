@@ -666,6 +666,73 @@ describe('linting', () => {
       lintCalls().every((call) => (call[1] as RequestInit | undefined)?.method === 'POST'),
     ).toBe(true)
   })
+
+  // A lint result is a snapshot of the content at the moment it ran. Editing,
+  // removing, or reordering messages afterward must not leave a stale (or,
+  // worse, mis-pointed) marker behind for the operator to trust by mistake.
+  describe('invalidating a stale result', () => {
+    function flagBroken() {
+      lintResponder = (content) =>
+        content.includes('BROKEN')
+          ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+          : { ok: true, errors: [] }
+    }
+
+    it("clears a message's own error marker once its content is edited", async () => {
+      flagBroken()
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      await userEvent.type(screen.getByLabelText('user'), 'BROKEN')
+      await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+      // The operator has changed exactly this text; the old result about it
+      // must not still be showing.
+      await userEvent.type(screen.getByLabelText('user'), '!')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('clears every diagnostic when a message is removed, rather than shifting them onto the wrong message', async () => {
+      flagBroken()
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      await userEvent.type(screen.getByLabelText('user'), 'BROKEN')
+      await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+      // Remove the OTHER message -- proves the whole map is cleared, not
+      // merely reindexed around the one actually removed.
+      const rows = screen.getAllByTestId('message-row')
+      await userEvent.click(within(rows[0]).getByRole('button', { name: /^remove$/i }))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('clears every diagnostic when messages are reordered', async () => {
+      flagBroken()
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      await userEvent.type(screen.getByLabelText('user'), 'BROKEN')
+      await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+      await userEvent.click(screen.getAllByRole('button', { name: /move (up|down)/i })[0])
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('does not keep a stale "no syntax errors" result after an edit', async () => {
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+      await waitFor(() => expect(screen.getByText('No syntax errors.')).toBeInTheDocument())
+
+      await userEvent.type(screen.getByLabelText('user'), '!')
+      expect(screen.queryByText('No syntax errors.')).not.toBeInTheDocument()
+    })
+  })
 })
 
 // Every test above pins lang="en" to keep its English-text assertions
