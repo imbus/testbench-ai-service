@@ -18,8 +18,8 @@ effective Service, LLM and Logging configuration.
 
 The console can change the Service, LLM provider and Logging settings, which
 agents run and which prompt each one uses, and which of those decisions a given
-TestBench project overrides. Editing prompt files themselves is still read-only
-from the browser and arrives in a later release.
+TestBench project overrides. It can also edit the prompt files themselves —
+their messages, variables and variants — with a lint and a sandboxed preview.
 
 :::caution
 Changing configuration from the console rewrites `config.toml` on the server.
@@ -256,6 +256,72 @@ again.
 If TestBench could not be asked, the console says so and offers a free-text
 field for typing a project name by hand. The name must match the name in
 TestBench exactly, including spaces and punctuation.
+
+## Prompts
+
+The **Prompts** screen lists every `<language>/<agent>/prompt.yaml` the
+service knows about, grouped by language, with each agent's name and its
+variants. A prompt that fails to parse is listed too, marked with the error
+instead of its variants — a broken prompt still needs to be opened to be
+fixed, so it is never hidden.
+
+Any signed-in session can browse the tree and open a prompt. Editing is
+Administrator-only, same as the rest of the console: a non-admin sees the same
+document with the values displayed rather than as form fields.
+
+### Prompt detail
+
+Selecting a prompt opens an editor for:
+
+- the prompt's **name**, **summary** and **description**;
+- its **default model** and **default variant**;
+- each **variant**'s own model override, its variable declarations, and its
+  Jinja messages, one per role.
+
+A message body is edited in a Jinja-aware code editor. **Lint** checks the
+Jinja syntax and reports the line of the first error; it is available to any
+signed-in session. **Render** evaluates the message against the variant's
+variables and the agent's own context, and is **Administrator-only** —
+unlike lint, it executes the template text, so a non-admin session sees lint
+errors but no Render button. Preview always runs inside a sandboxed Jinja
+environment, whatever the template does.
+
+The **context** pane that Render fills in is built server-side from the real
+Jinja syntax tree of the variant's messages, not guessed in the browser, so
+it always agrees with what a render will actually look up.
+
+:::note
+Renaming or removing a variant that an agent or a project still points at by
+name is refused. The response names the agent or project holding the
+reference. Repoint that agent's (or project's) `prompt.variant` in
+`config.toml` to a variant that will still exist, apply that change, and only
+then rename or remove the old one — a variant name is a free string
+elsewhere in the configuration, so nothing else catches this at save time.
+:::
+
+:::caution
+Saving a prompt rewrites the whole `prompt.yaml` file and does **not**
+preserve comments you added by hand. The prompt editor serializes with
+`PyYAML` rather than a comment-preserving library, unlike the configuration
+editor. Key order and non-ASCII text (German prompt text, for instance) are
+kept, multi-line message text is written back as a literal block scalar, and
+the `# yaml-language-server: $schema=` header is re-emitted — but a comment
+is not data PyYAML round-trips, so it does not survive the first save from
+the console. Keep prompt notes somewhere other than the YAML file if you rely
+on them.
+:::
+
+### What saving does and does not do
+
+Saving writes `prompt.yaml` and, for any message whose text you changed and
+which is already stored in an external file (`source: "file"`), that file —
+both replaced in place, with the previous contents kept as `<file>.bak`
+next to it.
+
+Phase 4a never creates or deletes a file. A message already stored externally
+can be edited but not switched to inline text, and a new message is always
+inline; moving a message's text out to its own file, and forking a whole
+prompt into a new variant file, are not yet available from the console.
 
 ---
 

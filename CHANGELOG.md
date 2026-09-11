@@ -55,8 +55,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `str`, `bool`, `int` and `float`, matching the `number` and `boolean` value types that
   `prompt.yaml` has always been able to declare. Writing `max_findings = 10` previously failed
   validation at startup with "Input should be a valid string".
+- Prompt editing in the web console, for administrators. A new **Prompts** screen lists every
+  `<language>/<agent>/prompt.yaml` the service knows about, including any that fail to parse —
+  shown with the error rather than hidden, so a broken prompt can still be opened and fixed.
+  Selecting one opens a document editor for its name, default model, default variant, and each
+  variant's own model, variable declarations and Jinja messages. **Lint** checks a message's
+  Jinja syntax and is available to any signed-in session; **Render** evaluates it against typed
+  variables and the agent's own context and is Administrator-only, since it executes the
+  template text — always inside a sandboxed Jinja environment. Renaming or removing a variant
+  that an agent or project still points at by name is refused with the referencing agent or
+  project named in the response, so it can be repointed in `config.toml` before the rename is
+  retried. Saving writes `prompt.yaml` and any template file already referenced by a message;
+  phase 4a does not create or delete files, so switching a message between inline and an
+  external file, and forking a prompt, remain for a later release. Documented in
+  `docs/web-console.md`.
 
 ### Changed
+
+- **Saving a prompt from the console rewrites the whole `prompt.yaml` and does not preserve
+  hand-written comments.** The prompt editor writes YAML with `PyYAML` rather than a
+  comment-preserving library — unlike the configuration editor's `config.toml` writer. Key
+  order and German text survive, multi-line message text comes back as a literal block scalar,
+  and the `# yaml-language-server: $schema=` header is re-emitted, but any comment an operator
+  added by hand is gone after the first save from the console. Keep notes for a prompt
+  somewhere other than the file itself, or accept that the console will remove them.
 
 - The console's remaining screens now follow the Claude Design artboard the agents and
   projects screens were rebuilt against. The sign-in screen carries the TestBench lockup on
