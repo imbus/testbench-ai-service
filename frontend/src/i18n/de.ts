@@ -137,6 +137,11 @@ export const de = {
   cancel: 'Abbrechen',
   confirm: 'Bestätigen',
   unsavedChangesWarning: 'Sie haben ungespeicherte Änderungen.',
+  orphanGlobalTable: 'die globale Agenten-Tabelle',
+  orphanProjectPrefix: 'Projekt',
+  unsavedNavTitle: 'Nicht gespeicherte Änderungen',
+  unsavedNavBody: 'Es gibt nicht gespeicherte Änderungen. Ohne Speichern verlassen?',
+  leaveAnyway: 'Trotzdem verlassen',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German

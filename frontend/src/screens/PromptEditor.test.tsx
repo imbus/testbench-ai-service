@@ -7,7 +7,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConfigResponse, PromptDocument, PromptSaveResponse } from '../api/types'
 import type { Lang } from '../i18n'
@@ -127,6 +127,10 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+// A data router, not `<MemoryRouter>`/`<Routes>`: `PromptEditor` calls
+// `useBlocker` unconditionally (Task 15 fix round, Finding 2), which only
+// works inside a data router's context, regardless of whether the component
+// itself sits behind a matched data route.
 function renderEditor({
   agent = 'explainer',
   docLang = 'de',
@@ -136,13 +140,46 @@ function renderEditor({
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
+  const router = createMemoryRouter(
+    [{ path: '/prompts/:lang/:agent', element: <PromptEditor lang={lang} isAdmin={isAdmin} /> }],
+    { initialEntries: [`/prompts/${docLang}/${agent}`] },
+  )
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/prompts/${docLang}/${agent}`]}>
-        <Routes>
-          <Route path="/prompts/:lang/:agent" element={<PromptEditor lang={lang} isAdmin={isAdmin} />} />
-        </Routes>
-      </MemoryRouter>
+      <RouterProvider router={router} />
+    </QueryClientProvider>,
+  )
+}
+
+/** Adds an in-app `<Link>` beside the editor and a second route to land on,
+ * so a test can exercise `useBlocker`'s block on a real router navigation. */
+function renderEditorWithNav({
+  agent = 'explainer',
+  docLang = 'de',
+  isAdmin = true,
+  lang,
+}: { agent?: string; docLang?: string; isAdmin?: boolean; lang?: Lang } = {}) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/prompts/:lang/:agent',
+        element: (
+          <div>
+            <Link to="/elsewhere">Elsewhere</Link>
+            <PromptEditor lang={lang} isAdmin={isAdmin} />
+          </div>
+        ),
+      },
+      { path: '/elsewhere', element: <div data-testid="elsewhere">Elsewhere page</div> },
+    ],
+    { initialEntries: [`/prompts/${docLang}/${agent}`] },
+  )
+  return render(
+    <QueryClientProvider client={client}>
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   )
 }
@@ -305,7 +342,12 @@ describe('saving', () => {
     )
   })
 
-  it('marks the offending field on a 422', async () => {
+  it('marks the offending field on a 422, AND shows it in the still-open dialog', async () => {
+    // The field marker lives in `<section data-testid="prompt-header">`,
+    // which sits BEHIND the confirm dialog's `position:fixed` overlay -- an
+    // operator with the dialog open must see the failure inside it too, or
+    // Confirm silently does nothing from where they are looking (Task 15
+    // review, Finding 1).
     putResult = {
       status: 422,
       detail: "default_variant 'Ghost' names no variant. Available: Thorough, Quick",
@@ -322,7 +364,101 @@ describe('saving', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Default variant')).toHaveAttribute('aria-invalid', 'true'),
     )
-    expect(screen.getByText(/names no variant/)).toBeInTheDocument()
+    // Dialog stays open (does not auto-close on a failed save) and carries
+    // the message itself -- not only the (currently hidden-behind-it) field.
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(within(screen.getByRole('dialog')).getByText(/names no variant/)).toBeInTheDocument()
+  })
+
+  it('marks every variant a 422 names as having no messages', async () => {
+    putResult = {
+      status: 422,
+      detail: 'Every variant needs at least one message. Empty: Quick',
+    }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Quick' })).toHaveAttribute('aria-invalid', 'true'),
+    )
+    expect(screen.getByRole('tab', { name: 'Thorough' })).not.toHaveAttribute('aria-invalid')
+    expect(within(screen.getByRole('dialog')).getByText(/needs at least one message/)).toBeInTheDocument()
+  })
+
+  it('clears a stale 422 field marker once the operator edits that field', async () => {
+    putResult = {
+      status: 422,
+      detail: "default_variant 'Ghost' names no variant. Available: Thorough, Quick",
+    }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Default variant')).toHaveAttribute('aria-invalid', 'true'),
+    )
+
+    await userEvent.selectOptions(screen.getByLabelText('Default variant'), 'Quick')
+    expect(screen.getByLabelText('Default variant')).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('clears a stale 422 field marker when the confirm dialog is cancelled', async () => {
+    putResult = {
+      status: 422,
+      detail: "default_variant 'Ghost' names no variant. Available: Thorough, Quick",
+    }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    let dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Default variant')).toHaveAttribute('aria-invalid', 'true'),
+    )
+
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^cancel$/i }))
+    expect(screen.getByLabelText('Default variant')).not.toHaveAttribute('aria-invalid')
+
+    // Reopening Save must not resurrect the stale marker either.
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    dialog = await screen.findByRole('dialog')
+    expect(screen.getByLabelText('Default variant')).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('does not replace the editor with an error page when a background refetch fails', async () => {
+    // `useSavePrompt`'s `onSuccess` invalidates the document query; if THAT
+    // refetch fails, react-query keeps the last good `data` and only flips
+    // `isError` -- this must show as an inline banner, not the fatal
+    // load-failure guard, or a successful save's own aftermath would destroy
+    // the screen the operator is looking at.
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    const dialog = await screen.findByRole('dialog')
+
+    docBody = null // the next GET (the post-save refetch) 404s
+    await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
+
+    await waitFor(() => expect(screen.getAllByRole('alert').length).toBeGreaterThan(0))
+    // Still the editor, not the fatal guard's full-page error.
+    expect(screen.getByTestId('prompt-editor')).toBeInTheDocument()
+    expect(promptName()).toBeInTheDocument()
   })
 })
 
@@ -346,6 +482,106 @@ describe('unsaved changes', () => {
     const event = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(event)
     expect(event.defaultPrevented).toBe(false)
+  })
+
+  // Pins the exact bug fixed in the first round: on the render where
+  // `document.data` first arrives, `draft` has not been `reset` yet, so
+  // diffing against the raw query data (rather than `originalRef.current`)
+  // read as spuriously dirty for one render -- long enough to register a
+  // `beforeunload` listener nothing actually justified. `ready()`'s own
+  // `waitFor` lets that whole loading -> loaded cascade settle before this
+  // asserts, so a regression here would show as a `'beforeunload'` call this
+  // spy catches, not as a failed dispatch-and-check (the false-negative shape
+  // the two tests above cannot rule out by themselves).
+  it('never registers a beforeunload listener across a clean load', async () => {
+    const addSpy = vi.spyOn(window, 'addEventListener')
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    expect(addSpy.mock.calls.some((call) => call[0] === 'beforeunload')).toBe(false)
+  })
+
+  it('blocks an in-app navigation while dirty, and cancelling stays on the editor', async () => {
+    renderEditorWithNav({ lang: 'en' })
+    await ready()
+
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByRole('heading', { name: /unsaved changes/i })).toBeInTheDocument()
+
+    await userEvent.click(within(dialog).getByRole('button', { name: /^cancel$/i }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('elsewhere')).not.toBeInTheDocument()
+    expect(screen.getByTestId('prompt-editor')).toBeInTheDocument()
+  })
+
+  it('leaves the editor on an in-app navigation when the operator confirms', async () => {
+    renderEditorWithNav({ lang: 'en' })
+    await ready()
+
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^leave anyway$/i }))
+
+    await waitFor(() => expect(screen.getByTestId('elsewhere')).toBeInTheDocument())
+    expect(screen.queryByTestId('prompt-editor')).not.toBeInTheDocument()
+  })
+
+  it('does not block an in-app navigation when the draft is clean', async () => {
+    renderEditorWithNav({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Elsewhere' }))
+    await waitFor(() => expect(screen.getByTestId('elsewhere')).toBeInTheDocument())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('variant controls', () => {
+  it('adds a variant', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.type(screen.getByLabelText('New variant name'), 'Extra')
+    await userEvent.click(screen.getByRole('button', { name: /^add variant$/i }))
+    expect(screen.getByRole('tab', { name: 'Extra' })).toBeInTheDocument()
+  })
+
+  it('removes the selected variant', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Quick' }))
+    // Scoped: MessageList renders its own per-row "Remove" button, and
+    // `Quick`'s one message means there is one on screen at the same time.
+    const actions = screen.getByTestId('variant-actions')
+    await userEvent.click(within(actions).getByRole('button', { name: /^remove$/i }))
+    expect(screen.queryByRole('tab', { name: 'Quick' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Thorough' })).toBeInTheDocument()
+  })
+
+  it('renames the selected variant', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.clear(screen.getByLabelText('Variant name'))
+    await userEvent.type(screen.getByLabelText('Variant name'), 'Renamed')
+    expect(screen.getByRole('tab', { name: 'Renamed' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Thorough' })).not.toBeInTheDocument()
+  })
+
+  it('sets the selected variant model', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.type(screen.getByLabelText('Variant model'), 'gpt-5.5-mini')
+    expect(screen.getByLabelText('Variant model')).toHaveValue('gpt-5.5-mini')
   })
 })
 

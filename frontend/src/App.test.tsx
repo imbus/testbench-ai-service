@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from './App'
 import * as sessionState from './state/session'
@@ -33,6 +33,10 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks())
 
+// A data router, not `<MemoryRouter>`: `PromptEditor`'s `useBlocker` (Task 15
+// fix round, Finding 2) only works inside one, and the two `/prompts` route
+// tests below mount it. `App`'s own nested `<Routes>` tree needs no change to
+// sit under this single catch-all data route -- see main.tsx's own comment.
 const renderApp = ({
   isAdmin = false,
   route = '/admin/status',
@@ -44,11 +48,10 @@ const renderApp = ({
     tb_server_url: 'https://tb:9443/api/',
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  const router = createMemoryRouter([{ path: '*', element: <App /> }], { initialEntries: [route] })
   return render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[route]}>
-        <App />
-      </MemoryRouter>
+      <RouterProvider router={router} />
     </QueryClientProvider>,
   )
 }

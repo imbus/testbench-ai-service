@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useBlocker, useParams } from 'react-router-dom'
+import type { Scope } from '../api/agents'
 import { ApiError } from '../api/client'
 import { useSavePrompt } from '../api/mutations'
 import { agentsUsingVariant } from '../api/prompts'
@@ -8,7 +9,7 @@ import type { MessageRole, PromptDocument, PromptVarDecl } from '../api/types'
 import { MessageList } from '../components/MessageList'
 import { RenderPreview } from '../components/RenderPreview'
 import { VarDeclTable } from '../components/VarDeclTable'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslations, type Lang, type Translations } from '../i18n'
 import { changedFiles, isDirty, promptDraftReducer } from '../state/promptDraft'
 
 function emptyDocument(lang: string, agent: string): PromptDocument {
@@ -70,16 +71,34 @@ function toSaveRequest(doc: PromptDocument) {
   }
 }
 
+type SaveFieldError = { kind: 'default_variant' } | { kind: 'emptyVariants'; names: string[] }
+
 /**
- * Which field a 422's message names, so the form can mark it.
+ * Which control a 422's message names, so the form can mark it.
  *
  * `build_write_set`'s validation errors are prose, not field-addressed JSON
- * (unlike `config/apply`'s `ConfigIssue` list) -- this is the client's own
- * mirror of the one case the editor can act on: an out-of-range
- * `default_variant`, which is a field this screen renders as a single select.
+ * (unlike `config/apply`'s `ConfigIssue` list). This recognizes the two cases
+ * that both name something concrete AND correspond to a single control on
+ * this screen: an out-of-range `default_variant` (the header select), and a
+ * variant with no messages (its tab) -- reachable because this screen lets a
+ * variant's last message be removed, and `MessageList`/this screen's own test
+ * suite exercise a variant that loads with zero messages already.
+ *
+ * Deliberately not a general parser: matching English server prose is
+ * brittle by construction. Any 422 this does not recognize still surfaces
+ * verbatim in the confirm dialog -- it is simply not pinned to one control.
  */
-function fieldFromSaveError(message: string): 'default_variant' | null {
-  return message.startsWith('default_variant') ? 'default_variant' : null
+function fieldFromSaveError(message: string): SaveFieldError | null {
+  if (message.startsWith('default_variant')) return { kind: 'default_variant' }
+  const empty = /^Every variant needs at least one message\. Empty: (.+)$/.exec(message)
+  if (empty) return { kind: 'emptyVariants', names: empty[1].split(', ').map((s) => s.trim()) }
+  return null
+}
+
+/** Localizes one `agentsUsingVariant` scope. Only the project name (a wire
+ * token, like an agent key) stays untranslated. */
+function referenceLabel(t: Translations, scope: Scope): string {
+  return scope.kind === 'global' ? t.orphanGlobalTable : `${t.orphanProjectPrefix} '${scope.project}'`
 }
 
 export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: boolean }) {
@@ -99,7 +118,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
   const [newVariantName, setNewVariantName] = useState('')
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [saveFieldError, setSaveFieldError] = useState<string | null>(null)
+  const [saveFieldError, setSaveFieldError] = useState<SaveFieldError | null>(null)
   // The normalized document the reducer was last `reset` from -- what the
   // draft is diffed against. NOT `document.data` directly: on the very render
   // where the query first resolves, `document.data` is already the loaded
@@ -145,8 +164,24 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     return () => window.removeEventListener('beforeunload', handler)
   }, [dirty, t.unsavedChangesWarning])
 
+  // Blocks an IN-APP navigation (a `<Link>`/`NavLink` click elsewhere in the
+  // console) the same way the effect above blocks a tab close or refresh.
+  // Needs a data router -- see main.tsx and dev/preview.tsx, both switched to
+  // `createBrowserRouter`/`RouterProvider` for this. `beforeunload` above is
+  // kept alongside this, not replaced by it: `useBlocker` has no say over a
+  // tab close or a refresh, since neither is a router navigation.
+  const blocker = useBlocker(dirty)
+
+  // `document.isLoading` is only true on the FIRST load. A failed refetch
+  // after this screen's own successful save (`useSavePrompt`'s
+  // `invalidateQueries`) sets `document.isError` while `document.data` still
+  // holds the last good document -- react-query does not clear `data` just
+  // because a background refetch failed. Treating `isError` as fatal here
+  // would replace the whole editor, unsaved edits included, with an error
+  // page over a refetch the operator never asked for. Only the absence of any
+  // successfully loaded document is fatal.
   if (document.isLoading) return <div style={{ padding: 28 }}>…</div>
-  if (document.isError || !document.data) {
+  if (!document.data) {
     const detail = (document.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
@@ -159,6 +194,11 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       </div>
     )
   }
+  // A document loaded, but the `reset` effect above has not yet run against
+  // it (see `originalRef`'s own comment) -- without this guard, this render
+  // would paint the OLD draft (the initial empty document, or a previous
+  // agent's) under the NEW document's header for exactly one frame.
+  if (!original) return <div style={{ padding: 28 }}>…</div>
 
   const disk = config.data?.disk ?? {}
 
@@ -170,16 +210,24 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const vars = selectedVariantObj?.vars ?? {}
   const messages = selectedVariantObj?.messages ?? []
 
-  const files = original ? changedFiles(original, draft) : []
+  // A blank name never belongs in the confirm list: `changedFiles` always
+  // names `draft.file`, which `normalizeDocument` defaults to `''` for a
+  // document that loaded without one.
+  const files = changedFiles(original, draft).filter((file) => file !== '')
 
   // Names the draft dropped since the load -- renamed away or removed
   // outright -- mirrored against `config.disk` exactly as the server's own
   // guard (§5.5) will, so the operator sees the same refusal *before*
-  // confirming rather than only after a 409. Guarded against `original` (the
-  // reducer's own reset document, always field-defaulted -- see
-  // `normalizeDocument`) rather than the raw `document.data`, which a 200 with
-  // a missing `variants` field would otherwise crash `.map` on.
-  const orphanWarnings = (original?.variants ?? [])
+  // confirming rather than only after a 409.
+  //
+  // Narrower than the server's own check, by construction: this only walks
+  // variant names that were present in the LOADED document, so a
+  // `config.toml` entry pointing at a variant this document never contained
+  // (a stale reference, or a typo) gets no client-side warning here -- only
+  // the server's 409 catches that case. Acceptable: it is the server that is
+  // authoritative, and this is a best-effort warning ahead of it, not a
+  // replacement for it.
+  const orphanWarnings = original.variants
     .map((v) => v.name)
     .filter((name) => !draft.variants.some((v) => v.name === name))
     .map((name) => ({ name, referencedBy: agentsUsingVariant(disk, agentKey, name) }))
@@ -204,6 +252,14 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     })
   }
 
+  const closeConfirm = () => {
+    setConfirmOpen(false)
+    // A stale 422 marker must not survive past the dialog the operator saw
+    // it in -- reopening Save on an unrelated later edit would otherwise
+    // still show the old server text and an invalid `default_variant`.
+    setSaveFieldError(null)
+  }
+
   const headerReadOnly = !isAdmin
 
   return (
@@ -220,6 +276,16 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
           {agentKey} · {docLang} · {draft.file}
         </div>
       </div>
+
+      {/* A background refetch failure (e.g. the tree/document invalidation
+          this screen's own successful save triggers) -- NOT the fatal
+          load-failure guard above, which only fires when no document has
+          ever loaded. The draft stays exactly as it was. */}
+      {document.isError && (
+        <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
+          {t.promptDocError}
+        </div>
+      )}
 
       <section
         className="blueprint"
@@ -263,12 +329,19 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
             className="input"
             id="prompt-default-variant"
             disabled={headerReadOnly}
-            aria-invalid={saveFieldError === 'default_variant' || undefined}
-            aria-describedby={saveFieldError === 'default_variant' ? 'default-variant-issue' : undefined}
-            value={draft.default_variant}
-            onChange={(event) =>
-              dispatch({ type: 'setHeader', field: 'default_variant', value: event.target.value })
+            aria-invalid={saveFieldError?.kind === 'default_variant' || undefined}
+            aria-describedby={
+              saveFieldError?.kind === 'default_variant' ? 'default-variant-issue' : undefined
             }
+            value={draft.default_variant}
+            onChange={(event) => {
+              // Clears a stale 422 marker the moment the operator actually
+              // edits the field it was marking -- otherwise it would persist
+              // (with the old server text) past a fix that has already made
+              // it wrong.
+              setSaveFieldError(null)
+              dispatch({ type: 'setHeader', field: 'default_variant', value: event.target.value })
+            }}
             style={{ maxWidth: 260 }}
           >
             {draft.variants.map((v) => (
@@ -277,7 +350,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
               </option>
             ))}
           </select>
-          {saveFieldError === 'default_variant' && saveErrorMessage && (
+          {saveFieldError?.kind === 'default_variant' && saveErrorMessage && (
             <span id="default-variant-issue" role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
               {saveErrorMessage}
             </span>
@@ -287,31 +360,44 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
 
       <section className="blueprint" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <div role="tablist" aria-label={t.variants} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {draft.variants.map((v) => (
-            <button
-              key={v.name}
-              type="button"
-              role="tab"
-              className="tb-chip"
-              aria-selected={v.name === variantName}
-              onClick={() => setSelectedVariant(v.name)}
-              style={{
-                border: '1px solid var(--color-divider)',
-                padding: '4px 12px',
-                font: 'inherit',
-                fontSize: 13,
-                background: v.name === variantName ? 'var(--color-accent)' : 'transparent',
-                color: v.name === variantName ? 'var(--color-bg)' : 'inherit',
-                cursor: 'pointer',
-              }}
-            >
-              {v.name}
-            </button>
-          ))}
+          {draft.variants.map((v) => {
+            const flagged =
+              saveFieldError?.kind === 'emptyVariants' && saveFieldError.names.includes(v.name)
+            return (
+              <button
+                key={v.name}
+                type="button"
+                role="tab"
+                className="tb-chip"
+                aria-selected={v.name === variantName}
+                aria-invalid={flagged || undefined}
+                onClick={() => setSelectedVariant(v.name)}
+                style={{
+                  border: flagged ? '1px solid #a33a2b' : '1px solid var(--color-divider)',
+                  padding: '4px 12px',
+                  font: 'inherit',
+                  fontSize: 13,
+                  background: v.name === variantName ? 'var(--color-accent)' : 'transparent',
+                  color: v.name === variantName ? 'var(--color-bg)' : 'inherit',
+                  cursor: 'pointer',
+                }}
+              >
+                {v.name}
+              </button>
+            )
+          })}
         </div>
+        {saveFieldError?.kind === 'emptyVariants' && saveErrorMessage && (
+          <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
+            {saveErrorMessage}
+          </span>
+        )}
 
         {isAdmin && selectedVariantObj && (
-          <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div
+            data-testid="variant-actions"
+            style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}
+          >
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <label htmlFor="variant-name" style={{ fontSize: 12 }}>
                 {t.variantName}
@@ -462,23 +548,28 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
               <div role="alert" style={{ fontSize: 12, color: '#a33a2b', display: 'flex', flexDirection: 'column', gap: 4 }}>
                 {orphanWarnings.map((entry) => (
                   <div key={entry.name} data-testid={`orphan-${entry.name}`}>
-                    {t.confirmSaveOrphanWarning} {entry.name} — {entry.referencedBy.join(', ')}
+                    {t.confirmSaveOrphanWarning} {entry.name} —{' '}
+                    {entry.referencedBy.map((scope) => referenceLabel(t, scope)).join(', ')}
                   </div>
                 ))}
               </div>
             )}
 
-            {/* A field-specific 422 is already shown beside that field; a
-                generic failure (409, or anything not field-addressed) is
-                shown here instead of a duplicate. */}
-            {saveErrorMessage && !saveFieldError && (
+            {/* Always shown on a save failure, field-marked or not (Task 15
+                review, Finding 1): the field marker beside `default_variant`
+                sits in `<section data-testid="prompt-header">`, which is
+                BEHIND this dialog's `position:fixed` overlay -- an operator
+                who has this dialog open would otherwise see literally nothing
+                happen when Confirm 422s. Duplicating the text here is far
+                cheaper than that silence. */}
+            {saveErrorMessage && (
               <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
                 {saveErrorMessage}
               </div>
             )}
 
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => setConfirmOpen(false)}>
+              <button type="button" className="btn btn-secondary" onClick={closeConfirm}>
                 {t.cancel}
               </button>
               <button
@@ -488,6 +579,46 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
                 disabled={save.isPending}
               >
                 {save.isPending ? t.saving : t.confirm}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {blocker.state === 'blocked' && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={t.unsavedNavTitle}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,.45)',
+            display: 'grid',
+            placeItems: 'center',
+            padding: 24,
+            zIndex: 20,
+          }}
+        >
+          <div
+            className="card"
+            style={{
+              background: 'var(--color-bg)',
+              width: 'min(480px, 100%)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              padding: 20,
+            }}
+          >
+            <h3 style={{ margin: 0 }}>{t.unsavedNavTitle}</h3>
+            <div style={{ fontSize: 13 }}>{t.unsavedNavBody}</div>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn btn-secondary" onClick={() => blocker.reset?.()}>
+                {t.cancel}
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => blocker.proceed?.()}>
+                {t.leaveAnyway}
               </button>
             </div>
           </div>

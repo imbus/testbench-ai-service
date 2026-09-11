@@ -57,11 +57,13 @@ describe('mergeContext', () => {
 describe('agentsUsingVariant', () => {
   it('finds a global reference', () => {
     const disk = { agents: { explainer: { prompt: { variant: 'A' } } } }
-    expect(agentsUsingVariant(disk, 'explainer', 'A')).toEqual(['the global agents table'])
+    expect(agentsUsingVariant(disk, 'explainer', 'A')).toEqual([{ kind: 'global' }])
   })
   it('finds a project override', () => {
     const disk = { projects: { Alpha: { agents: { explainer: { prompt: { variant: 'A' } } } } } }
-    expect(agentsUsingVariant(disk, 'explainer', 'A')).toEqual(["project 'Alpha'"])
+    expect(agentsUsingVariant(disk, 'explainer', 'A')).toEqual([
+      { kind: 'project', project: 'Alpha' },
+    ])
   })
   it('ignores a different variant', () => {
     const disk = { agents: { explainer: { prompt: { variant: 'B' } } } }

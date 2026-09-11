@@ -141,4 +141,9 @@ export const en = {
   cancel: 'Cancel',
   confirm: 'Confirm',
   unsavedChangesWarning: 'You have unsaved changes.',
+  orphanGlobalTable: 'the global agents table',
+  orphanProjectPrefix: 'project',
+  unsavedNavTitle: 'Unsaved changes',
+  unsavedNavBody: 'You have unsaved changes. Leave without saving?',
+  leaveAnyway: 'Leave anyway',
 } as const

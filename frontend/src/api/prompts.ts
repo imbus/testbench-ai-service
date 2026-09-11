@@ -1,3 +1,4 @@
+import type { Scope } from './agents'
 import type { PromptDocument, PromptMessageDoc, PromptVariantDoc } from './types'
 
 export function variantByName(doc: PromptDocument, name: string): PromptVariantDoc | undefined {
@@ -48,22 +49,28 @@ function variantOf(block: unknown): string | null {
 }
 
 /**
- * Which config keys name *variant* for *agentKey*, as operator-facing labels.
+ * Which config keys name *variant* for *agentKey*, as structured scopes.
  *
  * The client-side mirror of the server's guard, so the editor can warn before
  * a save is refused with a 409. `disk` is unvalidated TOML: a bad shape must
  * cost a check, not a render.
+ *
+ * Returns `Scope`s rather than pre-built English labels -- the operator-facing
+ * console defaults to German, so a caller must be able to localize "the
+ * global agents table" / "project 'X'" through `useTranslations`, the same as
+ * every other piece of console prose. Only the project NAME (a wire token,
+ * like an agent key) survives untranslated.
  */
 export function agentsUsingVariant(
   disk: Record<string, unknown>,
   agentKey: string,
   variant: string,
-): string[] {
-  const labels: string[] = []
+): Scope[] {
+  const refs: Scope[] = []
 
   const agents = disk?.agents
   if (isRecord(agents) && variantOf(agents[agentKey]) === variant) {
-    labels.push('the global agents table')
+    refs.push({ kind: 'global' })
   }
 
   const projects = disk?.projects
@@ -72,9 +79,9 @@ export function agentsUsingVariant(
       if (!isRecord(block)) continue
       const projectAgents = block.agents
       if (!isRecord(projectAgents)) continue
-      if (variantOf(projectAgents[agentKey]) === variant) labels.push(`project '${name}'`)
+      if (variantOf(projectAgents[agentKey]) === variant) refs.push({ kind: 'project', project: name })
     }
   }
 
-  return labels
+  return refs
 }
