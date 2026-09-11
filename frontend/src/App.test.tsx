@@ -475,3 +475,28 @@ describe('the phase 3 routes', () => {
     )
   })
 })
+
+describe('the phase 4a prompt routes', () => {
+  it('renders the prompt tree at /prompts', async () => {
+    renderApp({ isAdmin: true, route: '/prompts' })
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'Prompts' })).toBeInTheDocument(),
+    )
+  })
+
+  it('renders the prompt editor at /prompts/:lang/:agent', async () => {
+    renderApp({ isAdmin: true, route: '/prompts/de/explainer' })
+    // The stubbed fetch answers every call with the /meta payload, so the
+    // document query resolves to a 200 whose body has none of PromptDocument's
+    // fields -- the same "malformed but truthy" shape the tree screen's own
+    // guard (task 14) had to defend against. Reaching the editor's own testid
+    // rather than crashing, or falling through to the Status redirect, is
+    // what proves the route matched AND the field-level defaulting holds.
+    await waitFor(() => expect(screen.getByTestId('prompt-editor')).toBeInTheDocument())
+  })
+
+  it('keeps the prompt editor reachable for a non-admin session', async () => {
+    renderApp({ isAdmin: false, route: '/prompts/de/explainer' })
+    await waitFor(() => expect(screen.getByTestId('prompt-editor')).toBeInTheDocument())
+  })
+})

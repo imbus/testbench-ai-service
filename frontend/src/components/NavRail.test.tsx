@@ -98,6 +98,21 @@ it('leaves the badge off when nothing is overridden', () => {
   expect(screen.getByRole('link', { name: /Projekte/ })).toHaveTextContent(/^Projekte$/)
 })
 
+it('offers the prompt editor at /prompts', () => {
+  renderNav(true)
+  expect(screen.getByRole('link', { name: /Prompts/ })).toHaveAttribute('href', '/prompts')
+})
+
+it('keeps the prompt editor readable for a non-admin', () => {
+  // Read-only for a non-admin, like Agents and Projects: hiding the link
+  // would conceal information the operator is allowed to see.
+  renderNav(false)
+  expect(screen.getByRole('link', { name: /Prompts/ })).not.toHaveAttribute(
+    'aria-disabled',
+    'true',
+  )
+})
+
 it('orders agents and projects after the config sections and before the raw file', () => {
   renderNav(true)
   const labels = screen.getAllByRole('link').map((link) => link.textContent ?? '')

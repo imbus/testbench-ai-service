@@ -59,8 +59,17 @@ export const NAV_ITEMS: NavItem[] = [
     icon: 'M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z',
     adminOnly: false,
   },
-  // The artboard puts Prompts here, between Projects and this rule. It is
-  // phase 4's screen; the rule it sits above is the artboard's and stays.
+  {
+    key: 'prompts',
+    path: '/prompts',
+    labelKey: 'prompts',
+    icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
+    // Read-only for a non-admin, like Agents and Projects: the tree and the
+    // editor both render through VarDeclTable/MessageList/read-only fields
+    // rather than hiding the nav entry, which would conceal information the
+    // operator is allowed to see.
+    adminOnly: false,
+  },
   {
     key: 'raw',
     path: '/admin/raw',

@@ -9,6 +9,8 @@ import { Agents } from './screens/Agents'
 import { ConfigSection } from './screens/ConfigSection'
 import { Login } from './screens/Login'
 import { Projects } from './screens/Projects'
+import { PromptEditor } from './screens/PromptEditor'
+import { Prompts } from './screens/Prompts'
 import { Raw } from './screens/Raw'
 import { Status } from './screens/Status'
 import type { ConfigIssue } from './api/types'
@@ -172,6 +174,16 @@ export function App() {
                 }
               />
               <Route path="/admin/raw" element={<Raw lang={lang} />} />
+              {/* Not under /admin: Prompts.tsx's own links already point here
+                  (task 14), matching the brief's routing. Both ungated, like
+                  Agents and Projects -- a non-admin sees the tree and the
+                  editor read-only rather than losing the nav entry, which
+                  would conceal information they are allowed to read. */}
+              <Route path="/prompts" element={<Prompts lang={lang} />} />
+              <Route
+                path="/prompts/:lang/:agent"
+                element={<PromptEditor lang={lang} isAdmin={session.is_admin} />}
+              />
               <Route path="*" element={<Navigate to="/admin/status" replace />} />
             </Routes>
           </main>
