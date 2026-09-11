@@ -17,15 +17,13 @@ import tempfile
 from pathlib import Path
 
 from fastapi import HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from testbench_ai_service.log import logger
 
 
 class MultiWriteResult(BaseModel):
     """What a completed :func:`write_all` did."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     written: list[Path] = []
     #: target -> the ``.bak`` holding its previous contents. Absent for a file
@@ -120,5 +118,4 @@ def _roll_back(result: MultiWriteResult, failed: Path) -> None:
             result.rolled_back.append(done)
         except OSError as e:  # pragma: no cover - best effort, already failing
             logger.error("Could not roll %s back after a failed write: %s", done, e)
-    result.written.clear()
     logger.error("Write of %s failed; rolled back %d file(s)", failed, len(result.rolled_back))
