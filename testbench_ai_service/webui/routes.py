@@ -679,8 +679,21 @@ async def fork_prompt(
 
     plan = build_fork(prompts_dir, source, lang, agent, body.directory, body.project)
 
-    plan.target_dir.mkdir(parents=True)
-    result = write_all(dict(plan.files))
+    # exist_ok=True: build_fork already refused an existing target_dir with a
+    # 409 one line above; a fork racing in between would otherwise turn that
+    # into an uncaught FileExistsError (500) instead of the same 409.
+    plan.target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        result = write_all(dict(plan.files))
+    except HTTPException:
+        # write_all rolls back the files it already staged/wrote, but the
+        # directory itself is its caller's to clean up -- exactly what
+        # rollback_fork's rmdir does. Without this, a write failure here
+        # (disk full, a locked file) leaves an empty directory behind that
+        # permanently blocks every future fork to this same target with a
+        # 409, since build_fork refuses to fork into a directory that exists.
+        rollback_fork((), plan.target_dir)
+        raise
 
     edits = {
         join_path(["projects", body.project, "agents", agent, "prompt", "file"]): plan.config_value
@@ -701,15 +714,35 @@ async def fork_prompt(
         raise
 
     reloaded = False
+    reload_detail: str | None = None
     try:
         on_disk = read_config_file(config_path)
     except HTTPException as e:
+        # The write already committed (write_atomic already returned). Same
+        # reasoning as apply_config: this is reported on the 200, never raised.
         logger.error("Forked, but could not re-read %s: %s", config_path, e.detail)
+        reload_detail = (
+            f"Forked, but could not re-read the configuration to verify the reload: {e.detail}"
+        )
     else:
-        reloaded_config, _issues = validate_config_dict(on_disk)
+        reloaded_config, issues = validate_config_dict(on_disk)
         if reloaded_config is not None:
             reloaded_config.loaded_from = config_path
             reloaded = await hot_reload(request.app, reloaded_config)
+            if not reloaded:
+                reload_detail = (
+                    "Forked, but the in-process reload completed with degraded results; "
+                    "check the service log if it is currently writable."
+                )
+        else:
+            # Should be unreachable: the same dict validated moments ago inside
+            # _plan_change. If it happens, the file on disk is the one that is
+            # right and the operator needs to know the process did not follow.
+            logger.error("Forked and wrote %s but could not reload it: %s", config_path, issues)
+            reasons = "; ".join(issue.message for issue in issues)
+            reload_detail = (
+                f"Forked, but the configuration failed re-validation before reload: {reasons}"
+            )
 
     return PromptForkResponse(
         lang=lang,
@@ -718,6 +751,7 @@ async def fork_prompt(
         created=[str(p) for p in result.written],
         config_backup=str(backup) if backup is not None else None,
         reloaded=reloaded,
+        reload_detail=reload_detail,
     )
 
 

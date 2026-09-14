@@ -1,4 +1,5 @@
 import textwrap
+from pathlib import Path
 
 import pytest
 
@@ -110,3 +111,41 @@ def test_a_tree_without_a_config_still_lists_its_prompts(tmp_path):
 
     tree = build_tree(tmp_path, None)
     assert tree.languages[0].prompts[0].used_by == []
+
+
+def test_used_by_survives_a_relative_prompts_dir(tmp_path, monkeypatch):
+    """Important 2: resolve_prompt_file always returns a RESOLVED path (it goes
+    through resolve_within -> Path.resolve()), but build_tree's own
+    prompt_path came from an unresolved base -- config.toml's prompts_dir need
+    only exist(), not be absolute. Comparing an unresolved prompt_path against
+    a resolved candidate silently drops every used_by under a relative (or
+    symlinked) prompts_dir, with no error anywhere.
+    """
+    prompts_root = tmp_path / "prompts"
+    agent = prompts_root / "de" / "explainer"
+    agent.mkdir(parents=True)
+    (agent / "prompt.yaml").write_text(MINIMAL_PROMPT, encoding="utf-8")
+
+    monkeypatch.chdir(tmp_path)
+    relative = Path("prompts")
+    tree = build_tree(
+        relative, {"agents": {"explainer": {"prompt": {"file": "explainer/prompt.yaml"}}}}
+    )
+    entry = tree.languages[0].prompts[0]
+    assert [(u.agent, u.project) for u in entry.used_by] == [("explainer", None)]
+
+
+def test_used_by_does_not_bleed_into_the_other_language(prompts_dir):
+    """A matcher indistinguishable from `return True` would pass every other
+    used_by test here, since each of them has exactly one candidate prompt.
+    The two-language fixture is what actually exercises the matcher's
+    specificity: the config below resolves to `de/explainer/prompt.yaml`
+    only, so `en/explainer` -- a distinct file, same agent key -- must come
+    back with an empty `used_by`.
+    """
+    tree = build_tree(
+        prompts_dir, {"agents": {"explainer": {"prompt": {"file": "explainer/prompt.yaml"}}}}
+    )
+    by_lang = {language.lang: language.prompts[0] for language in tree.languages}
+    assert [(u.agent, u.project) for u in by_lang["de"].used_by] == [("explainer", None)]
+    assert by_lang["en"].used_by == []

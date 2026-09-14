@@ -360,6 +360,11 @@ class PromptForkResponse(BaseModel):
     created: list[str] = []
     config_backup: str | None = None
     reloaded: bool = False
+    #: Populated only when `reloaded` is False for a reason other than success.
+    #: Mirrors ApplyResponse.reload_detail: the fork has already committed by
+    #: the time this is decided, so a re-read/re-validation/reload failure here
+    #: is reported on a normal 200, never raised.
+    reload_detail: str | None = None
 
 
 class LintRequest(BaseModel):

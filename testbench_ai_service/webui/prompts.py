@@ -534,11 +534,21 @@ def _usages(prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]) -> li
     becomes a lie the first time someone renames a directory by hand (D4).
     """
 
+    # prompt_path.resolve(), not prompt_path bare: resolve_prompt_file (below)
+    # always returns a resolved path (it goes through resolve_within ->
+    # Path.resolve()), but build_tree's own prompt_path is built from an
+    # UNRESOLVED prompts_dir -- config.toml's prompts_dir need only exist(),
+    # not be absolute or symlink-free. Comparing an unresolved prompt_path
+    # against a resolved candidate would silently never match under a
+    # relative or symlinked prompts_dir, dropping every used_by with no error
+    # (the same resolved-vs-unresolved class of bug Task 4 hit).
+    resolved_prompt_path = prompt_path.resolve()
+
     def matches(lang: str, declared: Any) -> bool:
         if not isinstance(declared, str) or not declared.strip():
             return False
         try:
-            return resolve_prompt_file(prompts_dir, lang, declared) == prompt_path
+            return resolve_prompt_file(prompts_dir, lang, declared) == resolved_prompt_path
         except HTTPException:
             return False
 

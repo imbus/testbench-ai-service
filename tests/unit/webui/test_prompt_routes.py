@@ -152,6 +152,19 @@ class TestTree:
     def test_refuses_an_anonymous_caller(self, client):
         assert client.get("/admin/api/prompts").status_code == 401
 
+    def test_an_unreadable_config_still_lists_the_tree(self, client, login, config_path):
+        """The tree is how an operator would reach a broken prompt to fix it;
+        an unreadable config.toml must not cost them that (routes.py's
+        try/except around read_config_file in read_prompt_tree).
+        """
+        config_path.write_text("not toml [", encoding="utf-8")
+        login(roles=[])
+        response = client.get("/admin/api/prompts")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["languages"][0]["prompts"][0]["agent"] == "explainer"
+        assert body["languages"][0]["prompts"][0]["used_by"] == []
+
 
 class TestDocument:
     def test_returns_the_document_with_template_bodies(self, client, login):
@@ -295,6 +308,46 @@ class TestSave:
         assert response.status_code == 422
         assert (prompt_tree / "de/explainer/prompt.yaml").read_text(encoding="utf-8") == before
 
+    def test_names_a_deleted_template_and_nothing_created(self, client, login, prompt_tree):
+        """PromptSaveResponse.created/deleted/deletions_skipped (Task 6's addition
+        to the PUT -- Task 4 deliberately left them off `save_prompt`'s response).
+        """
+        login(roles=["Administrator"])
+        response = client.put(
+            "/admin/api/prompts/de/explainer",
+            # save_body() carries only the system.jinja message, dropping the
+            # user.jinja one the on-disk document (VALID) declares -- so this
+            # save orphans user.jinja and it must be deleted.
+            json=self.save_body(),
+            headers=csrf(client),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["deleted"] == [str(prompt_tree / "de/explainer/user.jinja")]
+        assert body["created"] == []
+        assert not (prompt_tree / "de/explainer/user.jinja").exists()
+
+    def test_reports_why_a_deletion_was_skipped(self, client, login, prompt_tree):
+        """An unparseable prompt anywhere blocks every deletion (design 5.5) --
+        the save still succeeds, but `deletions_skipped` must say why nothing
+        was removed rather than silently keeping user.jinja with no comment.
+        """
+        broken = prompt_tree / "de" / "broken"
+        broken.mkdir()
+        (broken / "prompt.yaml").write_text("name: [unclosed", encoding="utf-8")
+
+        login(roles=["Administrator"])
+        response = client.put(
+            "/admin/api/prompts/de/explainer",
+            json=self.save_body(),
+            headers=csrf(client),
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["deleted"] == []
+        assert body["deletions_skipped"] is not None
+        assert (prompt_tree / "de/explainer/user.jinja").exists()
+
     def test_a_rename_orphaning_a_reference_is_refused(self, client, login, app, prompt_tree):
         """`_refuse_orphaned_variants` end to end (design D-note in routes.py).
 
@@ -341,6 +394,10 @@ def test_the_plan_route_names_creations_updates_and_deletions(admin_client, prom
     body = response.json()
     assert body["deleted"] == [str(prompt_tree / "de/explainer/user.jinja")]
     assert body["deletions_skipped"] is None
+    # The document itself changed (one message removed), so it is "updated";
+    # system.jinja's content is unchanged, so nothing is "created".
+    assert body["updated"] == [str(prompt_tree / "de/explainer/prompt.yaml")]
+    assert body["created"] == []
 
 
 def test_the_plan_route_touches_nothing(admin_client, prompt_tree):
@@ -352,7 +409,10 @@ def test_the_plan_route_touches_nothing(admin_client, prompt_tree):
 
 def test_the_plan_route_refuses_a_non_admin(client, login):
     login(roles=["Project User"])
-    response = client.post("/admin/api/prompts/de/explainer/plan", json={})
+    # With the CSRF header attached, only require_admin can still produce the
+    # 403 -- without it, the CSRF gate alone would explain the status code and
+    # the admin gate could be silently missing.
+    response = client.post("/admin/api/prompts/de/explainer/plan", json={}, headers=csrf(client))
     assert response.status_code == 403
 
 
@@ -361,6 +421,12 @@ def test_the_plan_route_reports_a_refusal_the_way_the_save_would(admin_client):
         "/admin/api/prompts/de/explainer/plan", json=SAVE_BODY_WITH_BAD_DEFAULT_VARIANT
     )
     assert response.status_code == 422
+
+
+def test_the_plan_route_refuses_a_missing_csrf_header(client, login):
+    login(roles=["Administrator"])
+    response = client.post("/admin/api/prompts/de/explainer/plan", json={})
+    assert response.status_code == 403
 
 
 def test_a_fork_creates_the_files_and_repoints_the_project(admin_client, prompt_tree, config_path):
@@ -388,8 +454,41 @@ def test_a_fork_whose_config_write_fails_removes_what_it_created(
     assert not (prompt_tree / "de/explainer__proj").exists()
 
 
+def test_a_fork_whose_file_write_fails_removes_the_directory_and_unblocks_a_retry(
+    admin_client, prompt_tree, monkeypatch
+):
+    """Important 1: write_all (copying the fork's own files) sat OUTSIDE the
+    try/rollback, so a failure there left an empty target directory behind --
+    build_fork refuses to fork into a directory that already exists, so every
+    later retry would 409 forever until an operator deleted it by hand.
+    """
+
+    def explode(files, deletes=()):
+        raise HTTPException(status_code=400, detail="disk full")
+
+    monkeypatch.setattr("testbench_ai_service.webui.routes.write_all", explode)
+
+    response = admin_client.post("/admin/api/prompts/de/explainer/fork", json={"project": "Proj"})
+    assert response.status_code == 400
+    assert not (prompt_tree / "de/explainer__proj").exists()
+
+    monkeypatch.undo()
+    retry = admin_client.post("/admin/api/prompts/de/explainer/fork", json={"project": "Proj"})
+    assert retry.status_code == 200
+
+
 def test_a_fork_refuses_a_non_admin(client, login):
     login(roles=["Project User"])
+    # See test_the_plan_route_refuses_a_non_admin: the CSRF header must be
+    # present so the 403 can only come from require_admin.
+    response = client.post(
+        "/admin/api/prompts/de/explainer/fork", json={"project": "P"}, headers=csrf(client)
+    )
+    assert response.status_code == 403
+
+
+def test_a_fork_refuses_a_missing_csrf_header(client, login):
+    login(roles=["Administrator"])
     response = client.post("/admin/api/prompts/de/explainer/fork", json={"project": "P"})
     assert response.status_code == 403
 
