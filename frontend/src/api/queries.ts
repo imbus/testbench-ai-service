@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from './client'
+import { fetchModels } from './models'
 import type {
   ConfigResponse,
   LogLine,
   MetaResponse,
-  ModelCatalogue,
   ProjectsResponse,
   PromptDocument,
   PromptMeta,
@@ -112,10 +112,9 @@ export function useModels(
   project?: string,
   { enabled = true }: { enabled?: boolean } = {},
 ) {
-  const query = project ? `?project=${encodeURIComponent(project)}` : ''
   return useQuery({
     queryKey: ['models', project ?? null],
-    queryFn: () => apiFetch<ModelCatalogue>(`/models${query}`),
+    queryFn: () => fetchModels(project),
     staleTime: Infinity,
     enabled,
   })

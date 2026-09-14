@@ -10,6 +10,7 @@ import { MessageList } from '../components/MessageList'
 import { Modal } from '../components/Modal'
 import { RenderPreview } from '../components/RenderPreview'
 import { SavePromptDialog } from '../components/SavePromptDialog'
+import { TestRunPanel } from '../components/TestRunPanel'
 import { VarDeclTable } from '../components/VarDeclTable'
 import { useTranslations, type Lang, type Translations } from '../i18n'
 import { isDirty, promptDraftReducer } from '../state/promptDraft'
@@ -684,6 +685,14 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         messages={messages}
         vars={sampleVars(vars)}
         skeleton={original?.agent_context_skeleton ?? {}}
+        isAdmin={isAdmin}
+        lang={lang}
+      />
+
+      <TestRunPanel
+        messages={messages}
+        vars={sampleVars(vars)}
+        agentContext={original?.agent_context_skeleton ?? {}}
         isAdmin={isAdmin}
         lang={lang}
       />
