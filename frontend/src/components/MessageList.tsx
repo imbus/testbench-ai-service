@@ -1,6 +1,6 @@
 import { CodeEditor } from './CodeEditor'
 import { useTranslations, type Lang } from '../i18n'
-import type { LintError, MessageRole, PromptMessageDoc } from '../api/types'
+import type { LintError, MessageRole, MessageSource, PromptMessageDoc } from '../api/types'
 
 // A wire token round-tripped through the API, not prose -- kept in English
 // regardless of `lang`, matching how Field.tsx never translates `spec.key`.
@@ -34,6 +34,8 @@ function MessageRow({
   onMove,
   onRole,
   onContent,
+  onSource,
+  onFile,
 }: {
   index: number
   message: PromptMessageDoc
@@ -45,9 +47,13 @@ function MessageRow({
   onMove: (to: number) => void
   onRole: (role: MessageRole) => void
   onContent: (content: string) => void
+  onSource: (source: MessageSource) => void
+  onFile: (file: string) => void
 }) {
   const t = useTranslations(lang)
   const roleId = `message-${index}-role`
+  const sourceId = `message-${index}-source`
+  const fileId = `message-${index}-file`
 
   return (
     <div
@@ -79,7 +85,37 @@ function MessageRow({
             ))}
           </select>
         </div>
-        {message.source === 'file' && message.file && (
+        {!readOnly && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label htmlFor={sourceId} style={{ fontSize: 11 }}>
+              {t.messageSourceLabel}
+            </label>
+            <select
+              className="input"
+              id={sourceId}
+              value={message.source}
+              onChange={(event) => onSource(event.target.value as MessageSource)}
+            >
+              <option value="inline">{t.messageSourceInline}</option>
+              <option value="file">{t.messageSourceFile}</option>
+            </select>
+          </div>
+        )}
+        {message.source === 'file' && !readOnly && (
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <label htmlFor={fileId} style={{ fontSize: 11 }}>
+              {t.messageFileLabel}
+            </label>
+            <input
+              className="input"
+              id={fileId}
+              value={message.file ?? ''}
+              onChange={(event) => onFile(event.target.value)}
+              style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}
+            />
+          </div>
+        )}
+        {message.source === 'file' && readOnly && message.file && (
           <span
             className="text-muted"
             style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
@@ -121,6 +157,7 @@ function MessageRow({
 }
 
 export function MessageList({
+  variantName,
   messages,
   readOnly,
   lang = 'de',
@@ -130,7 +167,10 @@ export function MessageList({
   onMove,
   onRole,
   onContent,
+  onSource,
+  onFile,
 }: {
+  variantName: string
   messages: PromptMessageDoc[]
   readOnly?: boolean
   lang?: Lang
@@ -141,6 +181,8 @@ export function MessageList({
   onMove: (from: number, to: number) => void
   onRole: (index: number, role: MessageRole) => void
   onContent: (index: number, content: string) => void
+  onSource: (index: number, source: MessageSource) => void
+  onFile: (index: number, file: string) => void
 }) {
   const t = useTranslations(lang)
 
@@ -159,6 +201,8 @@ export function MessageList({
           onMove={(to) => onMove(index, to)}
           onRole={(role) => onRole(index, role)}
           onContent={(content) => onContent(index, content)}
+          onSource={(source) => onSource(index, source)}
+          onFile={(file) => onFile(index, file)}
         />
       ))}
       {!readOnly && (

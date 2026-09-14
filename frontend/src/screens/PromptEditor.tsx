@@ -607,6 +607,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         />
 
         <MessageList
+          variantName={variantName}
           messages={messages}
           readOnly={!isAdmin}
           lang={lang}
@@ -632,6 +633,12 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
             // index, so every other message's result still points correctly.
             dropDiagnostic(index)
           }}
+          onSource={(index, source) =>
+            dispatch({ type: 'setMessageSource', variant: variantName, index, source })
+          }
+          onFile={(index, file) =>
+            dispatch({ type: 'setMessageFile', variant: variantName, index, file })
+          }
         />
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
