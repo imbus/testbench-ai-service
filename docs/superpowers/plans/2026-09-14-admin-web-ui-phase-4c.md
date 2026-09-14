@@ -903,8 +903,13 @@ class TestResolveProvider:
         assert factory.resolve_provider(config, "gpt-4o") is LLMProvider.OPENAI
 
     def test_falls_back_to_the_configured_provider(self):
+        # class_path is required for CUSTOM by LLMConfig's own validator, and is
+        # inert here: _resolve_provider reads only prompt_model and provider.
         factory = LLMFactory()
-        config = LLMConfig(provider=LLMProvider.CUSTOM)
+        config = LLMConfig(
+            provider=LLMProvider.CUSTOM,
+            class_path="testbench_ai_service.llm.openai.OpenAIClient",
+        )
         assert factory.resolve_provider(config, "something-unknown") is LLMProvider.CUSTOM
 
 
