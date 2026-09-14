@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from testbench_ai_service.llm.base import LLMProvider, RoutingFamily
 from testbench_ai_service.models.config import PromptVarValue
 from testbench_ai_service.models.prompt import PromptVariableDefinition
 
@@ -375,3 +376,24 @@ class RenderRequest(BaseModel):
     messages: list[PromptMessageDoc] = []
     vars: dict[str, PromptVarValue] = {}
     agent_context: dict[str, Any] = {}
+
+
+class CatalogueModel(BaseModel):
+    """One offerable model and the request shape it will be called with."""
+
+    id: str
+    routing: RoutingFamily
+    #: "builtin" comes from a client's own routing set; "config" from
+    #: llm_config.extra_models, which is the only kind the console can remove.
+    source: Literal["builtin", "config"]
+
+
+class CatalogueProvider(BaseModel):
+    provider: LLMProvider
+    #: Whether a credential exists. Presence only, never a value.
+    key_present: bool
+    models: list[CatalogueModel]
+
+
+class ModelCatalogueResponse(BaseModel):
+    providers: list[CatalogueProvider]
