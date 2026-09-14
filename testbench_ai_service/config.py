@@ -313,6 +313,14 @@ class AppConfig(BaseModel):
                     continue
                 raise_field_validation_error(self, ("agents", agent_key, "prompt", "file"), e)
         for proj_key, project in self.projects.items():
+            # The project's own language when it declares one -- matching what
+            # utils.config.get_prompt_config does at runtime. Resolving against
+            # the global language here refused to boot a config the runtime
+            # would have served correctly. Inlined rather than delegated to
+            # get_language_from_config: utils/config.py imports this module.
+            project_language = (
+                project.language.value if project.language is not None else self.language.value
+            )
             for agent_key, agent_override in (project.agents or {}).items():
                 if agent_override.prompt is None or agent_override.prompt.file is None:
                     continue
@@ -320,7 +328,7 @@ class AppConfig(BaseModel):
                     validate_prompt_file(
                         agent_override.prompt.file,
                         prompts_dir=self.prompts_dir,
-                        language=self.language.value,
+                        language=project_language,
                     )
                 except ValueError as e:
                     raise_field_validation_error(
