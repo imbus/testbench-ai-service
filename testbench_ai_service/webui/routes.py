@@ -17,6 +17,7 @@ from testbench_ai_service.webui.auth import (
     require_csrf,
     set_session_cookies,
 )
+from testbench_ai_service.webui.catalogue import build_catalogue
 from testbench_ai_service.webui.config_io import (
     build_config_response,
     read_config_file,
@@ -37,6 +38,7 @@ from testbench_ai_service.webui.models import (
     LoginRequest,
     LogLine,
     MetaResponse,
+    ModelCatalogueResponse,
     PreviewResponse,
     ProjectsResponse,
     PromptDocumentResponse,
@@ -587,6 +589,22 @@ def render_prompt_preview(
     return RenderResponse(
         messages=render_messages(body.messages, dict(body.vars), body.agent_context)
     )
+
+
+@router.get("/models", response_model=ModelCatalogueResponse)
+def read_model_catalogue(
+    project: str | None = None,
+    _session: Session = Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+    config: AppConfig = Depends(get_app_config),
+) -> ModelCatalogueResponse:
+    """Every model the console can offer, grouped by provider.
+
+    Admin-gated despite being a read: it is the catalogue for the one console
+    action that spends money, and it reports which provider credentials are
+    present. Presence only -- no endpoint returns a credential value.
+    """
+    return build_catalogue(config, project)
 
 
 @router.post("/prompts/{lang}/{agent}/plan", response_model=PromptPlanResponse)
