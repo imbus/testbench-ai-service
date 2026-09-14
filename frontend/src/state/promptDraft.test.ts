@@ -282,4 +282,87 @@ describe('message source', () => {
       reduce(doc, { type: 'setMessageSource', variant: 'A', index: 7, source: 'file' }),
     ).toEqual(doc)
   })
+
+  it('deduplicates when two user messages move to file', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'inline', file: null, content: 'first', readable: true },
+      { role: 'user', source: 'inline', file: null, content: 'second', readable: true },
+    ])
+    const next = reduce(doc, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 0,
+      source: 'file',
+    })
+    const msg0 = next.variants[0].messages[0]
+    const msg1 = next.variants[0].messages[1]
+    expect(msg0.source).toBe('file')
+    expect(msg1.source).toBe('inline')
+    expect(msg0.file).toBe('a_user.jinja')
+    expect(msg1.file).toBeNull()
+    expect(msg0.content).toBe('first')
+    expect(msg1.content).toBe('second')
+  })
+
+  it('deduplicates when both messages move to file and would share a base name', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'inline', file: null, content: 'first', readable: true },
+      { role: 'user', source: 'inline', file: null, content: 'second', readable: true },
+    ])
+    let next = reduce(doc, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 0,
+      source: 'file',
+    })
+    next = reduce(next, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 1,
+      source: 'file',
+    })
+    const msg0 = next.variants[0].messages[0]
+    const msg1 = next.variants[0].messages[1]
+    expect(msg0.file).toBe('a_user.jinja')
+    expect(msg1.file).toBe('a_user_2.jinja')
+    expect(msg0.content).toBe('first')
+    expect(msg1.content).toBe('second')
+  })
+
+  it('handles the variant fallback when multiple non-Latin variants slug to "variant"', () => {
+    const docWithNonLatin: PromptDocument = {
+      ...documentWith([
+        { role: 'user', source: 'inline', file: null, content: 'first', readable: true },
+        { role: 'user', source: 'inline', file: null, content: 'second', readable: true },
+      ]),
+      variants: [
+        {
+          name: '中文',
+          description: null,
+          model: null,
+          vars: {},
+          messages: [
+            { role: 'user', source: 'inline', file: null, content: 'first', readable: true },
+            { role: 'user', source: 'inline', file: null, content: 'second', readable: true },
+          ],
+        },
+      ],
+    }
+    let next = reduce(docWithNonLatin, {
+      type: 'setMessageSource',
+      variant: '中文',
+      index: 0,
+      source: 'file',
+    })
+    next = reduce(next, {
+      type: 'setMessageSource',
+      variant: '中文',
+      index: 1,
+      source: 'file',
+    })
+    const msg0 = next.variants[0].messages[0]
+    const msg1 = next.variants[0].messages[1]
+    expect(msg0.file).toBe('variant_user.jinja')
+    expect(msg1.file).toBe('variant_user_2.jinja')
+  })
 })

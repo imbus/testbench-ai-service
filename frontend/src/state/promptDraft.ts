@@ -188,20 +188,48 @@ export function promptDraftReducer(
         if (!current || current.source === action.source) return v
         // The body survives the switch in both directions: it is the same text,
         // and losing it would make the toggle destructive.
-        const next: PromptMessageDoc =
-          action.source === 'file'
-            ? {
-                ...current,
-                source: 'file',
-                file: defaultTemplateName(v.name, current.role),
-                // A file the draft is about to create is readable by construction.
-                readable: true,
-              }
-            : { ...current, source: 'inline', file: null, readable: true }
+        if (action.source !== 'file') {
+          return { ...v, messages: v.messages.map((m, i) => (i === action.index ? { ...current, source: 'inline', file: null, readable: true } : m)) }
+        }
+
+        // Moving to file: deduplicate the generated filename.
+        // Collect every filename already used across all variants.
+        const usedFiles = new Set<string>()
+        for (const variant of state.variants) {
+          for (const msg of variant.messages) {
+            if (msg.source === 'file' && msg.file) usedFiles.add(msg.file)
+          }
+        }
+
+        // Generate a unique filename, suffixing if necessary.
+        let filename = defaultTemplateName(v.name, current.role)
+        if (usedFiles.has(filename)) {
+          const baseName = filename.replace(/\.jinja$/, '')
+          let suffix = 2
+          while (usedFiles.has(`${baseName}_${suffix}.jinja`)) {
+            suffix++
+          }
+          filename = `${baseName}_${suffix}.jinja`
+        }
+
+        const next: PromptMessageDoc = {
+          ...current,
+          source: 'file',
+          file: filename,
+          // A file the draft is about to create is readable by construction.
+          readable: true,
+        }
         return { ...v, messages: v.messages.map((m, i) => (i === action.index ? next : m)) }
       })
 
     case 'setMessageFile':
+      // Deliberately permissive: this backs a controlled text input. A no-op on
+      // collision would freeze the field mid-typing the moment a prefix matched,
+      // which is worse than the problem. The operator typing a name that another
+      // message already uses is a deliberate act, and the server's own message is
+      // clear and actionable: "A file has one body: point one of them at a
+      // different file, or make the two bodies identical". The plan endpoint
+      // surfaces that refusal in the confirm dialog before anything is written.
       return mapVariant(state, action.variant, (v) => ({
         ...v,
         messages: v.messages.map((m, i) =>
