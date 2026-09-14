@@ -22,6 +22,23 @@ class AzureAuthMethod(str, Enum):
         return self.value
 
 
+class RoutingFamily(str, Enum):
+    """How a client shapes the request for a given model.
+
+    Lives in ``base`` rather than in ``routing`` so the clients can name a
+    family without importing ``routing``, which imports them back.
+    """
+
+    CHAT = "chat"
+    REASONING = "reasoning"
+    ADAPTIVE = "adaptive"
+    BUDGET = "budget"
+    FALLBACK = "fallback"
+
+    def __str__(self):
+        return self.value
+
+
 class LLMClient(ABC):
     @abstractmethod
     def __init__(self, api_key: str | None = None, *args, **kwargs):
