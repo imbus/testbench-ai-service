@@ -17,6 +17,10 @@ VALID = textwrap.dedent(
     """
 ).strip()
 
+#: The minimal shape build_write_set/AppConfig accepts -- one variant, one
+#: inline message. Used where a test's prompt content is otherwise irrelevant.
+MINIMAL_PROMPT = VALID
+
 
 @pytest.fixture
 def prompts_dir(tmp_path):
@@ -74,3 +78,35 @@ def test_loose_files_at_the_top_level_are_not_languages(prompts_dir):
 
 def test_a_missing_prompts_dir_is_an_empty_tree(tmp_path):
     assert build_tree(tmp_path / "absent").languages == []
+
+
+def test_a_tree_entry_names_the_config_keys_that_use_it(tmp_path):
+    agent = tmp_path / "de" / "explainer"
+    agent.mkdir(parents=True)
+    (agent / "prompt.yaml").write_text(MINIMAL_PROMPT, encoding="utf-8")
+
+    tree = build_tree(
+        tmp_path,
+        {
+            "agents": {"explainer": {"prompt": {"file": "explainer/prompt.yaml"}}},
+            "projects": {
+                "Car Configurator": {
+                    "agents": {"explainer": {"prompt": {"file": "de/explainer/prompt.yaml"}}}
+                }
+            },
+        },
+    )
+    entry = tree.languages[0].prompts[0]
+    assert {(u.agent, u.project) for u in entry.used_by} == {
+        ("explainer", None),
+        ("explainer", "Car Configurator"),
+    }
+
+
+def test_a_tree_without_a_config_still_lists_its_prompts(tmp_path):
+    agent = tmp_path / "de" / "explainer"
+    agent.mkdir(parents=True)
+    (agent / "prompt.yaml").write_text(MINIMAL_PROMPT, encoding="utf-8")
+
+    tree = build_tree(tmp_path, None)
+    assert tree.languages[0].prompts[0].used_by == []

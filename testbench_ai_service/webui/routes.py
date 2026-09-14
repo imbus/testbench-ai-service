@@ -25,6 +25,7 @@ from testbench_ai_service.webui.config_io import (
 from testbench_ai_service.webui.diff import file_diff
 from testbench_ai_service.webui.document import apply_edits, load_document, render_document
 from testbench_ai_service.webui.edits import merge_edits, validate_edit_paths
+from testbench_ai_service.webui.fork import build_fork, rollback_fork
 from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 from testbench_ai_service.webui.logs import MAX_LIMIT, read_log
 from testbench_ai_service.webui.models import (
@@ -39,7 +40,10 @@ from testbench_ai_service.webui.models import (
     PreviewResponse,
     ProjectsResponse,
     PromptDocumentResponse,
+    PromptForkRequest,
+    PromptForkResponse,
     PromptMetaResponse,
+    PromptPlanResponse,
     PromptSaveRequest,
     PromptSaveResponse,
     PromptTreeResponse,
@@ -49,6 +53,7 @@ from testbench_ai_service.webui.models import (
     StatusResponse,
 )
 from testbench_ai_service.webui.multi_write import write_all
+from testbench_ai_service.webui.paths import join_path
 from testbench_ai_service.webui.projects import (
     fetch_projects_with_token,
     projects_response,
@@ -527,13 +532,21 @@ async def apply_config(
 
 @router.get("/prompts", response_model=PromptTreeResponse)
 def read_prompt_tree(
+    request: Request,
     _session: Session = Depends(current_session),
     config: AppConfig = Depends(get_app_config),
 ) -> PromptTreeResponse:
     """Every prompt on disk, including the ones that do not parse."""
     if config.prompts_dir is None:
         return PromptTreeResponse(languages=[])
-    return build_tree(config.prompts_dir)
+    try:
+        on_disk = read_config_file(Path(request.app.state.config_path))
+    except HTTPException as e:
+        # `used_by` is a labelling nicety; the tree itself is how an operator
+        # reaches a broken prompt. An unreadable config must not cost them that.
+        logger.warning("Listing prompts without usage labels: %s", e.detail)
+        on_disk = {}
+    return build_tree(config.prompts_dir, on_disk)
 
 
 @router.get("/prompts/{lang}/{agent}", response_model=PromptDocumentResponse)
@@ -576,6 +589,36 @@ def render_prompt_preview(
     )
 
 
+@router.post("/prompts/{lang}/{agent}/plan", response_model=PromptPlanResponse)
+def plan_prompt_save(
+    lang: str,
+    agent: str,
+    body: PromptSaveRequest,
+    request: Request,
+    _session: Session = Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+    config: AppConfig = Depends(get_app_config),
+) -> PromptPlanResponse:
+    """What saving *body* would write and remove, without touching anything.
+
+    Mirrors the PUT exactly, refusals included: the dialog has to show what the
+    save will really do, and a plan that downgraded a 422 into a list would be
+    describing a different operation from the one the operator is about to
+    confirm (design D8).
+    """
+    prompts_dir = _require_prompts_dir(config)
+    path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
+    _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
+
+    plan = build_write_set(body, path, prompts_dir)
+    return PromptPlanResponse(
+        created=sorted(str(p) for p in plan.creates),
+        updated=sorted(str(p) for p in plan.writes if p not in plan.creates),
+        deleted=[str(p) for p in plan.deletes],
+        deletions_skipped=plan.deletions_skipped,
+    )
+
+
 @router.put("/prompts/{lang}/{agent}", response_model=PromptSaveResponse)
 def save_prompt(
     lang: str,
@@ -598,7 +641,83 @@ def save_prompt(
     result = write_all(dict(plan.writes), deletes=plan.deletes)
     return PromptSaveResponse(
         written=[str(p) for p in result.written],
+        created=[str(p) for p in result.created],
+        deleted=[str(p) for p in result.deleted],
+        deletions_skipped=plan.deletions_skipped,
         backups=[str(p) for p in result.backups.values()],
+    )
+
+
+@router.post("/prompts/{lang}/{agent}/fork", response_model=PromptForkResponse)
+async def fork_prompt(
+    lang: str,
+    agent: str,
+    body: PromptForkRequest,
+    request: Request,
+    _session: Session = Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+    config: AppConfig = Depends(get_app_config),
+) -> PromptForkResponse:
+    """Copy a prompt for one project and point that project at the copy.
+
+    The copied files land BEFORE the proposed config is validated, and that
+    ordering is forced rather than chosen: ``validate_config_dict`` builds an
+    ``AppConfig``, and ``validate_prompt_paths`` refuses a ``prompt.file`` that
+    is not on disk -- so validating first would reject every fork, including
+    the correct ones.
+
+    What still holds, and what the rollback is for: nothing OUTSIDE the new
+    fork directory is written until the configuration validates, and the
+    directory is removed if either the validation or the config write fails.
+    Removing it is a true undo rather than a best-effort one, because every
+    file in it is new -- there is no previous content that could fail to be
+    restored.
+    """
+    prompts_dir = _require_prompts_dir(config)
+    source = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
+    config_path = Path(request.app.state.config_path)
+
+    plan = build_fork(prompts_dir, source, lang, agent, body.directory, body.project)
+
+    plan.target_dir.mkdir(parents=True)
+    result = write_all(dict(plan.files))
+
+    edits = {
+        join_path(["projects", body.project, "agents", agent, "prompt", "file"]): plan.config_value
+    }
+    try:
+        preview, proposed_text, _has_write = _plan_change(edits, config_path, config)
+        if not preview.valid:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": "The fork would produce a configuration the service cannot load.",
+                    "issues": [issue.model_dump() for issue in preview.issues],
+                },
+            )
+        backup = write_atomic(config_path, proposed_text)
+    except HTTPException:
+        rollback_fork(result.written, plan.target_dir)
+        raise
+
+    reloaded = False
+    try:
+        on_disk = read_config_file(config_path)
+    except HTTPException as e:
+        logger.error("Forked, but could not re-read %s: %s", config_path, e.detail)
+    else:
+        reloaded_config, _issues = validate_config_dict(on_disk)
+        if reloaded_config is not None:
+            reloaded_config.loaded_from = config_path
+            reloaded = await hot_reload(request.app, reloaded_config)
+
+    return PromptForkResponse(
+        lang=lang,
+        agent=plan.agent_dir,
+        file=f"{lang}/{plan.agent_dir}/prompt.yaml",
+        created=[str(p) for p in result.written],
+        config_backup=str(backup) if backup is not None else None,
+        reloaded=reloaded,
     )
 
 

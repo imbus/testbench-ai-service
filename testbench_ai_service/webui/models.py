@@ -255,6 +255,19 @@ class RenderResponse(BaseModel):
     messages: list[RenderedMessage] = []
 
 
+class PromptUsage(BaseModel):
+    """One config key pointing at a prompt file.
+
+    Structured rather than pre-rendered prose: the console defaults to German,
+    so the caller localizes "the global agents table" / "project 'X'". Only the
+    project NAME survives untranslated, the way an agent key does.
+    """
+
+    agent: str
+    #: None for the global agents table, otherwise the project's raw name.
+    project: str | None = None
+
+
 class PromptTreeEntry(BaseModel):
     """One agent's prompt, as the tree screen lists it."""
 
@@ -267,6 +280,10 @@ class PromptTreeEntry(BaseModel):
     #: listed: an operator who cannot see a broken prompt cannot fix it either.
     ok: bool = True
     error: str | None = None
+    #: Which config keys resolve to this file. A labelling nicety, not part of
+    #: the tree's own identity -- an unreadable config.toml leaves this empty
+    #: rather than hiding the entry itself.
+    used_by: list[PromptUsage] = []
 
 
 class PromptTreeLanguage(BaseModel):
@@ -311,8 +328,38 @@ class PromptSaveRequest(BaseModel):
 
 
 class PromptSaveResponse(BaseModel):
+    #: Every file written -- created and updated alike.
     written: list[str] = []
+    #: The subset of *written* that did not exist before.
+    created: list[str] = []
+    deleted: list[str] = []
+    deletions_skipped: str | None = None
     backups: list[str] = []
+
+
+class PromptPlanResponse(BaseModel):
+    """What a save would do, without doing it."""
+
+    created: list[str] = []
+    updated: list[str] = []
+    deleted: list[str] = []
+    #: Why nothing is being deleted, when the tree scan could not be trusted.
+    deletions_skipped: str | None = None
+
+
+class PromptForkRequest(BaseModel):
+    project: str = Field(min_length=1)
+    #: The operator's correction to the final path segment alone, never a path.
+    directory: str | None = None
+
+
+class PromptForkResponse(BaseModel):
+    lang: str
+    agent: str
+    file: str
+    created: list[str] = []
+    config_backup: str | None = None
+    reloaded: bool = False
 
 
 class LintRequest(BaseModel):

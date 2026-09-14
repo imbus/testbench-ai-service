@@ -22,6 +22,7 @@ defeated by ``p.yaml.`` (suffix ``"."``) and ``p.yaml:evil`` (an NTFS alternate
 data stream, suffix ``".yaml:evil"``).
 """
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +32,7 @@ from pydantic import BaseModel, ValidationError
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
+from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.prompt import MessageTemplate, PromptDefinition
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 from testbench_ai_service.webui.models import (
@@ -41,6 +43,7 @@ from testbench_ai_service.webui.models import (
     PromptTreeEntry,
     PromptTreeLanguage,
     PromptTreeResponse,
+    PromptUsage,
     PromptVariantDoc,
     PromptVariantMeta,
 )
@@ -476,13 +479,93 @@ def _message_doc(
     )
 
 
-def build_tree(prompts_dir: Path) -> PromptTreeResponse:
+def _declared_file(block: Any) -> Any:
+    """The ``prompt.file`` value declared in one agent block, or ``None``."""
+    if isinstance(block, dict) and isinstance(block.get("prompt"), dict):
+        return block["prompt"].get("file")
+    return None
+
+
+def _global_usages(
+    agents: Any, language: str, matches: Callable[[str, Any], bool]
+) -> list[PromptUsage]:
+    """Usages from the top-level ``[agents]`` table."""
+    if not isinstance(agents, dict):
+        return []
+    return [
+        PromptUsage(agent=str(key), project=None)
+        for key, block in agents.items()
+        if matches(language, _declared_file(block))
+    ]
+
+
+def _project_usages(
+    projects: Any, language: str, matches: Callable[[str, Any], bool]
+) -> list[PromptUsage]:
+    """Usages from every ``[projects.<name>.agents]`` table.
+
+    Each project resolves against its OWN ``language`` override when it
+    declares one, otherwise the global *language* -- matching what
+    ``AppConfig.validate_prompt_paths`` does at boot (design 5.3/D2).
+    """
+    if not isinstance(projects, dict):
+        return []
+    usages: list[PromptUsage] = []
+    for project_name, project_block in projects.items():
+        if not isinstance(project_block, dict):
+            continue
+        project_language = str(project_block.get("language") or language)
+        project_agents = project_block.get("agents")
+        if not isinstance(project_agents, dict):
+            continue
+        usages.extend(
+            PromptUsage(agent=str(key), project=str(project_name))
+            for key, block in project_agents.items()
+            if matches(project_language, _declared_file(block))
+        )
+    return usages
+
+
+def _usages(prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]) -> list[PromptUsage]:
+    """Which config keys resolve to *prompt_path*.
+
+    Matched on RESOLVED paths, never on the directory's name: a fork's
+    ``<agent>__<slug>`` directory is cosmetic, and a convention parsed as data
+    becomes a lie the first time someone renames a directory by hand (D4).
+    """
+
+    def matches(lang: str, declared: Any) -> bool:
+        if not isinstance(declared, str) or not declared.strip():
+            return False
+        try:
+            return resolve_prompt_file(prompts_dir, lang, declared) == prompt_path
+        except HTTPException:
+            return False
+
+    # An absent `language` key is not "no language" -- it is AppConfig's own
+    # default (LanguageOption.GERMAN), the same value a config.toml that never
+    # mentions `language` boots with. Falling back to "" here would make
+    # resolve_prompt_file refuse `resolve_within(base, "")` outright (its own
+    # empty-path guard), so a bare "explainer/prompt.yaml" declaration -- the
+    # normal, unprefixed spelling -- would never match anything.
+    language = str(on_disk.get("language") or LanguageOption.GERMAN.value)
+    return _global_usages(on_disk.get("agents"), language, matches) + _project_usages(
+        on_disk.get("projects"), language, matches
+    )
+
+
+def build_tree(prompts_dir: Path, on_disk: dict[str, Any] | None = None) -> PromptTreeResponse:
     """Every ``<lang>/<agent>/prompt.yaml`` under *prompts_dir*.
 
     A file that does not parse is listed with ``ok=False`` and a reason rather
     than omitted or raised: one broken prompt must not hide the other seven,
     and an operator who cannot see a broken prompt in the console cannot fix it
     there either.
+
+    *on_disk* is the config's raw ``[testbench-ai-service]`` table, used only to
+    label each entry's ``used_by``. It is optional, and ``None`` is treated the
+    same as ``{}``: an unreadable ``config.toml`` must not cost the operator the
+    tree itself, which is how they would reach a broken prompt to fix it.
     """
     base = Path(prompts_dir)
     if not base.is_dir():
@@ -496,20 +579,23 @@ def build_tree(prompts_dir: Path) -> PromptTreeResponse:
             prompt_path = agent_dir / "prompt.yaml"
             if not prompt_path.is_file():
                 continue
-            entries.append(_tree_entry(agent_dir.name, prompt_path, base))
+            entries.append(_tree_entry(agent_dir.name, prompt_path, base, on_disk or {}))
         if entries:
             languages.append(PromptTreeLanguage(lang=language_dir.name, prompts=entries))
 
     return PromptTreeResponse(languages=languages)
 
 
-def _tree_entry(agent: str, prompt_path: Path, prompts_dir: Path) -> PromptTreeEntry:
+def _tree_entry(
+    agent: str, prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]
+) -> PromptTreeEntry:
     relative = prompt_path.relative_to(prompts_dir).as_posix()
+    used_by = _usages(prompt_path, prompts_dir, on_disk)
     try:
         meta = read_prompt_meta(prompt_path, prompts_dir)
     except HTTPException as e:
         return PromptTreeEntry(
-            agent=agent, file=relative, ok=False, error=str(e.detail), variants=[]
+            agent=agent, file=relative, ok=False, error=str(e.detail), variants=[], used_by=used_by
         )
     return PromptTreeEntry(
         agent=agent,
@@ -517,6 +603,7 @@ def _tree_entry(agent: str, prompt_path: Path, prompts_dir: Path) -> PromptTreeE
         name=meta.name,
         variants=[variant.name for variant in meta.variants],
         ok=True,
+        used_by=used_by,
     )
 
 

@@ -1,6 +1,10 @@
 import textwrap
+from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
+
+from testbench_ai_service.webui.models import ConfigIssue, PreviewResponse
 
 VALID = textwrap.dedent(
     """
@@ -12,8 +16,46 @@ VALID = textwrap.dedent(
         messages:
           - role: "system"
             file: "system.jinja"
+          - role: "user"
+            file: "user.jinja"
     """
 ).strip()
+
+#: What a save posting SAVE_BODY_DROPPING_USER_JINJA would do to the on-disk
+#: document: drop the "user" message, leaving the template it pointed at
+#: unreferenced and therefore deletable (design 5.5).
+SAVE_BODY_DROPPING_USER_JINJA = {
+    "name": "Erklärer",
+    "default_model": "gpt-5.5",
+    "default_variant": "A",
+    "variants": [
+        {
+            "name": "A",
+            "messages": [
+                {
+                    "role": "system",
+                    "source": "file",
+                    "file": "system.jinja",
+                    "content": "Du bist {{ agent.role }}",
+                }
+            ],
+        }
+    ],
+}
+
+#: A document whose default_variant names no variant at all -- refused by
+#: `_validate_document` the same way for both the plan route and the save.
+SAVE_BODY_WITH_BAD_DEFAULT_VARIANT = {
+    "name": "Erklärer",
+    "default_model": "gpt-5.5",
+    "default_variant": "Absent",
+    "variants": [
+        {
+            "name": "A",
+            "messages": [{"role": "system", "source": "inline", "file": None, "content": "hallo"}],
+        }
+    ],
+}
 
 
 def csrf(client) -> dict[str, str]:
@@ -27,17 +69,78 @@ def csrf(client) -> dict[str, str]:
 
 
 @pytest.fixture
-def prompts_dir(tmp_path):
+def prompt_tree(tmp_path):
     agent = tmp_path / "de" / "explainer"
     agent.mkdir(parents=True)
     (agent / "prompt.yaml").write_text(VALID, encoding="utf-8")
     (agent / "system.jinja").write_text("Du bist {{ agent.role }}", encoding="utf-8")
+    (agent / "user.jinja").write_text("Nutzer-Text", encoding="utf-8")
     return tmp_path
 
 
 @pytest.fixture
-def app(make_app, prompts_dir):
-    return make_app(prompts_dir=str(prompts_dir))
+def config_path(prompt_tree) -> Path:
+    """A config.toml pointing ``prompts_dir`` at *prompt_tree*.
+
+    A fork's proposed config is validated by building a real ``AppConfig``
+    (``validate_config_dict``), which resolves every ``prompt.file`` against
+    ``prompts_dir`` -- so the fork tests need that field to name the same
+    directory the running app was built with, not the module's real prompts
+    directory a bare, path-less config.toml would default to.
+    """
+    path = prompt_tree / "config.toml"
+    path.write_text(
+        f'[testbench-ai-service]\nprompts_dir = "{prompt_tree.resolve().as_posix()}"\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+@pytest.fixture
+def app(make_app, prompt_tree, config_path):
+    application = make_app(prompts_dir=str(prompt_tree))
+    application.state.config_path = config_path
+    return application
+
+
+class _AdminClient:
+    """A signed-in admin client that attaches the CSRF header automatically.
+
+    Mirrors what the console's own fetch wrapper does (it reads the cookie
+    ``login`` sets and adds it to every mutating request) -- see the module's
+    ``csrf()`` helper, which every other test class in this file calls by
+    hand. The plan/fork tests read like an operator's request rather than an
+    HTTP fixture, so this fixture, not another explicit header, is what makes
+    that possible.
+    """
+
+    def __init__(self, client):
+        self._client = client
+
+    def _headers(self) -> dict[str, str]:
+        token = self._client.cookies.get("tbai_admin_csrf")
+        return {"X-CSRF-Token": token} if token else {}
+
+    def get(self, url, **kwargs):
+        return self._client.get(url, **kwargs)
+
+    def post(self, url, **kwargs):
+        kwargs.setdefault("headers", self._headers())
+        return self._client.post(url, **kwargs)
+
+    def put(self, url, **kwargs):
+        kwargs.setdefault("headers", self._headers())
+        return self._client.put(url, **kwargs)
+
+    def delete(self, url, **kwargs):
+        kwargs.setdefault("headers", self._headers())
+        return self._client.delete(url, **kwargs)
+
+
+@pytest.fixture
+def admin_client(client, login):
+    login(roles=["Administrator"])
+    return _AdminClient(client)
 
 
 class TestTree:
@@ -155,7 +258,7 @@ class TestSave:
             ],
         }
 
-    def test_writes_the_yaml_and_the_template(self, client, login, prompts_dir):
+    def test_writes_the_yaml_and_the_template(self, client, login, prompt_tree):
         login(roles=["Administrator"])
         response = client.put(
             "/admin/api/prompts/de/explainer",
@@ -163,7 +266,7 @@ class TestSave:
             headers=csrf(client),
         )
         assert response.status_code == 200
-        assert (prompts_dir / "de/explainer/system.jinja").read_text(
+        assert (prompt_tree / "de/explainer/system.jinja").read_text(
             encoding="utf-8"
         ) == "Neuer Text"
 
@@ -181,18 +284,18 @@ class TestSave:
         response = client.put("/admin/api/prompts/de/explainer", json=self.save_body())
         assert response.status_code == 403
 
-    def test_an_invalid_document_writes_nothing(self, client, login, prompts_dir):
+    def test_an_invalid_document_writes_nothing(self, client, login, prompt_tree):
         login(roles=["Administrator"])
-        before = (prompts_dir / "de/explainer/prompt.yaml").read_text(encoding="utf-8")
+        before = (prompt_tree / "de/explainer/prompt.yaml").read_text(encoding="utf-8")
         response = client.put(
             "/admin/api/prompts/de/explainer",
             json=self.save_body(variant_name="A") | {"default_variant": "Absent"},
             headers=csrf(client),
         )
         assert response.status_code == 422
-        assert (prompts_dir / "de/explainer/prompt.yaml").read_text(encoding="utf-8") == before
+        assert (prompt_tree / "de/explainer/prompt.yaml").read_text(encoding="utf-8") == before
 
-    def test_a_rename_orphaning_a_reference_is_refused(self, client, login, app, prompts_dir):
+    def test_a_rename_orphaning_a_reference_is_refused(self, client, login, app, prompt_tree):
         """`_refuse_orphaned_variants` end to end (design D-note in routes.py).
 
         The global agents table points ``explainer`` at variant "A". Renaming
@@ -200,7 +303,7 @@ class TestSave:
         nothing -- ``get_prompt_variant`` would then silently fall back to
         ``default_variant`` instead of erroring, so the save must be refused.
         """
-        config_file = prompts_dir / "config.toml"
+        config_file = prompt_tree / "config.toml"
         config_file.write_text(
             textwrap.dedent(
                 """
@@ -227,3 +330,97 @@ class TestSave:
         assert response.status_code == 409
         assert "the global agents table" in response.json()["detail"]
         assert "'A'" in response.json()["detail"]
+
+
+def test_the_plan_route_names_creations_updates_and_deletions(admin_client, prompt_tree):
+    response = admin_client.post(
+        "/admin/api/prompts/de/explainer/plan",
+        json=SAVE_BODY_DROPPING_USER_JINJA,
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["deleted"] == [str(prompt_tree / "de/explainer/user.jinja")]
+    assert body["deletions_skipped"] is None
+
+
+def test_the_plan_route_touches_nothing(admin_client, prompt_tree):
+    before = (prompt_tree / "de/explainer/prompt.yaml").read_bytes()
+    admin_client.post("/admin/api/prompts/de/explainer/plan", json=SAVE_BODY_DROPPING_USER_JINJA)
+    assert (prompt_tree / "de/explainer/prompt.yaml").read_bytes() == before
+    assert (prompt_tree / "de/explainer/user.jinja").exists()
+
+
+def test_the_plan_route_refuses_a_non_admin(client, login):
+    login(roles=["Project User"])
+    response = client.post("/admin/api/prompts/de/explainer/plan", json={})
+    assert response.status_code == 403
+
+
+def test_the_plan_route_reports_a_refusal_the_way_the_save_would(admin_client):
+    response = admin_client.post(
+        "/admin/api/prompts/de/explainer/plan", json=SAVE_BODY_WITH_BAD_DEFAULT_VARIANT
+    )
+    assert response.status_code == 422
+
+
+def test_a_fork_creates_the_files_and_repoints_the_project(admin_client, prompt_tree, config_path):
+    response = admin_client.post(
+        "/admin/api/prompts/de/explainer/fork", json={"project": "Car Configurator"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["agent"] == "explainer__car-configurator"
+    assert (prompt_tree / "de/explainer__car-configurator/prompt.yaml").is_file()
+    written = config_path.read_text(encoding="utf-8")
+    assert "de/explainer__car-configurator/prompt.yaml" in written
+
+
+def test_a_fork_whose_config_write_fails_removes_what_it_created(
+    admin_client, prompt_tree, monkeypatch
+):
+    def explode(path, text):
+        raise HTTPException(status_code=400, detail="no")
+
+    monkeypatch.setattr("testbench_ai_service.webui.routes.write_atomic", explode)
+
+    response = admin_client.post("/admin/api/prompts/de/explainer/fork", json={"project": "Proj"})
+    assert response.status_code == 400
+    assert not (prompt_tree / "de/explainer__proj").exists()
+
+
+def test_a_fork_refuses_a_non_admin(client, login):
+    login(roles=["Project User"])
+    response = client.post("/admin/api/prompts/de/explainer/fork", json={"project": "P"})
+    assert response.status_code == 403
+
+
+def test_a_fork_producing_an_unloadable_config_removes_what_it_created(
+    admin_client, prompt_tree, monkeypatch
+):
+    """Ruling P1's other failure path: validation runs AFTER the files exist."""
+
+    def invalid(edits, config_path, running):
+        return (
+            PreviewResponse(
+                valid=False,
+                issues=[
+                    ConfigIssue(
+                        path="projects.Proj",
+                        message="nope",
+                        toml_section="[testbench-ai-service.projects.Proj]",
+                    )
+                ],
+                diffs=[],
+                restart_required=[],
+                in_flight_tasks=0,
+                toml="",
+            ),
+            "",
+            True,
+        )
+
+    monkeypatch.setattr("testbench_ai_service.webui.routes._plan_change", invalid)
+
+    response = admin_client.post("/admin/api/prompts/de/explainer/fork", json={"project": "Proj"})
+    assert response.status_code == 422
+    assert not (prompt_tree / "de/explainer__proj").exists()
