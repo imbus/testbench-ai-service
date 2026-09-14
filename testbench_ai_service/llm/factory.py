@@ -8,7 +8,7 @@ from testbench_ai_service.llm.azure_auth import (
     create_token_provider,
     resolve_entra_credentials,
 )
-from testbench_ai_service.llm.base import AzureAuthMethod, LLMClient, LLMProvider
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMClient, LLMProvider, RoutingFamily
 from testbench_ai_service.llm.openai import AzureOpenAIClient, OpenAIClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import LLMConfig
@@ -74,6 +74,33 @@ class LLMFactory:
             self._clients[global_key] = self._create_client(provider, config, credential)
 
         return self._clients[global_key]
+
+    def has_project_credential(
+        self, project_name: str, provider: LLMProvider, config: LLMConfig
+    ) -> bool:
+        """Whether a project-specific credential exists for this provider.
+
+        A thin wrapper over the exact call ``get_client`` makes, so the console
+        can report which credential a run used without restating the
+        environment-variable naming rules (design D4). A credential resolver
+        that raises is reported as "no project credential" rather than
+        propagating: this is a reporting aid, and the real failure surfaces on
+        the call itself.
+        """
+        try:
+            return self._get_project_credential(project_name, provider, config) is not None
+        except Exception:
+            return False
+
+    def resolve_provider(self, config: LLMConfig, prompt_model: str | None) -> LLMProvider:
+        """Which provider this model routes to -- the same answer get_client uses.
+
+        Public because the console reports the resolved route back to the
+        operator (design D4) and must not reach into a private method to do
+        it. Delegates rather than reimplements: a second copy of the prefix
+        rules would be a second thing to keep in step.
+        """
+        return self._resolve_provider(config, prompt_model)
 
     async def close_clients(self):
         """
@@ -171,7 +198,7 @@ class LLMFactory:
         """
         Create an LLM client instance using the given LLMConfig and credential.
         """
-        common_kwargs = self._get_common_client_kwargs(config)
+        common_kwargs = self._get_common_client_kwargs(config, provider)
 
         if provider == LLMProvider.OPENAI:
             return OpenAIClient(api_key=self._as_api_key(credential), **common_kwargs)
@@ -245,7 +272,7 @@ class LLMFactory:
             **common_kwargs,
         )
 
-    def _get_common_client_kwargs(self, config: LLMConfig) -> dict[str, Any]:
+    def _get_common_client_kwargs(self, config: LLMConfig, provider: LLMProvider) -> dict[str, Any]:
         """Kwargs passed to every provider SDK client.
 
         'timeout' and 'max_retries' are declared fields (the console renders
@@ -254,12 +281,25 @@ class LLMFactory:
         nothing. '_strict_response_validation' stays undeclared -- it is a
         private SDK flag, not a configuration surface -- so it still comes from
         model_extra.
+
+        'model_routing' is filtered to *provider* so an OpenAI entry never
+        reaches the Anthropic client, and is omitted entirely when empty: a
+        third-party CUSTOM client should see exactly the kwargs it saw before
+        this field existed.
         """
         kwargs: dict[str, Any] = {}
         if config.timeout is not None:
             kwargs["timeout"] = config.timeout
         if config.max_retries is not None:
             kwargs["max_retries"] = config.max_retries
+
+        model_routing: dict[str, RoutingFamily] = {
+            name: entry.routing
+            for name, entry in config.extra_models.items()
+            if entry.provider == provider
+        }
+        if model_routing:
+            kwargs["model_routing"] = model_routing
 
         extra = config.model_extra or {}
         if "_strict_response_validation" in extra:

@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 
 from testbench_ai_service.llm.azure_auth import EntraIdCredentials
-from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider, RoutingFamily
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.models.config import LLMConfig
 
@@ -424,14 +424,22 @@ def test_declared_timeout_and_max_retries_reach_the_client_kwargs():
 
     assert config.timeout == 42.5
     assert config.max_retries == 7
-    assert factory._get_common_client_kwargs(config) == {"timeout": 42.5, "max_retries": 7}
+    assert factory._get_common_client_kwargs(config, LLMProvider.OPENAI) == {
+        "timeout": 42.5,
+        "max_retries": 7,
+    }
 
 
 def test_unset_timeout_and_max_retries_are_omitted_from_client_kwargs():
     """An unset field must not become an explicit None the SDK would honour."""
     factory = LLMFactory()
 
-    assert factory._get_common_client_kwargs(LLMConfig(provider=LLMProvider.OPENAI)) == {}
+    assert (
+        factory._get_common_client_kwargs(
+            LLMConfig(provider=LLMProvider.OPENAI), LLMProvider.OPENAI
+        )
+        == {}
+    )
 
 
 def test_strict_response_validation_still_comes_from_extra():
@@ -439,4 +447,65 @@ def test_strict_response_validation_still_comes_from_extra():
     factory = LLMFactory()
     config = LLMConfig(provider=LLMProvider.OPENAI, _strict_response_validation=False)
 
-    assert factory._get_common_client_kwargs(config) == {"_strict_response_validation": False}
+    assert factory._get_common_client_kwargs(config, LLMProvider.OPENAI) == {
+        "_strict_response_validation": False
+    }
+
+
+class TestModelRoutingForwarding:
+    def test_nothing_is_forwarded_when_no_extra_models_are_configured(self):
+        factory = LLMFactory()
+        kwargs = factory._get_common_client_kwargs(LLMConfig(), LLMProvider.OPENAI)
+        assert "model_routing" not in kwargs
+
+    def test_only_this_provider_s_entries_are_forwarded(self):
+        config = LLMConfig(
+            extra_models={
+                "gpt-6": {"provider": "openai", "routing": "reasoning"},
+                "claude-opus-6": {"provider": "anthropic", "routing": "adaptive"},
+            }
+        )
+        factory = LLMFactory()
+
+        openai_kwargs = factory._get_common_client_kwargs(config, LLMProvider.OPENAI)
+        anthropic_kwargs = factory._get_common_client_kwargs(config, LLMProvider.ANTHROPIC)
+
+        assert openai_kwargs["model_routing"] == {"gpt-6": RoutingFamily.REASONING}
+        assert anthropic_kwargs["model_routing"] == {"claude-opus-6": RoutingFamily.ADAPTIVE}
+
+    def test_declared_fields_still_do_not_leak_into_query_kwargs(self):
+        # extra_models is declared, so it is not in model_extra and therefore
+        # never spread into query_llm by agents/base.py:92.
+        config = LLMConfig(extra_models={"gpt-6": {"provider": "openai", "routing": "reasoning"}})
+        assert "extra_models" not in (config.model_extra or {})
+
+
+class TestResolveProvider:
+    def test_delegates_to_the_private_resolver(self):
+        factory = LLMFactory()
+        config = LLMConfig(provider=LLMProvider.OPENAI)
+        assert factory.resolve_provider(config, "claude-opus-5") is LLMProvider.ANTHROPIC
+        assert factory.resolve_provider(config, "gpt-4o") is LLMProvider.OPENAI
+
+    def test_falls_back_to_the_configured_provider(self):
+        factory = LLMFactory()
+        config = LLMConfig(
+            provider=LLMProvider.CUSTOM,
+            class_path="testbench_ai_service.llm.openai.OpenAIClient",
+        )
+        assert factory.resolve_provider(config, "something-unknown") is LLMProvider.CUSTOM
+
+
+class TestHasProjectCredential:
+    def test_true_when_the_project_variable_is_set(self, monkeypatch):
+        monkeypatch.setenv("CAR_CONFIGURATOR_OPENAI_API_KEY", "sk-project")
+        factory = LLMFactory()
+        assert factory.has_project_credential("Car Configurator", LLMProvider.OPENAI, LLMConfig())
+
+    def test_false_when_only_the_global_variable_is_set(self, monkeypatch):
+        monkeypatch.delenv("CAR_CONFIGURATOR_OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-global")
+        factory = LLMFactory()
+        assert not factory.has_project_credential(
+            "Car Configurator", LLMProvider.OPENAI, LLMConfig()
+        )
