@@ -135,6 +135,25 @@ def test_switching_a_message_to_inline_deletes_its_template(prompt):
     assert plan.deletes == [prompt / "de/explainer/user.jinja"]
 
 
+def test_an_orphaned_template_that_is_not_utf8_is_kept_on_disk(prompt):
+    """I3 belt: an unreadable ``file``-backed message's own 409 guard (see
+    test_prompt_write_set.py) only fires while the message is still
+    ``source: "file"``. Flipping it to ``"inline"`` walks around that guard
+    entirely and orphans the template -- never delete a file the console
+    could not read in the first place.
+    """
+    latin1 = prompt / "de/explainer/system.jinja"
+    latin1.write_bytes("Du bist Prüfer".encode("latin-1"))
+    path = prompt / "de/explainer/prompt.yaml"
+    plan = build_write_set(
+        save([inline("was a file"), external("user.jinja", "user body")]), path, prompt
+    )
+    assert latin1 not in plan.deletes
+    assert plan.deletions_skipped is not None
+    assert "system.jinja" in plan.deletions_skipped
+    assert latin1.read_bytes() == "Du bist Prüfer".encode("latin-1")
+
+
 def test_a_new_template_is_created_not_refused(prompt):
     path = prompt / "de/explainer/prompt.yaml"
     plan = build_write_set(
@@ -218,6 +237,18 @@ class TestResolveTemplateTarget:
         with pytest.raises(HTTPException) as excinfo:
             resolve_template_target(prompt, prompt / "de/explainer/prompt.yaml", ".")
         assert excinfo.value.status_code == 400
+
+    def test_a_disguised_dot_dot_is_refused(self, prompt):
+        """M5-a: Path("./..").parts == ("..",), so a raw-string check against
+        {".", ".."} lets this through as a bogus single segment that resolves
+        to the LANGUAGE directory -- outside the prompt's own directory,
+        which design D7 forbids. Only the suffix allowlist happened to stop
+        it before this was fixed to check the normalised parts instead.
+        """
+        for disguised in ("./..", ".//..", "././..", "..//"):
+            with pytest.raises(HTTPException) as excinfo:
+                resolve_template_target(prompt, prompt / "de/explainer/prompt.yaml", disguised)
+            assert excinfo.value.status_code == 400, disguised
 
     def test_an_absolute_path_is_refused(self, prompt):
         absolute = str(prompt / "de/explainer/fresh.jinja")

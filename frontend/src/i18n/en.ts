@@ -147,7 +147,6 @@ export const en = {
   save: 'Save',
   saving: 'Saving…',
   confirmSaveTitle: 'Confirm save',
-  confirmSaveFiles: 'This will write:',
   confirmSaveCreated: 'Created:',
   confirmSaveUpdated: 'Updated:',
   confirmSaveDeleted: 'Deleted (no prompt references it any more):',

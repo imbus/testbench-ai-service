@@ -84,26 +84,47 @@ def scan_template_references(prompts_dir: Path) -> TemplateScan:
         return scan
 
     for prompt_path in sorted(base.rglob("prompt.yaml")):
-        if not prompt_path.is_file():
-            continue
-        relative = prompt_path.relative_to(base).as_posix()
-        try:
-            document = yaml.safe_load(prompt_path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, yaml.YAMLError) as e:
-            logger.warning("Prompt %s could not be parsed for the scan: %s", relative, e)
-            if scan.blocked_by is None:
-                scan.blocked_by = relative
-            continue
-
-        for ref in message_refs(document):
-            try:
-                target = resolve_template_file(base, prompt_path, ref)
-            except HTTPException:
-                # Escapes prompts_dir, disallowed suffix, or is not there.
-                # Nothing on disk to protect, so nothing to record.
-                continue
-            scan.references.setdefault(target, [])
-            if relative not in scan.references[target]:
-                scan.references[target].append(relative)
+        if prompt_path.is_file():
+            _scan_one_prompt(prompt_path, base, scan)
 
     return scan
+
+
+def _block(scan: TemplateScan, relative: str) -> None:
+    """Record *relative* as the (first) reason nothing anywhere may be deleted."""
+    if scan.blocked_by is None:
+        scan.blocked_by = relative
+
+
+def _scan_one_prompt(prompt_path: Path, base: Path, scan: TemplateScan) -> None:
+    """Parse one ``prompt.yaml`` and fold its references into *scan* in place."""
+    relative = prompt_path.relative_to(base).as_posix()
+    try:
+        document = yaml.safe_load(prompt_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as e:
+        logger.warning("Prompt %s could not be parsed for the scan: %s", relative, e)
+        _block(scan, relative)
+        return
+
+    # A document that parses as YAML but is not even prompt-SHAPED (not a
+    # mapping, or "variants" is not a list -- a mapping, say, or absent
+    # entirely) is just as blind a spot as a parse failure: message_refs
+    # would silently answer [] for it, so whatever it actually references
+    # would look orphaned and get deleted. Block exactly like a parse
+    # failure rather than let a YAML-valid-but-wrong-shaped file slip
+    # through as "references nothing" (design 5.5).
+    if not isinstance(document, dict) or not isinstance(document.get("variants"), list):
+        logger.warning("Prompt %s is not prompt-shaped; blocking deletions", relative)
+        _block(scan, relative)
+        return
+
+    for ref in message_refs(document):
+        try:
+            target = resolve_template_file(base, prompt_path, ref)
+        except HTTPException:
+            # Escapes prompts_dir, disallowed suffix, or is not there. Nothing
+            # on disk to protect, so nothing to record.
+            continue
+        scan.references.setdefault(target, [])
+        if relative not in scan.references[target]:
+            scan.references[target].append(relative)

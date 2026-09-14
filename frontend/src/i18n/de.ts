@@ -143,7 +143,6 @@ export const de = {
   save: 'Speichern',
   saving: 'Wird gespeichert…',
   confirmSaveTitle: 'Speichern bestätigen',
-  confirmSaveFiles: 'Dies schreibt:',
   confirmSaveCreated: 'Neu angelegt:',
   confirmSaveUpdated: 'Geändert:',
   confirmSaveDeleted: 'Gelöscht (wird von keinem Prompt mehr verwendet):',

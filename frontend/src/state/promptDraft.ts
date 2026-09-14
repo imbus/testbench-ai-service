@@ -1,4 +1,4 @@
-import { defaultTemplateName, emptyMessage, emptyVariant } from '../api/prompts'
+import { TEMPLATE_EXTENSION, defaultTemplateName, emptyMessage, emptyVariant } from '../api/prompts'
 import type { MessageRole, MessageSource, PromptDocument, PromptMessageDoc, PromptVarDecl, PromptVariantDoc } from '../api/types'
 
 export type PromptDraftAction =
@@ -204,12 +204,13 @@ export function promptDraftReducer(
         // Generate a unique filename, suffixing if necessary.
         let filename = defaultTemplateName(v.name, current.role)
         if (usedFiles.has(filename)) {
-          const baseName = filename.replace(/\.jinja$/, '')
+          const extensionPattern = new RegExp(`\\${TEMPLATE_EXTENSION}$`)
+          const baseName = filename.replace(extensionPattern, '')
           let suffix = 2
-          while (usedFiles.has(`${baseName}_${suffix}.jinja`)) {
+          while (usedFiles.has(`${baseName}_${suffix}${TEMPLATE_EXTENSION}`)) {
             suffix++
           }
-          filename = `${baseName}_${suffix}.jinja`
+          filename = `${baseName}_${suffix}${TEMPLATE_EXTENSION}`
         }
 
         const next: PromptMessageDoc = {

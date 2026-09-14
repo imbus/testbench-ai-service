@@ -54,6 +54,7 @@ function MessageRow({
   const roleId = `message-${index}-role`
   const sourceId = `message-${index}-source`
   const fileId = `message-${index}-file`
+  const unreadableId = `message-${index}-unreadable`
 
   return (
     <div
@@ -94,6 +95,18 @@ function MessageRow({
               className="input"
               id={sourceId}
               value={message.source}
+              // I3: the server refuses to save a "readable: false" file-backed
+              // message with a 409 (the loader's placeholder is an empty
+              // body, not the template's real text), but that guard only
+              // fires while the message is still `source: "file"`. Flipping
+              // it to "inline" here would carry the same empty placeholder
+              // in as the new inline text and walk straight around the
+              // guard -- the save would go through and silently truncate the
+              // template. Disabled outright rather than only the "inline"
+              // option: there is nothing useful to switch to until the file
+              // is readable again.
+              disabled={!message.readable}
+              aria-describedby={!message.readable ? unreadableId : undefined}
               onChange={(event) => onSource(event.target.value as MessageSource)}
             >
               <option value="inline">{t.messageSourceInline}</option>
@@ -141,7 +154,7 @@ function MessageRow({
         )}
       </div>
       {!message.readable && message.file && (
-        <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
+        <span id={unreadableId} role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
           {t.messageUnreadable} <code>{message.file}</code>
         </span>
       )}

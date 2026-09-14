@@ -33,7 +33,7 @@ from pydantic import BaseModel
 from testbench_ai_service.log import logger
 from testbench_ai_service.webui.prompt_io import document_to_yaml, prune_none, schema_header
 from testbench_ai_service.webui.prompts import _load_definition, resolve_template_file
-from testbench_ai_service.webui.security import resolve_within
+from testbench_ai_service.webui.security import require_single_segment, resolve_within
 
 #: Everything outside this collapses to a single "-".
 _SLUG_ALLOWED = re.compile(r"[^a-z0-9._-]+")
@@ -75,16 +75,7 @@ def _require_segment(prompts_dir: Path, lang: str, directory: str) -> Path:
                 "The project name does not produce a usable directory name. Supply one explicitly."
             ),
         )
-    candidate = Path(directory)
-    # Checked on the NORMALISED parts, not the raw string: pathlib collapses a
-    # leading "./" (so "./.." also has exactly one part), and a raw-string
-    # check against {".", ".."} would let "./..", ".//..", "././.." and "..//"
-    # all through as a bogus single segment that resolves to prompts_dir itself.
-    if candidate.is_absolute() or len(candidate.parts) != 1 or candidate.parts[0] in (".", ".."):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"{directory!r} is not a plain directory name.",
-        )
+    candidate = require_single_segment(directory)
     language_dir = resolve_within(Path(prompts_dir), lang)
     return resolve_within(Path(prompts_dir), language_dir / candidate)
 

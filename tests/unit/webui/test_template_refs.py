@@ -89,6 +89,31 @@ def test_a_schema_invalid_but_parseable_prompt_still_protects_its_templates(tree
     assert scan.blocked_by is None
 
 
+def test_a_prompt_whose_variants_is_a_mapping_blocks_deletions(tree):
+    """I2: YAML-valid but not prompt-SHAPED must be treated like a parse
+    failure, not like "references nothing" -- otherwise a template it still
+    names looks orphaned and gets deleted.
+    """
+    (tree / "de/beta/prompt.yaml").write_text(
+        'name: "X"\nvariants:\n  A:\n    messages: []\n', encoding="utf-8"
+    )
+
+    scan = scan_template_references(tree)
+    assert scan.blocked_by == "de/beta/prompt.yaml"
+    assert scan.references == {tree / "de/alpha/system.jinja": ["de/alpha/prompt.yaml"]}
+
+
+def test_a_zero_byte_prompt_blocks_deletions(tree):
+    """A zero-byte file parses to ``None``, not a dict -- just as blind a spot
+    as a mapping-shaped ``variants``.
+    """
+    (tree / "de/beta/prompt.yaml").write_text("", encoding="utf-8")
+
+    scan = scan_template_references(tree)
+    assert scan.blocked_by == "de/beta/prompt.yaml"
+    assert scan.references == {tree / "de/alpha/system.jinja": ["de/alpha/prompt.yaml"]}
+
+
 def test_a_reference_escaping_prompts_dir_is_ignored(tree):
     (tree / "de/beta/prompt.yaml").write_text(
         PROMPT.format(ref="../../../outside.jinja"), encoding="utf-8"

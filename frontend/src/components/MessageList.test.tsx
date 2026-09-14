@@ -64,6 +64,25 @@ describe('MessageList', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/sys\.jinja/)
   })
 
+  // I3: a message the loader could not read carries an empty placeholder as
+  // its `content`, not the file's real body. Letting the operator flip it to
+  // "inline" would save that placeholder as the new text and silently
+  // truncate the template -- the server's own "readable: false" 409 guard
+  // only fires while the message is still `source: "file"`, so the toggle
+  // is the console's own responsibility to block.
+  it('disables the source toggle for an unreadable message and shows why', () => {
+    const broken = [{ ...messages[0], readable: false, content: '' }]
+    render(<MessageList variantName="A" messages={broken} lang="en" {...handlers()} />)
+    expect(screen.getByLabelText(/source/i)).toBeDisabled()
+    expect(screen.getByRole('alert')).toHaveTextContent(/sys\.jinja/)
+  })
+
+  it('leaves the source toggle enabled for a readable message', () => {
+    const readable = [messages[0]]
+    render(<MessageList variantName="A" messages={readable} lang="en" {...handlers()} />)
+    expect(screen.getByLabelText(/source/i)).toBeEnabled()
+  })
+
   it('emits a content change', async () => {
     const h = handlers()
     render(<MessageList variantName="A" messages={messages} lang="en" {...h} />)

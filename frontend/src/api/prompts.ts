@@ -11,6 +11,16 @@ export function emptyVariant(name: string): PromptVariantDoc {
 }
 
 /**
+ * The one template suffix a message file is ever generated with.
+ *
+ * Shared with `promptDraft.ts`'s inline->file dedupe logic, which strips and
+ * re-appends this same suffix when suffixing a colliding generated name --
+ * the two must agree, or a generated name the dedupe logic doesn't recognise
+ * as "already carrying the suffix" gets it appended twice.
+ */
+export const TEMPLATE_EXTENSION = '.jinja'
+
+/**
  * The file name proposed when a message moves out of the YAML.
  *
  * `<variant-slug>_<role>.jinja` is not invented: it is the convention all eight
@@ -26,7 +36,7 @@ export function defaultTemplateName(variant: string, role: MessageRole): string 
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '') || 'variant'
-  return `${slug}_${role}.jinja`
+  return `${slug}_${role}${TEMPLATE_EXTENSION}`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

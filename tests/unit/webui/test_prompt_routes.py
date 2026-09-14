@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
+from testbench_ai_service.models.config import ProjectConfig
 from testbench_ai_service.webui.models import ConfigIssue, PreviewResponse
 
 VALID = textwrap.dedent(
@@ -98,7 +99,14 @@ def config_path(prompt_tree) -> Path:
 
 @pytest.fixture
 def app(make_app, prompt_tree, config_path):
-    application = make_app(prompts_dir=str(prompt_tree))
+    # I4: a fork 404s for a project neither TestBench nor config.toml knows.
+    # "Car Configurator" and "Proj" are what the fork tests below fork for, so
+    # both are declared here as config.toml-known projects -- the same footing
+    # a real operator's first override for either would already have.
+    application = make_app(
+        prompts_dir=str(prompt_tree),
+        projects={"Car Configurator": ProjectConfig(), "Proj": ProjectConfig()},
+    )
     application.state.config_path = config_path
     return application
 
@@ -439,6 +447,51 @@ def test_a_fork_creates_the_files_and_repoints_the_project(admin_client, prompt_
     assert (prompt_tree / "de/explainer__car-configurator/prompt.yaml").is_file()
     written = config_path.read_text(encoding="utf-8")
     assert "de/explainer__car-configurator/prompt.yaml" in written
+
+
+def test_a_fork_naming_a_project_known_only_from_the_testbench_cache_succeeds(
+    client, login, tb_connection, prompt_tree
+):
+    """I4: the project need not already have a [projects.<name>] block in
+    config.toml -- a first override is the common case, so the session's
+    cached TestBench project list is just as good a "known" source.
+    """
+    tb_connection.get_all_projects.return_value = {"projects": [{"name": "Cache Only", "key": "9"}]}
+    login(roles=["Administrator"])
+    response = client.post(
+        "/admin/api/prompts/de/explainer/fork",
+        json={"project": "Cache Only"},
+        headers=csrf(client),
+    )
+    assert response.status_code == 200
+    assert (prompt_tree / "de/explainer__cache-only/prompt.yaml").is_file()
+
+
+def test_a_fork_naming_an_unknown_project_is_refused_with_404(admin_client, prompt_tree):
+    """I4: a name in neither the TestBench cache nor config.toml must not
+    silently invent a new [projects.<name>] block out of a typo.
+    """
+    response = admin_client.post(
+        "/admin/api/prompts/de/explainer/fork", json={"project": "Unknown Project"}
+    )
+    assert response.status_code == 404
+    assert not (prompt_tree / "de/explainer__unknown-project").exists()
+
+
+def test_a_fork_whose_project_name_holds_a_nul_byte_is_a_clean_400(admin_client, prompt_tree):
+    """I1: join_path raises a bare ValueError for a NUL-holding segment.
+
+    Reproduced pre-fix: the fork directory and its files landed on disk, and
+    config.toml was left untouched, all outside the try/rollback -- a 500
+    with a fork half-committed, and a retry with a clean name then 409'd
+    because the directory was already there. This must be a plain 400 with
+    nothing left behind under the language directory.
+    """
+    response = admin_client.post(
+        "/admin/api/prompts/de/explainer/fork", json={"project": "\u0000evil"}
+    )
+    assert response.status_code == 400
+    assert list((prompt_tree / "de").iterdir()) == [prompt_tree / "de" / "explainer"]
 
 
 def test_a_fork_whose_config_write_fails_removes_what_it_created(

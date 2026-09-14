@@ -654,7 +654,7 @@ async def fork_prompt(
     agent: str,
     body: PromptForkRequest,
     request: Request,
-    _session: Session = Depends(require_admin),
+    session: Session = Depends(require_admin),
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
 ) -> PromptForkResponse:
@@ -672,12 +672,55 @@ async def fork_prompt(
     Removing it is a true undo rather than a best-effort one, because every
     file in it is new -- there is no previous content that could fail to be
     restored.
+
+    A narrow TOCTOU sits between ``build_fork``'s own ``target_dir.exists()``
+    check and the ``mkdir(exist_ok=True)`` below: if another process creates
+    and populates that same directory in the interval, this request's rollback
+    (on a later failure) removes files it did not create, plus their
+    ``.bak`` siblings. Admin-only and extremely narrow -- documented here
+    rather than locked against.
     """
     prompts_dir = _require_prompts_dir(config)
+
+    # The config key this fork would write, validated up front, before
+    # build_fork or any existence check: join_path raises a bare ValueError
+    # for a segment containing a NUL, and body.project is the only
+    # unsanitised input that reaches it. Computing this AFTER mkdir/write_all
+    # (as it once was) meant that ValueError propagated as a 500 with the
+    # fork directory and its files already on disk and config.toml
+    # untouched -- outside the rollback every later failure in this function
+    # goes through. Checked before "is this project known" too: a malformed
+    # name is a 400 regardless of whether it happens to also be unknown.
+    try:
+        config_key = join_path(["projects", body.project, "agents", agent, "prompt", "file"])
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid project name: {e}"
+        ) from e
+
+    # design 5.3 step 1 / §6: a fork naming a project neither TestBench nor
+    # config.toml has ever heard of is a 404, not a config.toml write that
+    # invents a brand-new [projects.<name>] section out of a typo. Checked
+    # against the UNION of the session's cached TestBench project list and
+    # the on-disk config's projects table -- never against config.toml alone
+    # -- because a project's first-ever override is the common case, and
+    # requiring it to already have a [projects.<name>] block would make a
+    # fork impossible exactly when it is most wanted.
+    known_projects = set(config.projects) | {ref.name for ref in session.projects}
+    if body.project not in known_projects:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                f"{body.project!r} is not a known project. It must be visible in the "
+                "TestBench project list or already have an entry in the configuration."
+            ),
+        )
+
     source = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
     config_path = Path(request.app.state.config_path)
 
     plan = build_fork(prompts_dir, source, lang, agent, body.directory, body.project)
+    edits = {config_key: plan.config_value}
 
     # exist_ok=True: build_fork already refused an existing target_dir with a
     # 409 one line above; a fork racing in between would otherwise turn that
@@ -695,9 +738,6 @@ async def fork_prompt(
         rollback_fork((), plan.target_dir)
         raise
 
-    edits = {
-        join_path(["projects", body.project, "agents", agent, "prompt", "file"]): plan.config_value
-    }
     try:
         preview, proposed_text, _has_write = _plan_change(edits, config_path, config)
         if not preview.valid:

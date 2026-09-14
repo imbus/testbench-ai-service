@@ -18,6 +18,7 @@ Two things a caller building on top of :func:`resolve_within` must know:
   ``Path`` before calling this function must check for emptiness itself.
 """
 
+import re
 from ipaddress import ip_address
 from pathlib import Path
 
@@ -26,6 +27,46 @@ from fastapi import Depends, HTTPException, Request, status
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.log import logger
+
+#: A segment made up entirely of dots -- ".", "..", "...", and so on. Windows
+#: also accepts three-or-more-dot spellings where POSIX would not, so this is
+#: checked regardless of platform rather than trusted to `.parts` collapsing.
+_ALL_DOTS = re.compile(r"^\.+$")
+
+
+def require_single_segment(name: str) -> Path:
+    """*name* as a single, non-empty path segment that is not all dots.
+
+    Shared by every caller that lets an operator name a bare file or directory
+    segment (a new template's name, a fork's target directory): each used to
+    run its own version of this check, and the two drifted -- one accepted a
+    disguised ``".."`` the other had already learned to reject (see the
+    module-level history of ``resolve_template_target`` and
+    ``fork._require_segment``). One validator, used by both, is how that stops
+    happening again.
+
+    Checked on the NORMALISED parts, not the raw string: pathlib collapses a
+    leading ``"./"`` (so ``"./.."`` also has exactly one part, ``".."``), and a
+    raw-string check against ``{".", ".."}`` would let ``"./.."``, ``".//.."``,
+    ``"././.."`` and ``"..//"`` all through as a bogus single segment that
+    resolves to the parent directory itself.
+
+    Raises:
+        HTTPException 400: *name* is empty, is not a single path segment, or
+            (in any disguised spelling) resolves to a segment made up entirely
+            of dots.
+    """
+    if not name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Empty path is not allowed"
+        )
+    candidate = Path(name)
+    if candidate.is_absolute() or len(candidate.parts) != 1 or _ALL_DOTS.match(candidate.parts[0]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{name!r} is not a plain path segment.",
+        )
+    return candidate
 
 
 def resolve_within(base: Path, candidate: str | Path) -> Path:

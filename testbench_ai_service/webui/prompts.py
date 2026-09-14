@@ -49,7 +49,7 @@ from testbench_ai_service.webui.models import (
 )
 from testbench_ai_service.webui.prompt_io import document_to_yaml, prune_none, schema_header
 from testbench_ai_service.webui.prompt_render import context_skeleton
-from testbench_ai_service.webui.security import resolve_within
+from testbench_ai_service.webui.security import require_single_segment, resolve_within
 
 #: Prompt metadata is YAML. ``prompts_dir`` also holds the Jinja templates the
 #: messages point at, and containment alone would let ``?file=`` read any of
@@ -331,22 +331,11 @@ def resolve_template_target(prompts_dir: Path, prompt_path: Path, name: str) -> 
     extension is refused whether or not the file happens to exist.
 
     Raises:
-        HTTPException 400: *name* is empty, is not a single path segment, or is
-            not an allowlisted template suffix.
+        HTTPException 400: *name* is empty, is not a single path segment (in
+            any disguised spelling of ``"."``/``".."`` included), or is not an
+            allowlisted template suffix.
     """
-    if not name.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Empty path is not allowed"
-        )
-    candidate = Path(name)
-    if candidate.is_absolute() or len(candidate.parts) != 1 or name in {".", ".."}:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"A new template file must be a plain file name in the prompt's own "
-                f"directory, not {name!r}."
-            ),
-        )
+    candidate = require_single_segment(name)
     target = resolve_within(Path(prompts_dir), Path(prompt_path).parent / candidate)
     _require_template_suffix(target)
     return target
@@ -412,10 +401,31 @@ def _plan_deletions(
     # around the resolve).
     own = Path(prompt_path).relative_to(Path(prompts_dir).resolve()).as_posix()
     deletes = []
+    #: Basenames of orphaned candidates kept on disk because their bytes could
+    #: not be confirmed readable (I3): a message can only flip from "file" to
+    #: "inline" once its `readable` guard is bypassed by that very switch, so
+    #: this is the last check standing between an unreadable template and
+    #: deletion, not a defense against something the request layer already
+    #: refuses.
+    unreadable: list[str] = []
     for candidate in sorted(candidates, key=str):
         holders = [name for name in scan.references.get(candidate, []) if name != own]
-        if not holders:
-            deletes.append(candidate)
+        if holders:
+            continue
+        try:
+            candidate.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as e:
+            logger.warning("Not deleting %s: it could not be read as UTF-8: %s", candidate, e)
+            unreadable.append(candidate.name)
+            continue
+        deletes.append(candidate)
+
+    if unreadable:
+        names = ", ".join(sorted(unreadable))
+        return deletes, (
+            f"Kept on disk rather than deleted: {names} could not be read as UTF-8, so the "
+            f"console cannot confirm it is safe to remove. Repair or remove it by hand."
+        )
     return deletes, None
 
 
