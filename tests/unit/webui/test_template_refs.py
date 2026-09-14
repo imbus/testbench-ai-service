@@ -44,13 +44,21 @@ def test_a_template_outside_the_agent_directory_is_resolved(tree):
 
 
 def test_a_template_shared_by_two_prompts_lists_both(tree):
-    """The case deletion safety actually turns on."""
+    """The case deletion safety actually turns on.
+
+    Uses different valid spellings (absolute and relative) that resolve to the same
+    file, verifying that deduplication is by resolved absolute path, not raw string.
+    """
     shared = tree / "de" / "shared.jinja"
     shared.write_text("common", encoding="utf-8")
-    for agent in ("alpha", "beta"):
-        (tree / "de" / agent / "prompt.yaml").write_text(
-            PROMPT.format(ref="../shared.jinja"), encoding="utf-8"
-        )
+    # Alpha uses absolute path (forward-slash format), beta uses relative path.
+    # Both resolve to the same file, testing deduplication by absolute path.
+    (tree / "de/alpha/prompt.yaml").write_text(
+        PROMPT.format(ref=shared.as_posix()), encoding="utf-8"
+    )
+    (tree / "de/beta/prompt.yaml").write_text(
+        PROMPT.format(ref="../shared.jinja"), encoding="utf-8"
+    )
 
     scan = scan_template_references(tree)
     assert scan.references[shared] == ["de/alpha/prompt.yaml", "de/beta/prompt.yaml"]
@@ -61,6 +69,9 @@ def test_an_unparseable_prompt_blocks_the_whole_scan(tree):
 
     scan = scan_template_references(tree)
     assert scan.blocked_by == "de/beta/prompt.yaml"
+    # Verify the corrupted prompt contributed zero references despite de/beta/system.jinja
+    # existing on disk. Parsing failure must prevent message_refs from being called.
+    assert scan.references == {tree / "de/alpha/system.jinja": ["de/alpha/prompt.yaml"]}
 
 
 def test_a_schema_invalid_but_parseable_prompt_still_protects_its_templates(tree):
