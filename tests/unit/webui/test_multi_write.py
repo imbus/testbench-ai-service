@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -123,3 +124,80 @@ def test_writes_utf8_without_newline_translation(tmp_path):
 def test_an_empty_set_is_a_no_op(tmp_path):
     result = write_all({})
     assert result.written == []
+
+
+def test_bytes_are_written_verbatim(tmp_path):
+    target = tmp_path / "latin.jinja"
+    result = write_all({target: "grüße".encode("latin-1")})
+    assert target.read_bytes() == "grüße".encode("latin-1")
+    assert result.created == [target]
+
+
+def test_crlf_bytes_survive_the_round_trip(tmp_path):
+    target = tmp_path / "crlf.jinja"
+    result = write_all({target: b"a\r\nb\r\n"})
+    assert target.read_bytes() == b"a\r\nb\r\n"
+    assert result.created == [target]
+
+
+def test_a_target_that_existed_is_not_reported_as_created(tmp_path):
+    target = tmp_path / "old.jinja"
+    target.write_text("before", encoding="utf-8")
+    result = write_all({target: "after"})
+    assert result.created == []
+    assert result.written == [target]
+
+
+def test_a_deleted_file_is_backed_up_then_removed(tmp_path):
+    doomed = tmp_path / "orphan.jinja"
+    doomed.write_text("body", encoding="utf-8")
+
+    result = write_all({}, deletes=[doomed])
+
+    assert not doomed.exists()
+    assert result.deleted == [doomed]
+    assert (tmp_path / "orphan.jinja.bak").read_text(encoding="utf-8") == "body"
+
+
+def test_deletes_run_after_writes(tmp_path, monkeypatch):
+    """A failure while writing must never leave a file already deleted."""
+    doomed = tmp_path / "orphan.jinja"
+    doomed.write_text("body", encoding="utf-8")
+    target = tmp_path / "kept.jinja"
+
+    real_replace = os.replace
+
+    def explode(src, dst):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("testbench_ai_service.webui.multi_write.os.replace", explode)
+
+    with pytest.raises(HTTPException):
+        write_all({target: "new"}, deletes=[doomed])
+
+    assert doomed.exists(), "a delete ran before the writes had committed"
+    monkeypatch.setattr("testbench_ai_service.webui.multi_write.os.replace", real_replace)
+
+
+def test_a_failure_during_delete_restores_what_was_already_deleted(tmp_path, monkeypatch):
+    first = tmp_path / "a.jinja"
+    second = tmp_path / "b.jinja"
+    first.write_text("one", encoding="utf-8")
+    second.write_text("two", encoding="utf-8")
+
+    calls = {"n": 0}
+    real_unlink = Path.unlink
+
+    def flaky(self, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise OSError("locked")
+        return real_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", flaky)
+
+    with pytest.raises(HTTPException):
+        write_all({}, deletes=[first, second])
+
+    monkeypatch.setattr(Path, "unlink", real_unlink)
+    assert first.read_text(encoding="utf-8") == "one", "the first delete was not rolled back"
