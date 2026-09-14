@@ -131,7 +131,13 @@ const CONFIG: ConfigResponse = {
   config_path: 'C:/svc/config.toml',
 }
 
-const SAVE_OK: PromptSaveResponse = { written: ['de/explainer/prompt.yaml'], backups: [] }
+const SAVE_OK: PromptSaveResponse = {
+  written: ['de/explainer/prompt.yaml'],
+  created: [],
+  deleted: [],
+  deletions_skipped: null,
+  backups: [],
+}
 
 function ok(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as Response

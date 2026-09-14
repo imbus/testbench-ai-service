@@ -143,6 +143,9 @@ export interface PromptMeta {
   variants: PromptVariantMeta[]
 }
 
+/** One config key pointing at a prompt file. Localized by the caller. */
+export type PromptUsage = { agent: string; project: string | null }
+
 export type PromptTreeEntry = {
   agent: string
   file: string
@@ -150,6 +153,7 @@ export type PromptTreeEntry = {
   variants: string[]
   ok: boolean
   error: string | null
+  used_by: PromptUsage[]
 }
 export type PromptTreeLanguage = { lang: string; prompts: PromptTreeEntry[] }
 export type PromptTreeResponse = { languages: PromptTreeLanguage[] }
@@ -199,4 +203,27 @@ export type LintError = { line: number; column: number; message: string }
 export type LintResponse = { ok: boolean; errors: LintError[] }
 export type RenderedMessage = { role: string; content: string; error: string | null }
 export type RenderResponse = { messages: RenderedMessage[] }
-export type PromptSaveResponse = { written: string[]; backups: string[] }
+export type PromptSaveResponse = {
+  written: string[]
+  created: string[]
+  deleted: string[]
+  deletions_skipped: string | null
+  backups: string[]
+}
+
+export type PromptPlanResponse = {
+  created: string[]
+  updated: string[]
+  deleted: string[]
+  deletions_skipped: string | null
+}
+
+export type PromptForkResponse = {
+  lang: string
+  agent: string
+  file: string
+  created: string[]
+  config_backup: string | null
+  reloaded: boolean
+  reload_detail: string | null
+}

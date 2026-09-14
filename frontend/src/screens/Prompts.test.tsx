@@ -21,6 +21,7 @@ const TREE: PromptTreeResponse = {
           variants: ['Thorough'],
           ok: true,
           error: null,
+          used_by: [],
         },
         {
           agent: 'explainer',
@@ -29,6 +30,7 @@ const TREE: PromptTreeResponse = {
           variants: [],
           ok: false,
           error: 'Invalid YAML at line 4',
+          used_by: [],
         },
       ],
     },
@@ -42,6 +44,7 @@ const TREE: PromptTreeResponse = {
           variants: ['Thorough'],
           ok: true,
           error: null,
+          used_by: [],
         },
       ],
     },

@@ -6,7 +6,9 @@ import type {
   LintResponse,
   PreviewResponse,
   ProjectsResponse,
+  PromptForkResponse,
   PromptMessageDoc,
+  PromptPlanResponse,
   PromptSaveResponse,
   RenderResponse,
 } from './types'
@@ -112,6 +114,46 @@ export function useSavePrompt(lang: string, agent: string) {
     onSuccess: () => {
       // The document on disk changed, so both the tree and the document are stale.
       queryClient.invalidateQueries({ queryKey: ['prompts'] })
+    },
+  })
+}
+
+/**
+ * What saving this document would create, update and delete.
+ *
+ * Mirrors the PUT's refusals rather than reporting them as data: the dialog
+ * must describe the operation the operator is about to confirm, including how
+ * it would fail. Only the server can name deletions — orphan detection needs a
+ * scan of the whole prompt tree, which the browser cannot do.
+ */
+export function usePlanPrompt(lang: string, agent: string) {
+  return useMutation({
+    mutationFn: (body: unknown) =>
+      apiFetch<PromptPlanResponse>(
+        `/prompts/${encodeURIComponent(lang)}/${encodeURIComponent(agent)}/plan`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+  })
+}
+
+/**
+ * Copy a prompt for one project and point that project at the copy.
+ *
+ * Writes config.toml, so the saved config, the status and the prompt tree are
+ * all stale afterwards.
+ */
+export function useForkPrompt(lang: string, agent: string) {
+  const queries = useQueryClient()
+  return useMutation({
+    mutationFn: (body: { project: string; directory?: string }) =>
+      apiFetch<PromptForkResponse>(
+        `/prompts/${encodeURIComponent(lang)}/${encodeURIComponent(agent)}/fork`,
+        { method: 'POST', body: JSON.stringify(body) },
+      ),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: ['config'] })
+      void queries.invalidateQueries({ queryKey: ['status'] })
+      void queries.invalidateQueries({ queryKey: ['prompts'] })
     },
   })
 }
