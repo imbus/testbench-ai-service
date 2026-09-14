@@ -8,8 +8,19 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
-import type { ConfigResponse, ProjectsResponse, PromptMeta } from '../api/types'
+import type { ConfigResponse, ProjectsResponse, PromptForkResponse, PromptMeta } from '../api/types'
 import { AgentDetail } from './AgentDetail'
+
+// `useNavigate` is mocked rather than asserted through a real route match: the
+// fork dialog's whole point is that it navigates using the SERVER's response
+// fields, not a client-computed guess, and a mock spy is the direct way to
+// assert what URL it was actually called with. `vi.hoisted` is required
+// because `vi.mock` factories run before this module's own `const`s do.
+const { navigateMock } = vi.hoisted(() => ({ navigateMock: vi.fn() }))
+vi.mock('react-router-dom', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('react-router-dom')>()
+  return { ...actual, useNavigate: () => navigateMock }
+})
 
 const DISK = {
   language: 'de',
@@ -34,10 +45,26 @@ const PROJECTS: ProjectsResponse = {
     { name: 'Alpha', key: '11' },
     { name: 'Release 2.0', key: '12' },
     { name: 'Untouched', key: '13' },
+    { name: 'Car Configurator', key: '14' },
   ],
   fetched_at: '2026-09-10T08:00:00Z',
   source: 'testbench',
   error: null,
+}
+
+// The server names the fork's new directory -- it slugifies the project,
+// dedupes, and may accept an operator override -- so this deliberately does
+// NOT look like any name the client could compute from agentKey ('reviewer')
+// or the project ('Car Configurator'). That mismatch is exactly what proves
+// the navigation test reads the response instead of guessing.
+const FORK_RESPONSE: PromptForkResponse = {
+  lang: 'de',
+  agent: 'explainer__car-configurator',
+  file: 'explainer__car-configurator/prompt.yaml',
+  created: ['explainer__car-configurator/prompt.yaml'],
+  config_backup: 'config.toml.bak',
+  reloaded: true,
+  reload_detail: null,
 }
 
 const META: PromptMeta = {
@@ -100,13 +127,22 @@ const META: PromptMeta = {
 
 let fetchMock: ReturnType<typeof vi.fn>
 let metaBody: PromptMeta | null
+/** Set by a test to make the fork POST 400 instead of succeeding. */
+let forkError: string | null
 
 beforeEach(() => {
   window.localStorage.clear()
   metaBody = META
-  fetchMock = vi.fn(async (url: string) => {
+  forkError = null
+  navigateMock.mockClear()
+  fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.startsWith('/admin/api/config')) return ok(CONFIG)
     if (url.startsWith('/admin/api/projects')) return ok(PROJECTS)
+    if ((init?.method ?? 'GET').toUpperCase() === 'POST' && url.includes('/fork')) {
+      return forkError
+        ? ({ ok: false, status: 400, json: async () => ({ detail: forkError }) } as Response)
+        : ok(FORK_RESPONSE)
+    }
     if (url.includes('/prompts/')) {
       return metaBody
         ? ok(metaBody)
@@ -158,6 +194,35 @@ function renderDetail({
 
 async function ready() {
   await waitFor(() => expect(screen.getByTestId('agent-detail')).toBeInTheDocument())
+}
+
+/**
+ * `renderDetail` plus the setup the fork tests need: a settled scope (global,
+ * or a named project reached through the add-override picker -- exactly the
+ * path an operator takes, and one that writes no edit by itself, per "switches
+ * to a newly picked project without writing anything yet" above) and,
+ * optionally, one queued edit so `draft.changeCount` is nonzero.
+ */
+async function renderAgentDetail({
+  agentKey = 'reviewer',
+  isAdmin = true,
+  project = null,
+  dirty = false,
+}: {
+  agentKey?: string
+  isAdmin?: boolean
+  project?: string | null
+  dirty?: boolean
+} = {}) {
+  renderDetail({ agentKey, isAdmin })
+  await ready()
+  if (project) {
+    await userEvent.selectOptions(screen.getByLabelText('Add a project override'), project)
+  }
+  if (dirty) {
+    await userEvent.click(screen.getByRole('switch', { name: 'enabled' }))
+  }
+  return { navigate: navigateMock }
 }
 
 // --- header and scope switching ----------------------------------------
@@ -510,5 +575,64 @@ describe('removing every override for one agent in a project', () => {
     // The server rejects an overlay holding both a table and a key inside it,
     // so keeping the switch's edit would 400 the preview.
     expect(edits()).toEqual({ 'projects.Alpha.agents.reviewer': null })
+  })
+})
+
+// --- forking a prompt for a project -------------------------------------
+//
+// Scope discipline: this action lives on Agent detail only, not on the
+// Projects card -- one call site, one dialog, one guard.
+
+describe('forking a prompt for a project', () => {
+  const FORK_BUTTON = 'Give this project its own prompt'
+
+  it('does not offer the fork in global scope', async () => {
+    await renderAgentDetail({ isAdmin: true, project: null })
+    expect(screen.queryByRole('button', { name: FORK_BUTTON })).not.toBeInTheDocument()
+  })
+
+  it('does not offer the fork to a non-admin session', async () => {
+    await renderAgentDetail({ isAdmin: false, project: 'Car Configurator' })
+    expect(screen.queryByRole('button', { name: FORK_BUTTON })).not.toBeInTheDocument()
+  })
+
+  it('offers the fork in project scope, to an admin', async () => {
+    await renderAgentDetail({ isAdmin: true, project: 'Car Configurator' })
+    expect(screen.getByRole('button', { name: FORK_BUTTON })).toBeInTheDocument()
+  })
+
+  it('is disabled with a reason while config edits are pending', async () => {
+    await renderAgentDetail({ isAdmin: true, project: 'Car Configurator', dirty: true })
+    expect(screen.getByRole('button', { name: FORK_BUTTON })).toBeDisabled()
+    expect(
+      screen.getByText('Apply or discard the pending configuration changes first.'),
+    ).toBeInTheDocument()
+  })
+
+  it('posts the project and navigates using the SERVER’S own directory name, not a client guess', async () => {
+    const { navigate } = await renderAgentDetail({ isAdmin: true, project: 'Car Configurator' })
+    await userEvent.click(screen.getByRole('button', { name: FORK_BUTTON }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith('/admin/prompts/de/explainer__car-configurator'),
+    )
+    // Neither the client-computed agentKey nor a naive project slug: proof
+    // the navigation reads the response rather than recomputing the name.
+    expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining('reviewer'))
+    expect(navigate).not.toHaveBeenCalledWith('/admin/prompts/de/car-configurator')
+  })
+
+  it('surfaces the server’s error text in the dialog instead of swallowing it', async () => {
+    forkError = 'The project name has no usable directory name; supply one.'
+    await renderAgentDetail({ isAdmin: true, project: 'Car Configurator' })
+    await userEvent.click(screen.getByRole('button', { name: FORK_BUTTON }))
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText('The project name has no usable directory name; supply one.'),
+      ).toBeInTheDocument(),
+    )
   })
 })

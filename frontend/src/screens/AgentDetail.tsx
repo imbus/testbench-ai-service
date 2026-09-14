@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   configuredProjects,
   effectiveAgent,
@@ -10,9 +10,11 @@ import {
   scopedAgentPath,
   type Scope,
 } from '../api/agents'
+import { useForkPrompt } from '../api/mutations'
 import { useConfig, useProjects, usePromptMeta } from '../api/queries'
-import type { ConfigIssue, PromptVarDefinition } from '../api/types'
+import type { ConfigIssue, PromptForkResponse, PromptVarDefinition } from '../api/types'
 import { Field } from '../components/Field'
+import { Modal } from '../components/Modal'
 import { ReadOnlyField } from '../components/ReadOnlyField'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
@@ -52,7 +54,10 @@ export function AgentDetail({
   const config = useConfig()
   const projects = useProjects()
   const draft = useDraft()
+  const navigate = useNavigate()
   const [project, setProject] = useState<string | null>(null)
+  const [forkOpen, setForkOpen] = useState(false)
+  const [forkDirectory, setForkDirectory] = useState('')
 
   // Every hook is called here, above the early returns below. This component
   // stays mounted across the loading -> loaded transition, and a hook called
@@ -87,6 +92,7 @@ export function AgentDetail({
         : undefined
 
   const meta = usePromptMeta(language, agentKey, promptFile)
+  const fork = useForkPrompt(language, agentKey)
 
   if (config.isLoading) return <div style={{ padding: 28 }}>…</div>
   if (config.isError || !config.data) {
@@ -317,16 +323,65 @@ export function AgentDetail({
       </section>
 
       {scope.kind === 'project' && isAdmin && (
-        <div>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            style={{ fontSize: 12 }}
-            onClick={() => draft.unsetSubtree(projectAgentPath(scope.project, agentKey))}
-          >
-            {t.removeAllOverrides}
-          </button>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          <div>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 12 }}
+              onClick={() => draft.unsetSubtree(projectAgentPath(scope.project, agentKey))}
+            >
+              {t.removeAllOverrides}
+            </button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ fontSize: 12 }}
+              // config.toml has one writer at a time. The fork writes it directly,
+              // so a browser holding unapplied edits would make the pending count
+              // disagree with the file the moment the fork lands.
+              disabled={draft.changeCount > 0}
+              onClick={() => setForkOpen(true)}
+            >
+              {t.forkPrompt}
+            </button>
+            {draft.changeCount > 0 && (
+              <span className="text-muted" style={{ fontSize: 11 }}>
+                {t.forkBlockedByDraft}
+              </span>
+            )}
+          </div>
         </div>
+      )}
+
+      {forkOpen && scope.kind === 'project' && (
+        <ForkPromptDialog
+          t={t}
+          project={scope.project}
+          directory={forkDirectory}
+          onDirectoryChange={setForkDirectory}
+          pending={fork.isPending}
+          error={fork.error instanceof Error ? fork.error.message : null}
+          onCancel={() => {
+            setForkOpen(false)
+            setForkDirectory('')
+            fork.reset()
+          }}
+          onConfirm={() => {
+            fork.mutate(
+              { project: scope.project, directory: forkDirectory.trim() || undefined },
+              {
+                onSuccess: (response: PromptForkResponse) => {
+                  setForkOpen(false)
+                  setForkDirectory('')
+                  navigate(`/admin/prompts/${response.lang}/${response.agent}`)
+                },
+              },
+            )
+          }}
+        />
       )}
     </div>
   )
@@ -414,5 +469,69 @@ function VarField({
       inheritedFrom={{ value: inheritedValue, label }}
       lang={lang}
     />
+  )
+}
+
+/**
+ * Confirms forking the current prompt for one project (spec §5.8, §3.8).
+ *
+ * The directory field is left empty rather than prefilled: the server decides
+ * the default name (it slugifies the project, dedupes against what already
+ * exists, and may accept an override), and nothing client-side can predict
+ * that before the call is made. `error` renders the server's own text — a 400
+ * for a name that slugified to nothing is exactly what this field exists to
+ * let the operator recover from.
+ */
+function ForkPromptDialog({
+  t,
+  project,
+  directory,
+  onDirectoryChange,
+  pending,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  t: ReturnType<typeof useTranslations>
+  project: string
+  directory: string
+  onDirectoryChange: (value: string) => void
+  pending: boolean
+  error: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <Modal label={t.forkPromptTitle}>
+      <h3 style={{ margin: 0 }}>{t.forkPromptTitle}</h3>
+      <p style={{ margin: 0, fontSize: 13 }}>{t.forkPromptBody}</p>
+      <div className="text-muted" style={{ fontSize: 12 }}>
+        {project}
+      </div>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+        {t.forkDirectoryLabel}
+        <input
+          className="input"
+          type="text"
+          value={directory}
+          onChange={(event) => onDirectoryChange(event.target.value)}
+        />
+      </label>
+
+      {error && (
+        <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
+          {error}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button type="button" className="btn btn-secondary" onClick={onCancel}>
+          {t.cancel}
+        </button>
+        <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={pending}>
+          {pending ? t.forking : t.confirm}
+        </button>
+      </div>
+    </Modal>
   )
 }

@@ -87,6 +87,13 @@ export const en = {
     'This project defines its own prompt variables, which replace the global set entirely. Unset variables fall back to the prompt default, not to the global value.',
   notEditableHere: 'Not editable here',
   removeAllOverrides: 'Remove all overrides',
+  forkPrompt: 'Give this project its own prompt',
+  forkPromptTitle: 'Fork prompt',
+  forkPromptBody:
+    'A private copy of this prompt is created and this project is pointed at it. The original prompt is left untouched.',
+  forkDirectoryLabel: 'Target directory',
+  forkBlockedByDraft: 'Apply or discard the pending configuration changes first.',
+  forking: 'Forking …',
   promptMetaUnavailable: 'The prompt metadata could not be read.',
   promptDefault: 'prompt default',
   unknownAgent: 'No such agent.',

@@ -83,6 +83,13 @@ export const de = {
     'Dieses Projekt definiert eigene Prompt-Variablen und ersetzt damit den globalen Satz vollständig. Nicht gesetzte Variablen fallen auf den Prompt-Standard zurück, nicht auf den globalen Wert.',
   notEditableHere: 'Nicht hier änderbar',
   removeAllOverrides: 'Alle Überschreibungen entfernen',
+  forkPrompt: 'Eigenen Prompt für dieses Projekt anlegen',
+  forkPromptTitle: 'Prompt kopieren',
+  forkPromptBody:
+    'Es wird eine eigene Kopie dieses Prompts angelegt und dieses Projekt darauf gezeigt. Der ursprüngliche Prompt bleibt unverändert.',
+  forkDirectoryLabel: 'Zielverzeichnis',
+  forkBlockedByDraft: 'Erst die offenen Konfigurationsänderungen anwenden oder verwerfen.',
+  forking: 'Wird angelegt …',
   promptMetaUnavailable: 'Prompt-Metadaten konnten nicht gelesen werden.',
   promptDefault: 'Prompt-Standard',
   unknownAgent: 'Diesen Agenten gibt es nicht.',
