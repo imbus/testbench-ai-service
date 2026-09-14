@@ -7,6 +7,7 @@ import { agentsUsingVariant } from '../api/prompts'
 import { useConfig, usePromptDocument } from '../api/queries'
 import type { LintError, MessageRole, PromptDocument, PromptVarDecl } from '../api/types'
 import { MessageList } from '../components/MessageList'
+import { Modal } from '../components/Modal'
 import { RenderPreview } from '../components/RenderPreview'
 import { VarDeclTable } from '../components/VarDeclTable'
 import { useTranslations, type Lang, type Translations } from '../i18n'
@@ -685,120 +686,70 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       )}
 
       {confirmOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.confirmSaveTitle}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,.45)',
-            display: 'grid',
-            placeItems: 'center',
-            padding: 24,
-            zIndex: 20,
-          }}
-        >
-          <div
-            className="card"
-            style={{
-              background: 'var(--color-bg)',
-              width: 'min(560px, 100%)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-              padding: 20,
-            }}
-          >
-            <h3 style={{ margin: 0 }}>{t.confirmSaveTitle}</h3>
-            <div style={{ fontSize: 13 }}>{t.confirmSaveFiles}</div>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace' }}>
-              {files.map((file) => (
-                <li key={file} data-testid="confirm-file">
-                  {file}
-                </li>
+        <Modal label={t.confirmSaveTitle}>
+          <h3 style={{ margin: 0 }}>{t.confirmSaveTitle}</h3>
+          <div style={{ fontSize: 13 }}>{t.confirmSaveFiles}</div>
+          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+            {files.map((file) => (
+              <li key={file} data-testid="confirm-file">
+                {file}
+              </li>
+            ))}
+          </ul>
+
+          {orphanWarnings.length > 0 && (
+            <div role="alert" style={{ fontSize: 12, color: '#a33a2b', display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {orphanWarnings.map((entry) => (
+                <div key={entry.name} data-testid={`orphan-${entry.name}`}>
+                  {t.confirmSaveOrphanWarning} {entry.name} —{' '}
+                  {entry.referencedBy.map((scope) => referenceLabel(t, scope)).join(', ')}
+                </div>
               ))}
-            </ul>
-
-            {orphanWarnings.length > 0 && (
-              <div role="alert" style={{ fontSize: 12, color: '#a33a2b', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {orphanWarnings.map((entry) => (
-                  <div key={entry.name} data-testid={`orphan-${entry.name}`}>
-                    {t.confirmSaveOrphanWarning} {entry.name} —{' '}
-                    {entry.referencedBy.map((scope) => referenceLabel(t, scope)).join(', ')}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Always shown on a save failure, field-marked or not (Task 15
-                review, Finding 1): the field marker beside `default_variant`
-                sits in `<section data-testid="prompt-header">`, which is
-                BEHIND this dialog's `position:fixed` overlay -- an operator
-                who has this dialog open would otherwise see literally nothing
-                happen when Confirm 422s. Duplicating the text here is far
-                cheaper than that silence. */}
-            {saveErrorMessage && (
-              <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-                {saveErrorMessage}
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" className="btn btn-secondary" onClick={closeConfirm}>
-                {t.cancel}
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={confirmSave}
-                disabled={save.isPending}
-              >
-                {save.isPending ? t.saving : t.confirm}
-              </button>
             </div>
+          )}
+
+          {/* Always shown on a save failure, field-marked or not (Task 15
+              review, Finding 1): the field marker beside `default_variant`
+              sits in `<section data-testid="prompt-header">`, which is
+              BEHIND this dialog's `position:fixed` overlay -- an operator
+              who has this dialog open would otherwise see literally nothing
+              happen when Confirm 422s. Duplicating the text here is far
+              cheaper than that silence. */}
+          {saveErrorMessage && (
+            <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
+              {saveErrorMessage}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-secondary" onClick={closeConfirm}>
+              {t.cancel}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={confirmSave}
+              disabled={save.isPending}
+            >
+              {save.isPending ? t.saving : t.confirm}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
 
       {blocker.state === 'blocked' && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.unsavedNavTitle}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,.45)',
-            display: 'grid',
-            placeItems: 'center',
-            padding: 24,
-            zIndex: 20,
-          }}
-        >
-          <div
-            className="card"
-            style={{
-              background: 'var(--color-bg)',
-              width: 'min(480px, 100%)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 12,
-              padding: 20,
-            }}
-          >
-            <h3 style={{ margin: 0 }}>{t.unsavedNavTitle}</h3>
-            <div style={{ fontSize: 13 }}>{t.unsavedNavBody}</div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button type="button" className="btn btn-secondary" onClick={() => blocker.reset?.()}>
-                {t.cancel}
-              </button>
-              <button type="button" className="btn btn-primary" onClick={() => blocker.proceed?.()}>
-                {t.leaveAnyway}
-              </button>
-            </div>
+        <Modal label={t.unsavedNavTitle} width={480}>
+          <h3 style={{ margin: 0 }}>{t.unsavedNavTitle}</h3>
+          <div style={{ fontSize: 13 }}>{t.unsavedNavBody}</div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button type="button" className="btn btn-secondary" onClick={() => blocker.reset?.()}>
+              {t.cancel}
+            </button>
+            <button type="button" className="btn btn-primary" onClick={() => blocker.proceed?.()}>
+              {t.leaveAnyway}
+            </button>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   )
