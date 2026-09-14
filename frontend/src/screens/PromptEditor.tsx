@@ -2,16 +2,17 @@ import { useEffect, useReducer, useRef, useState } from 'react'
 import { useBlocker, useParams } from 'react-router-dom'
 import type { Scope } from '../api/agents'
 import { ApiError } from '../api/client'
-import { useLintTemplate, useSavePrompt } from '../api/mutations'
+import { useLintTemplate, usePlanPrompt, useSavePrompt } from '../api/mutations'
 import { agentsUsingVariant } from '../api/prompts'
 import { useConfig, usePromptDocument } from '../api/queries'
 import type { LintError, MessageRole, PromptDocument, PromptVarDecl } from '../api/types'
 import { MessageList } from '../components/MessageList'
 import { Modal } from '../components/Modal'
 import { RenderPreview } from '../components/RenderPreview'
+import { SavePromptDialog } from '../components/SavePromptDialog'
 import { VarDeclTable } from '../components/VarDeclTable'
 import { useTranslations, type Lang, type Translations } from '../i18n'
-import { changedFiles, isDirty, promptDraftReducer } from '../state/promptDraft'
+import { isDirty, promptDraftReducer } from '../state/promptDraft'
 
 function emptyDocument(lang: string, agent: string): PromptDocument {
   return {
@@ -144,6 +145,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const document = usePromptDocument(docLang || undefined, agentKey || undefined)
   const config = useConfig()
   const save = useSavePrompt(docLang, agentKey)
+  const plan = usePlanPrompt(docLang, agentKey)
   const lint = useLintTemplate()
 
   const [draft, dispatch] = useReducer(promptDraftReducer, undefined, () =>
@@ -280,11 +282,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const vars = selectedVariantObj?.vars ?? {}
   const messages = selectedVariantObj?.messages ?? []
 
-  // A blank name never belongs in the confirm list: `changedFiles` always
-  // names `draft.file`, which `normalizeDocument` defaults to `''` for a
-  // document that loaded without one.
-  const files = changedFiles(original, draft).filter((file) => file !== '')
-
   // Names the draft dropped since the load -- renamed away or removed
   // outright -- mirrored against `config.disk` exactly as the server's own
   // guard (§5.5) will, so the operator sees the same refusal *before*
@@ -305,10 +302,40 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
 
   const saveErrorMessage =
     save.isError && save.error instanceof ApiError ? save.error.message : null
+  const planErrorMessage =
+    plan.isError && plan.error instanceof ApiError ? plan.error.message : null
 
   // Any variant -- not only the selected one -- holding an enum var with no
   // choices. The save sends every variant, so any one of them 422s it.
   const emptyEnumVariants = variantsWithEmptyEnum(draft)
+
+  /**
+   * Which control a 422 names, whichever of the two requests it came from.
+   *
+   * A plan refusal and a save refusal both run `build_write_set`'s
+   * validation, so both 422 with the same prose -- routing them through the
+   * same marker keeps the form's field-level feedback identical regardless
+   * of which request happened to fail.
+   */
+  const markSaveError = (error: unknown) => {
+    if (error instanceof ApiError && error.status === 422) {
+      setSaveFieldError(fieldFromSaveError(error.message))
+    } else {
+      setSaveFieldError(null)
+    }
+  }
+
+  // Save no longer opens the dialog on the strength of the browser's own
+  // guess at what will change -- it asks the server what saving WOULD do,
+  // and the dialog renders that answer once it arrives (D8: only the server
+  // can name a deletion).
+  const openConfirm = () => {
+    setConfirmOpen(true)
+    plan.mutate(toSaveRequest(draft), {
+      onSuccess: () => setSaveFieldError(null),
+      onError: markSaveError,
+    })
+  }
 
   const confirmSave = () => {
     save.mutate(toSaveRequest(draft), {
@@ -316,13 +343,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         setConfirmOpen(false)
         setSaveFieldError(null)
       },
-      onError: (error) => {
-        if (error instanceof ApiError && error.status === 422) {
-          setSaveFieldError(fieldFromSaveError(error.message))
-        } else {
-          setSaveFieldError(null)
-        }
-      },
+      onError: markSaveError,
     })
   }
 
@@ -678,7 +699,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
             type="button"
             className="btn btn-primary"
             disabled={!dirty || emptyEnumVariants.length > 0}
-            onClick={() => setConfirmOpen(true)}
+            onClick={openConfirm}
           >
             {t.save}
           </button>
@@ -686,17 +707,14 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       )}
 
       {confirmOpen && (
-        <Modal label={t.confirmSaveTitle}>
-          <h3 style={{ margin: 0 }}>{t.confirmSaveTitle}</h3>
-          <div style={{ fontSize: 13 }}>{t.confirmSaveFiles}</div>
-          <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace' }}>
-            {files.map((file) => (
-              <li key={file} data-testid="confirm-file">
-                {file}
-              </li>
-            ))}
-          </ul>
-
+        <SavePromptDialog
+          plan={plan.data ?? null}
+          error={planErrorMessage ?? saveErrorMessage}
+          pending={save.isPending || plan.isPending}
+          onCancel={closeConfirm}
+          onConfirm={confirmSave}
+          lang={lang}
+        >
           {orphanWarnings.length > 0 && (
             <div role="alert" style={{ fontSize: 12, color: '#a33a2b', display: 'flex', flexDirection: 'column', gap: 4 }}>
               {orphanWarnings.map((entry) => (
@@ -707,34 +725,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
               ))}
             </div>
           )}
-
-          {/* Always shown on a save failure, field-marked or not (Task 15
-              review, Finding 1): the field marker beside `default_variant`
-              sits in `<section data-testid="prompt-header">`, which is
-              BEHIND this dialog's `position:fixed` overlay -- an operator
-              who has this dialog open would otherwise see literally nothing
-              happen when Confirm 422s. Duplicating the text here is far
-              cheaper than that silence. */}
-          {saveErrorMessage && (
-            <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-              {saveErrorMessage}
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-secondary" onClick={closeConfirm}>
-              {t.cancel}
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={confirmSave}
-              disabled={save.isPending}
-            >
-              {save.isPending ? t.saving : t.confirm}
-            </button>
-          </div>
-        </Modal>
+        </SavePromptDialog>
       )}
 
       {blocker.state === 'blocked' && (

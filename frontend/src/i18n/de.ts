@@ -137,6 +137,12 @@ export const de = {
   saving: 'Wird gespeichert…',
   confirmSaveTitle: 'Speichern bestätigen',
   confirmSaveFiles: 'Dies schreibt:',
+  confirmSaveCreated: 'Neu angelegt:',
+  confirmSaveUpdated: 'Geändert:',
+  confirmSaveDeleted: 'Gelöscht (wird von keinem Prompt mehr verwendet):',
+  confirmSaveDeletionsSkipped:
+    'Es wird nichts gelöscht, weil eine Prompt-Datei nicht gelesen werden konnte:',
+  planning: 'Wird geprüft …',
   confirmSaveOrphanWarning: 'Wird noch referenziert von:',
   cancel: 'Abbrechen',
   confirm: 'Bestätigen',

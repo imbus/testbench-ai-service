@@ -9,7 +9,13 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConfigResponse, LintError, PromptDocument, PromptSaveResponse } from '../api/types'
+import type {
+  ConfigResponse,
+  LintError,
+  PromptDocument,
+  PromptPlanResponse,
+  PromptSaveResponse,
+} from '../api/types'
 import type { Lang } from '../i18n'
 import { PromptEditor } from './PromptEditor'
 
@@ -158,6 +164,11 @@ function deferredResponse() {
 let fetchMock: ReturnType<typeof vi.fn>
 let docBody: PromptDocument | null
 let putResult: { status: 200 } | { status: 409; detail: string } | { status: 422; detail: string }
+/** What `POST /prompts/{lang}/{agent}/plan` answers. Defaults to a plan that
+ * names a file the browser's own client-side diff could never have computed
+ * (a deletion) -- proof the dialog's file list comes from the server, not
+ * from `changedFiles`. */
+let planResult: { status: 200; body: PromptPlanResponse } | { status: 422; detail: string }
 /** What `POST /prompts/lint` answers for a given message body. Defaults to
  * clean; a test overrides it to make one message's content report an error. */
 let lintResponder: (content: string) => { ok: boolean; errors: LintError[] }
@@ -167,6 +178,15 @@ let lintFailure: { status: number; detail: string } | null
 beforeEach(() => {
   docBody = DOC
   putResult = { status: 200 }
+  planResult = {
+    status: 200,
+    body: {
+      created: [],
+      updated: ['/p/de/explainer/prompt.yaml'],
+      deleted: ['/p/de/explainer/user.jinja'],
+      deletions_skipped: null,
+    },
+  }
   lintResponder = () => ({ ok: true, errors: [] })
   lintFailure = null
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
@@ -179,6 +199,13 @@ beforeEach(() => {
     }
     if (method === 'POST' && url.startsWith('/admin/api/prompts/render')) {
       return ok({ messages: [] })
+    }
+    // ABOVE the generic POST/PUT branches below: `/plan` is a POST to the
+    // same `/admin/api/prompts/{lang}/{agent}` prefix the PUT below matches,
+    // so it must be checked first or it would always fall through to the PUT
+    // branch instead.
+    if (method === 'POST' && url.endsWith('/plan')) {
+      return planResult.status === 200 ? ok(planResult.body) : fail(planResult.status, planResult.detail)
     }
     if (method === 'PUT' && url.startsWith('/admin/api/prompts/')) {
       if (putResult.status === 200) return ok(SAVE_OK)
@@ -363,11 +390,56 @@ describe('saving', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
     const dialog = await screen.findByRole('dialog')
-    expect(within(dialog).getByText('de/explainer/prompt.yaml')).toBeInTheDocument()
+    // The dialog's file list comes from the server's plan, not from the
+    // browser's own diff -- `findByText` waits for that plan to resolve.
+    expect(await within(dialog).findByText('/p/de/explainer/prompt.yaml')).toBeInTheDocument()
     expect(putCalls()).toHaveLength(0)
 
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
     await waitFor(() => expect(putCalls()).toHaveLength(1))
+  })
+
+  it('names a deletion the browser could not have computed', async () => {
+    renderEditor({ lang: 'en' })
+    await screen.findByDisplayValue('Explainer')
+
+    // Any edit at all: the dialog's contents come from the server, not from
+    // the shape of the change.
+    await userEvent.clear(promptName())
+    await userEvent.type(promptName(), 'Renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('/p/de/explainer/user.jinja')).toBeInTheDocument()
+    expect(screen.getByText('Deleted (no prompt references it any more):')).toBeInTheDocument()
+  })
+
+  it('shows a plan refusal inside the dialog rather than behind it', async () => {
+    planResult = { status: 422, detail: "default_variant 'Gone' names no variant. Available: Thorough" }
+    renderEditor({ lang: 'en' })
+    await screen.findByDisplayValue('Explainer')
+
+    await userEvent.clear(promptName())
+    await userEvent.type(promptName(), 'Renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    // The dialog is open AND carries the reason. Phase 4a's M7 failure mode
+    // was a marker rendered behind this overlay, i.e. nothing visible
+    // happening.
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(/default_variant/)
+    expect(within(dialog).getByRole('button', { name: 'Confirm' })).toBeDisabled()
+  })
+
+  it('does not PUT until the operator confirms', async () => {
+    renderEditor({ lang: 'en' })
+    await screen.findByDisplayValue('Explainer')
+
+    await userEvent.clear(promptName())
+    await userEvent.type(promptName(), 'Renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await screen.findByRole('dialog')
+
+    expect(fetchMock.mock.calls.filter((call) => (call[1]?.method ?? '') === 'PUT')).toHaveLength(0)
   })
 
   it('calls nothing when the confirm is cancelled', async () => {

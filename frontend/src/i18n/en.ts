@@ -141,6 +141,12 @@ export const en = {
   saving: 'Saving…',
   confirmSaveTitle: 'Confirm save',
   confirmSaveFiles: 'This will write:',
+  confirmSaveCreated: 'Created:',
+  confirmSaveUpdated: 'Updated:',
+  confirmSaveDeleted: 'Deleted (no prompt references it any more):',
+  confirmSaveDeletionsSkipped:
+    'Nothing will be deleted, because a prompt file could not be read:',
+  planning: 'Checking …',
   confirmSaveOrphanWarning: 'Still referenced by:',
   cancel: 'Cancel',
   confirm: 'Confirm',
