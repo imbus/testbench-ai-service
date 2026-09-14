@@ -2176,31 +2176,52 @@ git commit -m "Run the edited prompt against a real model"
 
 ### Task 10: Frontend API layer
 
-Types and fetchers only, so the two UI tasks can be reviewed on their own.
+Types plus one query hook and one mutation hook, so the two UI tasks can be reviewed on their own.
+
+**Corrected against the real codebase** (the plan's first draft assumed a different layout):
+`api/queries.ts` holds `useQuery` hooks, `api/mutations.ts` holds `useMutation` hooks, and
+`api/prompts.ts` is pure domain helpers with no API calls in it at all. There is no standalone
+`api/models.ts` and none is added. `apiFetch(path, init)` takes a plain `RequestInit`, so a POST
+body is `body: JSON.stringify(...)` — there is no `json:` option — and `apiFetch` attaches the
+CSRF header itself for unsafe methods, so no hook sets it.
 
 **Files:**
 - Modify: `frontend/src/api/types.ts`
-- Create: `frontend/src/api/models.ts`
-- Modify: `frontend/src/api/prompts.ts`
-- Test: `frontend/src/api/models.test.ts`
+- Modify: `frontend/src/api/queries.ts`
+- Modify: `frontend/src/api/mutations.ts`
+- Test: `frontend/src/api/models.test.tsx`
 
 **Interfaces:**
-- Consumes: `apiFetch` (existing, `frontend/src/api/client.ts`)
+- Consumes: `apiFetch` (`frontend/src/api/client.ts`)
 - Produces:
   - `RoutingFamily = 'chat' | 'reasoning' | 'adaptive' | 'budget' | 'fallback'`
   - `CatalogueModel`, `CatalogueProvider`, `ModelCatalogue`, `ResolvedRoute`, `PromptTestResult`, `ExtraModelEntry`
-  - `fetchModels(project?: string): Promise<ModelCatalogue>`
-  - `testPrompt(body: PromptTestBody): Promise<PromptTestResult>`
+  - `useModels(project?: string, opts?)` in `queries.ts` — query key `['models', project ?? null]`
+  - `useTestPrompt()` in `mutations.ts` — mutation taking `{messages, vars, agent_context, model, project}`
 
 - [ ] **Step 1: Write the failing test**
 
-Create `frontend/src/api/models.test.ts`:
+Create `frontend/src/api/models.test.tsx`:
 
-```ts
+```tsx
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { renderHook, waitFor } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, expect, test, vi } from 'vitest'
-import { fetchModels } from './models'
+import { useTestPrompt } from './mutations'
+import { useModels } from './queries'
 
 afterEach(() => vi.unstubAllGlobals())
+
+const CATALOGUE = {
+  providers: [
+    {
+      provider: 'openai',
+      key_present: true,
+      models: [{ id: 'gpt-4o', routing: 'chat', source: 'builtin' }],
+    },
+  ],
+}
 
 function stubFetch(body: unknown) {
   const spy = vi.fn().mockResolvedValue(
@@ -2213,39 +2234,60 @@ function stubFetch(body: unknown) {
   return spy
 }
 
-const CATALOGUE = {
-  providers: [
-    {
-      provider: 'openai',
-      key_present: true,
-      models: [{ id: 'gpt-4o', routing: 'chat', source: 'builtin' }],
-    },
-  ],
+function wrapper({ children }: { children: ReactNode }) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
-test('fetches the catalogue', async () => {
+test('useModels fetches the catalogue', async () => {
   stubFetch(CATALOGUE)
-  const catalogue = await fetchModels()
-  expect(catalogue.providers[0].models[0].id).toBe('gpt-4o')
+  const { result } = renderHook(() => useModels(), { wrapper })
+  await waitFor(() => expect(result.current.isSuccess).toBe(true))
+  expect(result.current.data?.providers[0].models[0].id).toBe('gpt-4o')
 })
 
-test('passes the project through as a query parameter', async () => {
+test('useModels passes the project through as a query parameter', async () => {
   const spy = stubFetch(CATALOGUE)
-  await fetchModels('Car Configurator')
-  expect(String(spy.mock.calls[0][0])).toContain('project=Car+Configurator')
+  const { result } = renderHook(() => useModels('Car Configurator'), { wrapper })
+  await waitFor(() => expect(result.current.isSuccess).toBe(true))
+  expect(String(spy.mock.calls[0][0])).toContain('project=Car%20Configurator')
 })
 
-test('omits the query parameter when no project is given', async () => {
+test('useModels omits the query parameter when no project is given', async () => {
   const spy = stubFetch(CATALOGUE)
-  await fetchModels()
+  const { result } = renderHook(() => useModels(), { wrapper })
+  await waitFor(() => expect(result.current.isSuccess).toBe(true))
   expect(String(spy.mock.calls[0][0])).not.toContain('project=')
+})
+
+test('useTestPrompt posts the body as JSON', async () => {
+  const spy = stubFetch({
+    text: 'ok',
+    latency_ms: 12,
+    resolved: { provider: 'anthropic', model: 'claude-opus-5', credential_scope: 'global' },
+  })
+  const { result } = renderHook(() => useTestPrompt(), { wrapper })
+
+  result.current.mutate({
+    messages: [],
+    vars: {},
+    agent_context: {},
+    model: 'claude-opus-5',
+    project: null,
+  })
+
+  await waitFor(() => expect(result.current.isSuccess).toBe(true))
+  const init = spy.mock.calls[0][1] as RequestInit
+  expect(init.method).toBe('POST')
+  expect(JSON.parse(init.body as string).model).toBe('claude-opus-5')
+  expect(result.current.data?.resolved.credential_scope).toBe('global')
 })
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `cd frontend && npx vitest run src/api/models.test.ts`
-Expected: FAIL — cannot resolve `./models`
+Run: `cd frontend && npx vitest run src/api/models.test.tsx`
+Expected: FAIL — `useModels` / `useTestPrompt` are not exported
 
 - [ ] **Step 3: Add the types to `api/types.ts`**
 
@@ -2290,12 +2332,11 @@ export interface ExtraModelEntry {
 }
 ```
 
-- [ ] **Step 4: Write `api/models.ts`**
+- [ ] **Step 4: Add `useModels` to `api/queries.ts`**
+
+Follow `usePromptMeta`'s shape — it is the existing parameterised query in this file.
 
 ```ts
-import { apiFetch } from './client'
-import type { ModelCatalogue } from './types'
-
 /**
  * The model catalogue, optionally scoped to a project.
  *
@@ -2303,30 +2344,51 @@ import type { ModelCatalogue } from './types'
  * one — matching the backend's silent credential fallback, so the answer is
  * "will a run find a key at all".
  */
-export function fetchModels(project?: string): Promise<ModelCatalogue> {
-  const query = project ? `?${new URLSearchParams({ project }).toString()}` : ''
-  return apiFetch<ModelCatalogue>(`/models${query}`)
+export function useModels(
+  project?: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const query = project ? `?project=${encodeURIComponent(project)}` : ''
+  return useQuery({
+    queryKey: ['models', project ?? null],
+    queryFn: () => apiFetch<ModelCatalogue>(`/models${query}`),
+    staleTime: Infinity,
+    enabled,
+  })
 }
 ```
 
-- [ ] **Step 5: Add `testPrompt` to `api/prompts.ts`**
+Add `ModelCatalogue` to the existing `./types` import in that file.
+
+- [ ] **Step 5: Add `useTestPrompt` to `api/mutations.ts`**
+
+Follow `useRenderPrompt`'s shape — it is the closest existing mutation.
 
 ```ts
-export interface PromptTestBody {
-  messages: PromptMessageDoc[]
-  vars: Record<string, unknown>
-  agent_context: Record<string, unknown>
-  model: string
-  project: string | null
-}
-
-/** Run the current draft against a real model. Spends money — never implicit. */
-export function testPrompt(body: PromptTestBody): Promise<PromptTestResult> {
-  return apiFetch<PromptTestResult>('/prompts/test', { method: 'POST', json: body })
+/**
+ * Run the current draft against a real model.
+ *
+ * The one console action that spends money, so it is never called implicitly —
+ * only from the editor's explicit Test run button.
+ */
+export function useTestPrompt() {
+  return useMutation({
+    mutationFn: (body: {
+      messages: PromptMessageDoc[]
+      vars: Record<string, unknown>
+      agent_context: Record<string, unknown>
+      model: string
+      project: string | null
+    }) =>
+      apiFetch<PromptTestResult>('/prompts/test', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
+  })
 }
 ```
 
-Match the exact `apiFetch` option shape already used by the other POST helpers in this file; if it takes `body: JSON.stringify(...)` rather than `json`, follow that.
+Add `PromptTestResult` to the existing `./types` import in that file.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
@@ -2336,11 +2398,9 @@ Expected: PASS, no type errors
 - [ ] **Step 7: Commit**
 
 ```bash
-git add frontend/src/api/types.ts frontend/src/api/models.ts frontend/src/api/prompts.ts frontend/src/api/models.test.ts
-git commit -m "Add the catalogue and test-run API helpers"
+git add frontend/src/api/types.ts frontend/src/api/queries.ts frontend/src/api/mutations.ts frontend/src/api/models.test.tsx
+git commit -m "Add the catalogue query and test-run mutation hooks"
 ```
-
----
 
 ### Task 11: `TestRunPanel` in the prompt editor
 
@@ -2353,7 +2413,7 @@ Read-only against the catalogue: the picker consumes `GET /models` and offers fr
 - Test: `frontend/src/components/TestRunPanel.test.tsx`
 
 **Interfaces:**
-- Consumes: `fetchModels`, `testPrompt`, `PromptTestResult`, `CatalogueModel` (Task 10)
+- Consumes: `useModels`, `useTestPrompt`, `PromptTestResult`, `CatalogueModel` (Task 10)
 - Produces: `<TestRunPanel messages vars agentContext isAdmin lang />`
 
 - [ ] **Step 1: Write the failing test**
@@ -2507,7 +2567,7 @@ To **both** `en.ts` and `de.ts` (English then German):
 
 Build the component to satisfy the test above:
 
-- `useQuery({ queryKey: ['models', project], queryFn: () => fetchModels(project) })`.
+- `useModels(project)` from `api/queries.ts` — do not call `apiFetch` directly.
 - A `<select>` labelled by `t.testRunModel`, with one `<optgroup>` per provider whose label carries the provider name and, when `key_present` is false, a "no key" marker. Each `<option>` renders `` `${model.id} · ${model.routing}` `` so a `fallback` entry reads as such (`t.testRunFallbackHint` for the `fallback` family).
 - A free-text `<input>` bound to the same state as the select, so typing a model not in the catalogue still submits — the select writes into the input's state rather than replacing it.
 - A project `<select>` defaulting to `t.testRunProjectGlobal` (value `null`).
