@@ -11,7 +11,7 @@ from testbench_ai_service.llm.azure_auth import (
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMClient, LLMProvider, RoutingFamily
 from testbench_ai_service.llm.openai import AzureOpenAIClient, OpenAIClient
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.config import LLMConfig
+from testbench_ai_service.models.config import LLMConfig, resolved_extra_models
 from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.naming import normalize_project_name
 
@@ -286,6 +286,16 @@ class LLMFactory:
         reaches the Anthropic client, and is omitted entirely when empty: a
         third-party CUSTOM client should see exactly the kwargs it saw before
         this field existed.
+
+        It is never forwarded to CUSTOM at all, empty or not. `_create_client`
+        splats these kwargs into a class the operator named, and a third-party
+        `__init__` that spells out `timeout` and `max_retries` without a
+        `**kwargs` catch-all raises TypeError on an unexpected one -- at
+        `init_clients` during startup and at every `reload.apply`, taking down
+        all four production agents rather than just the console. Nothing is
+        lost: a CUSTOM client implements its own dispatch, so the routing
+        family is decorative there, which is why `fallback` is the only value
+        ALLOWED_ROUTING permits for it (design 5.3).
         """
         kwargs: dict[str, Any] = {}
         if config.timeout is not None:
@@ -293,13 +303,14 @@ class LLMFactory:
         if config.max_retries is not None:
             kwargs["max_retries"] = config.max_retries
 
-        model_routing: dict[str, RoutingFamily] = {
-            name: entry.routing
-            for name, entry in config.extra_models.items()
-            if entry.provider == provider
-        }
-        if model_routing:
-            kwargs["model_routing"] = model_routing
+        if provider != LLMProvider.CUSTOM:
+            model_routing: dict[str, RoutingFamily] = {
+                name: entry.routing
+                for name, entry in resolved_extra_models(config).items()
+                if entry.provider == provider
+            }
+            if model_routing:
+                kwargs["model_routing"] = model_routing
 
         extra = config.model_extra or {}
         if "_strict_response_validation" in extra:

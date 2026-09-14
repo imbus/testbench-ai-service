@@ -249,3 +249,78 @@ class TestFailures:
         response = client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
         assert response.status_code == 400
         assert "anthropic" in response.text
+
+    def test_the_400_from_get_client_is_scrubbed_too(
+        self, client, login, app, fake_client, monkeypatch
+    ):
+        """The 400 is a provider-sourced string like the 502, and D9 covers both.
+
+        It used to be built from `str(e)` computed BEFORE `secrets`, so it was
+        the one message on this route that reached the operator unmasked.
+        """
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret-value")
+        app.state.llm_factory.get_client = MagicMock(
+            side_effect=ValueError("credential 'sk-secret-value' was rejected")
+        )
+        login(roles=["Administrator"])
+        response = client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
+        assert response.status_code == 400
+        assert "sk-secret-value" not in response.text
+        assert "***" in response.text
+
+
+class TestEntraIdSuppression:
+    """Design 6/9: the Entra ID path has no credential string to scrub.
+
+    `resolve_entra_credentials` yields a credential OBJECT, so
+    `_credential_values` finds nothing for AZURE_OPENAI + ENTRA_ID and
+    `scrub_all` would hand the provider's message back verbatim -- the exact
+    disclosure D9 exists to prevent. That path returns the exception type and a
+    pointer to the log instead.
+    """
+
+    def _azure_app(self, make_app, auth_method: str):
+        return make_app(
+            llm_config={
+                "provider": "azure_openai",
+                "auth_method": auth_method,
+                "azure_endpoint": "https://example.openai.azure.com/",
+                "api_version": "2024-02-01",
+            }
+        )
+
+    def _run(self, app, tb_connection, message: str):
+        fake = MagicMock()
+        fake.query_llm = AsyncMock(side_effect=RuntimeError(message))
+        app.state.llm_factory.get_client = MagicMock(return_value=fake)
+        app.state.llm_factory.has_project_credential = MagicMock(return_value=False)
+
+        with TestClient(app, raise_server_exceptions=False) as scoped:
+            with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+                scoped.post("/admin/api/session", json={"username": "a", "password": "p"})
+            return scoped.post(
+                "/admin/api/prompts/test",
+                json=body(model="gpt-4o"),
+                headers={"X-CSRF-Token": scoped.cookies["tbai_admin_csrf"]},
+            )
+
+    def test_the_provider_message_is_suppressed(self, make_app, tb_connection):
+        app = self._azure_app(make_app, "entra_id")
+        response = self._run(app, tb_connection, "401 token https://x/?sig=leaked-token")
+
+        assert response.status_code == 502
+        # The type is still reported -- the operator needs to know WHAT failed.
+        assert "RuntimeError" in response.text
+        # The message is not, in any part.
+        assert "leaked-token" not in response.text
+        assert "sig=" not in response.text
+        assert "401" not in response.text
+        assert "log" in response.text.lower()
+
+    def test_the_api_key_path_still_reports_the_message(self, make_app, tb_connection):
+        # The suppression is narrow: only the path with no string to scrub.
+        app = self._azure_app(make_app, "api_key")
+        response = self._run(app, tb_connection, "404 deployment not found")
+
+        assert response.status_code == 502
+        assert "deployment not found" in response.text

@@ -70,3 +70,23 @@ def test_join_refuses_an_empty_segment():
     """There is no spelling of an empty segment that split_path would accept back."""
     with pytest.raises(ValueError, match=r"(?i)edit path"):
         join_path(["projects", "", "language"])
+
+
+def test_a_dotted_model_name_stays_one_segment():
+    """The `llm_config.extra_models` key `ModelTable` writes, read back.
+
+    OpenAI's own set is full of dotted names (`gpt-4.1`, `gpt-5.1`, `gpt-5.5`),
+    so this is the primary case for that table rather than an edge one. The
+    concatenated spelling `llm_config.extra_models.gpt-5.5.provider` tokenizes
+    into FIVE segments and addresses a nested table; the joined spelling must
+    come back as exactly four, with the model name intact.
+    """
+    joined = join_path(["llm_config", "extra_models", "gpt-5.5", "provider"])
+    assert joined == 'llm_config.extra_models."gpt-5.5".provider'
+
+    segments = split_path(joined)
+    assert segments == ["llm_config", "extra_models", "gpt-5.5", "provider"]
+    assert len(segments) == 4
+
+    # What the bug actually was, asserted rather than described.
+    assert len(split_path("llm_config.extra_models.gpt-5.5.provider")) == 5

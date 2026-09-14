@@ -102,15 +102,47 @@ test('shows the resolved route including the credential scope', async () => {
   expect(screen.getByText(/global key/i)).toBeInTheDocument()
 })
 
-test('the button is disabled while a run is in flight', () => {
+test('the button is disabled while a run is in flight', async () => {
   runState = { isPending: true, data: undefined, error: null }
   renderPanel()
+  // A model is typed first, so this asserts the in-flight gate specifically
+  // rather than passing because the (empty) model gate happens to fire.
+  await userEvent.setup().type(screen.getByLabelText(/model/i), 'claude-opus-5')
   expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
 })
 
-test('a non-admin cannot start a run', () => {
+test('a non-admin cannot start a run', async () => {
   renderPanel({ isAdmin: false })
+  await userEvent.setup().type(screen.getByLabelText(/model/i), 'claude-opus-5')
   expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
+})
+
+test('the button is disabled until a model is given', async () => {
+  // An empty model would reach a real client and cost a guaranteed 502 on a
+  // paid endpoint. Whitespace is not a model name either.
+  renderPanel()
+  const button = screen.getByRole('button', { name: /test run/i })
+  expect(button).toBeDisabled()
+
+  const user = userEvent.setup()
+  const field = screen.getByLabelText(/model/i)
+  await user.type(field, '   ')
+  expect(button).toBeDisabled()
+
+  await user.clear(field)
+  await user.type(field, 'claude-opus-5')
+  expect(button).toBeEnabled()
+})
+
+test('the in-flight notice is announced', () => {
+  runState = { isPending: true, data: undefined, error: null }
+  renderPanel()
+  expect(screen.getByText(/running/i)).toHaveAttribute('aria-live', 'polite')
+})
+
+test('the admin-gate notice is announced', () => {
+  renderPanel({ isAdmin: false })
+  expect(screen.getByText(/administrator/i)).toHaveAttribute('aria-live', 'polite')
 })
 
 test('has no add-model control — that lives on the LLM view', async () => {

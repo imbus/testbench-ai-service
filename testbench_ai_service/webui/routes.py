@@ -6,9 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
-from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
+from testbench_ai_service.models.config import LLMConfig
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
 from testbench_ai_service.webui.atomic import write_atomic
@@ -617,6 +618,33 @@ def _credential_values(provider: LLMProvider, project: str | None) -> list[str]:
     return [value for value in candidates if value]
 
 
+def _provider_error_detail(
+    exc: Exception, provider: LLMProvider, llm_config: LLMConfig, secrets: list[str]
+) -> str:
+    """What a failed provider call may say back to the operator (design D9/§6).
+
+    Normally the provider's own words, scrubbed by exact substring against the
+    credential this run could have used -- operators need "model not found" or
+    "401" to act on.
+
+    The Entra ID path is the documented exception (§6, §9):
+    ``resolve_entra_credentials`` yields a credential *object*, so there is no
+    string for the scrubber to match on and ``_credential_values`` would return
+    an empty list -- which would return the provider message **unscrubbed**,
+    exactly the disclosure D9 exists to prevent. For that path only, the
+    message is suppressed rather than scrubbed, and the operator is pointed at
+    the log, where the caller has already recorded the full exception with
+    ``exc_info``.
+    """
+    if provider is LLMProvider.AZURE_OPENAI and llm_config.auth_method == AzureAuthMethod.ENTRA_ID:
+        return (
+            f"{type(exc).__name__}: the provider's message was suppressed because this "
+            "request authenticates via Entra ID, which yields a credential object rather "
+            "than a string that could be masked. The full error is in the service log."
+        )
+    return scrub_all(f"{type(exc).__name__}: {exc}", secrets)
+
+
 @router.post("/prompts/test", response_model=PromptTestResponse)
 async def run_prompt_test(
     body: PromptTestRequest,
@@ -650,24 +678,32 @@ async def run_prompt_test(
     llm_config = get_llm_config(config, project_name=body.project)
     factory: LLMFactory = request.app.state.llm_factory
 
+    # Resolved BEFORE get_client, not after: `resolve_provider` is a pure
+    # function of (config, model) with no I/O, and the 400 below reports a
+    # credential-resolution failure whose message can name the variable it
+    # looked for. Computing `secrets` afterwards left that 400 as the one
+    # provider-sourced string on this route that was never scrubbed.
+    #
+    # Both candidates, not just the global one: a project run may have used the
+    # project variable, and scrubbing only the global key would leave exactly
+    # the credential this run used exposed (design D9).
+    provider = factory.resolve_provider(llm_config, body.model)
+    secrets = _credential_values(provider, body.project)
+
     try:
         client = factory.get_client(
             config=llm_config, prompt_model=body.model, project_name=body.project
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=scrub_all(str(e), secrets)
+        ) from e
 
-    provider = factory.resolve_provider(llm_config, body.model)
     scope = "global"
     if body.project is not None and factory.has_project_credential(
         body.project, provider, llm_config
     ):
         scope = "project"
-
-    # Both candidates, not just the global one: a project run may have used the
-    # project variable, and scrubbing only the global key would leave exactly
-    # the credential this run used exposed in the 502 (design D9).
-    secrets = _credential_values(provider, body.project)
 
     flight: SingleFlight = request.app.state.prompt_test_flight
     with flight.hold(session.sid):
@@ -680,7 +716,7 @@ async def run_prompt_test(
                 logger.error("Prompt test run failed: %r", e, exc_info=True)
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=scrub_all(f"{type(e).__name__}: {e}", secrets),
+                    detail=_provider_error_detail(e, provider, llm_config, secrets),
                 ) from e
 
     return PromptTestResponse(
@@ -694,7 +730,6 @@ async def run_prompt_test(
 def read_model_catalogue(
     project: str | None = None,
     _session: Session = Depends(require_admin),
-    _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
 ) -> ModelCatalogueResponse:
     """Every model the console can offer, grouped by provider.
@@ -702,6 +737,15 @@ def read_model_catalogue(
     Admin-gated despite being a read: it is the catalogue for the one console
     action that spends money, and it reports which provider credentials are
     present. Presence only -- no endpoint returns a credential value.
+
+    Admin-gated **only**, and deliberately the one route here without
+    ``require_csrf``. The console's own ``apiFetch`` (``api/client.ts``)
+    attaches ``X-CSRF-Token`` to unsafe methods only, so a browser GET never
+    sends one and the guard would 403 every real request -- a permanently
+    empty model picker. It would also defend nothing: CSRF protects
+    state-changing requests, and this one returns presence booleans to a
+    session that is already authenticated and already admin. ``require_admin``
+    is the access control.
     """
     return build_catalogue(config, project)
 

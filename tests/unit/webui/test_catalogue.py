@@ -14,8 +14,10 @@ def no_tb_probe(monkeypatch):
     monkeypatch.setattr("testbench_ai_service.config.validate_tb_server_url", lambda *a, **k: None)
 
 
-def _config(**llm_kwargs) -> AppConfig:
-    return AppConfig(tb_server_url=TB_URL, llm_config=LLMConfig(**llm_kwargs))
+def _config(projects=None, **llm_kwargs) -> AppConfig:
+    return AppConfig(
+        tb_server_url=TB_URL, llm_config=LLMConfig(**llm_kwargs), projects=projects or {}
+    )
 
 
 def _models(response, provider: LLMProvider) -> dict[str, RoutingFamily]:
@@ -69,6 +71,43 @@ class TestExtraModelsOverlay:
         )
         response = build_catalogue(config)
         assert "my-deployment" in _models(response, LLMProvider.AZURE_OPENAI)
+
+    def test_a_project_s_own_extra_models_are_what_that_project_lists(self):
+        """The catalogue must resolve the same way the run does (design D3/3.7).
+
+        `get_llm_config` lets a project REPLACE `extra_models`, so a catalogue
+        that read the global dict would list models the run will not route and
+        hide the ones it will -- silently, and only for the projects that
+        override. Asserted in both directions: the project's entry present and
+        the global one gone with `?project=`, and the reverse without it.
+        """
+        config = _config(
+            extra_models={"global-only": {"provider": "anthropic", "routing": "adaptive"}},
+            projects={
+                "Car Configurator": {
+                    "llm_config": {
+                        "extra_models": {
+                            "project-only": {"provider": "anthropic", "routing": "budget"}
+                        }
+                    }
+                }
+            },
+        )
+
+        scoped = _models(build_catalogue(config, project="Car Configurator"), LLMProvider.ANTHROPIC)
+        assert scoped["project-only"] is RoutingFamily.BUDGET
+        assert "global-only" not in scoped
+
+        globals_ = _models(build_catalogue(config), LLMProvider.ANTHROPIC)
+        assert "global-only" in globals_
+        assert "project-only" not in globals_
+
+    def test_an_unknown_project_still_sees_the_global_entries(self):
+        config = _config(
+            extra_models={"global-only": {"provider": "anthropic", "routing": "adaptive"}}
+        )
+        entry = _models(build_catalogue(config, project="No Such Project"), LLMProvider.ANTHROPIC)
+        assert "global-only" in entry
 
     def test_builtins_survive_the_overlay(self):
         config = _config(

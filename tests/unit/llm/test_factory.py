@@ -473,6 +473,44 @@ class TestModelRoutingForwarding:
         assert openai_kwargs["model_routing"] == {"gpt-6": RoutingFamily.REASONING}
         assert anthropic_kwargs["model_routing"] == {"claude-opus-6": RoutingFamily.ADAPTIVE}
 
+    def test_custom_never_receives_model_routing(self):
+        """A CUSTOM client's kwargs must stay byte-identical to what they were.
+
+        `_create_client` splats these into a class the operator named, and a
+        third-party `__init__` that spells out `timeout`/`max_retries` without
+        `**kwargs` raises TypeError on an unexpected one -- at `init_clients`
+        during startup and at every `reload.apply`, taking all four production
+        agents down with it. Nothing is lost: a CUSTOM client implements its
+        own dispatch, so `fallback` is the only value ALLOWED_ROUTING permits
+        for it (design 5.3) and the map would be decorative.
+        """
+        config = LLMConfig(
+            provider=LLMProvider.CUSTOM,
+            class_path="testbench_ai_service.llm.openai.OpenAIClient",
+            extra_models={"my-local-llama": {"provider": "custom", "routing": "fallback"}},
+        )
+        kwargs = LLMFactory()._get_common_client_kwargs(config, LLMProvider.CUSTOM)
+        assert "model_routing" not in kwargs
+
+    def test_a_custom_entry_does_not_reach_another_provider_either(self):
+        config = LLMConfig(
+            extra_models={"my-local-llama": {"provider": "custom", "routing": "fallback"}}
+        )
+        kwargs = LLMFactory()._get_common_client_kwargs(config, LLMProvider.OPENAI)
+        assert "model_routing" not in kwargs
+
+    def test_a_project_merged_config_still_forwards_its_entries(self):
+        """After `get_llm_config` merges a project block, the entries are plain
+        dicts -- `model_copy(update=...)` skips validation. Reading
+        `entry.provider` off one would be an AttributeError at client
+        construction, on exactly the per-project catalogue design 5.3 promises.
+        """
+        merged = LLMConfig().model_copy(
+            update={"extra_models": {"gpt-6": {"provider": "openai", "routing": "reasoning"}}}
+        )
+        kwargs = LLMFactory()._get_common_client_kwargs(merged, LLMProvider.OPENAI)
+        assert kwargs["model_routing"] == {"gpt-6": RoutingFamily.REASONING}
+
     def test_declared_fields_still_do_not_leak_into_query_kwargs(self):
         # extra_models is declared, so it is not in model_extra and therefore
         # never spread into query_llm by agents/base.py:92.

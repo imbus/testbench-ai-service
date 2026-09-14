@@ -11,11 +11,21 @@ class TestGates:
         response = client.get("/admin/api/models", headers=csrf(client))
         assert response.status_code == 403
 
-    def test_missing_csrf_is_refused(self, client, login):
-        login(roles=["Administrator"])
-        assert client.get("/admin/api/models").status_code == 403
+    def test_a_browser_shaped_get_without_csrf_succeeds(self, client, login):
+        """No CSRF header, because the console's own client never sends one.
 
-    def test_an_admin_with_csrf_is_allowed(self, client, login):
+        ``apiFetch`` (frontend/src/api/client.ts) attaches ``X-CSRF-Token`` to
+        unsafe methods only, so a real browser GET arrives exactly like this
+        one. Gating this route on CSRF made every real request a 403 and the
+        model picker permanently empty; it also defended nothing, since a read
+        of presence booleans by an already-authenticated admin changes no
+        state. ``require_admin`` is the access control, and the two tests
+        above are what assert it.
+        """
+        login(roles=["Administrator"])
+        assert client.get("/admin/api/models").status_code == 200
+
+    def test_an_admin_is_allowed(self, client, login):
         login(roles=["Administrator"])
         response = client.get("/admin/api/models", headers=csrf(client))
         assert response.status_code == 200

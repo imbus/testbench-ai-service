@@ -16,6 +16,8 @@ import os
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.llm.routing import builtin_models_by_provider
+from testbench_ai_service.models.config import resolved_extra_models
+from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
 from testbench_ai_service.webui.models import (
     CatalogueModel,
@@ -57,7 +59,17 @@ def _key_present(config: AppConfig, provider: LLMProvider, project: str | None) 
 
 
 def build_catalogue(config: AppConfig, project: str | None = None) -> ModelCatalogueResponse:
-    """Every model the console can offer, grouped by provider."""
+    """Every model the console can offer, grouped by provider.
+
+    The operator half is read off the **effective** LLM config for *project*,
+    resolved through the same ``get_llm_config`` helper the test run itself
+    calls (design D3/3.7). Reading ``config.llm_config.extra_models`` directly
+    would always report the global dict, while a project that declares its own
+    ``extra_models`` replaces it at call time -- so the picker would list
+    models the run will not route and hide the ones it will, silently and only
+    for the projects that override.
+    """
+    llm_config = get_llm_config(config, project_name=project)
     grouped = builtin_models_by_provider()
 
     entries: dict[LLMProvider, dict[str, CatalogueModel]] = {
@@ -68,7 +80,7 @@ def build_catalogue(config: AppConfig, project: str | None = None) -> ModelCatal
         for provider, models in grouped.items()
     }
 
-    for name, extra in config.llm_config.extra_models.items():
+    for name, extra in resolved_extra_models(llm_config).items():
         # setdefault, not assignment: LLMConfig refuses an entry that shadows a
         # built-in, so this can only ever add. Belt and braces -- a built-in
         # must never be displaceable by config.

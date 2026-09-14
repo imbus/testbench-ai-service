@@ -48,6 +48,11 @@ export function TestRunPanel({
     .flatMap((provider) => provider.models)
     .find((entry) => entry.id === model)?.routing
 
+  // An empty model is a guaranteed 502 on a paid endpoint: the request reaches
+  // a real client, which asks the provider about a model called "". The one
+  // console action that spends money does not get to be spent on nothing.
+  const canRun = isAdmin && !test.isPending && model.trim() !== ''
+
   const handleRun = () => {
     test.mutate({ messages, vars, agent_context: agentContext, model, project })
   }
@@ -129,7 +134,7 @@ export function TestRunPanel({
         <button
           type="button"
           className="btn btn-ghost"
-          disabled={!isAdmin || test.isPending}
+          disabled={!canRun}
           onClick={handleRun}
         >
           {t.testRunGo}
@@ -137,13 +142,16 @@ export function TestRunPanel({
         {/* A sibling status note, not a swap of the button's own label --
             the button's accessible name must stay `t.testRunGo` so it is
             still reachable by that name while a run is in flight. */}
+        {/* aria-live: the button's own label never changes (see above), so
+            without this a screen-reader user gets no announcement at all that
+            a run has started -- only a button that has gone quiet. */}
         {test.isPending && (
-          <span className="text-muted" style={{ fontSize: 12 }}>
+          <span className="text-muted" aria-live="polite" style={{ fontSize: 12 }}>
             {t.testRunPending}
           </span>
         )}
         {!isAdmin && (
-          <span className="text-muted" style={{ fontSize: 12 }}>
+          <span className="text-muted" aria-live="polite" style={{ fontSize: 12 }}>
             {t.testRunAdminOnly}
           </span>
         )}

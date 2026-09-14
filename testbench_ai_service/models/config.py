@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider, RoutingFamily
 from testbench_ai_service.models.language import LanguageOption
@@ -133,6 +133,34 @@ class LLMConfig(BaseModel):
                     ),
                 )
         return self
+
+
+def resolved_extra_models(config: LLMConfig) -> dict[str, ExtraModel]:
+    """``config.extra_models`` as ``ExtraModel`` objects, whatever the merge left.
+
+    ``get_llm_config`` merges a project's block with
+    ``model_copy(update=project.llm_config.model_dump(exclude_unset=True))``,
+    and ``model_copy`` skips validation -- so after a project override the
+    entries are the plain dicts ``model_dump`` produced, not ``ExtraModel``
+    instances. Every reader that does ``entry.provider`` would then raise
+    ``AttributeError`` on exactly the per-project catalogue design 5.3
+    promises. Coercing here keeps that knowledge in one place instead of two.
+
+    A malformed entry is dropped rather than raised on: both callers are on a
+    path where one bad row must not take out the whole catalogue or every
+    client constructor, and ``validate_config_dict`` already refuses such a
+    row, with a field-addressed issue, before it can be written.
+    """
+    resolved: dict[str, ExtraModel] = {}
+    for name, entry in (config.extra_models or {}).items():
+        if isinstance(entry, ExtraModel):
+            resolved[name] = entry
+            continue
+        try:
+            resolved[name] = ExtraModel.model_validate(entry)
+        except ValidationError:
+            continue
+    return resolved
 
 
 # Prompt variables carry the value types PromptVariableDefinition declares
