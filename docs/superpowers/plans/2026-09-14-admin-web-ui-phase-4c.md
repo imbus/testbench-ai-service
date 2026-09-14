@@ -833,7 +833,7 @@ Forwarded **only when non-empty**, which keeps the default path byte-identical f
 
 **Interfaces:**
 - Consumes: `LLMConfig.extra_models` (Task 2), `model_routing` client kwarg (Task 4)
-- Produces: `LLMFactory._get_common_client_kwargs(config: LLMConfig, provider: LLMProvider) -> dict[str, Any]`; `LLMFactory.has_project_credential(project_name: str, provider: LLMProvider, config: LLMConfig) -> bool`
+- Produces: `LLMFactory._get_common_client_kwargs(config: LLMConfig, provider: LLMProvider) -> dict[str, Any]`; `LLMFactory.has_project_credential(project_name: str, provider: LLMProvider, config: LLMConfig) -> bool`; `LLMFactory.resolve_provider(config: LLMConfig, prompt_model: str | None) -> LLMProvider`
 
 - [ ] **Step 1: Write the failing test**
 
@@ -873,6 +873,19 @@ class TestModelRoutingForwarding:
             extra_models={"gpt-6": {"provider": "openai", "routing": "reasoning"}}
         )
         assert "extra_models" not in (config.model_extra or {})
+
+
+class TestResolveProvider:
+    def test_delegates_to_the_private_resolver(self):
+        factory = LLMFactory()
+        config = LLMConfig(provider=LLMProvider.OPENAI)
+        assert factory.resolve_provider(config, "claude-opus-5") is LLMProvider.ANTHROPIC
+        assert factory.resolve_provider(config, "gpt-4o") is LLMProvider.OPENAI
+
+    def test_falls_back_to_the_configured_provider(self):
+        factory = LLMFactory()
+        config = LLMConfig(provider=LLMProvider.CUSTOM)
+        assert factory.resolve_provider(config, "something-unknown") is LLMProvider.CUSTOM
 
 
 class TestHasProjectCredential:
@@ -945,7 +958,9 @@ Update the one call site at the top of `_create_client`:
         common_kwargs = self._get_common_client_kwargs(config, provider)
 ```
 
-Add the public credential probe (used by Task 8 for `credential_scope`, D4):
+Add the two public probes the console needs (both are thin wrappers over the exact paths
+`get_client` already takes, so the console can report what a run resolved without restating the
+rules or reaching into a private method):
 
 ```python
     def has_project_credential(
@@ -964,6 +979,16 @@ Add the public credential probe (used by Task 8 for `credential_scope`, D4):
             return self._get_project_credential(project_name, provider, config) is not None
         except Exception:
             return False
+
+    def resolve_provider(self, config: LLMConfig, prompt_model: str | None) -> LLMProvider:
+        """Which provider this model routes to -- the same answer get_client uses.
+
+        Public because the console reports the resolved route back to the
+        operator (design D4) and must not reach into a private method to do
+        it. Delegates rather than reimplements: a second copy of the prefix
+        rules would be a second thing to keep in step.
+        """
+        return self._resolve_provider(config, prompt_model)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -1420,6 +1445,7 @@ The lock gets its **own** primitive rather than reusing `TaskRegistry`: that reg
   - `PROMPT_TEST_TIMEOUT: float = 60.0`
   - `SingleFlight` with `hold(key: str)` — a context manager raising `HTTPException(409)` when *key* is already held
   - `scrub(message: str, secret: str | None) -> str`
+  - `scrub_all(message: str, secrets: Iterable[str | None]) -> str`
   - `to_messages(rendered: list[RenderedMessage]) -> list[Message]`
   - `RunOutcome` dataclass: `text: str`, `latency_ms: int`
 
@@ -1440,6 +1466,7 @@ from testbench_ai_service.webui.prompt_test import (
     SingleFlight,
     run_query,
     scrub,
+    scrub_all,
     to_messages,
 )
 
@@ -1486,6 +1513,19 @@ class TestScrub:
 
     def test_unrelated_text_survives(self):
         assert scrub("404 model not found", "sk-abc") == "404 model not found"
+
+
+class TestScrubAll:
+    def test_masks_every_candidate_credential(self):
+        # A project run may have used either key; both must be masked.
+        message = "global sk-global project sk-project"
+        assert scrub_all(message, ["sk-global", "sk-project"]) == "global *** project ***"
+
+    def test_skips_absent_candidates(self):
+        assert scrub_all("bad key sk-global", ["sk-global", None]) == "bad key ***"
+
+    def test_an_empty_candidate_list_leaves_the_message_alone(self):
+        assert scrub_all("model not found", []) == "model not found"
 
 
 class TestToMessages:
@@ -1549,7 +1589,7 @@ turn a wrong count into a session locked out forever (design 3.6).
 
 import asyncio
 import time
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 
@@ -1608,6 +1648,18 @@ def scrub(message: str, secret: str | None) -> str:
     return message.replace(secret, "***")
 
 
+def scrub_all(message: str, secrets: Iterable[str | None]) -> str:
+    """Mask every candidate credential in *message*.
+
+    A run resolves either a project credential or the global one, and the
+    console cannot see which the SDK actually sent -- so both are masked
+    rather than guessed between (design D9).
+    """
+    for secret in secrets:
+        message = scrub(message, secret)
+    return message
+
+
 def to_messages(rendered: list[RenderedMessage]) -> list[Message]:
     """The rendered preview, as the messages a client accepts."""
     return [Message(role=item.role, content=item.content) for item in rendered]
@@ -1623,9 +1675,12 @@ async def run_query(
     """
     started = time.perf_counter()
     try:
-        async with asyncio.timeout(timeout):
-            text = await client.query_llm(model=model, messages=messages)
-    except TimeoutError as e:
+        text = await asyncio.wait_for(
+            client.query_llm(model=model, messages=messages), timeout
+        )
+    # asyncio.TimeoutError is only an alias of the builtin from 3.11 on, and
+    # pyproject declares support back to 3.10 -- catch both.
+    except (asyncio.TimeoutError, TimeoutError) as e:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=f"The model did not answer within {timeout} seconds.",
@@ -1633,7 +1688,7 @@ async def run_query(
     return RunOutcome(text=text, latency_ms=int((time.perf_counter() - started) * 1000))
 ```
 
-> **Python floor:** `asyncio.timeout` requires 3.11, and `pyproject.toml:12` allows 3.10. If the 3.10 job fails, replace the `async with asyncio.timeout(timeout)` block with `text = await asyncio.wait_for(client.query_llm(model=model, messages=messages), timeout)` and catch `asyncio.TimeoutError` — behaviour and tests are identical.
+> **Python floor (pre-flight ruling P3):** this uses `asyncio.wait_for`, not `asyncio.timeout`. `asyncio.timeout` requires 3.11 and `pyproject.toml:12` declares support from 3.10, so the newer API would fail to import on a supported interpreter. Semantics here are identical.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1662,7 +1717,7 @@ Wires Task 8's pieces to the production resolution path. The ordering is the mon
 - Test: `tests/unit/webui/test_prompt_test_route.py`
 
 **Interfaces:**
-- Consumes: `render_messages` (existing, `webui/prompt_render.py`), `get_llm_config` (existing, `utils/config.py:368`), `LLMFactory.get_client` / `has_project_credential` (Task 5), `SingleFlight` / `run_query` / `scrub` / `to_messages` / `PROMPT_TEST_TIMEOUT` (Task 8), `TaskRegistry` (existing, `webui/inflight.py`)
+- Consumes: `render_messages` (existing, `webui/prompt_render.py`), `get_llm_config` (existing, `utils/config.py:368`), `LLMFactory.get_client` / `has_project_credential` (Task 5), `SingleFlight` / `run_query` / `scrub_all` / `to_messages` / `PROMPT_TEST_TIMEOUT` (Task 8), `TaskRegistry` (existing, `webui/inflight.py`)
 - Produces:
   - `PromptTestRequest(RenderRequest)`: `model: str`, `project: str | None = None`
   - `ResolvedRoute(BaseModel)`: `provider: LLMProvider`, `model: str`, `credential_scope: Literal["project", "global"]`
@@ -2016,14 +2071,17 @@ async def test_prompt(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
-    provider = factory._resolve_provider(llm_config, body.model)
+    provider = factory.resolve_provider(llm_config, body.model)
     scope = "global"
     if body.project is not None and factory.has_project_credential(
         body.project, provider, llm_config
     ):
         scope = "project"
 
-    secret = os.environ.get(PROVIDER_KEY_NAMES.get(provider) or "")
+    # Both candidates, not just the global one: a project run may have used the
+    # project variable, and scrubbing only the global key would leave exactly
+    # the credential this run used exposed in the 502 (design D9).
+    secrets = _credential_values(provider, body.project)
 
     flight: SingleFlight = request.app.state.prompt_test_flight
     with flight.hold(session.sid):
@@ -2036,7 +2094,7 @@ async def test_prompt(
                 logger.error("Prompt test run failed: %r", e, exc_info=True)
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=scrub(f"{type(e).__name__}: {e}", secret),
+                    detail=scrub_all(f"{type(e).__name__}: {e}", secrets),
                 ) from e
 
     return PromptTestResponse(
@@ -2048,7 +2106,27 @@ async def test_prompt(
     )
 ```
 
-Add the imports this needs: `os`, `PROVIDER_KEY_NAMES` from `webui.catalogue`, `get_llm_config` from `utils.config`, `LLMFactory` from `llm.factory`, `TaskRegistry` / `get_task_registry` from `webui.inflight`, and `SingleFlight` / `run_query` / `scrub` / `to_messages` from `webui.prompt_test`.
+Add this module-level helper to `routes.py`, above the route:
+
+```python
+def _credential_values(provider: LLMProvider, project: str | None) -> list[str]:
+    """Every credential value a run for this provider could have used.
+
+    Returned so the 502 path can mask each one (design D9). Values never leave
+    this process: they are matched against an error message and discarded.
+    An unknown provider (CUSTOM has no variable) yields an empty list, and
+    scrub_all then leaves the message untouched.
+    """
+    name = PROVIDER_KEY_NAMES.get(provider)
+    if name is None:
+        return []
+    candidates = [os.environ.get(name)]
+    if project is not None:
+        candidates.append(os.environ.get(f"{normalize_project_name(project)}_{name}"))
+    return [value for value in candidates if value]
+```
+
+Add the imports this needs: `os`, `PROVIDER_KEY_NAMES` from `webui.catalogue`, `get_llm_config` from `utils.config`, `LLMFactory` from `llm.factory`, `LLMProvider` from `llm.base`, `normalize_project_name` from `utils.naming`, `TaskRegistry` / `get_task_registry` from `webui.inflight`, and `SingleFlight` / `run_query` / `scrub_all` / `to_messages` from `webui.prompt_test`.
 
 - [ ] **Step 6: Run tests to verify they pass**
 
@@ -2260,6 +2338,7 @@ Create `frontend/src/components/TestRunPanel.test.tsx`:
 ```tsx
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { expect, test, vi } from 'vitest'
 import { TestRunPanel } from './TestRunPanel'
 
@@ -2284,7 +2363,7 @@ vi.mock('../api/prompts', async (importOriginal) => ({
   testPrompt: (...args: unknown[]) => testPrompt(...args),
 }))
 
-function renderPanel(props: Partial<React.ComponentProps<typeof TestRunPanel>> = {}) {
+function renderPanel(props: Partial<ComponentProps<typeof TestRunPanel>> = {}) {
   return render(
     <TestRunPanel
       messages={[{ role: 'user', source: 'inline', file: null, content: 'hi' }]}
@@ -2451,8 +2530,9 @@ Only operator entries are listed. Built-ins are not shown here, because showing 
 Create `frontend/src/components/ModelTable.test.tsx`:
 
 ```tsx
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import type { ComponentProps } from 'react'
 import { expect, test, vi } from 'vitest'
 import { ModelTable } from './ModelTable'
 
@@ -2463,7 +2543,7 @@ vi.mock('../state/draft', () => ({
   useDraft: () => ({ setEdit, removeKey, edits: {} }),
 }))
 
-function renderTable(props: Partial<React.ComponentProps<typeof ModelTable>> = {}) {
+function renderTable(props: Partial<ComponentProps<typeof ModelTable>> = {}) {
   return render(
     <ModelTable
       entries={{ 'claude-opus-6': { provider: 'anthropic', routing: 'adaptive' } }}
@@ -2537,7 +2617,6 @@ test('a read-only operator cannot add or remove', () => {
 })
 ```
 
-Add `within` to the `@testing-library/react` import.
 
 - [ ] **Step 2: Run test to verify it fails**
 
