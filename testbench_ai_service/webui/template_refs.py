@@ -64,35 +64,46 @@ def message_refs(document: Any) -> list[str]:
 
 
 def scan_template_references(prompts_dir: Path) -> TemplateScan:
-    """Walk every ``<lang>/<agent>/prompt.yaml`` and resolve its template refs."""
+    """Walk every ``prompt.yaml`` anywhere under *prompts_dir* and resolve its
+    template refs.
+
+    Deliberately **not** the two-level ``<lang>/<agent>/prompt.yaml`` shape
+    ``build_tree`` lists: ``resolve_prompt_file``'s ``prompts_dir/<file>``
+    fallback (and this repo's own ``config_example.toml`` project override)
+    means a prompt can legitimately live at ``prompts_dir/shared/prompt.yaml``
+    or deeper, e.g. ``de/explainer/sub/prompt.yaml``. A scan that only looked
+    two levels deep would miss such a prompt's references entirely -- both
+    "this template is still in use" and "this prompt failed to parse, so
+    delete nothing" -- and that divergence from ``build_tree`` (which answers
+    a different question, "what is addressable through the two-segment
+    route") is deliberate.
+    """
     base = Path(prompts_dir)
     scan = TemplateScan()
     if not base.is_dir():
         return scan
 
-    for language_dir in sorted(p for p in base.iterdir() if p.is_dir()):
-        for agent_dir in sorted(p for p in language_dir.iterdir() if p.is_dir()):
-            prompt_path = agent_dir / "prompt.yaml"
-            if not prompt_path.is_file():
-                continue
-            relative = prompt_path.relative_to(base).as_posix()
-            try:
-                document = yaml.safe_load(prompt_path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, yaml.YAMLError) as e:
-                logger.warning("Prompt %s could not be parsed for the scan: %s", relative, e)
-                if scan.blocked_by is None:
-                    scan.blocked_by = relative
-                continue
+    for prompt_path in sorted(base.rglob("prompt.yaml")):
+        if not prompt_path.is_file():
+            continue
+        relative = prompt_path.relative_to(base).as_posix()
+        try:
+            document = yaml.safe_load(prompt_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as e:
+            logger.warning("Prompt %s could not be parsed for the scan: %s", relative, e)
+            if scan.blocked_by is None:
+                scan.blocked_by = relative
+            continue
 
-            for ref in message_refs(document):
-                try:
-                    target = resolve_template_file(base, prompt_path, ref)
-                except HTTPException:
-                    # Escapes prompts_dir, disallowed suffix, or is not there.
-                    # Nothing on disk to protect, so nothing to record.
-                    continue
-                scan.references.setdefault(target, [])
-                if relative not in scan.references[target]:
-                    scan.references[target].append(relative)
+        for ref in message_refs(document):
+            try:
+                target = resolve_template_file(base, prompt_path, ref)
+            except HTTPException:
+                # Escapes prompts_dir, disallowed suffix, or is not there.
+                # Nothing on disk to protect, so nothing to record.
+                continue
+            scan.references.setdefault(target, [])
+            if relative not in scan.references[target]:
+                scan.references[target].append(relative)
 
     return scan

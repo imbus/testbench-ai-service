@@ -103,3 +103,36 @@ def test_a_missing_prompts_dir_scans_to_nothing(tmp_path):
     scan = scan_template_references(tmp_path / "nope")
     assert scan.references == {}
     assert scan.blocked_by is None
+
+
+def test_a_prompt_outside_the_lang_agent_shape_is_still_scanned(tree):
+    """``resolve_prompt_file``'s ``prompts_dir/<file>`` fallback (and this
+    repo's own ``config_example.toml`` project override) means a prompt can
+    legitimately live somewhere other than ``<lang>/<agent>/prompt.yaml`` --
+    here, one level up at ``prompts_dir/shared/prompt.yaml``. A scan that only
+    walked two levels deep would never see this prompt at all, and a template
+    it alone references would look orphaned.
+    """
+    shared_template = tree / "root.jinja"
+    shared_template.write_text("root body", encoding="utf-8")
+    holder = tree / "shared"
+    holder.mkdir()
+    (holder / "prompt.yaml").write_text(PROMPT.format(ref="../root.jinja"), encoding="utf-8")
+
+    scan = scan_template_references(tree)
+    assert scan.references[shared_template] == ["shared/prompt.yaml"]
+
+
+def test_a_prompt_nested_deeper_than_lang_agent_is_still_scanned(tree):
+    """A prompt at ``de/alpha/sub/prompt.yaml`` -- three levels deep -- is
+    just as invisible to a two-level walk as one sitting one level too
+    shallow.
+    """
+    nested = tree / "de" / "alpha" / "sub"
+    nested.mkdir()
+    nested_template = nested / "deep.jinja"
+    nested_template.write_text("deep body", encoding="utf-8")
+    (nested / "prompt.yaml").write_text(PROMPT.format(ref="deep.jinja"), encoding="utf-8")
+
+    scan = scan_template_references(tree)
+    assert scan.references[nested_template] == ["de/alpha/sub/prompt.yaml"]

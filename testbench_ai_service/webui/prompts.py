@@ -373,18 +373,22 @@ def _previous_template_refs(prompt_path: Path, prompts_dir: Path) -> set[Path]:
 
 
 def _plan_deletions(
-    prompt_path: Path, prompts_dir: Path, surviving: set[Path]
+    prompt_path: Path, prompts_dir: Path, previous_refs: set[Path], surviving: set[Path]
 ) -> tuple[list[Path], str | None]:
     """Which templates this save orphans, and why it might delete none.
 
     All three conditions of design 5.5 must hold: the file was referenced on
     disk before the save, is not referenced after it, and is referenced by no
     other prompt anywhere under ``prompts_dir``.
+
+    *previous_refs* is taken as a parameter -- :func:`build_write_set` already
+    computed it (as ``previous_refs``) for the existing-but-unowned check, and
+    nothing is written to disk in between, so recomputing it here would be a
+    redundant re-read and re-parse of the same file on every save.
     """
     from testbench_ai_service.webui.template_refs import scan_template_references  # noqa: PLC0415
 
-    previous = _previous_template_refs(prompt_path, prompts_dir)
-    candidates = previous - surviving
+    candidates = previous_refs - surviving
     if not candidates:
         return [], None
 
@@ -395,7 +399,15 @@ def _plan_deletions(
             f"cannot tell which templates are still in use. Repair it, then save again."
         )
 
-    own = Path(prompt_path).relative_to(Path(prompts_dir)).as_posix()
+    # prompt_path is resolved by every caller (resolve_prompt_file ->
+    # resolve_within -> Path.resolve()), but prompts_dir need not be --
+    # config.toml's prompts_dir only has to exist, not be absolute. Without
+    # resolving it here too, relative_to raises ValueError for a relative
+    # prompts_dir, turning an ordinary save into a 500 (see _display_name's
+    # sibling guard at line ~173, which the try/except pattern comes from --
+    # here it can't raise at all, so no try/except is needed instead of one
+    # around the resolve).
+    own = Path(prompt_path).relative_to(Path(prompts_dir).resolve()).as_posix()
     deletes = []
     for candidate in sorted(candidates, key=str):
         holders = [name for name in scan.references.get(candidate, []) if name != own]
@@ -541,16 +553,29 @@ def _already_on_disk(target: Path, text: str) -> bool:
 
 
 def _resolve_or_create_target(
-    base: Path, prompt_path: Path, name: str, previous_refs: set[Path], created: set[Path]
+    base: Path,
+    prompt_path: Path,
+    name: str,
+    text: str,
+    previous_refs: set[Path],
+    created: set[Path],
 ) -> Path:
     """Resolve a file-backed message's target, creating it if it is new.
+
+    An existing, previously-unreferenced file is refused only when this save
+    would actually **change** it (design D9 guards against one prompt
+    clobbering another's file, not against pointing at one -- design 3.6 and
+    D7 both permit a message to legitimately reference an existing shared
+    template). A message repeating a shared template's current content
+    byte-for-byte is not a clobber and is not refused.
 
     Raises:
         HTTPException 400/404: *name* escapes *base*, carries a disallowed
             suffix, or (for a new file) names more than one path segment.
-        HTTPException 409: *name* already exists on disk but this prompt did
-            not previously reference it -- saving would silently overwrite a
-            file that belongs to something else.
+        HTTPException 409: *name* already exists on disk, this prompt did not
+            previously reference it, and *text* differs from what is already
+            there -- saving would overwrite a file that belongs to something
+            else.
     """
     try:
         target = resolve_template_file(base, prompt_path, name)
@@ -562,12 +587,13 @@ def _resolve_or_create_target(
         target = resolve_template_target(base, prompt_path, name)
         created.add(target)
 
-    if target.exists() and target not in previous_refs:
+    if target.exists() and target not in previous_refs and not _already_on_disk(target, text):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"{name!r} already exists and this prompt does not use it. Saving would "
-                f"overwrite a file that belongs to something else. Choose a different name."
+                f"{name!r} already exists and belongs to another prompt. Saving would "
+                f"overwrite it with this message's body. Point this message at a "
+                f"different file, or make its content match what is already there."
             ),
         )
     return target
@@ -609,9 +635,10 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
         HTTPException 409: two messages reference the same template file with
             different content (a file has one body); a file-backed message
             arrived with ``readable: false`` -- its ``content`` is the empty
-            placeholder the loader substituted, not the file's body; or a new
-            template's name already exists on disk but this prompt did not
-            previously reference it.
+            placeholder the loader substituted, not the file's body; or a
+            message names a file that already exists, that this prompt did
+            not previously reference, and whose content this save would
+            actually change.
     """
     base = Path(prompts_dir)
     previous_refs = _previous_template_refs(prompt_path, base)
@@ -660,7 +687,7 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
                         ),
                     )
                 target = _resolve_or_create_target(
-                    base, prompt_path, message.file, previous_refs, created
+                    base, prompt_path, message.file, message.content, previous_refs, created
                 )
                 existing = bodies.get(target)
                 if existing is not None and existing != message.content:
@@ -698,7 +725,9 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
     if not _already_on_disk(Path(prompt_path), yaml_text):
         plan.writes[Path(prompt_path)] = yaml_text
 
-    plan.deletes, plan.deletions_skipped = _plan_deletions(Path(prompt_path), base, set(bodies))
+    plan.deletes, plan.deletions_skipped = _plan_deletions(
+        Path(prompt_path), base, previous_refs, set(bodies)
+    )
     return plan
 
 
