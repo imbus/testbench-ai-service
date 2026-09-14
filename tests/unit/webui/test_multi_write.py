@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -165,18 +164,27 @@ def test_deletes_run_after_writes(tmp_path, monkeypatch):
     doomed.write_text("body", encoding="utf-8")
     target = tmp_path / "kept.jinja"
 
-    real_replace = os.replace
+    unlink_calls = []
+    real_unlink = Path.unlink
+
+    def track_unlink(self, *args, **kwargs):
+        unlink_calls.append(self)
+        return real_unlink(self, *args, **kwargs)
 
     def explode(src, dst):
         raise OSError("disk full")
 
+    monkeypatch.setattr(Path, "unlink", track_unlink)
     monkeypatch.setattr("testbench_ai_service.webui.multi_write.os.replace", explode)
 
     with pytest.raises(HTTPException):
         write_all({target: "new"}, deletes=[doomed])
 
-    assert doomed.exists(), "a delete ran before the writes had committed"
-    monkeypatch.setattr("testbench_ai_service.webui.multi_write.os.replace", real_replace)
+    # With correct ordering (deletes run after writes), the delete never runs
+    # because the write fails first. With wrong ordering (deletes before writes),
+    # the delete runs, unlink succeeds, then the write fails and rollback restores it.
+    # This assertion detects the order by checking if unlink was ever called on doomed.
+    assert doomed not in unlink_calls, "delete ran before writes had committed"
 
 
 def test_a_failure_during_delete_restores_what_was_already_deleted(tmp_path, monkeypatch):
@@ -189,9 +197,11 @@ def test_a_failure_during_delete_restores_what_was_already_deleted(tmp_path, mon
     real_unlink = Path.unlink
 
     def flaky(self, *args, **kwargs):
-        calls["n"] += 1
-        if calls["n"] == 2:
-            raise OSError("locked")
+        # Only count and raise for first and second; let all other unlocks through
+        if self in (first, second):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise OSError("locked")
         return real_unlink(self, *args, **kwargs)
 
     monkeypatch.setattr(Path, "unlink", flaky)
@@ -199,5 +209,4 @@ def test_a_failure_during_delete_restores_what_was_already_deleted(tmp_path, mon
     with pytest.raises(HTTPException):
         write_all({}, deletes=[first, second])
 
-    monkeypatch.setattr(Path, "unlink", real_unlink)
     assert first.read_text(encoding="utf-8") == "one", "the first delete was not rolled back"

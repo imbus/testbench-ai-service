@@ -1,15 +1,22 @@
-"""Multi-file replacement for the prompt editor's saves.
+"""Multi-file replacement and deletion for the prompt editor's saves.
 
 ``atomic.write_atomic`` is single-file by construction, but saving one prompt
 touches ``prompt.yaml`` plus every template file whose body changed.
 
 This is **not** a journal and does not claim set-atomicity: ``os.replace`` is
-atomic per file, and N files cannot be replaced as one operation. What it does
-is stage every temp file *before* replacing any target, so directory existence,
-write permission and disk space are proven for all N while all N are still
-uncommitted -- which is where nearly everything that can go wrong does. The
-residual window is the replace loop itself, and a failure inside it restores
-the targets already replaced from their ``.bak``.
+atomic per file, and N files cannot be replaced as one operation. Instead, a
+five-phase model minimizes vulnerability windows:
+
+1. Stage every content to temp files (nothing is committed yet).
+2. Back up all write targets that exist.
+3. Back up all delete targets that exist (each becomes its ``.bak``; only copy).
+4. Replace all write targets (the main state-mutation window).
+5. Remove all delete targets (last, so a failure while writing never leaves
+   a file already deleted).
+
+A failure anywhere in phases 4-5 rolls back both delete and write operations
+in reverse order: deletes are restored first (from their backups), then writes,
+before raising an exception to the caller.
 """
 
 import os
@@ -67,9 +74,16 @@ def _stage(target: Path, content: str | bytes) -> Path:
     return Path(temp_name)
 
 
-def write_all(  # noqa: C901, PLR0912
-    files: dict[Path, str | bytes], deletes: Sequence[Path] = ()
-) -> MultiWriteResult:
+def _backup_existing(paths: Sequence[Path], result: MultiWriteResult) -> None:
+    """Back up any of *paths* that exist to a ``.bak`` in the same directory."""
+    for target in paths:
+        if target.exists():
+            backup = target.with_name(f"{target.name}.bak")
+            backup.write_bytes(target.read_bytes())
+            result.backups[target] = backup
+
+
+def write_all(files: dict[Path, str | bytes], deletes: Sequence[Path] = ()) -> MultiWriteResult:
     """Replace every target in *files*, then remove every path in *deletes*.
 
     Deletes run **last**, so a failure while writing can never leave a file
@@ -97,19 +111,11 @@ def write_all(  # noqa: C901, PLR0912
             staged[target] = _stage(target, files[target])
 
         # Phase 2 -- back up the write targets that exist.
-        for target in targets:
-            if target.exists():
-                backup = target.with_name(f"{target.name}.bak")
-                backup.write_bytes(target.read_bytes())
-                result.backups[target] = backup
+        _backup_existing(targets, result)
 
         # Phase 3 -- back up the delete targets. Same operation, different
         # purpose: this backup is the only copy once the unlink lands.
-        for target in doomed:
-            if target.exists():
-                backup = target.with_name(f"{target.name}.bak")
-                backup.write_bytes(target.read_bytes())
-                result.backups[target] = backup
+        _backup_existing(doomed, result)
 
         # Phase 4 -- replace.
         for target in targets:
