@@ -583,6 +583,21 @@ describe('removing every override for one agent in a project', () => {
 // Scope discipline: this action lives on Agent detail only, not on the
 // Projects card -- one call site, one dialog, one guard.
 
+/** The body of the (one) POST .../fork request, once it has been sent. */
+async function forkRequestBody(): Promise<{ project: string; directory?: string }> {
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        (call) => (call[1]?.method ?? '') === 'POST' && String(call[0]).includes('/fork'),
+      ),
+    ).toBe(true),
+  )
+  const call = fetchMock.mock.calls.find(
+    (entry) => (entry[1]?.method ?? '') === 'POST' && String(entry[0]).includes('/fork'),
+  )!
+  return JSON.parse(String((call[1] as RequestInit).body))
+}
+
 describe('forking a prompt for a project', () => {
   const FORK_BUTTON = 'Give this project its own prompt'
 
@@ -621,6 +636,30 @@ describe('forking a prompt for a project', () => {
     // the navigation reads the response rather than recomputing the name.
     expect(navigate).not.toHaveBeenCalledWith(expect.stringContaining('reviewer'))
     expect(navigate).not.toHaveBeenCalledWith('/admin/prompts/de/car-configurator')
+  })
+
+  it('sends the operator-typed directory override in the fork request', async () => {
+    // The whole recovery story for a 400 ("this project name yields no
+    // usable directory") is typing one in here, so it has to actually reach
+    // the server.
+    await renderAgentDetail({ isAdmin: true, project: 'Car Configurator' })
+    await userEvent.click(screen.getByRole('button', { name: FORK_BUTTON }))
+    await userEvent.type(screen.getByLabelText('Target directory'), 'my-dir')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    expect(await forkRequestBody()).toEqual({ project: 'Car Configurator', directory: 'my-dir' })
+  })
+
+  it('sends no directory override for a field left whitespace-only', async () => {
+    // `.trim() || undefined`: a whitespace-only override is exactly as
+    // absent as an empty field, and must not be sent as a literal "   " the
+    // server would reject.
+    await renderAgentDetail({ isAdmin: true, project: 'Car Configurator' })
+    await userEvent.click(screen.getByRole('button', { name: FORK_BUTTON }))
+    await userEvent.type(screen.getByLabelText('Target directory'), '   ')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+
+    expect(await forkRequestBody()).toEqual({ project: 'Car Configurator' })
   })
 
   it('surfaces the server’s error text in the dialog instead of swallowing it', async () => {
