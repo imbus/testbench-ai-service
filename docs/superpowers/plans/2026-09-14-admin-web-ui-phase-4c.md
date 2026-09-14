@@ -2418,46 +2418,65 @@ Read-only against the catalogue: the picker consumes `GET /models` and offers fr
 
 - [ ] **Step 1: Write the failing test**
 
-Create `frontend/src/components/TestRunPanel.test.tsx`:
+Create `frontend/src/components/TestRunPanel.test.tsx`. It mocks the two **hooks** from Task 10 —
+not any bare fetcher — so the component is tested in isolation and no `QueryClient` is needed:
 
 ```tsx
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
-import { expect, test, vi } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
+import { beforeEach, expect, test, vi } from 'vitest'
 import { TestRunPanel } from './TestRunPanel'
 
-vi.mock('../api/models', () => ({
-  fetchModels: vi.fn().mockResolvedValue({
-    providers: [
-      {
-        provider: 'anthropic',
-        key_present: true,
-        models: [
-          { id: 'claude-opus-5', routing: 'adaptive', source: 'builtin' },
-          { id: 'my-model', routing: 'fallback', source: 'config' },
-        ],
-      },
-    ],
-  }),
+const mutate = vi.fn()
+let runState: Record<string, unknown> = {}
+let modelsState: Record<string, unknown> = {}
+
+vi.mock('../api/queries', () => ({
+  useModels: () => modelsState,
+  useProjects: () => ({ data: { projects: [] }, isLoading: false, isError: false }),
 }))
 
-const testPrompt = vi.fn()
-vi.mock('../api/prompts', async (importOriginal) => ({
-  ...(await importOriginal<object>()),
-  testPrompt: (...args: unknown[]) => testPrompt(...args),
+vi.mock('../api/mutations', () => ({
+  useTestPrompt: () => ({ mutate, ...runState }),
 }))
+
+beforeEach(() => {
+  mutate.mockReset()
+  runState = { isPending: false, data: undefined, error: null }
+  modelsState = {
+    isLoading: false,
+    isError: false,
+    data: {
+      providers: [
+        {
+          provider: 'anthropic',
+          key_present: true,
+          models: [
+            { id: 'claude-opus-5', routing: 'adaptive', source: 'builtin' },
+            { id: 'my-model', routing: 'fallback', source: 'config' },
+          ],
+        },
+      ],
+    },
+  }
+})
 
 function renderPanel(props: Partial<ComponentProps<typeof TestRunPanel>> = {}) {
   return render(
-    <TestRunPanel
-      messages={[{ role: 'user', source: 'inline', file: null, content: 'hi' }]}
-      vars={{}}
-      agentContext={{}}
-      isAdmin
-      lang="en"
-      {...props}
-    />,
+    <MemoryRouter>
+      <TestRunPanel
+        messages={[
+          { role: 'user', source: 'inline', file: null, content: 'hi', readable: true },
+        ]}
+        vars={{}}
+        agentContext={{}}
+        isAdmin
+        lang="en"
+        {...props}
+      />
+    </MemoryRouter>,
   )
 }
 
@@ -2473,58 +2492,47 @@ test('marks a fallback model so a degraded call is visible', async () => {
 })
 
 test('a free-text model reaches the request', async () => {
-  testPrompt.mockResolvedValue({
-    text: 'ok',
-    latency_ms: 12,
-    resolved: { provider: 'anthropic', model: 'typed-model', credential_scope: 'global' },
-  })
   renderPanel()
   const user = userEvent.setup()
 
-  await user.clear(screen.getByLabelText(/model/i))
-  await user.type(screen.getByLabelText(/model/i), 'typed-model')
+  const field = screen.getByLabelText(/model/i)
+  await user.clear(field)
+  await user.type(field, 'typed-model')
   await user.click(screen.getByRole('button', { name: /test run/i }))
 
   await waitFor(() =>
-    expect(testPrompt).toHaveBeenCalledWith(expect.objectContaining({ model: 'typed-model' })),
+    expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ model: 'typed-model' })),
   )
 })
 
 test('shows the resolved route including the credential scope', async () => {
-  testPrompt.mockResolvedValue({
-    text: 'the answer',
-    latency_ms: 42,
-    resolved: { provider: 'anthropic', model: 'claude-opus-5', credential_scope: 'global' },
-  })
+  runState = {
+    isPending: false,
+    error: null,
+    data: {
+      text: 'the answer',
+      latency_ms: 42,
+      resolved: {
+        provider: 'anthropic',
+        model: 'claude-opus-5',
+        credential_scope: 'global',
+      },
+    },
+  }
   renderPanel()
-  const user = userEvent.setup()
-
-  await user.click(screen.getByRole('button', { name: /test run/i }))
 
   expect(await screen.findByText(/the answer/)).toBeInTheDocument()
   expect(screen.getByText(/42/)).toBeInTheDocument()
-  expect(screen.getByText(/global/i)).toBeInTheDocument()
+  expect(screen.getByText(/global key/i)).toBeInTheDocument()
 })
 
-test('the button is disabled while a run is in flight', async () => {
-  let resolve: (value: unknown) => void = () => {}
-  testPrompt.mockReturnValue(new Promise((r) => (resolve = r)))
+test('the button is disabled while a run is in flight', () => {
+  runState = { isPending: true, data: undefined, error: null }
   renderPanel()
-  const user = userEvent.setup()
-
-  const button = screen.getByRole('button', { name: /test run/i })
-  await user.click(button)
-  expect(button).toBeDisabled()
-
-  resolve({
-    text: 'x',
-    latency_ms: 1,
-    resolved: { provider: 'anthropic', model: 'm', credential_scope: 'global' },
-  })
-  await waitFor(() => expect(button).not.toBeDisabled())
+  expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
 })
 
-test('a non-admin cannot start a run', async () => {
+test('a non-admin cannot start a run', () => {
   renderPanel({ isAdmin: false })
   expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
 })
@@ -2533,6 +2541,15 @@ test('has no add-model control — that lives on the LLM view', async () => {
   renderPanel()
   await screen.findByRole('option', { name: /claude-opus-5/ })
   expect(screen.queryByRole('button', { name: /add model/i })).not.toBeInTheDocument()
+})
+
+test('the hint to add a model is an in-app link, not a full page load', async () => {
+  // A plain <a href> would bypass PromptEditor's useBlocker and fire
+  // beforeunload, losing the operator's unsaved draft. react-router's Link
+  // keeps the guard in charge.
+  renderPanel()
+  const link = await screen.findByRole('link', { name: /llm/i })
+  expect(link).toHaveAttribute('href', '/admin/llm')
 })
 ```
 
