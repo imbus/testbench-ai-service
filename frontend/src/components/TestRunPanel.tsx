@@ -1,17 +1,9 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { useTestPrompt } from '../api/mutations'
 import { useModels, useProjects } from '../api/queries'
 import type { PromptMessageDoc } from '../api/types'
 import { useTranslations, type Lang } from '../i18n'
-
-type TestRunPanelProps = {
-  messages: PromptMessageDoc[]
-  vars: Record<string, unknown>
-  agentContext: Record<string, unknown>
-  isAdmin: boolean
-  lang?: Lang
-}
 
 /**
  * Run the draft variant being edited against a real model (design §5.7).
@@ -27,27 +19,24 @@ type TestRunPanelProps = {
  * the catalogue has never heard of still reaches the request. There is no
  * add-model control here -- that lives on the LLM provider view.
  *
- * Carries its own `QueryClient` rather than assuming an ancestor's: every
- * other screen in this console is mounted below the app's own
- * `QueryClientProvider` (`main.tsx`), but this panel is a self-contained
- * widget on the prompt editor and must not assume one is already there.
+ * Mounted below the app's own `QueryClientProvider` (`main.tsx`) like every
+ * other screen -- `useModels`/`useProjects` share the same cache the rest of
+ * the console already populated (the Projects screen's list, in particular),
+ * rather than a private client that would refetch it and could disagree.
  */
-export function TestRunPanel(props: TestRunPanelProps) {
-  const [client] = useState(() => new QueryClient())
-  return (
-    <QueryClientProvider client={client}>
-      <TestRunPanelBody {...props} />
-    </QueryClientProvider>
-  )
-}
-
-function TestRunPanelBody({
+export function TestRunPanel({
   messages,
   vars,
   agentContext,
   isAdmin,
   lang = 'de',
-}: TestRunPanelProps) {
+}: {
+  messages: PromptMessageDoc[]
+  vars: Record<string, unknown>
+  agentContext: Record<string, unknown>
+  isAdmin: boolean
+  lang?: Lang
+}) {
   const t = useTranslations(lang)
   const [project, setProject] = useState<string | null>(null)
   const [model, setModel] = useState('')
@@ -143,8 +132,16 @@ function TestRunPanelBody({
           disabled={!isAdmin || test.isPending}
           onClick={handleRun}
         >
-          {test.isPending ? t.testRunPending : t.testRunGo}
+          {t.testRunGo}
         </button>
+        {/* A sibling status note, not a swap of the button's own label --
+            the button's accessible name must stay `t.testRunGo` so it is
+            still reachable by that name while a run is in flight. */}
+        {test.isPending && (
+          <span className="text-muted" style={{ fontSize: 12 }}>
+            {t.testRunPending}
+          </span>
+        )}
         {!isAdmin && (
           <span className="text-muted" style={{ fontSize: 12 }}>
             {t.testRunAdminOnly}
@@ -175,7 +172,7 @@ function TestRunPanelBody({
       )}
 
       <div className="text-muted" style={{ fontSize: 12 }}>
-        <a href="/admin/llm">{t.testRunAddHint}</a>
+        <Link to="/admin/llm">{t.testRunAddHint}</Link>
       </div>
     </div>
   )

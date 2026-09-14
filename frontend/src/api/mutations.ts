@@ -1,7 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Edits } from '../state/draft'
 import { apiFetch } from './client'
-import { testPrompt } from './prompts'
 import type {
   ApplyResponse,
   LintResponse,
@@ -11,6 +10,7 @@ import type {
   PromptMessageDoc,
   PromptPlanResponse,
   PromptSaveResponse,
+  PromptTestResult,
   RenderResponse,
 } from './types'
 
@@ -173,6 +173,10 @@ export function useTestPrompt() {
       agent_context: Record<string, unknown>
       model: string
       project: string | null
-    }) => testPrompt(body),
+    }) =>
+      apiFetch<PromptTestResult>('/prompts/test', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   })
 }

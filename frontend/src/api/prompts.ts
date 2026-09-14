@@ -1,11 +1,5 @@
 import type { Scope } from './agents'
-import { apiFetch } from './client'
-import type {
-  MessageRole,
-  PromptMessageDoc,
-  PromptTestResult,
-  PromptVariantDoc,
-} from './types'
+import type { MessageRole, PromptMessageDoc, PromptVariantDoc } from './types'
 
 /** A new message. Inline until the operator moves it into a file of its own. */
 export function emptyMessage(role: PromptMessageDoc['role'] = 'user'): PromptMessageDoc {
@@ -43,26 +37,6 @@ export function defaultTemplateName(variant: string, role: MessageRole): string 
       .replace(/[^a-z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '') || 'variant'
   return `${slug}_${role}${TEMPLATE_EXTENSION}`
-}
-
-/**
- * Run a draft's messages against a real model.
- *
- * Split out from `useTestPrompt` (mutations.ts) the same way `fetchModels`
- * is split out of `useModels` -- the mutation hook is the thin, cached
- * wrapper; this is the actual request.
- */
-export function testPrompt(body: {
-  messages: PromptMessageDoc[]
-  vars: Record<string, unknown>
-  agent_context: Record<string, unknown>
-  model: string
-  project: string | null
-}): Promise<PromptTestResult> {
-  return apiFetch<PromptTestResult>('/prompts/test', {
-    method: 'POST',
-    body: JSON.stringify(body),
-  })
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
