@@ -109,9 +109,13 @@ class LLMConfig(BaseModel):
         for name, entry in self.extra_models.items():
             allowed = ALLOWED_ROUTING[entry.provider]
             if entry.routing not in allowed:
+                # Full loc tuple, not the bare field name: the console renders a
+                # ConfigIssue against the offending ROW (design 5.3), which needs
+                # the model name and the field in the path. Same shape as
+                # config.py:336's ("projects", ..., "prompt", "file").
                 raise_field_validation_error(
                     self,
-                    "extra_models",
+                    ("extra_models", name, "routing"),
                     ValueError(
                         f"'{name}': routing '{entry.routing}' is not available for provider "
                         f"'{entry.provider}'. Allowed: "
@@ -119,9 +123,10 @@ class LLMConfig(BaseModel):
                     ),
                 )
             if builtin_routing(name) is not None:
+                # The whole entry is the problem here, not one of its fields.
                 raise_field_validation_error(
                     self,
-                    "extra_models",
+                    ("extra_models", name),
                     ValueError(
                         f"'{name}' is already routed by its client and cannot be redefined "
                         "here. Remove the entry; the model is offered automatically."
