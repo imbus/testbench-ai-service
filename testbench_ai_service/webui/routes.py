@@ -594,8 +594,8 @@ def save_prompt(
     # app.state, the way `read_config` and `read_prompt_metadata` already do.
     _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
 
-    files = build_write_set(body, path, prompts_dir)
-    result = write_all(files)
+    plan = build_write_set(body, path, prompts_dir)
+    result = write_all(dict(plan.writes), deletes=plan.deletes)
     return PromptSaveResponse(
         written=[str(p) for p in result.written],
         backups=[str(p) for p in result.backups.values()],

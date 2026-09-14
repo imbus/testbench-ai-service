@@ -27,7 +27,7 @@ from typing import Any
 
 import yaml
 from fastapi import HTTPException, status
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
@@ -315,6 +315,95 @@ def resolve_template_file(prompts_dir: Path, prompt_path: Path, ref: str) -> Pat
     return target
 
 
+def resolve_template_target(prompts_dir: Path, prompt_path: Path, name: str) -> Path:
+    """Where a *new* template called *name* would be created.
+
+    Creation is confined to one path segment in the prompt's own directory
+    (design D7), so "create a directory" never enters the design. Referencing an
+    existing template elsewhere under ``prompts_dir`` is unaffected -- that still
+    goes through :func:`resolve_template_file`.
+
+    The suffix allowlist is applied to the RESOLVED path and before anything is
+    stat'ed, exactly as ``resolve_template_file`` does it, so a refused
+    extension is refused whether or not the file happens to exist.
+
+    Raises:
+        HTTPException 400: *name* is empty, is not a single path segment, or is
+            not an allowlisted template suffix.
+    """
+    if not name.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Empty path is not allowed"
+        )
+    candidate = Path(name)
+    if candidate.is_absolute() or len(candidate.parts) != 1 or name in {".", ".."}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"A new template file must be a plain file name in the prompt's own "
+                f"directory, not {name!r}."
+            ),
+        )
+    target = resolve_within(Path(prompts_dir), Path(prompt_path).parent / candidate)
+    _require_template_suffix(target)
+    return target
+
+
+def _previous_template_refs(prompt_path: Path, prompts_dir: Path) -> set[Path]:
+    """Which templates the prompt referenced **on disk**, before this save.
+
+    Read from the file rather than taken from the request: a client-supplied
+    "these were the previous files" list would let the browser nominate any
+    contained file for deletion (design D9).
+    """
+    from testbench_ai_service.webui.template_refs import message_refs  # noqa: PLC0415
+
+    try:
+        document = yaml.safe_load(Path(prompt_path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return set()
+
+    refs: set[Path] = set()
+    for ref in message_refs(document):
+        try:
+            refs.add(resolve_template_file(Path(prompts_dir), Path(prompt_path), ref))
+        except HTTPException:
+            continue
+    return refs
+
+
+def _plan_deletions(
+    prompt_path: Path, prompts_dir: Path, surviving: set[Path]
+) -> tuple[list[Path], str | None]:
+    """Which templates this save orphans, and why it might delete none.
+
+    All three conditions of design 5.5 must hold: the file was referenced on
+    disk before the save, is not referenced after it, and is referenced by no
+    other prompt anywhere under ``prompts_dir``.
+    """
+    from testbench_ai_service.webui.template_refs import scan_template_references  # noqa: PLC0415
+
+    previous = _previous_template_refs(prompt_path, prompts_dir)
+    candidates = previous - surviving
+    if not candidates:
+        return [], None
+
+    scan = scan_template_references(Path(prompts_dir))
+    if scan.blocked_by is not None:
+        return [], (
+            f"No file was deleted: {scan.blocked_by} could not be parsed, so the console "
+            f"cannot tell which templates are still in use. Repair it, then save again."
+        )
+
+    own = Path(prompt_path).relative_to(Path(prompts_dir)).as_posix()
+    deletes = []
+    for candidate in sorted(candidates, key=str):
+        holders = [name for name in scan.references.get(candidate, []) if name != own]
+        if not holders:
+            deletes.append(candidate)
+    return deletes, None
+
+
 def read_prompt_document(
     prompt_path: Path, prompts_dir: Path, lang: str, agent: str
 ) -> PromptDocumentResponse:
@@ -451,10 +540,57 @@ def _already_on_disk(target: Path, text: str) -> bool:
     return decoded.replace("\r\n", "\n").replace("\r", "\n") == text
 
 
-def build_write_set(
-    request: PromptSaveRequest, prompt_path: Path, prompts_dir: Path
-) -> dict[Path, str]:
-    """Validate *request* and turn it into ``{path: text}``, touching nothing.
+def _resolve_or_create_target(
+    base: Path, prompt_path: Path, name: str, previous_refs: set[Path], created: set[Path]
+) -> Path:
+    """Resolve a file-backed message's target, creating it if it is new.
+
+    Raises:
+        HTTPException 400/404: *name* escapes *base*, carries a disallowed
+            suffix, or (for a new file) names more than one path segment.
+        HTTPException 409: *name* already exists on disk but this prompt did
+            not previously reference it -- saving would silently overwrite a
+            file that belongs to something else.
+    """
+    try:
+        target = resolve_template_file(base, prompt_path, name)
+    except HTTPException as e:
+        if e.status_code != status.HTTP_404_NOT_FOUND:
+            raise
+        # Not there yet: this is a creation. Confined to one segment in the
+        # prompt's own directory (D7).
+        target = resolve_template_target(base, prompt_path, name)
+        created.add(target)
+
+    if target.exists() and target not in previous_refs:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{name!r} already exists and this prompt does not use it. Saving would "
+                f"overwrite a file that belongs to something else. Choose a different name."
+            ),
+        )
+    return target
+
+
+class WritePlan(BaseModel):
+    """What a save would do, computed without touching anything.
+
+    ``writes`` is text only. A save always writes what the editor holds; the
+    ``bytes`` entries :func:`~testbench_ai_service.webui.multi_write.write_all`
+    accepts exist solely for the fork's faithful copy, which builds its own set.
+    """
+
+    writes: dict[Path, str] = {}
+    #: The subset of ``writes`` that does not exist yet.
+    creates: set[Path] = set()
+    deletes: list[Path] = []
+    #: Why no deletion was planned, when the tree scan could not be trusted.
+    deletions_skipped: str | None = None
+
+
+def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: Path) -> WritePlan:
+    """Validate *request* and turn it into a :class:`WritePlan`, touching nothing.
 
     Validation happens here, before any caller reaches ``write_all``, which is
     how "a multi-file apply with one invalid file writes nothing at all"
@@ -467,20 +603,23 @@ def build_write_set(
     Raises:
         HTTPException 422: the document is not a usable ``PromptDefinition``,
             ``default_variant`` names no variant, or a variant has no messages.
-        HTTPException 400/404: a ``file`` message points outside ``prompts_dir``,
-            at a disallowed suffix, or at a file that does not exist. Phase 4a
-            never creates a file.
+        HTTPException 400: a ``file`` message points outside ``prompts_dir``, at
+            a disallowed suffix, or (for a new file) names more than one path
+            segment.
         HTTPException 409: two messages reference the same template file with
-            different content (a file has one body), or a file-backed message
+            different content (a file has one body); a file-backed message
             arrived with ``readable: false`` -- its ``content`` is the empty
-            placeholder the loader substituted, not the file's body.
+            placeholder the loader substituted, not the file's body; or a new
+            template's name already exists on disk but this prompt did not
+            previously reference it.
     """
     base = Path(prompts_dir)
-    files: dict[Path, str] = {}
+    previous_refs = _previous_template_refs(prompt_path, base)
+    created: set[Path] = set()
     #: Every file-backed body, before the unchanged ones are filtered out.
-    #: Kept separate from *files* so the "one file, one body" check below still
-    #: sees a second message pointing at a template the first one left
-    #: unchanged.
+    #: Kept separate from the final write set so the "one file, one body"
+    #: check below still sees a second message pointing at a template the
+    #: first one left unchanged.
     bodies: dict[Path, str] = {}
 
     document: dict[str, Any] = {
@@ -520,8 +659,9 @@ def build_write_set(
                             f"save again."
                         ),
                     )
-                # Raises 400/404 when it escapes, is disallowed, or is absent.
-                target = resolve_template_file(base, prompt_path, message.file)
+                target = _resolve_or_create_target(
+                    base, prompt_path, message.file, previous_refs, created
+                )
                 existing = bodies.get(target)
                 if existing is not None and existing != message.content:
                     raise HTTPException(
@@ -549,14 +689,17 @@ def build_write_set(
 
     _validate_document(document)
 
+    plan = WritePlan(creates=created)
     for target, text in bodies.items():
-        if not _already_on_disk(target, text):
-            files[target] = text
+        if target in created or not _already_on_disk(target, text):
+            plan.writes[target] = text
 
     yaml_text = document_to_yaml(document, header=schema_header(Path(prompt_path), base))
     if not _already_on_disk(Path(prompt_path), yaml_text):
-        files[Path(prompt_path)] = yaml_text
-    return files
+        plan.writes[Path(prompt_path)] = yaml_text
+
+    plan.deletes, plan.deletions_skipped = _plan_deletions(Path(prompt_path), base, set(bodies))
+    return plan
 
 
 def _validate_document(document: dict[str, Any]) -> None:
