@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import type { ConfigIssue } from '../api/types'
+import type { ConfigIssue, ExtraModelEntry } from '../api/types'
 import { useConfig } from '../api/queries'
 import { Field } from '../components/Field'
+import { ModelTable } from '../components/ModelTable'
 import { ReadOnlyField } from '../components/ReadOnlyField'
 import { useTranslations, type Lang } from '../i18n'
 import { LLM_FIELDS, LOGGING_FIELDS, SERVICE_TABS, valueAt, type FieldSpec } from './fields'
@@ -183,6 +184,22 @@ export function ConfigSection({
           )
         })}
       </div>
+
+      {section === 'llm' && (
+        <ModelTable
+          entries={
+            // Same source ordering every other field on this screen uses:
+            // the file first (what the draft is measured against), the
+            // fully-defaulted running config only if the file is silent.
+            ((valueAt(config.data.disk, 'llm_config.extra_models') ??
+              valueAt(running, 'llm_config.extra_models')) ??
+              {}) as Record<string, ExtraModelEntry>
+          }
+          issues={issues}
+          readOnly={!isAdmin}
+          lang={lang}
+        />
+      )}
     </div>
   )
 }

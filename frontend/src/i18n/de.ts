@@ -176,6 +176,17 @@ export const de = {
   linting: 'Wird geprüft…',
   lintClean: 'Keine Syntaxfehler.',
   lintFailed: 'Die Syntaxprüfung konnte nicht ausgeführt werden.',
+  models: 'Modelle',
+  modelsHint: 'Modelle zusätzlich zu denen, die der Dienst bereits kennt.',
+  modelsEmpty: 'Keine zusätzlichen Modelle konfiguriert.',
+  modelName: 'Modell',
+  modelProvider: 'Anbieter',
+  modelRouting: 'Anfrageform',
+  modelNewName: 'Neues Modell',
+  modelNewProvider: 'Neuer Anbieter',
+  modelNewRouting: 'Neue Anfrageform',
+  modelAdd: 'Hinzufügen',
+  modelRemove: 'Entfernen',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German
