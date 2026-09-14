@@ -1,6 +1,7 @@
-import threading
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -176,36 +177,45 @@ class TestProductionResolution:
 
 
 class TestSingleFlightOverTheWire:
-    def test_a_second_concurrent_run_for_one_session_is_refused(
-        self, client, login, app, fake_client
-    ):
-        started = threading.Event()
-        release = threading.Event()
+    async def test_a_second_concurrent_run_for_one_session_is_refused(self, app, tb_connection):
+        """Two genuinely overlapping requests: the second is refused with 409.
 
-        async def blocking_query(model, messages, **kwargs):
-            started.set()
-            release.wait(timeout=5)
-            return "ok"
+        Uses httpx.ASGITransport rather than TestClient. TestClient drives the
+        app on a single shared event loop, so a request held open by a
+        synchronous wait starves that loop and the "concurrent" request never
+        starts -- it would pass or fail for reasons unrelated to SingleFlight.
+        asyncio.Event + create_task produces real overlap.
+        """
+        gate = asyncio.Event()
 
-        fake_client.query_llm = AsyncMock(side_effect=blocking_query)
-        login(roles=["Administrator"])
-        headers = csrf(client)
+        async def slow_query(model, messages, **kwargs):
+            await gate.wait()  # holds the first request open, yields the loop
+            return "answer"
 
-        first: list = []
-        worker = threading.Thread(
-            target=lambda: first.append(
+        fake = MagicMock()
+        fake.query_llm = AsyncMock(side_effect=slow_query)
+        app.state.llm_factory.get_client = MagicMock(return_value=fake)
+        app.state.llm_factory.has_project_credential = MagicMock(return_value=False)
+
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+                signed_in = await client.post(
+                    "/admin/api/session", json={"username": "a", "password": "p"}
+                )
+            assert signed_in.status_code == 200
+            headers = {"X-CSRF-Token": client.cookies["tbai_admin_csrf"]}
+
+            first = asyncio.create_task(
                 client.post("/admin/api/prompts/test", json=body(), headers=headers)
             )
-        )
-        worker.start()
-        assert started.wait(timeout=5)
+            await asyncio.sleep(0.2)  # let the first request reach query_llm
+            second = await client.post("/admin/api/prompts/test", json=body(), headers=headers)
+            gate.set()
+            first_response = await first
 
-        second = client.post("/admin/api/prompts/test", json=body(), headers=headers)
-        release.set()
-        worker.join(timeout=5)
-
+        assert first_response.status_code == 200
         assert second.status_code == 409
-        assert first[0].status_code == 200
 
 
 class TestFailures:
