@@ -2,9 +2,40 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider, RoutingFamily
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.validators import raise_field_validation_error, validate_class_path
+
+#: Which request shapes each provider's client can actually produce.
+#: AZURE_OPENAI shares OpenAI's two branches (it dispatches on the canonical
+#: name after deployment_mapping); CUSTOM implements its own dispatch, so
+#: "fallback" is the only honest answer for it.
+ALLOWED_ROUTING: dict[LLMProvider, frozenset[RoutingFamily]] = {
+    LLMProvider.OPENAI: frozenset(
+        {RoutingFamily.CHAT, RoutingFamily.REASONING, RoutingFamily.FALLBACK}
+    ),
+    LLMProvider.AZURE_OPENAI: frozenset(
+        {RoutingFamily.CHAT, RoutingFamily.REASONING, RoutingFamily.FALLBACK}
+    ),
+    LLMProvider.ANTHROPIC: frozenset(
+        {RoutingFamily.ADAPTIVE, RoutingFamily.BUDGET, RoutingFamily.FALLBACK}
+    ),
+    LLMProvider.CUSTOM: frozenset({RoutingFamily.FALLBACK}),
+}
+
+
+class ExtraModel(BaseModel):
+    """One operator-supplied catalogue entry.
+
+    ``routing`` is not decoration: it is the branch the client will take for
+    this model. Without it a newly added model falls through to
+    ``_query_fallback_model`` -- no thinking, no effort, max_tokens 4096 --
+    which is the opposite of what an operator adding a new flagship wants
+    (design D10).
+    """
+
+    provider: LLMProvider
+    routing: RoutingFamily
 
 
 class LLMConfig(BaseModel):
@@ -23,6 +54,14 @@ class LLMConfig(BaseModel):
         default=None,
         ge=0,
         description="How often the provider SDK retries a failed request. Unset uses the SDK's own default.",
+    )
+    extra_models: dict[str, ExtraModel] = Field(
+        default_factory=dict,
+        description=(
+            "Models to offer in the console beyond those the clients already route, "
+            "keyed by model name. Each entry names its provider and the request shape "
+            "the client should use for it."
+        ),
     )
 
     model_config = ConfigDict(extra="allow")
@@ -59,6 +98,34 @@ class LLMConfig(BaseModel):
                     self,
                     "api_version",
                     ValueError("'api_version' must be set for provider 'azure_openai'."),
+                )
+
+        # Imported here rather than at module scope: llm.routing imports both
+        # client modules (and their SDKs), and models/config.py is imported by
+        # nearly everything. Keeping it function-local keeps that weight out of
+        # the common import path. Same pattern as 4b's template_refs import.
+        from testbench_ai_service.llm.routing import builtin_routing  # noqa: PLC0415
+
+        for name, entry in self.extra_models.items():
+            allowed = ALLOWED_ROUTING[entry.provider]
+            if entry.routing not in allowed:
+                raise_field_validation_error(
+                    self,
+                    "extra_models",
+                    ValueError(
+                        f"'{name}': routing '{entry.routing}' is not available for provider "
+                        f"'{entry.provider}'. Allowed: "
+                        f"{', '.join(sorted(family.value for family in allowed))}."
+                    ),
+                )
+            if builtin_routing(name) is not None:
+                raise_field_validation_error(
+                    self,
+                    "extra_models",
+                    ValueError(
+                        f"'{name}' is already routed by its client and cannot be redefined "
+                        "here. Remove the entry; the model is offered automatically."
+                    ),
                 )
         return self
 
