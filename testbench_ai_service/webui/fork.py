@@ -52,9 +52,18 @@ class ForkPlan(BaseModel):
 
 
 def slugify_project(name: str) -> str:
-    """A filesystem-safe segment derived from a TestBench project name."""
+    """A filesystem-safe segment derived from a TestBench project name.
+
+    Not total: a name with no ``[a-z0-9._-]`` characters at all (non-Latin
+    scripts included) slugs to ``""``, and a slug made up entirely of ``.``/``-``
+    is stripped down to ``""`` too, rather than returned as ``"."`` or ``".."``
+    -- neither of which is a safe bare directory segment. ``build_fork`` treats
+    an empty result as "the operator must supply ``directory`` explicitly"
+    (design D5); it is never used as a path segment on its own.
+    """
     slug = _SLUG_ALLOWED.sub("-", name.strip().lower()).strip("-")
-    return slug[:_SLUG_MAX].strip("-")
+    slug = slug[:_SLUG_MAX].strip("-")
+    return "" if slug.strip(".") == "" else slug
 
 
 def _require_segment(prompts_dir: Path, lang: str, directory: str) -> Path:
@@ -67,7 +76,11 @@ def _require_segment(prompts_dir: Path, lang: str, directory: str) -> Path:
             ),
         )
     candidate = Path(directory)
-    if candidate.is_absolute() or len(candidate.parts) != 1 or directory in {".", ".."}:
+    # Checked on the NORMALISED parts, not the raw string: pathlib collapses a
+    # leading "./" (so "./.." also has exactly one part), and a raw-string
+    # check against {".", ".."} would let "./..", ".//..", "././.." and "..//"
+    # all through as a bogus single segment that resolves to prompts_dir itself.
+    if candidate.is_absolute() or len(candidate.parts) != 1 or candidate.parts[0] in (".", ".."):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"{directory!r} is not a plain directory name.",
@@ -87,8 +100,9 @@ def build_fork(
     """Everything the fork would create, and the config value pointing at it.
 
     Raises:
-        HTTPException 400: the directory name is not a single usable segment, or
-            escapes ``prompts_dir``.
+        HTTPException 400: *directory* is not a single usable segment, or escapes
+            ``prompts_dir``; or *directory* is ``None`` and *project* slugs to
+            nothing usable, so no directory name can be derived.
         HTTPException 404: the source prompt does not parse, or a template it
             references cannot be read.
         HTTPException 409: the target directory already exists, or two templates
@@ -97,7 +111,23 @@ def build_fork(
     base = Path(prompts_dir)
     definition = _load_definition(Path(prompt_path), base)
 
-    name = directory if directory is not None else f"{agent}__{slugify_project(project)}"
+    if directory is not None:
+        name = directory
+    else:
+        slug = slugify_project(project)
+        if not slug:
+            # design D5: a project name that slugs to nothing (no [a-z0-9._-]
+            # characters at all, e.g. a non-Latin script) must not silently fork
+            # every such project to the same "<agent>__" directory -- make the
+            # operator supply a directory explicitly instead.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=(
+                    f"The project name {project!r} does not produce a usable directory "
+                    "name. Supply one explicitly."
+                ),
+            )
+        name = f"{agent}__{slug}"
     target_dir = _require_segment(base, lang, name)
     if target_dir.exists():
         raise HTTPException(
@@ -130,10 +160,13 @@ def build_fork(
             basename = source.name
             previous = copied.get(basename)
             if previous is not None and previous != source:
+                # previous.name == source.name == basename by construction -- that
+                # is why they collided -- so the full paths, not the basenames,
+                # are what tells the operator which two files to rename.
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
-                        f"{previous.name!r} and {source.name!r} would both be copied to "
+                        f"{previous} and {source} would both be copied to "
                         f"{basename!r}. Rename one of them before forking."
                     ),
                 )
