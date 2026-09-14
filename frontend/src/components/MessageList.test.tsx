@@ -186,6 +186,7 @@ describe('MessageList', () => {
       />,
     )
     expect(screen.queryByLabelText('Dateiname')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Quelle')).not.toBeInTheDocument()
     expect(screen.getByText('a.jinja')).toBeInTheDocument()
   })
 })
