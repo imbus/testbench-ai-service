@@ -7,7 +7,7 @@ from anthropic import DEFAULT_MAX_RETRIES, NOT_GIVEN, AsyncAnthropic, NotGiven
 from anthropic.types import MessageParam
 from httpx import Timeout
 
-from testbench_ai_service.llm.base import LLMClient
+from testbench_ai_service.llm.base import LLMClient, RoutingFamily
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import Message
 
@@ -44,6 +44,7 @@ class AnthropicClient(LLMClient):
         timeout: float | Timeout | NotGiven | None = NOT_GIVEN,
         max_retries: int = DEFAULT_MAX_RETRIES,
         _strict_response_validation: bool = False,
+        model_routing: dict[str, RoutingFamily] | None = None,
     ):
         self.client = AsyncAnthropic(
             api_key=api_key,
@@ -51,6 +52,22 @@ class AnthropicClient(LLMClient):
             max_retries=max_retries,
             _strict_response_validation=_strict_response_validation,
         )
+        self.model_routing = model_routing or {}
+
+    def _routing_family(self, model: str) -> RoutingFamily:
+        """Config first, then this client's own sets (design D11).
+
+        The frozensets keep their meaning -- they become the default answer
+        rather than the only one.
+        """
+        configured = self.model_routing.get(model)
+        if configured is not None:
+            return configured
+        if model in BUDGET_THINKING_MODELS:
+            return RoutingFamily.BUDGET
+        if model in ADAPTIVE_THINKING_MODELS:
+            return RoutingFamily.ADAPTIVE
+        return RoutingFamily.FALLBACK
 
     async def query_llm(
         self,
@@ -64,7 +81,9 @@ class AnthropicClient(LLMClient):
             {"role": msg.role, "content": msg.content} for msg in messages if msg.role != "system"
         ]
 
-        if model in BUDGET_THINKING_MODELS:
+        family = self._routing_family(model)
+
+        if family is RoutingFamily.BUDGET:
             return await self._query_budget_thinking_model(
                 model=model,
                 input_messages=anthropic_messages,
@@ -73,7 +92,7 @@ class AnthropicClient(LLMClient):
                 **kwargs,
             )
 
-        if model in ADAPTIVE_THINKING_MODELS:
+        if family is RoutingFamily.ADAPTIVE:
             return await self._query_adaptive_thinking_model(
                 model=model,
                 input_messages=anthropic_messages,

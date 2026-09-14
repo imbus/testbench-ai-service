@@ -12,7 +12,7 @@ from openai._types import (
 )
 from openai.types.responses import ResponseInputParam
 
-from testbench_ai_service.llm.base import LLMClient
+from testbench_ai_service.llm.base import LLMClient, RoutingFamily
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import Message
 
@@ -106,6 +106,7 @@ class OpenAIClient(LLMClient):
         timeout: float | Timeout | NotGiven | None = NOT_GIVEN,
         max_retries: int = DEFAULT_MAX_RETRIES,
         _strict_response_validation: bool = False,
+        model_routing: dict[str, RoutingFamily] | None = None,
     ):
         self.client = AsyncOpenAI(
             api_key=api_key,
@@ -113,6 +114,17 @@ class OpenAIClient(LLMClient):
             max_retries=max_retries,
             _strict_response_validation=_strict_response_validation,
         )
+        self.model_routing = model_routing or {}
+
+    def _routing_family(self, model: str) -> RoutingFamily:
+        configured = self.model_routing.get(model)
+        if configured is not None:
+            return configured
+        if model in CHAT_MODELS:
+            return RoutingFamily.CHAT
+        if model in REASONING_MODELS:
+            return RoutingFamily.REASONING
+        return RoutingFamily.FALLBACK
 
     async def query_llm(
         self,
@@ -122,16 +134,15 @@ class OpenAIClient(LLMClient):
     ) -> str:
         input_messages = cast(ResponseInputParam, [message.model_dump() for message in messages])
 
-        if model in CHAT_MODELS:
+        family = self._routing_family(model)
+        if family is RoutingFamily.CHAT:
             return await self._query_chat_model(model, input_messages)
-
-        if model in REASONING_MODELS:
+        if family is RoutingFamily.REASONING:
             return await self._query_reasoning_model(
                 model=model,
                 input_messages=input_messages,
                 reasoning_effort=kwargs.get("reasoning_effort", "medium"),
             )
-
         return await self._query_fallback_model(model, input_messages, **kwargs)
 
     async def _query_chat_model(self, model: str, input_messages: ResponseInputParam) -> str:
@@ -215,6 +226,7 @@ class AzureOpenAIClient(OpenAIClient):
         timeout: float | Timeout | NotGiven | None = NOT_GIVEN,
         max_retries: int = DEFAULT_MAX_RETRIES,
         _strict_response_validation: bool = False,
+        model_routing: dict[str, RoutingFamily] | None = None,
     ):
         self.client = AsyncAzureOpenAI(
             api_key=api_key,
@@ -227,6 +239,7 @@ class AzureOpenAIClient(OpenAIClient):
         )
         self.credential = credential
         self.deployment_mapping = deployment_mapping or {}
+        self.model_routing = model_routing or {}
 
     async def query_llm(
         self,
@@ -238,16 +251,23 @@ class AzureOpenAIClient(OpenAIClient):
         input_messages = cast(ResponseInputParam, [message.model_dump() for message in messages])
         kwargs.pop("deployment_mapping", None)
 
-        if canonical_model in CHAT_MODELS:
-            return await self._query_chat_model(model, input_messages)
+        family = self.model_routing.get(model) or self.model_routing.get(canonical_model)
+        if family is None:
+            if canonical_model in CHAT_MODELS:
+                family = RoutingFamily.CHAT
+            elif canonical_model in REASONING_MODELS:
+                family = RoutingFamily.REASONING
+            else:
+                family = RoutingFamily.FALLBACK
 
-        if canonical_model in REASONING_MODELS:
+        if family is RoutingFamily.CHAT:
+            return await self._query_chat_model(model, input_messages)
+        if family is RoutingFamily.REASONING:
             return await self._query_reasoning_model(
                 model=model,
                 input_messages=input_messages,
                 reasoning_effort=kwargs.get("reasoning_effort", "medium"),
             )
-
         return await self._query_fallback_model(model, input_messages, **kwargs)
 
     async def close(self):
