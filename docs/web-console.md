@@ -19,7 +19,9 @@ effective Service, LLM and Logging configuration.
 The console can change the Service, LLM provider and Logging settings, which
 agents run and which prompt each one uses, and which of those decisions a given
 TestBench project overrides. It can also edit the prompt files themselves —
-their messages, variables and variants — with a lint and a sandboxed preview.
+their messages, variables and variants — with a lint and a sandboxed preview,
+move a message between the YAML and its own template file, and give a single
+project its own copy of a prompt.
 
 :::caution
 Changing configuration from the console rewrites `config.toml` on the server.
@@ -204,6 +206,14 @@ A variable that is set in `config.toml` but not declared by the selected variant
 is still shown, flagged, so a value the prompt will ignore cannot hide in the
 file.
 
+In a **project** scope an administrator also gets **Give this project its own
+prompt**, which copies the prompt this project loads and points the project at
+the copy. See [Giving a project its own copy of a
+prompt](#giving-a-project-its-own-copy-of-a-prompt). It is on the agent screen
+rather than on the Projects screen because a fork is per agent, and the agent
+screen is the only place a project's effective prompt language is already
+resolved.
+
 `endpoint_path` and `class_path` are shown but not editable. Defining an agent
 means shipping a Python class, which is a deployment rather than a
 configuration change, and a typo in either one stops the service from starting.
@@ -318,10 +328,14 @@ on them.
 
 ### What saving does and does not do
 
-Saving writes `prompt.yaml` and, for any message whose text you changed and
-which is already stored in an external file (`source: "file"`), that file —
-both replaced in place, with the previous contents kept as `<file>.bak`
-next to it.
+Saving writes `prompt.yaml` and, for any message stored in an external file
+(`source: "file"`), that file — each replaced in place, with the previous
+contents kept as `<file>.bak` next to it. A file whose contents the save would
+not change is left alone rather than rewritten.
+
+A save can also create and delete template files: see *Moving a message
+between the YAML and its own file* and *Deleting a template that nothing
+references any more* below.
 
 A message whose template file could **not** be read when the prompt was
 loaded — it is missing, or it is not valid UTF-8 (an old latin-1 file, say) —
@@ -330,10 +344,130 @@ is broken. Saving is then refused, naming that file: the editor is holding a
 placeholder, not the file's text, and writing it back would leave the real
 file empty. Repair the file on disk first, then reload the prompt.
 
-Phase 4a never creates or deletes a file. A message already stored externally
-can be edited but not switched to inline text, and a new message is always
-inline; moving a message's text out to its own file, and forking a whole
-prompt into a new variant file, are not yet available from the console.
+Before you save, **Save** first asks the server what the save would do and
+shows the answer: the files it would create, the files it would update, and
+the files it would delete, each as its own group. The list is computed by the
+server against the files as they are on disk at that moment, not guessed in
+the browser, so it is the same work the save itself will do. A save the server
+would refuse is refused in that dialog, with the reason, before anything is
+written.
+
+### Moving a message between the YAML and its own file
+
+Every message carries a source toggle: its text can live **inline** in
+`prompt.yaml`, or in its own `.jinja` file beside it. Switching either way
+keeps the text you are looking at.
+
+Switching a message to a file proposes a name in the convention the shipped
+prompts already use — `<variant>_<role>.jinja`, so the `system` message of a
+variant called `Detailed explanation` is proposed as
+`detailed_explanation_system.jinja`. If that name is already used by another
+message in the same prompt, a number is appended. The name is a field you can
+change.
+
+A new template file is created in the prompt's **own directory**, under a
+plain file name: no subdirectory, no `../`, no absolute path. Pointing a
+message at an existing template somewhere else under `prompts_dir` is
+unchanged and still allowed — only creating a file is confined this way.
+
+If the name you give already exists on disk and this prompt does not already
+reference it, the save is refused rather than overwriting a file that belongs
+to something else. The one exception is a name whose content is already
+exactly what this message holds: pointing at it is then allowed, because it
+changes nothing and nothing is written.
+
+Switching a message back to inline puts its text into `prompt.yaml` and leaves
+the file as a deletion candidate, below.
+
+### Deleting a template that nothing references any more
+
+When a save leaves a template file that no prompt references, the save deletes
+it and keeps its previous contents as `<file>.bak` next to where it was — the
+same single undo step `config.toml.bak` and `prompt.yaml.bak` are, overwritten
+by the next save rather than kept as history.
+
+A file is only deleted when all three of these hold:
+
+- the prompt referenced it on disk **before** this save — the server re-reads
+  the file to decide this, so the browser cannot nominate a file for deletion;
+- the document you are saving no longer references it;
+- no other `prompt.yaml` anywhere under `prompts_dir` references it.
+
+The last condition means a template shared by two prompts survives when one of
+them stops using it.
+
+:::caution
+If **any** `prompt.yaml` under `prompts_dir` fails to parse, the save writes
+normally but deletes **nothing at all**, and the dialog names the file that
+blocked it. A prompt that cannot be parsed cannot be asked which templates it
+uses, and treating it as using none would delete files that are still in
+service. Repair that file and save again if you want the cleanup.
+:::
+
+Deletion only ever happens as a consequence of saving the prompt that used to
+reference the file. A template orphaned by a hand edit, or left behind by a
+save from an earlier release, is not swept up — there is no "clean up
+`prompts_dir`" action.
+
+### Giving a project its own copy of a prompt
+
+On an **agent's** screen, in a project scope, **Give this project its own
+prompt** copies the prompt the project currently loads and points the project
+at the copy. It is Administrator-only.
+
+The copy lands in a sibling directory beside the prompt it came from:
+
+```
+prompts_dir/<language>/<agent>__<project-slug>/
+```
+
+so it appears in the Prompts tree and can be opened in the editor on the next
+request. The project name is slugged for the directory name; the dialog shows
+the proposed path and lets you correct that last segment. A directory that
+already exists is refused by name rather than silently given a different one.
+
+The copy contains the prompt's `prompt.yaml` plus a copy of every template it
+references, each under its own file name, with the YAML's `file:` references
+rewritten to point at the copies. The copied templates are copied byte for
+byte, so a template that is not UTF-8, or has Windows line endings, arrives
+intact.
+
+The console then writes one key to `config.toml`:
+
+```toml
+[testbench-ai-service.projects."<project>".agents.<agent>.prompt]
+file = "<language>/<agent>__<project-slug>/prompt.yaml"
+```
+
+with the language prefix included, so the value resolves the same way whether
+or not the project later changes its own `language`. The previous
+`config.toml` is kept as `config.toml.bak`, the result is validated before it
+is written, and the service reloads in place — a `prompt.file` change never
+needs a restart.
+
+The fork is refused while your browser holds unapplied configuration changes,
+and the button says so. The fork writes `config.toml` itself, so allowing both
+at once would leave your pending-changes count describing a file that has
+since moved underneath it.
+
+:::caution
+A forked `prompt.yaml` is written out fresh rather than copied byte for byte,
+because every `file:` reference in it has to be rewritten. **Comments in the
+prompt YAML do not survive the fork**, for the same reason they do not survive
+an ordinary save. The copied `.jinja` templates are unaffected — those are
+copied verbatim.
+:::
+
+A fork is never undone automatically. To go back to the shared prompt, clear
+the project's **prompt file** override on the agent screen like any other
+configuration change; the forked files stay on disk for you to remove by hand
+if you want them gone.
+
+### Still not available from the console
+
+Running a prompt against the configured model, editing a project's
+`llm_config`, and repointing an agent at a renamed variant (still refused,
+see above) are not available from the console.
 
 ---
 

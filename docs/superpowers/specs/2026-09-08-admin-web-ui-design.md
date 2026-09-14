@@ -352,6 +352,12 @@ header.
 | POST | `/prompts/render` | Render messages against a sample context |
 | GET | `/models` | Model catalogue and which provider API keys are present |
 
+> **Amended by sections 12.2 and 12.3.** Routes added since: `POST /projects/refresh`,
+> `GET /prompts/{lang}/{agent}/meta`, `POST /prompts/{lang}/{agent}/plan` and
+> `POST /prompts/{lang}/{agent}/fork`. `POST /prompts/render` is **admin-gated**, which
+> this table does not show, and both `/prompts/lint` and `/prompts/render` require CSRF
+> despite not mutating. `GET /models` is not built yet — it belongs to phase 4c.
+
 `GET /status` reports API-key **presence only**, never values. No endpoint returns
 an environment variable's contents.
 
@@ -375,6 +381,13 @@ picker keeps the prototype's free-text entry, so a model missing from the catalo
 is always reachable.
 
 ## 9. Prompt editing
+
+> **Superseded in part — see section 12.3.** This section is left as written for the
+> record of what was planned. In particular: `POST /prompts/render` is **admin-only
+> and sandboxed**, not "the real Jinja2 environment" as the third paragraph says —
+> that description, taken literally, is an arbitrary code execution path. Section 12.3
+> also records the bounds on inline↔file switching, and the file deletion this section
+> does not mention at all.
 
 `GET /prompts/{lang}/{agent}` returns the parsed `prompt.yaml` together with the
 contents of every `file:`-referenced template, which is what lets the editor treat a
@@ -533,6 +546,116 @@ record of what was planned stays readable.
   Phase 3 therefore reads `prompts_dir` through `resolve_within` one increment
   earlier than section 9.1 planned. It writes nothing there.
 
+### 12.3 Amendments after phase 4a and 4b, 2026-09-14
+
+Two increments' worth. Phase 4a's own design listed seven amendments to fold back
+here and that never happened; phase 4b adds five more. Where this document and the
+list below disagree, the list is right; the sections themselves are left as written
+so the record of what was planned stays readable.
+
+**The one that is a security correction, not scheduling:**
+
+- **`POST /prompts/render` is admin-only, and it renders in a sandboxed Jinja
+  environment.** Section 8's table does not gate it, and section 9 specifies that it
+  "uses the real Jinja2 environment". As written, that is an arbitrary code execution
+  path: a template body is attacker-controlled request data, and `jinja2.Environment`
+  places no restriction on attribute access, so any session that could reach the route
+  could read or run whatever the service process can. As shipped, the route requires
+  the global `Administrator` role and renders through `jinja2.sandbox`. Section 9's
+  "real Jinja2 environment" applies to **lint** only — `POST /prompts/lint` does a real
+  `Environment().parse()`, which builds a syntax tree and evaluates nothing, and is
+  therefore available to any signed-in session.
+
+Carried over from phase 4a:
+
+- **Phase 4 is split into 4a–4d.** Section 12 describes it as one increment. 4a is the
+  editor (tree, document, variants, messages, variables, lint, render, save); 4b is the
+  file lifecycle and the fork; 4c is the live test run (`POST /prompts/test`, `GET
+  /models`); 4d is per-project `llm_config` editing. 4a and 4b have shipped.
+- **CodeMirror 6, not 5.** Section 10 names CodeMirror without a version and the
+  prototype used 5. The editor is built on the CodeMirror 6 `@codemirror/*` packages.
+- **`POST /prompts/lint` and `POST /prompts/render` require CSRF despite not mutating.**
+  Both carry a document body rather than being addressable by URL alone, and render
+  executes template text. Section 8's rule ("mutating routes require admin and a valid
+  CSRF header") is therefore narrower than what shipped.
+- **Renaming or removing a variant that is still referenced is refused.** A `409` names
+  the global agents table or the project holding the `prompt.variant` reference. Section
+  9 does not describe the guard. A variant name is a free string everywhere else in
+  `config.toml`, so nothing else would have caught the break.
+- **`GET /prompts/{lang}/{agent}/meta` survives phase 4 unchanged.** Section 12.2 added
+  it as a phase-3 stopgap for the agent detail form; phase 4 did not fold it into the
+  full document endpoint, because the agent screen wants the variant list without the
+  message bodies.
+- **The `agent.*` context skeleton is computed server-side** and shipped in the document
+  response, built from the Jinja syntax tree of the variant's own messages. Section 8's
+  "sample context" implies the browser assembles one; it cannot, because only the server
+  can parse the templates.
+
+New in phase 4b:
+
+- **The prompt fork landed in 4b**, as section 12.2 anticipated, in a layout section 9
+  does not describe: a **sibling agent directory**, `prompts_dir/<lang>/<agent>__<slug>/`,
+  beside the prompt it copies. That is the only shape the existing two-level tree walk and
+  the existing `{lang}/{agent}` address already reach, so a fork is visible and editable
+  with no new route. The `config.toml` value it writes **carries the language prefix** —
+  `file = "en/reviewer__carconfig/prompt.yaml"` — which both the runtime resolver and the
+  boot validator accept, and which keeps a fork meaning exactly one file if the project's
+  `language` later changes. The fork's transaction is not atomic and does not claim to
+  be: the files are created first because `validate_prompt_paths` requires the prompt file
+  to be on disk before the proposed config can be validated at all. What holds is that
+  nothing outside the new directory is written until the configuration validates, and the
+  directory is removed if anything after it fails.
+- **Template creation is confined to the prompt's own directory** — one plain file name,
+  no separators, no `..`. Section 9's inline↔file paragraph does not bound it. Referencing
+  an *existing* template anywhere under `prompts_dir` is unchanged and still allowed; only
+  creation is pinned. A name that exists on disk and that this prompt does not already
+  reference is refused with a `409`, unless its content is already identical to what the
+  message holds, in which case pointing at it writes nothing.
+- **Deletion exists, and is defined from disk over the whole tree.** Section 9 has no
+  file-removal concept at all. A save deletes a template only when the server's own re-read
+  of the prompt referenced it before the save, the saved document no longer does, and no
+  other `prompt.yaml` under `prompts_dir` does either — the first condition is what stops a
+  client nominating any contained file for deletion. If **any** prompt under `prompts_dir`
+  fails to parse the save writes but deletes nothing, and names the file that blocked it:
+  an unparseable prompt read as "references nothing" would delete templates still in use.
+- **`POST /prompts/{lang}/{agent}/plan` is added to section 8's table** (admin + CSRF). It
+  runs the same write-set builder the `PUT` runs and returns what the `PUT` would, refusals
+  included, touching nothing. The confirm dialog cannot compute a deletion itself — that
+  needs the whole-tree scan — and this is also where a `422` becomes visible instead of
+  disabling Save with no on-screen reason.
+- **Section 9.1's containment helper gained a creation sibling.**
+  `resolve_template_target` applies the same `resolve_within` containment and the same
+  extension allowlist **to the resolved path, before anything is stat'ed**, so a refused
+  suffix is refused whether or not the file exists. This is what makes a write path to a
+  file that does not exist yet safe to add.
+- **A sixth backend change outside the admin package**, beyond section 11's four and
+  section 12.2's fifth: `config.py`'s `validate_prompt_paths` now validates a project's
+  `prompt.file` against **that project's** language rather than the global one, matching
+  what `get_prompt_config` does at runtime. A configuration overriding both previously
+  failed to boot over a file the runtime would never have looked for.
+
+Known gaps recorded rather than fixed, so the next increment has them written down:
+
+- A prompt file referenced by `config.toml` but outside `<lang>/<agent>/prompt.yaml` — such
+  as `config_example.toml`'s own `CarConfigurator_reviews_prompt.yaml` — is invisible in the
+  tree and unaddressable by the editor. Pre-existing; making it addressable is a change to
+  the addressing scheme.
+- Orphaned templates are never swept. Deletion is a consequence of saving the prompt that
+  referenced the file; there is no "clean up `prompts_dir`" verb.
+- A forked prompt is never unforked. Removing the project's override is an ordinary config
+  edit; the fork's files stay on disk.
+- Comments in a forked `prompt.yaml` are lost, as in any console save, because the fork must
+  rewrite every `file:` reference and therefore re-serializes rather than copying bytes.
+- `config.py:360` joins `prompts_dir/<language>/<file>` directly instead of going through
+  `resolve_prompt_file_path`, so a global agent whose `prompt.file` resolves only through
+  that function's second candidate hands `template_variables` a path that does not exist.
+  Unrelated to the project-language bug fixed above.
+- Variant repointing is still refused with a `409`. 4b built the `config.toml` write path
+  that would make it possible; pointing it there is a decision about semantics, not a
+  by-product of having gained a serializer.
+- Two phase-2 leftovers, unchanged: the CRLF→LF rewrite on the first save of a CRLF
+  `config.toml`, and `main.py`'s relative `Path("config.toml")` fallback.
+
 
 ## 13. Testing
 
@@ -593,6 +716,15 @@ Playwright is available for smoke-testing the assembled console.
 - Any change to the existing agent trigger API.
 
 ## 16. Open items to verify against a live TestBench
+
+**Status as of 2026-09-14, after phases 1 through 4b: all six are still open.**
+Nothing in phase 4a or 4b closed any of them, and nothing in the earlier phases did
+either. They are not questions nobody has looked at — each is written against code
+that now exists and is covered by unit tests with a stubbed TestBench; what none of
+them has is a run against a real deployment. Every one is a behaviour that only a
+live server can settle, so they carry forward to whoever first deploys the console
+against one, and the list should be worked through then rather than read as
+background.
 
 1. `read_user_roles()` is TestBench-version dependent: on TestBench 4 it reads
    `GET {server}2/login/session` and returns `globalRoles`; on TestBench 3 it goes

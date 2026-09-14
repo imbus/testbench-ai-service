@@ -66,9 +66,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   executes the template text — always inside a sandboxed Jinja environment. Renaming or removing a
   variant that an agent or project still points at by name is refused, naming the global agents
   table or the project holding the reference, so it can be repointed in `config.toml` before the
-  rename is retried. Saving writes `prompt.yaml` and any template file already referenced by a
-  message; phase 4a does not create or delete files, so switching a message between inline and an
-  external file, and forking a prompt, remain for a later release. Documented in
+  rename is retried. Saving writes `prompt.yaml` and any template file a message references, each
+  with the previous contents kept as `<file>.bak`. Documented in `docs/web-console.md`.
+- The prompt editor can now move a message's text between `prompt.yaml` and its own `.jinja`
+  file, in both directions. Switching a message to a file proposes a name in the convention the
+  shipped prompts already use (`<variant>_<role>.jinja`), deduplicated against the files the
+  prompt already references, and the name is editable. Creation is confined to a plain file name
+  in the prompt's own directory — no subdirectory, no `../`, no absolute path — while pointing a
+  message at an existing template elsewhere under `prompts_dir` is unchanged. A name that already
+  exists on disk and that this prompt does not already reference is refused rather than
+  overwritten, so a save can never clobber a template belonging to another prompt; the one
+  exception is a file whose content is already exactly what the message holds, where pointing at
+  it is allowed and nothing is written.
+- A template file that no prompt references any more is now deleted when you save, with its
+  previous contents kept as `<file>.bak` — the same single undo step `config.toml.bak` is, not a
+  history. Deletion requires all three of: the prompt referenced the file on disk before the
+  save (re-read by the server, so the browser cannot nominate a file for deletion), the saved
+  document no longer references it, and no other `prompt.yaml` anywhere under `prompts_dir`
+  references it — so a template shared by two prompts survives. **If any `prompt.yaml` under
+  `prompts_dir` fails to parse, the save still writes but deletes nothing at all**, and the
+  response names the file that blocked it: a prompt that cannot be parsed cannot be asked which
+  templates it uses, and reading it as using none would delete files still in service. Deletion
+  happens only as a consequence of saving the prompt that used to reference the file; orphans
+  left by a hand edit, or by a save from an earlier release, are not swept up.
+- **Save** now asks the server what a save would do before it does it, and the confirm dialog
+  shows the files that would be created, updated and deleted as three groups, plus the reason
+  when deletions were skipped. The plan is computed by the same code the save runs, against the
+  files as they are on disk, so the dialog and the save cannot disagree — and a save the server
+  would refuse is now refused inside that dialog, with the reason, instead of after it closes.
+- Forking a prompt for one project, from an agent's screen in that project's scope, for
+  administrators. **Give this project its own prompt** copies the prompt the project loads into a
+  sibling directory `prompts_dir/<language>/<agent>__<project-slug>/` — the `prompt.yaml` plus a
+  byte-for-byte copy of every template it references, with the YAML's `file:` references
+  rewritten to the copies — then writes
+  `projects.<project>.agents.<agent>.prompt.file = "<language>/<agent>__<project-slug>/prompt.yaml"`
+  to `config.toml`, keeping the previous contents as `config.toml.bak`, validates the result
+  before writing it, and reloads in place; a `prompt.file` change never needs a restart. The fork
+  appears in the Prompts tree and is editable immediately. The proposed directory name is shown
+  and its last segment is editable; an existing directory is refused by name rather than silently
+  given another. A fork that would produce a configuration the service cannot load writes nothing
+  outside the new directory, and that directory is removed. It costs: the forked `prompt.yaml` is
+  re-serialized because every `file:` reference has to be rewritten, so **comments in it are not
+  preserved** (the copied `.jinja` templates are unaffected); the fork is refused while the
+  browser holds unapplied configuration changes, since it writes `config.toml` itself; and a fork
+  is never undone automatically — clearing the project's prompt file override is an ordinary
+  configuration change and leaves the forked files on disk. Documented in
   `docs/web-console.md`.
 
 ### Changed
@@ -114,6 +156,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Fixed
 
+- A project that overrides both `language` and its agent's `prompt.file` now starts. At boot,
+  `validate_prompt_paths` checked such a file against the **global** language while
+  `get_prompt_config` resolves it against the **project's** language at request time, so where
+  the two differed the service refused to start over a file that is, by its own runtime rules,
+  the wrong one. The boot check now uses the project's own language when it declares one. This
+  affects hand-written configurations independently of the console.
 - `GET /admin/api/config` previously did not redact credential keys written with hyphens or
   dots (`api-key`, `x-api-key`, `api.key`), so such a value could be shown in plaintext by
   the console's configuration screen. Now all credential-named keys, regardless of separator
