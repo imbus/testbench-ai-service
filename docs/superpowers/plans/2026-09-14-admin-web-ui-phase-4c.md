@@ -284,12 +284,27 @@ class TestExtraModels:
             LLMConfig(extra_models={"gpt-4o": {"provider": "openai", "routing": "reasoning"}})
         assert "gpt-4o" in str(excinfo.value)
 
-    def test_the_error_path_names_the_offending_field(self):
-        # ConfigSection renders issues against the field they name, so the path
-        # has to reach the row (design 5.3).
+    def test_the_error_path_reaches_the_offending_row(self):
+        # ConfigSection matches issues by path prefix, so a table-level loc
+        # would mark every row instead of the broken one (design 5.3). Task 12
+        # renders against exactly this path.
         with pytest.raises(ValidationError) as excinfo:
             LLMConfig(extra_models={"m": {"provider": "anthropic", "routing": "chat"}})
-        assert "extra_models" in str(excinfo.value)
+        assert excinfo.value.errors()[0]["loc"] == ("extra_models", "m", "routing")
+
+    def test_a_shadow_error_names_the_offending_entry(self):
+        with pytest.raises(ValidationError) as excinfo:
+            LLMConfig(extra_models={"gpt-4o": {"provider": "openai", "routing": "chat"}})
+        assert excinfo.value.errors()[0]["loc"] == ("extra_models", "gpt-4o")
+
+    def test_the_field_is_declared_so_it_cannot_leak_into_a_provider_request(self):
+        # agents/base.py:92 spreads **(llm_config.model_extra or {}) into
+        # query_llm. A declared field stays out of model_extra; an undeclared
+        # one would be sent to the provider as a request parameter.
+        config = LLMConfig(
+            extra_models={"claude-opus-6": {"provider": "anthropic", "routing": "adaptive"}}
+        )
+        assert "extra_models" not in (config.model_extra or {})
 
 
 class TestExtraModelStandalone:
@@ -371,9 +386,13 @@ Add this validation inside the existing `validate_config` `model_validator`, bef
         for name, entry in self.extra_models.items():
             allowed = ALLOWED_ROUTING[entry.provider]
             if entry.routing not in allowed:
+                # Full loc tuple, not the bare field name: the console renders a
+                # ConfigIssue against the offending ROW (design 5.3), which needs
+                # the model name and the field in the path. Same shape as
+                # config.py:336's ("projects", ..., "prompt", "file").
                 raise_field_validation_error(
                     self,
-                    "extra_models",
+                    ("extra_models", name, "routing"),
                     ValueError(
                         f"'{name}': routing '{entry.routing}' is not available for provider "
                         f"'{entry.provider}'. Allowed: "
@@ -381,9 +400,10 @@ Add this validation inside the existing `validate_config` `model_validator`, bef
                     ),
                 )
             if builtin_routing(name) is not None:
+                # The whole entry is the problem here, not one of its fields.
                 raise_field_validation_error(
                     self,
-                    "extra_models",
+                    ("extra_models", name),
                     ValueError(
                         f"'{name}' is already routed by its client and cannot be redefined "
                         "here. Remove the entry; the model is offered automatically."
