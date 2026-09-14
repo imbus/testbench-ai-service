@@ -4,6 +4,7 @@ import type {
   ConfigResponse,
   LogLine,
   MetaResponse,
+  ModelCatalogue,
   ProjectsResponse,
   PromptDocument,
   PromptMeta,
@@ -97,6 +98,26 @@ export function usePromptMeta(
     // An empty agent key is a guaranteed 404: agent detail renders before a
     // scope is settled, and asking anyway would 404 on every such render.
     enabled: enabled && !!lang && !!agent,
+  })
+}
+
+/**
+ * The model catalogue, optionally scoped to a project.
+ *
+ * With a project, `key_present` reflects the project variable OR the global
+ * one — matching the backend's silent credential fallback, so the answer is
+ * "will a run find a key at all".
+ */
+export function useModels(
+  project?: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const query = project ? `?project=${encodeURIComponent(project)}` : ''
+  return useQuery({
+    queryKey: ['models', project ?? null],
+    queryFn: () => apiFetch<ModelCatalogue>(`/models${query}`),
+    staleTime: Infinity,
+    enabled,
   })
 }
 

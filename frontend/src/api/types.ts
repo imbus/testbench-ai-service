@@ -227,3 +227,42 @@ export type PromptForkResponse = {
   reloaded: boolean
   reload_detail: string | null
 }
+
+export type RoutingFamily = 'chat' | 'reasoning' | 'adaptive' | 'budget' | 'fallback'
+
+export interface CatalogueModel {
+  id: string
+  routing: RoutingFamily
+  /** `builtin` comes from a client's routing set; only `config` is removable. */
+  source: 'builtin' | 'config'
+}
+
+export interface CatalogueProvider {
+  provider: string
+  /** Whether a credential exists. Presence only — never a value. */
+  key_present: boolean
+  models: CatalogueModel[]
+}
+
+export interface ModelCatalogue {
+  providers: CatalogueProvider[]
+}
+
+export interface ResolvedRoute {
+  provider: string
+  model: string
+  /** Which credential the run actually used; `global` means the fallback hit. */
+  credential_scope: 'project' | 'global'
+}
+
+export interface PromptTestResult {
+  text: string
+  latency_ms: number
+  resolved: ResolvedRoute
+}
+
+/** One `llm_config.extra_models` entry as the LLM view edits it. */
+export interface ExtraModelEntry {
+  provider: string
+  routing: RoutingFamily
+}

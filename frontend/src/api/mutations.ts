@@ -10,6 +10,7 @@ import type {
   PromptMessageDoc,
   PromptPlanResponse,
   PromptSaveResponse,
+  PromptTestResult,
   RenderResponse,
 } from './types'
 
@@ -155,5 +156,27 @@ export function useForkPrompt(lang: string, agent: string) {
       void queries.invalidateQueries({ queryKey: ['status'] })
       void queries.invalidateQueries({ queryKey: ['prompts'] })
     },
+  })
+}
+
+/**
+ * Run the current draft against a real model.
+ *
+ * The one console action that spends money, so it is never called implicitly —
+ * only from the editor's explicit Test run button.
+ */
+export function useTestPrompt() {
+  return useMutation({
+    mutationFn: (body: {
+      messages: PromptMessageDoc[]
+      vars: Record<string, unknown>
+      agent_context: Record<string, unknown>
+      model: string
+      project: string | null
+    }) =>
+      apiFetch<PromptTestResult>('/prompts/test', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      }),
   })
 }
