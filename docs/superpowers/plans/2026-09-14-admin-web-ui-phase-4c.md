@@ -2629,21 +2629,43 @@ Only operator entries are listed. Built-ins are not shown here, because showing 
 
 - [ ] **Step 1: Write the failing test**
 
-Create `frontend/src/components/ModelTable.test.tsx`:
+Create `frontend/src/components/ModelTable.test.tsx`.
+
+**The draft API is `setValue` / `unsetSubtree`** — verified against `frontend/src/state/draft.tsx`,
+whose `DraftApi` exposes `edits`, `changeCount`, `isChanged`, `valueOf`, `setValue`,
+`unsetValue`, `unsetSubtree`, `revert`, `discardAll`. Removing one model removes a whole TOML
+table (it owns `.provider` and `.routing`), and `unsetSubtree` is documented for exactly that:
+*"Queue a removal of a whole table, dropping edits queued inside it."* `unsetValue` on the table
+path would leave child edits queued underneath a removed parent.
 
 ```tsx
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
-import { expect, test, vi } from 'vitest'
+import { beforeEach, expect, test, vi } from 'vitest'
 import { ModelTable } from './ModelTable'
 
-const setEdit = vi.fn()
-const removeKey = vi.fn()
+const setValue = vi.fn()
+const unsetSubtree = vi.fn()
 
 vi.mock('../state/draft', () => ({
-  useDraft: () => ({ setEdit, removeKey, edits: {} }),
+  useDraft: () => ({
+    edits: {},
+    changeCount: 0,
+    isChanged: () => false,
+    valueOf: (_path: string, fallback: unknown) => fallback,
+    setValue,
+    unsetValue: vi.fn(),
+    unsetSubtree,
+    revert: vi.fn(),
+    discardAll: vi.fn(),
+  }),
 }))
+
+beforeEach(() => {
+  setValue.mockReset()
+  unsetSubtree.mockReset()
+})
 
 function renderTable(props: Partial<ComponentProps<typeof ModelTable>> = {}) {
   return render(
@@ -2658,12 +2680,13 @@ function renderTable(props: Partial<ComponentProps<typeof ModelTable>> = {}) {
 
 test('lists the configured models', () => {
   renderTable()
-  expect(screen.getByDisplayValue('claude-opus-6')).toBeInTheDocument()
+  expect(screen.getByText('claude-opus-6')).toBeInTheDocument()
 })
 
 test('does not list built-in models', () => {
+  // Built-ins are not editable here; showing them would imply otherwise.
   renderTable()
-  expect(screen.queryByDisplayValue('gpt-4o')).not.toBeInTheDocument()
+  expect(screen.queryByText('gpt-4o')).not.toBeInTheDocument()
 })
 
 test('adding a model writes both draft edits', async () => {
@@ -2675,18 +2698,17 @@ test('adding a model writes both draft edits', async () => {
   await user.selectOptions(screen.getByLabelText(/new routing/i), 'reasoning')
   await user.click(screen.getByRole('button', { name: /add/i }))
 
-  expect(setEdit).toHaveBeenCalledWith('llm_config.extra_models.gpt-6.provider', 'openai')
-  expect(setEdit).toHaveBeenCalledWith('llm_config.extra_models.gpt-6.routing', 'reasoning')
+  expect(setValue).toHaveBeenCalledWith('llm_config.extra_models.gpt-6.provider', 'openai')
+  expect(setValue).toHaveBeenCalledWith('llm_config.extra_models.gpt-6.routing', 'reasoning')
 })
 
-test('removing a model queues a null edit', async () => {
+test('removing a model drops the whole entry', async () => {
   renderTable()
   const user = userEvent.setup()
 
   await user.click(screen.getByRole('button', { name: /remove/i }))
 
-  // null means "remove this key" on both sides of the wire.
-  expect(setEdit).toHaveBeenCalledWith('llm_config.extra_models.claude-opus-6', null)
+  expect(unsetSubtree).toHaveBeenCalledWith('llm_config.extra_models.claude-opus-6')
 })
 
 test('routing choices are filtered to what the provider accepts', async () => {
@@ -2698,6 +2720,17 @@ test('routing choices are filtered to what the provider accepts', async () => {
   const routing = screen.getByLabelText(/new routing/i)
   expect(within(routing).queryByRole('option', { name: 'chat' })).not.toBeInTheDocument()
   expect(within(routing).getByRole('option', { name: 'adaptive' })).toBeInTheDocument()
+})
+
+test('a custom-provider entry can only be fallback', async () => {
+  renderTable()
+  const user = userEvent.setup()
+
+  await user.selectOptions(screen.getByLabelText(/new provider/i), 'custom')
+
+  const routing = screen.getByLabelText(/new routing/i)
+  expect(within(routing).getByRole('option', { name: 'fallback' })).toBeInTheDocument()
+  expect(within(routing).queryByRole('option', { name: 'adaptive' })).not.toBeInTheDocument()
 })
 
 test('renders a config issue against the offending row', () => {
@@ -2712,13 +2745,21 @@ test('renders a config issue against the offending row', () => {
   expect(screen.getByRole('alert')).toHaveTextContent(/not available/)
 })
 
+test('an issue on a different row does not mark this one', () => {
+  renderTable({
+    issues: [
+      { path: 'llm_config.extra_models.something-else.routing', message: 'bad' },
+    ],
+  })
+  expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+})
+
 test('a read-only operator cannot add or remove', () => {
   renderTable({ readOnly: true })
   expect(screen.getByRole('button', { name: /add/i })).toBeDisabled()
   expect(screen.getByRole('button', { name: /remove/i })).toBeDisabled()
 })
 ```
-
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -2780,8 +2821,8 @@ function path(model: string, field?: 'provider' | 'routing'): string {
 
 Then the component: it renders `t.models` as a heading with `t.modelsHint`, one row per entry (model name read-only, provider and routing shown, a `t.modelRemove` button), an add row (`t.modelNewName` text input, `t.modelNewProvider` select over `PROVIDERS`, `t.modelNewRouting` select over `ALLOWED_ROUTING[provider]`, and a `t.modelAdd` button), and `t.modelsEmpty` when `entries` is empty.
 
-- `onAdd` calls `setEdit(path(name, 'provider'), provider)` then `setEdit(path(name, 'routing'), routing)`, then clears the add-row state.
-- `onRemove` calls `setEdit(path(name), null)` — `null` is *remove this key* in both `state/draft.tsx` and the backend's `merge_edits`, so removal needs no special case.
+- `onAdd` calls `draft.setValue(path(name, 'provider'), provider)` then `draft.setValue(path(name, 'routing'), routing)`, then clears the add-row state.
+- `onRemove` calls `draft.unsetSubtree(path(name))`. One entry is a whole TOML table, and `unsetSubtree` is documented for that case — it also drops any edits queued inside the table, which `unsetValue` on the parent path would strand. The queued removal still reaches the backend as the `null` that `merge_edits` reads as *remove this key*.
 - Issues are matched against a row with the same prefix rule `ConfigSection` uses (`issue.path === key || issue.path.startsWith(key + '.')`) and rendered in a `role="alert"`.
 - Every control takes `disabled={readOnly}`.
 
