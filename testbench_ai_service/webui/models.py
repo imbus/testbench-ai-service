@@ -397,3 +397,30 @@ class CatalogueProvider(BaseModel):
 
 class ModelCatalogueResponse(BaseModel):
     providers: list[CatalogueProvider]
+
+
+class PromptTestRequest(RenderRequest):
+    """A render request plus where to send the result.
+
+    Inherits RenderRequest deliberately: the preview pane and the test run
+    must send the same messages, vars and agent_context, or the operator
+    tested something other than what they saw (design D1).
+    """
+
+    model: str
+    project: str | None = None
+
+
+class ResolvedRoute(BaseModel):
+    provider: LLMProvider
+    model: str
+    #: Which credential the factory actually found. get_client falls back to
+    #: the global key silently, so without this a project test that used the
+    #: global key is indistinguishable from one that used the project's own.
+    credential_scope: Literal["project", "global"]
+
+
+class PromptTestResponse(BaseModel):
+    text: str
+    latency_ms: int
+    resolved: ResolvedRoute

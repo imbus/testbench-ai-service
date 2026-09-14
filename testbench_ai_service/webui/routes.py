@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Any
 
@@ -5,7 +6,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
+from testbench_ai_service.llm.base import LLMProvider
+from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
+from testbench_ai_service.utils.config import get_llm_config
+from testbench_ai_service.utils.naming import normalize_project_name
 from testbench_ai_service.webui.atomic import write_atomic
 from testbench_ai_service.webui.auth import (
     authenticate,
@@ -17,7 +22,7 @@ from testbench_ai_service.webui.auth import (
     require_csrf,
     set_session_cookies,
 )
-from testbench_ai_service.webui.catalogue import build_catalogue
+from testbench_ai_service.webui.catalogue import PROVIDER_KEY_NAMES, build_catalogue
 from testbench_ai_service.webui.config_io import (
     build_config_response,
     read_config_file,
@@ -48,9 +53,12 @@ from testbench_ai_service.webui.models import (
     PromptPlanResponse,
     PromptSaveRequest,
     PromptSaveResponse,
+    PromptTestRequest,
+    PromptTestResponse,
     PromptTreeResponse,
     RenderRequest,
     RenderResponse,
+    ResolvedRoute,
     SessionResponse,
     StatusResponse,
 )
@@ -63,6 +71,7 @@ from testbench_ai_service.webui.projects import (
 )
 from testbench_ai_service.webui.prompt_refs import variant_references
 from testbench_ai_service.webui.prompt_render import lint_template, render_messages
+from testbench_ai_service.webui.prompt_test import SingleFlight, run_query, scrub_all, to_messages
 from testbench_ai_service.webui.prompts import (
     build_tree,
     build_write_set,
@@ -588,6 +597,96 @@ def render_prompt_preview(
     """
     return RenderResponse(
         messages=render_messages(body.messages, dict(body.vars), body.agent_context)
+    )
+
+
+def _credential_values(provider: LLMProvider, project: str | None) -> list[str]:
+    """Every credential value a run for this provider could have used.
+
+    Returned so the 502 path can mask each one (design D9). Values never leave
+    this process: they are matched against an error message and discarded.
+    An unknown provider (CUSTOM has no variable) yields an empty list, and
+    scrub_all then leaves the message untouched.
+    """
+    name = PROVIDER_KEY_NAMES.get(provider)
+    if name is None:
+        return []
+    candidates = [os.environ.get(name)]
+    if project is not None:
+        candidates.append(os.environ.get(f"{normalize_project_name(project)}_{name}"))
+    return [value for value in candidates if value]
+
+
+@router.post("/prompts/test", response_model=PromptTestResponse)
+async def run_prompt_test(
+    body: PromptTestRequest,
+    request: Request,
+    session: Session = Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+    config: AppConfig = Depends(get_app_config),
+    registry: TaskRegistry = Depends(get_task_registry),
+) -> PromptTestResponse:
+    """Run the editor's draft against a real model.
+
+    The one console action that spends money, so the order matters: render
+    first and refuse on failure BEFORE a client is created. Rendering goes
+    through the same sandboxed environment as POST /prompts/render -- a test
+    run is not a hole in that sandbox.
+    """
+    rendered = render_messages(body.messages, dict(body.vars), body.agent_context)
+    failed = [item for item in rendered if item.error is not None]
+    if failed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "The prompt did not render, so nothing was sent.",
+                "messages": [item.model_dump() for item in rendered],
+            },
+        )
+
+    # Resolution goes through the production helper, never a local re-merge:
+    # the project step is a merge, not a replacement, and re-implementing it
+    # would diverge silently for partial overrides (design 3.7).
+    llm_config = get_llm_config(config, project_name=body.project)
+    factory: LLMFactory = request.app.state.llm_factory
+
+    try:
+        client = factory.get_client(
+            config=llm_config, prompt_model=body.model, project_name=body.project
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+    provider = factory.resolve_provider(llm_config, body.model)
+    scope = "global"
+    if body.project is not None and factory.has_project_credential(
+        body.project, provider, llm_config
+    ):
+        scope = "project"
+
+    # Both candidates, not just the global one: a project run may have used the
+    # project variable, and scrubbing only the global key would leave exactly
+    # the credential this run used exposed in the 502 (design D9).
+    secrets = _credential_values(provider, body.project)
+
+    flight: SingleFlight = request.app.state.prompt_test_flight
+    with flight.hold(session.sid):
+        async with registry.track("prompt-test"):
+            try:
+                outcome = await run_query(client, body.model, to_messages(rendered))
+            except HTTPException:
+                raise
+            except Exception as e:
+                logger.error("Prompt test run failed: %r", e, exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=scrub_all(f"{type(e).__name__}: {e}", secrets),
+                ) from e
+
+    return PromptTestResponse(
+        text=outcome.text,
+        latency_ms=outcome.latency_ms,
+        resolved=ResolvedRoute(provider=provider, model=body.model, credential_scope=scope),
     )
 
 

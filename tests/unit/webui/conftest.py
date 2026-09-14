@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.main import create_app
 
 TB_URL = "https://localhost:9443/api/"
@@ -26,14 +27,25 @@ def no_tb_server_probe():
 
 @pytest.fixture
 def make_app():
-    """Build a real app with the LLM factory mocked out."""
+    """Build a real app with the LLM factory's network-touching parts mocked out.
+
+    ``instance`` is a REAL ``LLMFactory``, not a bare ``MagicMock``: methods
+    like ``resolve_provider`` are pure functions of ``(config, prompt_model)``
+    with no I/O, and a generic mock would return an unconfigured ``MagicMock``
+    for them instead of a real ``LLMProvider`` -- which breaks any route that
+    reports the resolved provider back to the caller. Only ``init_clients``
+    (called during app startup) and ``close_clients`` (called at shutdown)
+    touch credentials or connections, so only those two are replaced; a test
+    that wants ``get_client``/``has_project_credential`` mocked too overrides
+    those specific methods on this same instance.
+    """
 
     def _make(**config_kwargs):
         with (
             patch("testbench_ai_service.config.validate_tb_server_url"),
             patch("testbench_ai_service.main.LLMFactory") as factory_cls,
         ):
-            instance = MagicMock()
+            instance = LLMFactory()
             instance.init_clients = MagicMock()
             instance.close_clients = AsyncMock()
             factory_cls.return_value = instance

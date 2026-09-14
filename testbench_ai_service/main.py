@@ -20,6 +20,7 @@ from testbench_ai_service.routes import router
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import load_translations
 from testbench_ai_service.webui.inflight import TaskRegistry
+from testbench_ai_service.webui.prompt_test import SingleFlight
 from testbench_ai_service.webui.routes import router as webui_router
 from testbench_ai_service.webui.security import is_loopback
 from testbench_ai_service.webui.session import SessionStore
@@ -110,6 +111,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # into it whether or not the console is enabled, and a missing attribute
     # would be an AttributeError on the request path.
     app.state.task_registry = TaskRegistry()
+    # Same reasoning as task_registry: created unconditionally so the route
+    # never hits a missing attribute if it is ever reached before init_webui.
+    app.state.prompt_test_flight = SingleFlight()
 
     init_routers(app)
     init_webui(app)
