@@ -428,6 +428,10 @@ describe('saving', () => {
     const dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(/default_variant/)
     expect(within(dialog).getByRole('button', { name: 'Confirm' })).toBeDisabled()
+    // A plan 422 marks the offending field the same way a save 422 does --
+    // both funnel through the same `markSaveError`, so the field marker
+    // behind the dialog is not something only the save path produces.
+    expect(screen.getByLabelText('Default variant')).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('does not PUT until the operator confirms', async () => {
