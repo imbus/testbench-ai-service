@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
-import type { PromptDocument } from '../api/types'
+import type { PromptDocument, PromptMessageDoc } from '../api/types'
 import { changedFiles, isDirty, promptDraftReducer as reduce } from './promptDraft'
+import { defaultTemplateName } from '../api/prompts'
 
 const base: PromptDocument = {
   lang: 'de', agent: 'explainer', file: 'de/explainer/prompt.yaml',
@@ -17,6 +18,29 @@ const base: PromptDocument = {
     },
   ],
   agent_context_skeleton: {},
+}
+
+function documentWith(messages: PromptMessageDoc[]): PromptDocument {
+  return {
+    lang: 'de',
+    agent: 'test',
+    file: 'de/test/prompt.yaml',
+    name: 'Test',
+    summary: null,
+    description: null,
+    default_model: 'test-model',
+    default_variant: 'A',
+    variants: [
+      {
+        name: 'A',
+        description: null,
+        model: null,
+        vars: {},
+        messages,
+      },
+    ],
+    agent_context_skeleton: {},
+  }
 }
 
 describe('header', () => {
@@ -197,4 +221,65 @@ describe('isDirty and changedFiles', () => {
     expect(changedFiles(base, next).sort()).toEqual(['de/explainer/prompt.yaml', 'sys.jinja'])
   })
   it('names nothing when nothing changed', () => expect(changedFiles(base, base)).toEqual([]))
+})
+
+describe('message source', () => {
+  it('proposes the house naming convention when a message moves into a file', () => {
+    expect(defaultTemplateName('Detailed Explanation', 'system')).toBe(
+      'detailed_explanation_system.jinja',
+    )
+    expect(defaultTemplateName('Kompakte Prüfung', 'user')).toBe('kompakte_prufung_user.jinja')
+  })
+
+  it('carries the body across inline -> file', () => {
+    const doc = documentWith([{ role: 'user', source: 'inline', file: null, content: 'hallo', readable: true }])
+    const next = reduce(doc, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 0,
+      source: 'file',
+    })
+    const message = next.variants[0].messages[0]
+    expect(message.source).toBe('file')
+    expect(message.file).toBe('a_user.jinja')
+    expect(message.content).toBe('hallo')
+    expect(message.readable).toBe(true)
+  })
+
+  it('carries the body across file -> inline and drops the reference', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'file', file: 'a_user.jinja', content: 'body', readable: true },
+    ])
+    const next = reduce(doc, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 0,
+      source: 'inline',
+    })
+    const message = next.variants[0].messages[0]
+    expect(message.source).toBe('inline')
+    expect(message.file).toBeNull()
+    expect(message.content).toBe('body')
+  })
+
+  it('renames the reference without touching the body', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'file', file: 'old.jinja', content: 'body', readable: true },
+    ])
+    const next = reduce(doc, {
+      type: 'setMessageFile',
+      variant: 'A',
+      index: 0,
+      file: 'new.jinja',
+    })
+    expect(next.variants[0].messages[0].file).toBe('new.jinja')
+    expect(next.variants[0].messages[0].content).toBe('body')
+  })
+
+  it('leaves an out-of-range index alone', () => {
+    const doc = documentWith([{ role: 'user', source: 'inline', file: null, content: 'x', readable: true }])
+    expect(
+      reduce(doc, { type: 'setMessageSource', variant: 'A', index: 7, source: 'file' }),
+    ).toEqual(doc)
+  })
 })

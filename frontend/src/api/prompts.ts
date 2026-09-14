@@ -1,13 +1,32 @@
 import type { Scope } from './agents'
-import type { PromptMessageDoc, PromptVariantDoc } from './types'
+import type { MessageRole, PromptMessageDoc, PromptVariantDoc } from './types'
 
-/** A new message. Always inline: phase 4a never creates a template file. */
+/** A new message. Inline until the operator moves it into a file of its own. */
 export function emptyMessage(role: PromptMessageDoc['role'] = 'user'): PromptMessageDoc {
   return { role, source: 'inline', file: null, content: '', readable: true }
 }
 
 export function emptyVariant(name: string): PromptVariantDoc {
   return { name, description: null, model: null, vars: {}, messages: [emptyMessage()] }
+}
+
+/**
+ * The file name proposed when a message moves out of the YAML.
+ *
+ * `<variant-slug>_<role>.jinja` is not invented: it is the convention all eight
+ * prompts this service ships already follow (`detailed_explanation_system.jinja`,
+ * `kompakte_pruefung_user.jinja`). The operator can still change it; the server
+ * validates whatever arrives.
+ */
+export function defaultTemplateName(variant: string, role: MessageRole): string {
+  const slug =
+    variant
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'variant'
+  return `${slug}_${role}.jinja`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

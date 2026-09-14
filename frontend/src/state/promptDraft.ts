@@ -1,5 +1,5 @@
-import { emptyMessage, emptyVariant } from '../api/prompts'
-import type { MessageRole, PromptDocument, PromptVarDecl, PromptVariantDoc } from '../api/types'
+import { defaultTemplateName, emptyMessage, emptyVariant } from '../api/prompts'
+import type { MessageRole, MessageSource, PromptDocument, PromptMessageDoc, PromptVarDecl, PromptVariantDoc } from '../api/types'
 
 export type PromptDraftAction =
   | { type: 'setHeader'; field: 'name' | 'summary' | 'description' | 'default_model' | 'default_variant'; value: string }
@@ -15,6 +15,8 @@ export type PromptDraftAction =
   | { type: 'moveMessage'; variant: string; index: number; to: number }
   | { type: 'setMessageRole'; variant: string; index: number; role: MessageRole }
   | { type: 'setMessageContent'; variant: string; index: number; content: string }
+  | { type: 'setMessageSource'; variant: string; index: number; source: MessageSource }
+  | { type: 'setMessageFile'; variant: string; index: number; file: string }
   | { type: 'reset'; document: PromptDocument }
 
 function mapVariant(
@@ -179,6 +181,33 @@ export function promptDraftReducer(
 
     case 'setMessageContent':
       return setMessageContent(state, action.variant, action.index, action.content)
+
+    case 'setMessageSource':
+      return mapVariant(state, action.variant, (v) => {
+        const current = v.messages[action.index]
+        if (!current || current.source === action.source) return v
+        // The body survives the switch in both directions: it is the same text,
+        // and losing it would make the toggle destructive.
+        const next: PromptMessageDoc =
+          action.source === 'file'
+            ? {
+                ...current,
+                source: 'file',
+                file: defaultTemplateName(v.name, current.role),
+                // A file the draft is about to create is readable by construction.
+                readable: true,
+              }
+            : { ...current, source: 'inline', file: null, readable: true }
+        return { ...v, messages: v.messages.map((m, i) => (i === action.index ? next : m)) }
+      })
+
+    case 'setMessageFile':
+      return mapVariant(state, action.variant, (v) => ({
+        ...v,
+        messages: v.messages.map((m, i) =>
+          i === action.index && m.source === 'file' ? { ...m, file: action.file } : m,
+        ),
+      }))
 
     default:
       return state
