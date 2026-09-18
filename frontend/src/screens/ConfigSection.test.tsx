@@ -1,8 +1,12 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter } from 'react-router-dom'
 import type { ConfigIssue } from '../api/types'
-import { DraftProvider } from '../state/draft'
+import { de } from '../i18n/de'
+// The constant, not the literal: a rename of the storage key must not leave
+// these tests asserting against a key nothing writes.
+import { DRAFT_STORAGE_KEY, DraftProvider } from '../state/draft'
 import { ConfigSection } from './ConfigSection'
 
 // Correction 1: the brief's fixture included `in_sync: true`. The backend
@@ -43,12 +47,15 @@ function renderSection({
   disk = CONFIG.disk,
   running = CONFIG.running,
   issues = [],
+  initialEntries = '/admin/llm',
 }: {
   section?: 'service' | 'llm' | 'logging'
   isAdmin?: boolean
   disk?: Record<string, unknown>
   running?: Record<string, unknown>
   issues?: ConfigIssue[]
+  /** The scope lives in the URL, so the screen needs a router around it. */
+  initialEntries?: string
 } = {}) {
   // If specific disk/running values are provided, update the fetch mock
   if (
@@ -64,11 +71,13 @@ function renderSection({
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
-    <QueryClientProvider client={client}>
-      <DraftProvider saved={disk}>
-        <ConfigSection section={section} lang="de" isAdmin={isAdmin} issues={issues} />
-      </DraftProvider>
-    </QueryClientProvider>,
+    <MemoryRouter initialEntries={[initialEntries]}>
+      <QueryClientProvider client={client}>
+        <DraftProvider saved={disk}>
+          <ConfigSection section={section} lang="de" isAdmin={isAdmin} issues={issues} />
+        </DraftProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   )
 }
 
@@ -325,4 +334,144 @@ test('marks tabs with issues on non-selected array elements', async () => {
   await screen.findByLabelText('host')
   const proxyTab = screen.getByRole('tab', { name: /Reverse Proxy.*1.*issue/i })
   expect(proxyTab).toBeInTheDocument()
+})
+
+// --- Per-project llm_config (phase 4d) ------------------------------------
+
+const PROJECT_CONFIG = {
+  running: {
+    ...CONFIG.running,
+    llm_config: { provider: 'anthropic', model: 'claude-opus-5', timeout: null },
+    projects: {
+      Alpha: {
+        language: null,
+        // As the backend really dumps it: every default filled in.
+        llm_config: {
+          provider: 'openai',
+          auth_method: 'api_key',
+          model: null,
+          timeout: 12.5,
+          max_retries: null,
+          extra_models: {},
+        },
+        agents: null,
+      },
+    },
+  },
+  disk: {
+    llm_config: { provider: 'anthropic', model: 'claude-opus-5' },
+    projects: { Alpha: { llm_config: { timeout: 12.5 } } },
+  },
+  config_path: '/tmp/config.toml',
+}
+
+function renderLlm(options: { initialEntries?: string; isAdmin?: boolean } = {}) {
+  return renderSection({
+    section: 'llm',
+    isAdmin: options.isAdmin ?? true,
+    running: PROJECT_CONFIG.running,
+    disk: PROJECT_CONFIG.disk,
+    initialEntries: options.initialEntries ?? '/admin/llm',
+  })
+}
+
+test('the LLM screen offers a tab per project that overrides llm_config', async () => {
+  renderLlm()
+  expect(await screen.findByRole('tab', { name: 'Alpha' })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: /global/i })).toHaveAttribute('aria-selected', 'true')
+})
+
+test('a project in the URL is the selected scope', async () => {
+  renderLlm({ initialEntries: '/admin/llm?project=Alpha' })
+  expect(await screen.findByRole('tab', { name: 'Alpha' })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  )
+})
+
+test('an unstated field shows the inherited global value, not a filled default', async () => {
+  // The whole point. `running` reports provider="openai" for Alpha because a
+  // pydantic dump fills defaults; the operator must see the anthropic they
+  // actually inherit.
+  //
+  // Asserted on the control rather than with getByText(/anthropic/): the
+  // provider select always renders an <option>anthropic</option>, so a text
+  // query matches both that and the inherit note and resolves to neither.
+  renderLlm({ initialEntries: '/admin/llm?project=Alpha' })
+  await screen.findByRole('tab', { name: 'Alpha' })
+  expect(screen.getByLabelText('provider')).toHaveValue('anthropic')
+})
+
+test('a stated field shows the project value', async () => {
+  renderLlm({ initialEntries: '/admin/llm?project=Alpha' })
+  await screen.findByRole('tab', { name: 'Alpha' })
+  expect(screen.getByDisplayValue('12.5')).toBeInTheDocument()
+})
+
+test('a non-admin sees the inherited value too, not the filled default', async () => {
+  // The read-only path reads the same two sources in the same order. Reading
+  // `running` here would show provider="openai" on a project that inherits
+  // anthropic -- the exact misreport this screen exists to avoid, and a
+  // non-admin has no control to notice it is wrong on.
+  renderLlm({ initialEntries: '/admin/llm?project=Alpha', isAdmin: false })
+  await screen.findByRole('tab', { name: 'Alpha' })
+  expect(screen.getByText('anthropic')).toBeInTheDocument()
+  expect(screen.queryByText('openai')).not.toBeInTheDocument()
+})
+
+test('editing in project scope writes the project path, not the global one', async () => {
+  renderLlm({ initialEntries: '/admin/llm?project=Alpha' })
+  await screen.findByRole('tab', { name: 'Alpha' })
+
+  const model = screen.getByLabelText(/model/i)
+  await userEvent.type(model, 'gpt-5')
+
+  await waitFor(() =>
+    expect(
+      JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY) ?? '{}'),
+    ).toHaveProperty(['projects.Alpha.llm_config.model']),
+  )
+})
+
+test('selecting a project scope queues no edit', async () => {
+  // Choosing a scope is navigation, never an edit: an empty override table
+  // would appear in the diff the operator never asked for.
+  renderLlm()
+  await userEvent.click(await screen.findByRole('tab', { name: 'Alpha' }))
+  // Wait for the scope to have actually switched before reading the draft, so
+  // an empty result cannot just mean "nothing has happened yet".
+  await waitFor(() =>
+    expect(screen.getByRole('tab', { name: 'Alpha' })).toHaveAttribute('aria-selected', 'true'),
+  )
+  expect(JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY) ?? '{}')).toEqual({})
+})
+
+test('the model table is global-only', async () => {
+  // ModelTable renders no testid; its <h3>{t.models}</h3> heading is what
+  // identifies it, and this suite renders in German.
+  renderLlm()
+  expect(await screen.findByRole('heading', { name: de.models })).toBeInTheDocument()
+
+  await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
+  await waitFor(() =>
+    expect(screen.queryByRole('heading', { name: de.models })).not.toBeInTheDocument(),
+  )
+})
+
+test('a validation issue on a project field lands on that field', async () => {
+  renderSection({
+    section: 'llm',
+    isAdmin: true,
+    running: PROJECT_CONFIG.running,
+    disk: PROJECT_CONFIG.disk,
+    initialEntries: '/admin/llm?project=Alpha',
+    issues: [
+      {
+        path: 'projects.Alpha.llm_config.provider',
+        message: 'not a valid provider',
+        toml_section: '[testbench-ai-service.projects.Alpha.llm_config]',
+      },
+    ],
+  })
+  expect(await screen.findByText('not a valid provider')).toBeInTheDocument()
 })
