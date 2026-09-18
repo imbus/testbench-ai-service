@@ -1,4 +1,4 @@
-import { LLM_FIELDS, LOGGING_FIELDS, SERVICE_TABS, valueAt } from './fields'
+import { LLM_FIELDS, LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt } from './fields'
 
 const CONFIG = {
   host: '127.0.0.1',
@@ -82,4 +82,67 @@ test('reads through a project name containing a space, unquoted', () => {
 
 test('a dotted project name is not read as nested tables', () => {
   expect(valueAt({ projects: { a: { b: 'wrong' } } }, 'projects."a.b"')).toBeUndefined()
+})
+
+describe('llmFields', () => {
+  test('global scope keeps the existing top-level keys', () => {
+    const keys = llmFields({ kind: 'global' }).map((field) => field.key)
+    expect(keys).toEqual([
+      'llm_config.provider',
+      'llm_config.model',
+      'llm_config.auth_method',
+      'llm_config.azure_endpoint',
+      'llm_config.api_version',
+      'llm_config.class_path',
+      'llm_config.timeout',
+      'llm_config.max_retries',
+    ])
+  })
+
+  test('LLM_FIELDS stays the global list, so existing callers are unchanged', () => {
+    expect(LLM_FIELDS).toEqual(llmFields({ kind: 'global' }))
+  })
+
+  test('project scope addresses the project table', () => {
+    const keys = llmFields({ kind: 'project', project: 'Alpha' }).map((field) => field.key)
+    expect(keys[0]).toBe('projects.Alpha.llm_config.provider')
+    expect(keys[7]).toBe('projects.Alpha.llm_config.max_retries')
+  })
+
+  test('a dotted project name is quoted', () => {
+    const keys = llmFields({ kind: 'project', project: 'Release 2.0' }).map((field) => field.key)
+    expect(keys[0]).toBe('projects."Release 2.0".llm_config.provider')
+  })
+
+  test('selects gain a way back to inheriting in project scope', () => {
+    // Without allowEmpty a select can only move between its options, so an
+    // override could be set and never taken back off.
+    const provider = llmFields({ kind: 'project', project: 'Alpha' }).find(
+      (field) => field.setting === 'provider',
+    )
+    expect(provider?.type).toBe('select')
+    expect(provider?.allowEmpty).toBe(true)
+  })
+
+  test('selects have no blank option globally', () => {
+    // The service always has a provider; offering "none" there would be a
+    // setting that cannot boot.
+    const provider = llmFields({ kind: 'global' }).find((field) => field.setting === 'provider')
+    expect(provider?.allowEmpty).toBeUndefined()
+  })
+
+  test('every field carries the setting it edits', () => {
+    for (const field of llmFields({ kind: 'project', project: 'Alpha' })) {
+      expect(field.setting, `no setting on ${field.key}`).toBeTruthy()
+      expect(field.key.endsWith(field.setting as string)).toBe(true)
+    }
+  })
+
+  test('options and hints survive the scoping', () => {
+    const provider = llmFields({ kind: 'project', project: 'Alpha' }).find(
+      (field) => field.setting === 'provider',
+    )
+    expect(provider?.options).toEqual(['openai', 'azure_openai', 'anthropic', 'custom'])
+    expect(provider?.hint).toBeTruthy()
+  })
 })

@@ -1,4 +1,6 @@
 import { splitPath } from '../api/paths'
+import { scopedLlmPath } from '../api/agents'
+import type { Scope } from '../api/agents'
 
 export type FieldType = 'text' | 'textarea' | 'number' | 'bool' | 'select' | 'list'
 
@@ -99,33 +101,53 @@ export const SERVICE_TABS: ServiceTab[] = [
   },
 ]
 
-export const LLM_FIELDS: FieldSpec[] = [
+/** The `llm_config` settings, independent of the scope that holds them. */
+const LLM_SETTINGS: Omit<FieldSpec, 'key'>[] = [
   {
-    key: 'llm_config.provider',
+    setting: 'provider',
     type: 'select',
     options: ['openai', 'azure_openai', 'anthropic', 'custom'],
     hint: 'gpt-*/o-series route to OpenAI, claude-* to Anthropic, regardless of this setting',
   },
   {
-    key: 'llm_config.model',
+    setting: 'model',
     type: 'text',
     hint: "Global override. When empty, each prompt variant's model is used.",
   },
-  { key: 'llm_config.auth_method', type: 'text', hint: 'Azure only: api_key or entra_id' },
-  { key: 'llm_config.azure_endpoint', type: 'text', hint: 'Required for Azure' },
-  { key: 'llm_config.api_version', type: 'text', hint: 'Required for Azure' },
-  { key: 'llm_config.class_path', type: 'text', hint: 'Custom LLMClient subclass' },
+  { setting: 'auth_method', type: 'text', hint: 'Azure only: api_key or entra_id' },
+  { setting: 'azure_endpoint', type: 'text', hint: 'Required for Azure' },
+  { setting: 'api_version', type: 'text', hint: 'Required for Azure' },
+  { setting: 'class_path', type: 'text', hint: 'Custom LLMClient subclass' },
   {
-    key: 'llm_config.timeout',
+    setting: 'timeout',
     type: 'number',
     hint: "Seconds to wait for an LLM response. Empty uses the provider SDK's default.",
   },
   {
-    key: 'llm_config.max_retries',
+    setting: 'max_retries',
     type: 'number',
     hint: "Retries after a failed LLM request. Empty uses the provider SDK's default.",
   },
 ]
+
+/**
+ * The LLM fields, addressed at one scope.
+ *
+ * In project scope every control must be removable, so selects gain the blank
+ * option that is the only thing wired to `draft.unsetValue`. Globally they
+ * must not: the service always has a provider, and offering "none" there is a
+ * setting that cannot boot.
+ */
+export function llmFields(scope: Scope): FieldSpec[] {
+  const project = scope.kind === 'project'
+  return LLM_SETTINGS.map((spec) => ({
+    ...spec,
+    key: scopedLlmPath(scope, spec.setting),
+    ...(project && spec.type === 'select' ? { allowEmpty: true } : {}),
+  }))
+}
+
+export const LLM_FIELDS: FieldSpec[] = llmFields({ kind: 'global' })
 
 export const LOGGING_FIELDS: FieldSpec[] = [
   { key: 'logging.console.log_level', type: 'select', options: LOG_LEVELS, hint: 'Console' },
