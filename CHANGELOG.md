@@ -43,8 +43,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   reports and the projects `config.toml` mentions — a project in the configuration but not in
   TestBench is flagged. Each card carries the project's `language` override, a three-state
   toggle per agent (inherited · off · on, so an override can always be taken back off) and
-  "Remove all overrides". A per-project `llm_config` block is shown read-only. The project list
-  is read from TestBench once per session and cached, with its age shown and a **Refresh**
+  "Remove all overrides". A per-project `llm_config` block is summarised on the card, which
+  links to its tab on the LLM screen. The project list is read from TestBench once per session
+  and cached, with its age shown and a **Refresh**
   action; if TestBench cannot be reached the console says so and lets the project name be typed
   by hand. Documented in `docs/web-console.md`.
 - `[testbench-ai-service.llm_config]` gains `timeout` and `max_retries`. Both were already
@@ -112,6 +113,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   is never undone automatically — clearing the project's prompt file override is an ordinary
   configuration change and leaves the forked files on disk. Documented in
   `docs/web-console.md`.
+- The LLM screen now edits a project's `llm_config` as well as the global one,
+  with a tab per project. Empty fields inherit from the global configuration.
+- The service no longer refuses to start when a provider API key is missing.
+  The LLM clients are created on demand, so a missing credential surfaces on
+  the first agent request instead of at startup — which means the console can
+  be used to fix the provider configuration that is wrong.
 
 ### Changed
 

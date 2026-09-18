@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import {
   agentKeys,
   agentPath,
@@ -393,9 +394,9 @@ function ProjectCard({
         })}
       </div>
 
-      {/* D8 keeps the per-project surface to language and agents. A project
-          that already carries an llm_config is still shown: silently hiding a
-          block that is in the file would misrepresent the configuration. */}
+      {/* The project's llm_config, summarised. Phase 4d made it editable on
+          the LLM screen; this stays as the at-a-glance view of what the
+          project overrides, and links there. */}
       {llmConfig !== undefined && (
         <div
           data-testid="project-llm-config"
@@ -408,7 +409,12 @@ function ProjectCard({
           }}
         >
           <div style={{ marginBottom: 4 }}>
-            <strong>llm_config</strong> · {t.editInConfigToml}
+            <strong>llm_config</strong> ·{' '}
+            {/* <Link>, never <a href>: a full page load bypasses the
+                unsaved-changes guard and drops the operator's queued edits.
+                encodeURIComponent, so a project called `Release 2.0` addresses
+                itself on the other side rather than some other project. */}
+            <Link to={`/admin/llm?project=${encodeURIComponent(name)}`}>{t.editLlmConfig}</Link>
             <div className="text-muted" style={{ fontSize: 11 }}>{t.removedWithProject}</div>
           </div>
           <pre

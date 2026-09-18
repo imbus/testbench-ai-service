@@ -104,7 +104,7 @@ export const de = {
   projectName: 'Projektname',
   projectNameExact: 'Muss exakt dem Namen in TestBench entsprechen.',
   add: 'Hinzufügen',
-  editInConfigToml: 'in config.toml bearbeiten',
+  editLlmConfig: 'LLM-Konfiguration bearbeiten',
   removedWithProject: 'Wird von „Alle Überschreibungen entfernen“ zusammen mit dem Projektblock gelöscht',
   varName: 'Name',
   varDescription: 'Beschreibung',

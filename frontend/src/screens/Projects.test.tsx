@@ -219,15 +219,16 @@ describe('a project card', () => {
 
 describe('a project that carries an llm_config block', () => {
   it('shows it read-only, and says where to edit it', async () => {
-    // D8 keeps the per-project surface to language and agents. The model
-    // supports llm_config, so a project that already has one must still be
-    // visible -- silently hiding it would misrepresent the file.
+    // A project that already has an llm_config must still be visible here --
+    // silently hiding it would misrepresent the file. Phase 4d moved "where
+    // to edit it" from the file to the LLM screen; the panel stays the
+    // at-a-glance view of what the project overrides.
     renderProjects()
     await ready()
     const card = screen.getByTestId('project-Modelled')
     const llm = within(card).getByTestId('project-llm-config')
     expect(llm.textContent).toMatch(/anthropic/)
-    expect(llm.textContent).toMatch(/config\.toml/)
+    expect(within(llm).getByRole('link', { name: /LLM/i })).toBeInTheDocument()
   })
 
   it('gives it no editable control', async () => {
@@ -440,5 +441,54 @@ describe('removing every override for a project', () => {
     // Not both: the server refuses an overlay carrying a path and a prefix of
     // it, so preview and apply would 400 with no way back but Discard all.
     expect(edits()).toEqual({ 'projects.Alpha': null })
+  })
+})
+
+// --- the way into the LLM editor -----------------------------------------
+
+describe('the llm_config panel links into the LLM screen', () => {
+  it('links to that project, and still shows what it overrides', async () => {
+    renderProjects()
+    await ready()
+    const panel = within(screen.getByTestId('project-Modelled')).getByTestId('project-llm-config')
+    expect(within(panel).getByRole('link', { name: /LLM/i })).toHaveAttribute(
+      'href',
+      '/admin/llm?project=Modelled',
+    )
+    // The panel is still the at-a-glance view of the override, not just a link.
+    expect(panel.textContent).toContain('claude-x')
+  })
+
+  it('encodes a project name that is not URL-safe', async () => {
+    // A project may be called `Release 2.0`. Interpolating it raw would
+    // address a different project -- or none -- on the other side of the link.
+    const SPACED = {
+      ...DISK,
+      projects: { ...DISK.projects, 'Release 2.0': { llm_config: { model: 'gpt-5' } } },
+    }
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url.startsWith('/admin/api/config'))
+        return ok({ running: SPACED, disk: SPACED, config_path: 'C:/svc/config.toml' })
+      if (url.startsWith('/admin/api/projects')) return ok(AVAILABLE)
+      return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
+    })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <DraftProvider saved={SPACED}>
+            <Projects lang="en" isAdmin issues={[]} />
+          </DraftProvider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    )
+    await ready()
+    const panel = within(screen.getByTestId('project-Release 2.0')).getByTestId(
+      'project-llm-config',
+    )
+    expect(within(panel).getByRole('link', { name: /LLM/i })).toHaveAttribute(
+      'href',
+      '/admin/llm?project=Release%202.0',
+    )
   })
 })

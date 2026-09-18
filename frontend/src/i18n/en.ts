@@ -108,7 +108,7 @@ export const en = {
   projectName: 'Project name',
   projectNameExact: 'Must match the name in TestBench exactly.',
   add: 'Add',
-  editInConfigToml: 'edit in config.toml',
+  editLlmConfig: 'Edit LLM configuration',
   removedWithProject: 'Removed together with the project block by “Remove all overrides”',
   varName: 'Name',
   varDescription: 'Description',

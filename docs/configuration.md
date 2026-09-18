@@ -461,6 +461,32 @@ file = "CarConfigurator_reviews_prompt/prompt.yaml"
 variant = "Full Review"
 ```
 
+### Per-project LLM configuration
+
+A project may override any `llm_config` setting. The override is *sparse*:
+state only what differs, and every other setting is inherited from the global
+`[testbench-ai-service.llm_config]` table.
+
+```toml
+[testbench-ai-service.projects."Release 2.0".llm_config]
+model = "gpt-5"
+timeout = 30
+```
+
+Edit this from the console on the **LLM** screen, which has a tab per project.
+An empty field inherits; clearing a field removes the override.
+
+Two things behave differently from the rest of the table:
+
+- **`extra_models` is not merged.** A project that declares any `extra_models`
+  entry replaces the global catalogue for that project rather than adding to
+  it. The console therefore edits `extra_models` globally only.
+- **A project API key is separate from the project's config.** The key is read
+  from `<PROJECT_NAME>_<PROVIDER>_API_KEY` in the environment (see
+  [Project-specific API keys](#project-specific-api-keys)); when it is not set,
+  runs for that project fall back to the global credential even though the
+  project's own LLM settings still apply.
+
 ---
 
 ## Logging
