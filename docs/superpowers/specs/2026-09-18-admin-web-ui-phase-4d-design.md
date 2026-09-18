@@ -223,8 +223,11 @@ label: "global" }`, which gives the three states the draft already has:
 | A value | `setValue` | `key = value` |
 | Cleared box | `unsetValue` → queued `null` | key deleted |
 
-Every select gains `allowEmpty` in project scope (§3.6), so `provider` and
-`auth_method` can be taken back off.
+Every select gains `allowEmpty` in project scope (§3.6), so `provider` — the
+only select among the eight — can be taken back off. The text and number
+fields need no such affordance: clearing the input already queues a removal
+(`Field.tsx`'s `commit` calls `unsetValue` on an empty value), which is why
+only selects need the blank option.
 
 The `extra_models` table renders on the Global tab only (§2).
 
