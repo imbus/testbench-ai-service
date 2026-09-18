@@ -16,6 +16,7 @@ import type { ConfigIssue, PromptForkResponse, PromptVarDefinition } from '../ap
 import { Field } from '../components/Field'
 import { Modal } from '../components/Modal'
 import { ReadOnlyField } from '../components/ReadOnlyField'
+import { ScopeTabs } from '../components/ScopeTabs'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
 import {
@@ -182,39 +183,14 @@ export function AgentDetail({
         </div>
       </div>
 
-      <div role="tablist" style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
-        <ScopeTab
-          label={t.globalScope}
-          selected={project === null}
-          onSelect={() => setProject(null)}
-        />
-        {tabs.map((name) => (
-          <ScopeTab
-            key={name}
-            label={name}
-            selected={project === name}
-            onSelect={() => setProject(name)}
-          />
-        ))}
-        {addable.length > 0 && (
-          <select
-            className="input"
-            aria-label={t.addProjectOverride}
-            value=""
-            style={{ fontSize: 13, width: 'auto' }}
-            onChange={(event) => {
-              if (event.target.value) setProject(event.target.value)
-            }}
-          >
-            <option value="">+ {t.addProjectOverride}</option>
-            {addable.map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
+      <ScopeTabs
+        projects={tabs}
+        selected={project}
+        addable={addable}
+        onSelect={setProject}
+        globalLabel={t.globalScope}
+        addLabel={t.addProjectOverride}
+      />
 
       {meta.isError && (
         <div data-testid="meta-unavailable" style={{ fontSize: 12, color: '#a33a2b' }}>
@@ -384,39 +360,6 @@ export function AgentDetail({
         />
       )}
     </div>
-  )
-}
-
-function ScopeTab({
-  label,
-  selected,
-  onSelect,
-}: {
-  label: string
-  selected: boolean
-  onSelect: () => void
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      className="tb-chip"
-      aria-selected={selected}
-      onClick={onSelect}
-      style={{
-        // A chip, as the artboard draws the scope switcher -- but still a tab,
-        // because that is what selecting a scope is.
-        border: '1px solid var(--color-divider)',
-        padding: '4px 12px',
-        font: 'inherit',
-        fontSize: 13,
-        background: selected ? 'var(--color-accent)' : 'transparent',
-        color: selected ? 'var(--color-bg)' : 'inherit',
-        cursor: 'pointer',
-      }}
-    >
-      {label}
-    </button>
   )
 }
 
