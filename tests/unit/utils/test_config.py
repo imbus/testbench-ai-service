@@ -456,3 +456,58 @@ class TestMergePromptConfigs:
         result = merge_prompt_configs(default=default, override=override)
         assert result.name == "override"
         assert result.id == 2
+
+
+class TestProjectLlmConfigInheritance:
+    """The property the console's per-project LLM form is built on.
+
+    A project block is *sparse*: it states only what it overrides, and every
+    other field must come from the global table. LLMConfig has its own
+    defaults (provider=openai, auth_method=api_key), so if the merge ever
+    stopped using exclude_unset those defaults would silently overwrite the
+    operator's global provider -- and the project form would start writing
+    them into config.toml as if the operator had chosen them.
+    """
+
+    def _config(self):
+        return AppConfig(
+            llm_config={
+                "provider": "anthropic",
+                "model": "claude-opus-5",
+                "max_retries": 7,
+            },
+            projects={"Release 2.0": {"llm_config": {"timeout": 12.5}}},
+        )
+
+    def test_unstated_fields_are_inherited_from_the_global_table(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0")
+
+        assert merged.provider == LLMProvider.ANTHROPIC
+        assert merged.model == "claude-opus-5"
+        assert merged.max_retries == 7
+
+    def test_the_stated_field_wins(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0")
+
+        assert merged.timeout == 12.5
+
+    def test_the_project_block_dumps_only_what_it_states(self):
+        """The mechanism itself, pinned separately from its effect.
+
+        If this dump ever grows a second key, the assertions above start
+        passing for the wrong reason.
+        """
+        project = self._config().projects["Release 2.0"].llm_config
+
+        assert project.model_dump(exclude_unset=True) == {"timeout": 12.5}
+
+    def test_a_project_without_an_llm_block_gets_the_global_table(self):
+        config = AppConfig(
+            llm_config={"provider": "anthropic", "model": "claude-opus-5"},
+            projects={"Release 2.0": {"language": "en"}},
+        )
+
+        merged = get_llm_config(config, project_name="Release 2.0")
+
+        assert merged.provider == LLMProvider.ANTHROPIC
+        assert merged.model == "claude-opus-5"
