@@ -32,7 +32,24 @@ def init_services(app: FastAPI):
 
     # Initialize a singleton instance of LLMFactory and add it to the application state
     app.state.llm_factory = LLMFactory()
-    app.state.llm_factory.init_clients([app.state.config.llm_config])
+    try:
+        app.state.llm_factory.init_clients([app.state.config.llm_config])
+    except Exception as e:
+        # Pre-initialising the clients is an optimisation, not a precondition:
+        # LLMFactory.get_client creates them on demand. Letting a missing
+        # credential abort startup makes the one configuration the console
+        # exists to repair the one the operator cannot start the console to
+        # repair. reload.py:173-186 already treats the same call this way
+        # after a config apply; this makes boot agree with reload.
+        #
+        # Exception, not BaseException: a KeyboardInterrupt during startup
+        # must still stop the process rather than being logged and ignored.
+        logger.warning(
+            "Could not pre-initialise the LLM clients at startup: %r. The clients will be "
+            "created on demand; a missing provider credential will surface on the next agent "
+            "request.",
+            e,
+        )
 
 
 async def close_services(app: FastAPI):
