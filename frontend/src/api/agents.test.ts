@@ -12,10 +12,13 @@ import {
   agentPath,
   effectiveAgent,
   inheritedVars,
+  llmOverridingProjects,
   overridingProjects,
   projectAgentPath,
   projectPath,
+  scopedLlmPath,
 } from './agents'
+import { splitPath } from './paths'
 
 const CONFIG = {
   agents: {
@@ -236,5 +239,66 @@ describe('the shape the server actually sends', () => {
     expect(inheritedVars(RUNNING, 'reviewer', 'Beta')).toEqual({})
     expect(inheritedVars(RUNNING, 'reviewer', 'Alpha')).toEqual({ a: 1, b: 2 })
     expect(inheritedVars(RUNNING, 'reviewer', null)).toEqual({})
+  })
+})
+
+describe('scopedLlmPath', () => {
+  test('global scope addresses the top-level llm_config table', () => {
+    expect(scopedLlmPath({ kind: 'global' }, 'provider')).toBe('llm_config.provider')
+  })
+
+  test('project scope addresses the project\'s own llm_config table', () => {
+    expect(scopedLlmPath({ kind: 'project', project: 'Alpha' }, 'provider')).toBe(
+      'projects.Alpha.llm_config.provider',
+    )
+  })
+
+  test('a dotted project name is quoted, not concatenated', () => {
+    // Phase 4c shipped this exact bug as a Critical finding: string
+    // concatenation makes 'Release 2.0' tokenize as two segments, addressing
+    // a table that does not exist -- silently.
+    expect(scopedLlmPath({ kind: 'project', project: 'Release 2.0' }, 'provider')).toBe(
+      'projects."Release 2.0".llm_config.provider',
+    )
+  })
+
+  test('the quoted path tokenizes back to the four segments it means', () => {
+    expect(splitPath(scopedLlmPath({ kind: 'project', project: 'Release 2.0' }, 'provider'))).toEqual(
+      ['projects', 'Release 2.0', 'llm_config', 'provider'],
+    )
+  })
+
+  test('without a setting it addresses the table itself', () => {
+    expect(scopedLlmPath({ kind: 'project', project: 'Alpha' })).toBe('projects.Alpha.llm_config')
+    expect(scopedLlmPath({ kind: 'global' })).toBe('llm_config')
+  })
+})
+
+describe('llmOverridingProjects', () => {
+  test('lists the projects declaring an llm_config table, in config order', () => {
+    const config = {
+      projects: {
+        Alpha: { llm_config: { model: 'gpt-5' } },
+        Beta: { language: 'en' },
+        'Release 2.0': { llm_config: {} },
+      },
+    }
+    expect(llmOverridingProjects(config)).toEqual(['Alpha', 'Release 2.0'])
+  })
+
+  test('an empty llm_config table still counts', () => {
+    // It is a block the operator wrote. Hiding it would make the tab strip
+    // disagree with the file.
+    expect(llmOverridingProjects({ projects: { Alpha: { llm_config: {} } } })).toEqual(['Alpha'])
+  })
+
+  test('a null llm_config does not count', () => {
+    // `running` is a pydantic dump, so an unset optional is present as an
+    // explicit null. That is "no opinion", not an override.
+    expect(llmOverridingProjects({ projects: { Alpha: { llm_config: null } } })).toEqual([])
+  })
+
+  test('no projects table is not an error', () => {
+    expect(llmOverridingProjects({})).toEqual([])
   })
 })

@@ -172,3 +172,31 @@ export function agentKeys(config: Record<string, unknown>): string[] {
 export function configuredProjects(config: Record<string, unknown>): string[] {
   return Object.keys(table(config.projects) ?? {})
 }
+
+/** Address a setting on a project's own `[projects.<name>.llm_config]` table. */
+export function projectLlmPath(project: string, setting?: string): string {
+  const tail = setting ? setting.split('.') : []
+  return joinPath(['projects', project, 'llm_config', ...tail])
+}
+
+/** Address an LLM setting for whichever scope is in play. */
+export function scopedLlmPath(scope: Scope, setting?: string): string {
+  const tail = setting ? setting.split('.') : []
+  return scope.kind === 'global'
+    ? joinPath(['llm_config', ...tail])
+    : projectLlmPath(scope.project, setting)
+}
+
+/**
+ * The names of the projects that override `llm_config`, in config order.
+ *
+ * An empty table counts, for the same reason it does in `overridingProjects`:
+ * `[projects.Alpha.llm_config]` with nothing under it is still a block the
+ * operator wrote, and hiding it would make the scope strip disagree with the
+ * file.
+ */
+export function llmOverridingProjects(config: Record<string, unknown>): string[] {
+  const projects = table(config.projects)
+  if (!projects) return []
+  return Object.keys(projects).filter((name) => table(table(projects[name])?.llm_config) !== undefined)
+}
