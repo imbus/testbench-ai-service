@@ -101,23 +101,19 @@ class TestCaseSetDescriber(Agent):
                 warnings.append(msg)
                 continue
 
-            if node.spec is None:
-                items.append(node.base.uniqueID)
-                continue
-
-            try:
-                await patch_test_structure_element_spec(
-                    conn,
-                    context.project_key,
-                    node.spec.key,
-                    SpecificationDetailsForUpdate(locker=OptionalUser(optional=context.user_key)),
-                )
-
-            except Exception:
+            details = get_test_case_set_details(conn, context.project_key, node.base.key)
+            if (responsible := details.spec.responsible) and responsible.key != context.user_key:
                 msg = get_translation(
-                    "shared.precheck.spec_unlock_failed", context.language, uid=node.base.uniqueID
+                    "shared.precheck.spec_responsible_other_user",
+                    context.language,
+                    uid=node.base.uniqueID,
+                    user=responsible.name,
                 )
                 warnings.append(msg)
+                continue
+
+            if node.spec is None:
+                items.append(node.base.uniqueID)
                 continue
 
             items.append(node.base.uniqueID)
