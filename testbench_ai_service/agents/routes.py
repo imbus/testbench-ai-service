@@ -80,7 +80,7 @@ def load_agent(config: AgentConfig) -> Agent:
     """
     try:
         agent_class = load_class_from_path(config.class_path)
-        agent: Agent = agent_class()
+        agent: Agent = agent_class(agent_class.ARGS_CLASS.model_validate(config.args))
         logger.debug(
             "Successfully loaded agent '%s' from class path '%s'",
             agent_class.__name__,

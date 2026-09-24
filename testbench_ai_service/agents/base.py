@@ -6,6 +6,7 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
+    AgentArgs,
     AgentData,
     AgentResult,
     ExecutionContext,
@@ -21,6 +22,15 @@ class Agent(ABC):
     AGENT_DATA_CLASS: ClassVar[type[AgentData]]
     REQUIRED_PERMISSIONS: ClassVar[frozenset[PermissionWithCode]] = frozenset()
     ALLOWED_ROLES: ClassVar[frozenset[GlobalHumanRole | ProjectRole] | None] = None
+    ARGS_CLASS: ClassVar[type[AgentArgs]] = AgentArgs
+
+    def __init__(self, args: AgentArgs | None = None):
+        """
+        Args:
+            args: The validated ``args`` config table of this agent. Defaults to
+                  ``ARGS_CLASS()``, which only works if it has no required fields.
+        """
+        self.args = args if args is not None else self.ARGS_CLASS()
 
     @abstractmethod
     async def precheck(

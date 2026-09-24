@@ -1,6 +1,7 @@
 from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.models.language import LanguageOption
@@ -72,11 +73,29 @@ class AgentConfig(BaseModel):
     endpoint_path: str
     class_path: str
     prompt: PromptConfig
+    args: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProjectAgentConfig(BaseModel):
     enabled: bool | None = None
     prompt: ProjectPromptConfig | None = None
+    args: dict[str, Any] | None = None
+
+
+def merge_agent_args(
+    global_args: dict[str, Any], project_args: dict[str, Any] | None
+) -> dict[str, Any]:
+    """
+    Merge project-specific agent args over the global ones, key by key.
+
+    Args:
+        global_args: The ``args`` table of the global agent config.
+        project_args: The ``args`` table of a project override, if any.
+
+    Returns:
+        A new dict with the project keys taking precedence.
+    """
+    return {**global_args, **(project_args or {})}
 
 
 class ProjectConfig(BaseModel):

@@ -22,6 +22,7 @@ from testbench_ai_service.models.config import (
     LLMConfig,
     ProjectPromptConfig,
     PromptConfig,
+    merge_agent_args,
 )
 from testbench_ai_service.models.language import LanguageOption
 
@@ -456,9 +457,11 @@ def get_agent_config(
         if project_config is not None and project_config.agents is not None:
             project_agent_config = project_config.agents.get(agent_key, None)
             if project_agent_config is not None:
-                agent_config = agent_config.model_copy(
-                    update=project_agent_config.model_dump(exclude_unset=True)
-                )
+                update = project_agent_config.model_dump(exclude_unset=True)
+                if "args" in update:
+                    # Project args override single keys instead of replacing the whole table
+                    update["args"] = merge_agent_args(agent_config.args, update["args"])
+                agent_config = agent_config.model_copy(update=update)
 
     return agent_config
 

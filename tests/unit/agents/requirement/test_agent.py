@@ -8,6 +8,7 @@ import pytest
 
 from testbench_ai_service.agents.requirement import agent as agent_module
 from testbench_ai_service.agents.requirement.agent import RequirementAgent
+from testbench_ai_service.agents.requirement.model import RequirementAgentArgs
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import RequirementAssignment, TestThemeNode
 
@@ -172,6 +173,25 @@ class TestNothingToDo:
         wired.theme = _theme_node(locker_key="u1")
 
         await _run()
+
+        assert wired.recorder.calls == ["started", "generated"]
+
+
+class TestMaxRequirements:
+    async def test_skips_a_theme_with_more_requirements_than_allowed(self, wired):
+        wired.requirements = [_requirement("ER_1"), _requirement("ER_2"), _requirement("ER_3")]
+        agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
+
+        await agent.run(_context(), MagicMock(), MagicMock(), [])
+
+        assert wired.recorder.calls == []
+        assert wired.ai_calls == []
+
+    async def test_generates_when_the_requirements_are_within_the_limit(self, wired):
+        wired.requirements = [_requirement("ER_1"), _requirement("ER_2")]
+        agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
+
+        await agent.run(_context(), MagicMock(), MagicMock(), [])
 
         assert wired.recorder.calls == ["started", "generated"]
 

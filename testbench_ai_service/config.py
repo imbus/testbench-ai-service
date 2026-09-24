@@ -3,7 +3,7 @@ import inspect
 from pathlib import Path
 from typing import Any, get_type_hints
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
@@ -11,6 +11,7 @@ from testbench_ai_service.models.config import (
     LLMConfig,
     ProjectConfig,
     PromptConfig,
+    merge_agent_args,
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
@@ -25,6 +26,7 @@ from testbench_ai_service.utils.prompt_utils import (
 )
 from testbench_ai_service.validators import (
     raise_field_validation_error,
+    raise_nested_validation_error,
     validate_prompt_file,
     validate_tb_server_url,
 )
@@ -242,4 +244,35 @@ class AppConfig(BaseModel):
                 raise ValueError(
                     "Failed to validate template: variables are incompatible with the agent."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_agent_args(self):
+        """Validate each agent's ``args`` against its ``ARGS_CLASS``.
+
+        The global table must be complete on its own; each project override is
+        validated merged over it, so a project can only override keys.
+        """
+        for agent_key, agent in self.agents.items():
+            module_path, class_name = agent.class_path.rsplit(".", 1)
+            agent_class = getattr(importlib.import_module(module_path), class_name)
+            args_class = getattr(agent_class, "ARGS_CLASS", None)
+            if args_class is None:
+                continue
+
+            try:
+                args_class.model_validate(agent.args)
+            except ValidationError as e:
+                raise_nested_validation_error(self, ("agents", agent_key, "args"), e)
+
+            for proj_key, project in self.projects.items():
+                agent_override = (project.agents or {}).get(agent_key)
+                if agent_override is None or agent_override.args is None:
+                    continue
+                try:
+                    args_class.model_validate(merge_agent_args(agent.args, agent_override.args))
+                except ValidationError as e:
+                    raise_nested_validation_error(
+                        self, ("projects", proj_key, "agents", agent_key, "args"), e
+                    )
         return self
