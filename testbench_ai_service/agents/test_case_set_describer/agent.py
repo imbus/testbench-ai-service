@@ -28,6 +28,7 @@ from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
+    get_locked_spec_uids,
     get_test_case_set_catalog,
     get_test_case_set_details,
     get_test_case_set_nodes,
@@ -138,9 +139,13 @@ class TestCaseSetDescriber(Agent):
             logger.debug("Missing tov_key in context, skipping run execution.")
             return
 
+        locked_before_run = get_locked_spec_uids(conn, context)
+        logger.debug("Test case sets locked before the run: %s", sorted(locked_before_run))
+
         test_case_set_catalog = {}
         try:
-            test_case_set_catalog = get_test_case_set_catalog(
+            test_case_set_catalog = await asyncio.to_thread(
+                get_test_case_set_catalog,
                 conn=conn,
                 project_key=context.project_key,
                 tov_key=context.tov_key,
@@ -156,7 +161,13 @@ class TestCaseSetDescriber(Agent):
         for tcs in test_case_set_catalog.values():
             if tcs.details.uniqueID in item_ids:
                 task = asyncio.create_task(
-                    self._generate_test_case_set_description(tcs, context, conn, llm_client)
+                    self._generate_test_case_set_description(
+                        tcs,
+                        context,
+                        conn,
+                        llm_client,
+                        keep_locked=tcs.details.uniqueID in locked_before_run,
+                    )
                 )
                 logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
                 tasks.append(task)
@@ -170,8 +181,13 @@ class TestCaseSetDescriber(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
+        keep_locked: bool = False,
     ) -> None:
-        """Generates a description for a single test case set."""
+        """Generates a description for a single test case set.
+
+        ``keep_locked`` preserves the lock that was already held before the run
+        instead of unlocking the specification when the agent finishes.
+        """
         try:
             test_case = await asyncio.to_thread(
                 get_test_case_set_details, conn, context.project_key, test_case_set.details.key
@@ -227,6 +243,7 @@ class TestCaseSetDescriber(Agent):
                     language=context.language,
                     user_key=context.user_key,
                     templates_dir=context.templates_dir,
+                    keep_locked=keep_locked,
                 )
                 logger.debug(
                     "Patched generated description for test case set '%s'",
@@ -251,6 +268,7 @@ class TestCaseSetDescriber(Agent):
                     language=context.language,
                     user_key=context.user_key,
                     templates_dir=context.templates_dir,
+                    keep_locked=keep_locked,
                 )
                 logger.debug(
                     "Patched previous description for test case set '%s'",

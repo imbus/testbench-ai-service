@@ -266,6 +266,15 @@ def get_test_case_set_nodes(conn: TBConnection, context: ExecutionContext) -> li
     ]
 
 
+def get_locked_spec_uids(conn: TBConnection, context: ExecutionContext) -> set[str]:
+    """Return the uniqueIDs of the test case sets whose specification is currently locked."""
+    return {
+        node.base.uniqueID
+        for node in get_test_case_set_nodes(conn, context)
+        if node.spec is not None and node.spec.locker is not None
+    }
+
+
 def is_json_based_tov(conn: TBConnection, project_key: str, tov_key: str) -> bool:
     fetch_test_object_versions = get_tov_details(conn, project_key, tov_key)
     if fetch_test_object_versions.exchangeFormat == TOVExchangeFormat.json:
