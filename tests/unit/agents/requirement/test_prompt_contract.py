@@ -13,7 +13,7 @@ import pytest
 from testbench_ai_service.agents.requirement.agent import RequirementAgent
 from testbench_ai_service.agents.routes import validate_template_and_agent_vars
 
-PROMPTS = Path(__file__).parents[4] / "prompts"
+PROMPTS = Path(__file__).parents[4] / "testbench_ai_service" / "prompts"
 
 
 @pytest.mark.parametrize("language", ["en", "de"])

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Requirement Test Ideas"
+summary: "Generate test ideas for a requirement"
+description: >
+  This agent derives test ideas for the requirements of the test theme it was triggered on, using the
+  tests that already exist as context.
+  The generated ideas are added to the description of the test theme the requirements
+  are assigned to.
+default_model: "gpt-5.5"
+default_variant: "Test Ideas"
+variants:
+  - name: "Test Ideas"
+    description: "Derives test ideas from the requirements and their context, structured like a TestBench test structure: test cases, grouped under test themes where they share a topic, each with a telling name and a description of what exactly should be tested."
+    model: "gpt-5.5"
+    messages:
+      - role: "system"
+        file: "test_ideas_system.jinja"
+      - role: "user"
+        file: "test_ideas_user.jinja"

@@ -1,0 +1,15 @@
+{% for requirement in agent.requirements %}
+# Zielanforderung {{ loop.index }} von {{ loop.length }}
+```
+{{ requirement }}
+```
+
+{% endfor %}
+# Bereits vorhandene Tests
+Das Testthema, in das diese Ideen geschrieben werden, und was bereits darunter liegt. Wiederhole nicht, was diese abdecken.
+```
+{{ agent.existing_tests }}
+```
+
+# Anweisung
+Leite jetzt die Testideen für die Zielanforderungen als Einheit im angegebenen Format ab.

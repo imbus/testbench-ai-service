@@ -623,6 +623,12 @@ class TovStructureOptions(ReportExportOptions):
     filters: list[FilterInfo] | None = None
 
 
+class RequirementsOptions(BaseModel):
+    treeRootUID: str | None = None
+    filters: list[FilterInfo] | None = None
+    filtering: FilteringOptions | None = None
+
+
 class CycleStructureOptions(BaseModel):
     treeRootUID: str | None = None
     basedOnExecution: bool | None = Field(None, examples=[True])
@@ -689,3 +695,15 @@ class ProjectDetails(BaseModel):
     endDate: str | None
     projectContext: ProjectContext | None
     exchangeFormat: ProjectExchangeFormat
+
+
+class RequirementAssignment(BaseModel):
+    key: str
+    name: str
+    id: str
+    extendedId: str
+    version: str
+    owner: str
+    status: str
+    priority: str
+    repositoryId: str

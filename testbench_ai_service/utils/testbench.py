@@ -22,6 +22,8 @@ from testbench_ai_service.models.testbench import (
     ProjectExchangeFormat,
     ProjectMember,
     ProjectRole,
+    RequirementAssignment,
+    RequirementsOptions,
     SpecificationDetailsForUpdate,
     TestCaseSetDetails,
     TestCaseSetNode,
@@ -251,6 +253,27 @@ def get_project_roles(conn: TBConnection, project_key: str) -> list[ProjectRole]
         None,
     )
     return membership.roles if membership else []
+
+
+def get_requirements(
+    conn: TBConnection,
+    project_key: str,
+    root_uid: str,
+    tov_key: str,
+    cycle_key: str | None = None,
+    filtering: FilteringOptions | None = None,
+) -> list[RequirementAssignment]:
+    if cycle_key:
+        url = f"{conn.server_url}2/projects/{project_key}/cycles/{cycle_key}/requirements"
+    else:
+        url = f"{conn.server_url}2/projects/{project_key}/tovs/{tov_key}/requirements"
+    body = RequirementsOptions(
+        treeRootUID=root_uid,
+        filters=filtering.appliedFilters if filtering else None,
+        filtering=filtering,
+    ).model_dump(exclude_none=True)
+    requirements = conn.session.post(url, json=body).json()
+    return TypeAdapter(list[RequirementAssignment]).validate_python(requirements)
 
 
 def has_any_allowed_role(

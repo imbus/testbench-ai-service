@@ -1,0 +1,15 @@
+{% for requirement in agent.requirements %}
+# Target Requirement {{ loop.index }} of {{ loop.length }}
+```
+{{ requirement }}
+```
+
+{% endfor %}
+# Tests That Already Exist
+The test theme these ideas will be written to, and what is already below it. Do not repeat what these cover.
+```
+{{ agent.existing_tests }}
+```
+
+# Instruction
+Derive the test ideas for the target requirements as one unit now, in the specified format.
