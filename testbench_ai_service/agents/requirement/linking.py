@@ -82,7 +82,7 @@ async def get_theme_specification(
     return details.spec
 
 
-def _test_case_set_names(tree: TestStructureTree, theme: TestThemeNode) -> list[str]:
+def test_case_set_names(tree: TestStructureTree, theme: TestThemeNode) -> list[str]:
     """Return the names of the test case sets directly below a theme.
 
     Args:
@@ -172,7 +172,7 @@ async def collect_theme_contexts(
             ThemeContext(
                 theme_name=theme.base.name,
                 description=specification.description,
-                test_case_sets=_test_case_set_names(tree, theme),
+                test_case_sets=test_case_set_names(tree, theme),
                 related_tests=related_tests,
             ),
         )

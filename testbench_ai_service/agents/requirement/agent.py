@@ -15,8 +15,12 @@ write-back helper needs a theme's ``spec.key``, so an unlinked requirement has n
 destination in TestBench -- what it should be is still open.
 """
 
-import asyncio
+import json
+import os
+import tempfile
+from pathlib import Path
 
+from testbench2robotframework.json_reader import read_json
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
@@ -25,7 +29,7 @@ from testbench_ai_service.agents.requirement.context import (
     TokenBudget,
     assemble_context,
 )
-from testbench_ai_service.agents.requirement.linking import collect_theme_contexts
+from testbench_ai_service.agents.requirement.linking import test_case_set_names
 from testbench_ai_service.agents.requirement.model import Baseline, Requirement, ThemeContext
 from testbench_ai_service.agents.requirement.ranking import (
     LexicalRanker,
@@ -53,6 +57,13 @@ from testbench_ai_service.models.testbench import (
     TestThemeNode,
 )
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
+from testbench_ai_service.utils.testbench import (
+    get_json_report_reader,
+    get_test_case_set_catalog,
+    get_test_case_set_details,
+    get_test_theme_details,
+    post_project_tov_structure,
+)
 
 #: Whether the related-requirements tier is reordered by a model.
 #:
@@ -113,14 +124,15 @@ class RequirementAgent(Agent):
             llm_client: Initialised LLM client.
             item_ids: Unused -- ``precheck`` returns no items.
         """
-        if not context.tov_key or not context.root_uid:
-            logger.error(
-                "Cannot generate test ideas without both a tov_key and a root_uid "
-                "(tov_key=%r, root_uid=%r)",
-                context.tov_key,
-                context.root_uid,
-            )
-            return
+        tov = post_project_tov_structure(
+            conn=conn,
+            project_key=context.project_key,
+            tov_key=context.tov_key,
+            root_uid=context.root_uid,
+        )
+        testtheme = get_test_theme_details(
+            conn=conn, project_key=context.project_key, test_theme_key=tov.root.base.key
+        )
 
         try:
             baseline = await load_current_baseline(conn, context.tov_key)
@@ -130,7 +142,9 @@ class RequirementAgent(Agent):
             )
             return
 
-        target = find_requirement(baseline.children, context.root_uid)
+        requirement_keys = [reference.key for reference in testtheme.spec.requirements]
+        target = find_requirement(baseline.children, requirement_keys)
+
         if target is None:
             logger.error(
                 "root_uid '%s' names no requirement in baseline '%s'; nothing to do",
@@ -139,62 +153,49 @@ class RequirementAgent(Agent):
             )
             return
 
-        theme_contexts = await collect_theme_contexts(
-            conn,
-            project_key=context.project_key,
-            tov_key=context.tov_key,
-            cycle_key=context.cycle_key,
-            target=target,
-            core_requirements=_structural_core(baseline, target),
+        theme = tov.root
+        if not isinstance(theme, TestThemeNode):
+            logger.error(
+                "root_uid '%s' is not a test theme (got %s); nothing to do",
+                context.root_uid,
+                type(theme).__name__,
+            )
+            return
+
+        # root_uid names the theme itself, so its tree and specification already hold
+        # everything collect_theme_contexts would search the whole TOV for.
+        # related_tests (tier 5) is left empty: it needs the specifications of other
+        # themes, which this flow does not read.
+        theme_context = ThemeContext(
+            theme_name=theme.base.name,
+            description=testtheme.spec.description,
+            test_case_sets=test_case_set_names(tov, theme),
         )
+        print(theme_context)
         ranker = _build_ranker(llm_client, context)
 
-        if not theme_contexts:
-            await self._generate_without_theme(
+        if not _is_writable(theme, context.user_key):
+            logger.warning("Test theme '%s' is locked by another user", theme.base.name)
+            return
+
+        try:
+            await self._generate_for_theme(
+                theme=theme,
+                theme_context=theme_context,
                 baseline=baseline,
-                target=target,
+                targets=target,
                 context=context,
+                conn=conn,
                 llm_client=llm_client,
                 ranker=ranker,
             )
-            return
-
-        writable = [
-            (theme, theme_context)
-            for theme, theme_context in theme_contexts
-            if _is_writable(theme, context.user_key)
-        ]
-        if not writable:
-            logger.warning(
-                "Every theme linking requirement '%s' is locked by another user", target.extendedID
+        except Exception as error:
+            logger.error(
+                "Test idea generation failed for theme '%s' | requirements=%s | error=%r",
+                theme.base.name,
+                [requirement.extendedID for requirement in target],
+                error,
             )
-            return
-
-        results = await asyncio.gather(
-            *(
-                self._generate_for_theme(
-                    theme=theme,
-                    theme_context=theme_context,
-                    baseline=baseline,
-                    target=target,
-                    context=context,
-                    conn=conn,
-                    llm_client=llm_client,
-                    ranker=ranker,
-                )
-                for theme, theme_context in writable
-            ),
-            return_exceptions=True,
-        )
-
-        for (theme, _), result in zip(writable, results, strict=True):
-            if isinstance(result, BaseException):
-                logger.error(
-                    "Test idea generation failed for theme '%s' | requirement='%s' | error=%r",
-                    theme.base.name,
-                    target.extendedID,
-                    result,
-                )
 
     async def _generate_without_theme(
         self,
@@ -227,7 +228,7 @@ class RequirementAgent(Agent):
         try:
             agent_data = await assemble_context(
                 baseline=baseline,
-                target=target,
+                targets=[target],
                 theme_context=None,
                 ranker=ranker,
                 budget=TokenBudget(),
@@ -256,7 +257,7 @@ class RequirementAgent(Agent):
         theme: TestThemeNode,
         theme_context: ThemeContext,
         baseline: Baseline,
-        target: Requirement,
+        targets: list[Requirement],
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
@@ -264,11 +265,15 @@ class RequirementAgent(Agent):
     ) -> None:
         """Generate and write test ideas for one theme, rolling back on failure.
 
+        All requirements the theme links go into a single prompt, so the model
+        sees them together and is asked once per theme rather than once per
+        requirement.
+
         Args:
             theme: The theme node to write into.
             theme_context: Test-side context for that theme.
             baseline: The loaded baseline.
-            target: The target requirement.
+            targets: The requirements the theme links.
             context: The resolved execution context.
             conn: TestBench connection.
             llm_client: Initialised LLM client.
@@ -292,27 +297,20 @@ class RequirementAgent(Agent):
         )
 
         try:
-            agent_data = await assemble_context(
-                baseline=baseline,
-                target=target,
+            test_ideas = await self._generate_test_ideas(
+                theme=theme,
                 theme_context=theme_context,
+                baseline=baseline,
+                targets=targets,
+                context=context,
+                llm_client=llm_client,
                 ranker=ranker,
-                budget=TokenBudget(),
-            )
-            response = await self.get_ai_response(
-                llm_client, context.llm_config, context.prompt_config, agent_data
-            )
-            logger.debug(
-                "Test ideas for requirement '%s' into theme '%s':\n\t%s",
-                target.extendedID,
-                theme.base.name,
-                response.result,
             )
             await patch_generated_test_ideas(
                 conn=conn,
                 project_key=context.project_key,
                 spec_key=spec_key,
-                test_ideas=response.result,
+                test_ideas=test_ideas,
                 previous_description=previous_description,
                 language=context.language,
                 user_key=context.user_key,
@@ -338,6 +336,49 @@ class RequirementAgent(Agent):
                     rollback_error,
                 )
             raise error
+
+    async def _generate_test_ideas(
+        self,
+        *,
+        theme: TestThemeNode,
+        theme_context: ThemeContext,
+        baseline: Baseline,
+        targets: list[Requirement],
+        context: ExecutionContext,
+        llm_client: LLMClient,
+        ranker: Ranker,
+    ) -> str:
+        """Ask the AI, in one prompt, for test ideas for all requirements of a theme.
+
+        Args:
+            theme: The theme the ideas are for.
+            theme_context: Test-side context for that theme.
+            baseline: The loaded baseline.
+            targets: The requirements to generate ideas for.
+            context: The resolved execution context.
+            llm_client: Initialised LLM client.
+            ranker: Strategy for ordering the related-requirements tier.
+
+        Returns:
+            The ideas, grouped under the requirement each belongs to.
+        """
+        agent_data = await assemble_context(
+            baseline=baseline,
+            targets=targets,
+            theme_context=theme_context,
+            ranker=ranker,
+            budget=TokenBudget(),
+        )
+        response = await self.get_ai_response(
+            llm_client, context.llm_config, context.prompt_config, agent_data
+        )
+        logger.debug(
+            "Test ideas for requirements %s into theme '%s':\n\t%s",
+            [target.extendedID for target in targets],
+            theme.base.name,
+            response.result,
+        )
+        return response.result
 
 
 def _structural_core(baseline: Baseline, target: Requirement) -> list[Requirement]:

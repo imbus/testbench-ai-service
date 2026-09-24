@@ -4,11 +4,13 @@ A requirement carries no prose: its name is a ten-word title and its UDFs a hand
 of characters. What context exists is therefore structural, and this module spends a
 token budget on it in priority order.
 
-Tiers 1 to 3 -- the target, its ancestors and subtree, its siblings -- are the
-structural core and are always included; they are small by construction, bounded by
-the depth and branching of one baseline subtree rather than by baseline size. Tiers
-4 to 6 are trimmed, and because they are assembled in order, a large tier 6 can
-never crowd out the theme tiers before it.
+One context covers every requirement a theme links, so the model is asked once per
+theme and can see how the requirements overlap. Tiers 1 to 3 -- each target, its
+ancestors and subtree, its siblings -- are rendered per target as the structural
+core and are always included; they are small by construction, bounded by the depth
+and branching of one baseline subtree rather than by baseline size. Tiers 4 to 6 are
+shared by all targets and trimmed, and because they are assembled in order, a large
+tier 6 can never crowd out the theme tiers before it.
 
 Trimming happens at entry granularity. A tier that cannot fit even its first entry
 renders as an empty string rather than a fragment, so the prompt never shows the
@@ -17,7 +19,9 @@ model half a requirement.
 
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
+from itertools import zip_longest
 from math import ceil
+from typing import TypedDict
 
 from testbench_ai_service.agents.requirement.model import (
     Baseline,
@@ -44,24 +48,30 @@ from testbench_ai_service.models.agent import AgentData
 CHARS_PER_TOKEN = 4
 
 
-class RequirementAgentData(AgentData):
-    """Template variables the requirement agent exposes as ``{{ agent.<key> }}``.
-
-    Every field is a rendered string so that selection stays in Python and
-    presentation stays in the Jinja template. Sections with nothing to show are
-    empty strings rather than missing keys, because
-    ``validate_template_and_agent_vars`` matches these names against the prompt
-    template at request time.
-    """
+class RequirementSection(TypedDict):
+    """The structural core (tiers 1 to 3) of one target requirement, rendered."""
 
     requirement: str
     requirement_path: str
     requirement_subtree: str
     requirement_siblings: str
+
+
+class RequirementAgentData(AgentData):
+    """Template variables the requirement agent exposes as ``{{ agent.<key> }}``.
+
+    Every field is rendered text -- or a list of rendered sections, one per target
+    -- so that selection stays in Python and presentation stays in the Jinja
+    template. Sections with nothing to show are empty strings rather than missing
+    keys, because ``validate_template_and_agent_vars`` matches these names against
+    the prompt template at request time.
+    """
+
+    requirements: list[RequirementSection]
     existing_tests: str
     related_tests: str
     related_requirements: str
-    requirement_obj: Requirement
+    requirement_objs: list[Requirement]
 
 
 @dataclass(frozen=True)
@@ -145,12 +155,11 @@ def _render_related_tests(theme_context: ThemeContext | None) -> str:
     return "\n".join(lines)
 
 
-def _candidates(baseline: Baseline, target: Requirement) -> list[Requirement]:
-    """Return every requirement in the baseline other than the target."""
+def _candidates(baseline: Baseline, targets: Sequence[Requirement]) -> list[Requirement]:
+    """Return every requirement in the baseline other than the targets."""
+    target_keys = {target.key.serial for target in targets}
     return [
-        node
-        for node in iter_requirements(baseline.children)
-        if node.key.serial != target.key.serial
+        node for node in iter_requirements(baseline.children) if node.key.serial not in target_keys
     ]
 
 
@@ -159,19 +168,65 @@ def _render_lines(nodes: Iterable[Requirement]) -> str:
     return "\n".join(render_detail(node) for node in nodes)
 
 
+def _render_section(
+    baseline: Baseline, target: Requirement, target_keys: set[str]
+) -> RequirementSection:
+    """Render the structural core of one target.
+
+    Siblings that are themselves targets are left out: they already appear in full
+    as a section of their own.
+    """
+    return {
+        "requirement": render_detail(target),
+        "requirement_path": "\n".join(
+            render_line(node, depth)
+            for depth, node in enumerate(ancestors(baseline.children, target))
+        ),
+        "requirement_subtree": "\n".join(
+            render_detail(node, depth - 1) for depth, node in subtree(target)
+        ),
+        "requirement_siblings": _render_lines(
+            node
+            for node in siblings(baseline.children, target)
+            if node.key.serial not in target_keys
+        ),
+    }
+
+
+async def _order_candidates(
+    ranker: Ranker, targets: Sequence[Requirement], candidates: Sequence[Requirement]
+) -> list[Requirement]:
+    """Merge the per-target rankings into one ordering.
+
+    The rankings are interleaved round-robin, so each target's most relevant
+    candidates come first and no single target can claim the whole tier.
+    """
+    rankings = [await ranker.order(target, candidates) for target in targets]
+    merged: list[Requirement] = []
+    seen: set[str] = set()
+
+    for row in zip_longest(*rankings):
+        for node in row:
+            if node is not None and node.key.serial not in seen:
+                seen.add(node.key.serial)
+                merged.append(node)
+
+    return merged
+
+
 async def assemble_context(
     *,
     baseline: Baseline,
-    target: Requirement,
+    targets: Sequence[Requirement],
     theme_context: ThemeContext | None,
     ranker: Ranker,
     budget: TokenBudget,
 ) -> RequirementAgentData:
-    """Assemble the prompt context for one requirement.
+    """Assemble one prompt context covering every target requirement.
 
     Args:
         baseline: The loaded baseline holding the requirement tree.
-        target: The resolved target requirement.
+        targets: The resolved target requirements, in the order they are shown.
         theme_context: Test-side context for the target theme, or ``None`` when none
             could be gathered.
         ranker: Strategy ordering the tier-6 candidates.
@@ -181,17 +236,10 @@ async def assemble_context(
         The rendered template variables, with empty strings for sections that have
         nothing to show or did not fit.
     """
-    requirement = render_detail(target)
-    requirement_path = "\n".join(
-        render_line(node, depth) for depth, node in enumerate(ancestors(baseline.children, target))
-    )
-    requirement_subtree = "\n".join(
-        render_detail(node, depth - 1) for depth, node in subtree(target)
-    )
-    requirement_siblings = _render_lines(siblings(baseline.children, target))
+    target_keys = {target.key.serial for target in targets}
+    requirements = [_render_section(baseline, target, target_keys) for target in targets]
 
-    core = [requirement, requirement_path, requirement_subtree, requirement_siblings]
-    spent = sum(estimate_tokens(section) for section in core)
+    spent = sum(estimate_tokens(text) for section in requirements for text in section.values())
 
     existing_tests = _fit_entries(
         [_render_existing_tests(theme_context)],
@@ -205,7 +253,7 @@ async def assemble_context(
     )
     spent += estimate_tokens(related_tests)
 
-    ordered = await ranker.order(target, _candidates(baseline, target))
+    ordered = await _order_candidates(ranker, targets, _candidates(baseline, targets))
     related_requirements = _fit_entries(
         [render_line(node) for node in ordered],
         min(budget.related_requirements, max(budget.total - spent, 0)),
@@ -213,9 +261,9 @@ async def assemble_context(
     spent += estimate_tokens(related_requirements)
 
     logger.debug(
-        "Assembled context for requirement '%s': ~%d token(s) of %d, "
+        "Assembled context for requirement(s) %s: ~%d token(s) of %d, "
         "%d ranked candidate(s) available, %d included",
-        target.extendedID,
+        [target.extendedID for target in targets],
         spent,
         budget.total,
         len(ordered),
@@ -223,12 +271,9 @@ async def assemble_context(
     )
 
     return {
-        "requirement": requirement,
-        "requirement_path": requirement_path,
-        "requirement_subtree": requirement_subtree,
-        "requirement_siblings": requirement_siblings,
+        "requirements": requirements,
         "existing_tests": existing_tests,
         "related_tests": related_tests,
         "related_requirements": related_requirements,
-        "requirement_obj": target,
+        "requirement_objs": list(targets),
     }

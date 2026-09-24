@@ -270,6 +270,7 @@ async def load_current_baseline(
 
     logger.debug("Loading %s baseline '%s' of TOV '%s'", CURRENT_BASELINE_TYPE, serial, tov_key)
     job_payload = await load_requirements(conn, tov_key, serial, **load_kwargs)
+    print(job_payload)
     baseline = parse_loader_job(job_payload)
 
     udf_payload = await get_legacy_json(

@@ -31,7 +31,9 @@ RESOLUTION_FIELDS: tuple[tuple[str, Callable[[Requirement], str]], ...] = (
 )
 
 
-def find_requirement(requirements: Iterable[Requirement], uid: str) -> Requirement | None:
+def find_requirement(
+    requirements: Iterable[Requirement], keys: list[str]
+) -> list[Requirement] | None:
     """Locate the requirement a trigger's ``root_uid`` refers to.
 
     Each field in :data:`RESOLUTION_FIELDS` is tried across the whole tree before
@@ -46,19 +48,22 @@ def find_requirement(requirements: Iterable[Requirement], uid: str) -> Requireme
         The matched requirement, or ``None`` if no field of any node matches.
     """
     nodes = list(iter_requirements(requirements))
+    found_nodes: list[Requirement] = []
 
     for field, value_of in RESOLUTION_FIELDS:
         for node in nodes:
-            if value_of(node) == uid:
+            if value_of(node) in keys and node not in found_nodes:
                 logger.debug(
                     "Resolved root_uid '%s' to requirement '%s' via %s",
-                    uid,
+                    keys,
                     node.extendedID,
                     field,
                 )
-                return node
-
-    logger.debug("root_uid '%s' matched none of %d requirement(s)", uid, len(nodes))
+                print(keys)
+                found_nodes.append(node)
+    if found_nodes:
+        return found_nodes
+    logger.debug("root_uid '%s' matched none of %d requirement(s)", keys, len(nodes))
     return None
 
 
