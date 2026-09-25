@@ -1,7 +1,14 @@
 import type { LintError } from '../../api/types'
 import { useTranslations, type Lang } from '../../i18n'
 
-export type LintState = { running: boolean; checked: boolean; error: string | null; errors: LintError[] }
+/**
+ * What the lint block shows. `errors` are the OPEN message's own results;
+ * `clean` means the last run found no error in ANY message of the variant --
+ * the "no syntax errors" verdict is about the whole variant, so it must not
+ * appear on a clean message (or a non-message pane) while another message is
+ * flagged.
+ */
+export type LintState = { running: boolean; clean: boolean; error: string | null; errors: LintError[] }
 
 const caps = { fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' as const }
 const mono = 'ui-monospace, Menlo, monospace'
@@ -83,7 +90,7 @@ export function VarSidebar({ agentVars, declaredVars, used, undeclared, canInser
               {`${t.lintLine} ${error.line}: ${error.message}`}
             </div>
           ))}
-          {lint.checked && !lint.error && lint.errors.length === 0 && <div style={{ color: '#2e8b5e' }}>✓ {t.lintClean}</div>}
+          {lint.clean && !lint.error && <div style={{ color: '#2e8b5e' }}>✓ {t.lintClean}</div>}
         </>
       )}
     </aside>

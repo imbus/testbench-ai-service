@@ -114,13 +114,13 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
 
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '5px 12px', borderTop: '1px solid var(--color-divider)', background: 'var(--color-surface)', fontSize: 12, flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-ghost" style={{ fontSize: 12, padding: '0 6px' }} disabled={lint.running} onClick={onLint}>
-            {t.lint}
+            {lint.running ? t.linting : t.lint}
           </button>
           {lint.error && <span role="alert" style={{ color: '#a33a2b' }}>{lint.error}</span>}
           {lint.errors.map((error, index) => (
             <span key={index} style={{ color: '#a33a2b' }}>{`${t.lintLine} ${error.line}: ${error.message}`}</span>
           ))}
-          {lint.checked && !lint.error && lint.errors.length === 0 && <span style={{ color: '#2e8b5e' }}>✓ {t.lintClean}</span>}
+          {lint.clean && !lint.error && <span style={{ color: '#2e8b5e' }}>✓ {t.lintClean}</span>}
           <span className="text-muted">{`${usedDeclared}/${declared} ${t.varsUsed} · ${undeclared} ${t.undeclaredCount}`}</span>
           <div style={{ flex: 1 }} />
           <span className="text-muted">jinja · UTF-8</span>

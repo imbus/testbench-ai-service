@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { VarSidebar, type LintState } from './VarSidebar'
 
-const idle: LintState = { running: false, checked: false, error: null, errors: [] }
+const idle: LintState = { running: false, clean: false, error: null, errors: [] }
 
 function setup(overrides: Partial<Parameters<typeof VarSidebar>[0]> = {}) {
   const props = {
@@ -55,12 +55,12 @@ describe('VarSidebar', () => {
   })
 
   it('shows lint errors by line', () => {
-    setup({ lint: { ...idle, checked: true, errors: [{ line: 3, column: 1, message: 'unexpected end' }] } })
+    setup({ lint: { ...idle, errors: [{ line: 3, column: 1, message: 'unexpected end' }] } })
     expect(screen.getByText('Line 3: unexpected end')).toBeInTheDocument()
   })
 
-  it('shows the clean result only after a check', () => {
-    setup({ lint: { ...idle, checked: true } })
+  it('shows the clean verdict for a clean variant', () => {
+    setup({ lint: { ...idle, clean: true } })
     expect(screen.getByText(/No syntax errors\./)).toBeInTheDocument()
   })
 

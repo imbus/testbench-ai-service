@@ -8,7 +8,7 @@ const MESSAGES: PromptMessageDoc[] = [
   { role: 'system', source: 'file', file: 'sys.jinja', content: 'x', readable: true },
   { role: 'user', source: 'inline', file: null, content: 'Explain it', readable: true },
 ]
-const clean = { running: false, checked: true, error: null, errors: [] }
+const clean = { running: false, clean: true, error: null, errors: [] }
 
 function setup(overrides: Partial<Parameters<typeof TabsLayout>[0]> = {}) {
   const props = {
@@ -70,8 +70,13 @@ describe('TabsLayout', () => {
   })
 
   it('shows lint errors by line in the status bar', () => {
-    setup({ status: { lint: { ...clean, errors: [{ line: 2, column: 1, message: 'bad' }] }, usedDeclared: 0, declared: 0, undeclared: 0 } })
+    setup({ status: { lint: { ...clean, clean: false, errors: [{ line: 2, column: 1, message: 'bad' }] }, usedDeclared: 0, declared: 0, undeclared: 0 } })
     expect(screen.getByText('Line 2: bad')).toBeInTheDocument()
+  })
+
+  it('says Linting… on the status-bar button while a run is in flight', () => {
+    setup({ status: { lint: { ...clean, running: true }, usedDeclared: 0, declared: 0, undeclared: 0 } })
+    expect(screen.getByRole('button', { name: 'Linting…' })).toBeDisabled()
   })
 
   it('hides + message in a read-only session', () => {

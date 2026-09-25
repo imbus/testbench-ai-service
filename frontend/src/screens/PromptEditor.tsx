@@ -526,10 +526,12 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const alertStyle = { fontSize: 12, color: '#a33a2b', padding: '6px 16px' }
 
   // The lint result for the open message -- the Split sidebar's lint block
-  // and the Tabs status bar both show exactly this.
+  // and the Tabs status bar both show exactly this. "Clean" is the whole
+  // variant's verdict: a clean open message (or the prompt.yaml / settings
+  // pane) says nothing while any other message is still flagged.
   const lintState: LintState = {
     running: linting,
-    checked: lintChecked,
+    clean: lintChecked && flagged.length === 0,
     error: lintError,
     errors: current.kind === 'message' ? (diagnostics[current.index] ?? []) : [],
   }

@@ -993,6 +993,42 @@ describe('linting', () => {
       expect(treeMessages().filter((b) => b.getAttribute('aria-invalid') === 'true')).toHaveLength(0)
     })
 
+    it('shows no "no syntax errors" on a clean message while another message is flagged', async () => {
+      lintResponder = (content) =>
+        content.includes('helpful')
+          ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+          : { ok: true, errors: [] }
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      // The open message (index 1) is clean; the file-backed one (index 0) is not.
+      await openMessage(/Explain/)
+      await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+      await waitFor(() =>
+        expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }))
+          .toHaveAttribute('aria-invalid', 'true'),
+      )
+      expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
+    })
+
+    it('shows no "no syntax errors" on the prompt.yaml tab while a message is flagged (Tabs)', async () => {
+      lintResponder = (content) =>
+        content.includes('Explain')
+          ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+          : { ok: true, errors: [] }
+      renderEditor({ lang: 'en' })
+      await ready()
+      await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
+
+      await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Explain/ })).toHaveAttribute('aria-invalid', 'true'),
+      )
+      await userEvent.click(screen.getByRole('button', { name: 'prompt.yaml' }))
+      expect(screen.getByTestId('prompt-header')).toBeInTheDocument()
+      expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
+    })
+
     it('does not keep a stale "no syntax errors" result after an edit', async () => {
       renderEditor({ lang: 'en' })
       await ready()
