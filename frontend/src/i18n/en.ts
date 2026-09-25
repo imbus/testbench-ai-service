@@ -212,6 +212,7 @@ export const en = {
   undeclaredVars: 'Undeclared:',
   declareVars: 'declare',
   lintLine: 'Line',
+  varsVariantScope: 'variant',
   varsUsed: 'declared vars used',
   undeclaredCount: 'undeclared',
   previewPane: 'Preview',

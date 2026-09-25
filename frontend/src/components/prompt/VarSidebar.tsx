@@ -48,7 +48,7 @@ export function VarSidebar({ agentVars, declaredVars, used, undeclared, canInser
     >
       <div className="text-muted" style={caps}>agent.*</div>
       {list(agentVars)}
-      <div className="text-muted" style={{ ...caps, marginTop: 8 }}>vars.* (variant)</div>
+      <div className="text-muted" style={{ ...caps, marginTop: 8 }}>vars.* ({t.varsVariantScope})</div>
       {list(declaredVars)}
       {undeclared.length > 0 && (
         <div style={{ border: '1px solid #c9a227', padding: 6, color: '#7a5a00', background: 'color-mix(in srgb, #c9a227 12%, transparent)' }}>

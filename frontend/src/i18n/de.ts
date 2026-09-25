@@ -208,6 +208,7 @@ export const de = {
   undeclaredVars: 'Nicht deklariert:',
   declareVars: 'deklarieren',
   lintLine: 'Zeile',
+  varsVariantScope: 'Variante',
   varsUsed: 'deklarierte Variablen genutzt',
   undeclaredCount: 'nicht deklariert',
   previewPane: 'Vorschau',
