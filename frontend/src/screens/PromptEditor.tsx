@@ -647,7 +647,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         <div
           data-testid="preview-pane"
           style={{
-            height: 300,
+            height: 230,
             flex: 'none',
             borderTop: '1px solid var(--color-divider)',
             display: 'grid',

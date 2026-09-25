@@ -97,14 +97,18 @@ export function MetaPane({
         readOnly={readOnly}
         onChange={(value) => onHeader('summary', value)}
       />
-      <Header
-        label={t.promptDescription}
-        id="prompt-description"
-        value={draft.description ?? ''}
-        readOnly={readOnly}
-        multiline
-        onChange={(value) => onHeader('description', value)}
-      />
+      {/* Prototype reference: description spans the full row, between the
+          name/summary pair above and default_model/default_variant below. */}
+      <div style={{ gridColumn: '1 / -1' }}>
+        <Header
+          label={t.promptDescription}
+          id="prompt-description"
+          value={draft.description ?? ''}
+          readOnly={readOnly}
+          multiline
+          onChange={(value) => onHeader('description', value)}
+        />
+      </div>
       <Header
         label={t.defaultModel}
         id="prompt-default-model"

@@ -45,7 +45,107 @@ const FIXTURES: Record<string, unknown> = {
     disk: { host: '127.0.0.1', port: 8010 },
     config_path: 'C:/ProgramData/TestBench/config.toml',
   },
-  '/admin/api/projects': { projects: ['Alpha', 'Beta'], fetched_at: null, stale: false },
+  '/admin/api/projects': {
+    projects: [
+      { name: 'Alpha', key: 'ALPHA' },
+      { name: 'Beta', key: 'BETA' },
+    ],
+    fetched_at: null,
+    source: 'testbench',
+    error: null,
+  },
+  '/admin/api/prompts': {
+    languages: [
+      {
+        lang: 'de',
+        prompts: [
+          {
+            agent: 'test_case_set_reviewer',
+            file: 'de/test_case_set_reviewer/prompt.yaml',
+            name: 'Testfallmengen-Prüfer',
+            variants: ['Gründlich', 'Kompakt'],
+            ok: true,
+            error: null,
+            used_by: [],
+          },
+        ],
+      },
+      {
+        lang: 'en',
+        prompts: [
+          {
+            agent: 'test_case_set_reviewer',
+            file: 'en/test_case_set_reviewer/prompt.yaml',
+            name: 'Test Case Set Reviewer',
+            variants: ['Thorough'],
+            ok: true,
+            error: null,
+            used_by: [],
+          },
+        ],
+      },
+    ],
+  },
+  '/admin/api/prompts/de/test_case_set_reviewer': {
+    lang: 'de',
+    agent: 'test_case_set_reviewer',
+    file: 'de/test_case_set_reviewer/prompt.yaml',
+    name: 'Testfallmengen-Prüfer',
+    summary: 'Prüft eine Testfallmenge auf Vollständigkeit und Konsistenz.',
+    description:
+      'Bewertet die übergebene Testfallmenge gegenüber den Anforderungen und liefert eine strukturierte Rückmeldung.',
+    default_model: 'gpt-5.5',
+    default_variant: 'Gründlich',
+    variants: [
+      {
+        name: 'Gründlich',
+        description: 'Ausführliche Prüfung mit Begründung',
+        model: null,
+        vars: {
+          tone: {
+            name: 'tone',
+            description: 'Ton der Rückmeldung',
+            value_type: 'string',
+            choices: null,
+            default_value: 'sachlich',
+            required: false,
+          },
+        },
+        messages: [
+          {
+            role: 'system',
+            source: 'file',
+            file: 'gruendlich_system.jinja',
+            content: 'Du bist ein gründlicher Prüfer für Testfallmengen.',
+            readable: true,
+          },
+          {
+            role: 'user',
+            source: 'inline',
+            file: null,
+            content: 'Prüfe {{ agent.test_case_set }} im Ton {{ vars.tone }}',
+            readable: true,
+          },
+        ],
+      },
+      {
+        name: 'Kompakt',
+        description: null,
+        model: null,
+        vars: {},
+        messages: [
+          {
+            role: 'user',
+            source: 'inline',
+            file: null,
+            content: 'Kurzprüfung von {{ agent.test_case_set }}',
+            readable: true,
+          },
+        ],
+      },
+    ],
+    agent_context_skeleton: { test_case_set: '', test_cases: [], project_name: '' },
+  },
 }
 
 const LOGS = [
