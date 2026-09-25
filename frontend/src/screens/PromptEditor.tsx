@@ -220,6 +220,11 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   // arm the unsaved-changes warning. This ref is set in the SAME effect that
   // dispatches `reset`, so it and `draft` always change together.
   const originalRef = useRef<PromptDocument | null>(null)
+  // Which route `originalRef` was seeded for. The route reset below clears
+  // `originalRef` only AFTER the first render on the new route; when that
+  // render already has the new route's document (react-query cache), this is
+  // what keeps the previous agent's draft from painting under it.
+  const originalRouteRef = useRef<string | null>(null)
 
   // Every hook above this line runs on every render of this instance,
   // including the loading -> loaded transition below: this screen stays
@@ -229,16 +234,43 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   // what phase 3's AgentDetail hit. So the reducer is seeded from an effect
   // rather than a hook moved below the guards, and every value the JSX below
   // needs is derived from `document.data ?? undefined`, never assumed present.
+  //
+  // Two resets, not one, because two different things change:
+  //
+  // A ROUTE change (the toolbar's language/agent selects navigate within this
+  // same mounted screen) is a different document altogether, so everything
+  // about "where the operator is" starts over: the variant selection returns
+  // to the new document's `default_variant` (a name kept from the previous
+  // agent would otherwise stay selected whenever the new one happens to share
+  // it), the centre pane returns to message 0, and the previous agent's
+  // `originalRef` is dropped so the `!original` guard below covers the load.
+  // Declared BEFORE the document reset: when both fire in one commit (a
+  // cached document for the new route), the document reset's `originalRef`
+  // must be the one that sticks.
+  useEffect(() => {
+    originalRef.current = null
+    setSelectedVariant(null)
+    setSelection({ kind: 'message', index: 0 })
+    clearDiagnostics()
+  }, [docLang, agentKey])
+
+  // A new `document.data` for the SAME route -- the first load, or the
+  // refetch this screen's own successful save triggers -- re-seeds the draft
+  // and invalidates every lint result (they describe the old text), but
+  // leaves the selection alone: saving from the prompt.yaml or variant
+  // settings pane must not jump the operator to message 0. A selection that
+  // no longer resolves still falls back safely (see `current` below).
   useEffect(() => {
     if (!document.data) return
     const normalized = normalizeDocument(document.data, docLang, agentKey)
     originalRef.current = normalized
+    originalRouteRef.current = `${docLang}/${agentKey}`
     dispatch({ type: 'reset', document: normalized })
-    setSelection({ kind: 'message', index: 0 })
     clearDiagnostics()
   }, [document.data, docLang, agentKey])
 
-  const original = originalRef.current
+  const original =
+    originalRouteRef.current === `${docLang}/${agentKey}` ? originalRef.current : null
   const dirty = original ? isDirty(original, draft) : false
 
   // Warns on a tab close or refresh. `useBlocker` below covers an IN-APP
@@ -284,10 +316,12 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       </div>
     )
   }
-  // A document loaded, but the `reset` effect above has not yet run against
+  // A document loaded, but the document reset above has not yet run against
   // it (see `originalRef`'s own comment) -- without this guard, this render
   // would paint the OLD draft (the initial empty document, or a previous
-  // agent's) under the NEW document's header for exactly one frame.
+  // agent's) under the NEW document's header for exactly one frame. A
+  // previous agent's `originalRef` never counts: `original` above is null
+  // unless it was seeded for the current route.
   if (!original) return <div style={{ padding: 28 }}>…</div>
 
   const disk = config.data?.disk ?? {}

@@ -133,6 +133,36 @@ function docWithThreeMessages(): PromptDocument {
   }
 }
 
+/**
+ * The second agent the toolbar's agent select can switch to. Shares the
+ * variant name 'Quick' with `DOC`, and its `default_variant` is NOT
+ * `variants[0]` -- so a switch that kept the previous selection by name, or
+ * fell back to `variants[0]`, would each open the wrong variant.
+ */
+const OTHER_DOC: PromptDocument = {
+  ...DOC,
+  agent: 'other',
+  file: 'de/other/prompt.yaml',
+  name: 'Other',
+  default_variant: 'Deep',
+  variants: [
+    {
+      name: 'Quick',
+      description: null,
+      model: null,
+      vars: {},
+      messages: [{ role: 'user', source: 'inline', file: null, content: 'Other quick', readable: true }],
+    },
+    {
+      name: 'Deep',
+      description: null,
+      model: null,
+      vars: {},
+      messages: [{ role: 'user', source: 'inline', file: null, content: 'Other deep', readable: true }],
+    },
+  ],
+}
+
 const CONFIG: ConfigResponse = {
   running: {},
   disk: { agents: { explainer: { prompt: { variant: 'Thorough' } } } },
@@ -219,9 +249,10 @@ beforeEach(() => {
     if (method === 'GET' && url === '/admin/api/prompts') {
       return ok({ languages: [{ lang: 'de', prompts: [
         { agent: 'explainer', file: 'de/explainer/prompt.yaml', name: 'Explainer', variants: ['Thorough', 'Quick'], ok: true, error: null, used_by: [] },
-        { agent: 'other', file: 'de/other/prompt.yaml', name: 'Other', variants: ['A'], ok: true, error: null, used_by: [] },
+        { agent: 'other', file: 'de/other/prompt.yaml', name: 'Other', variants: ['Quick', 'Deep'], ok: true, error: null, used_by: [] },
       ] }] })
     }
+    if (method === 'GET' && url === '/admin/api/prompts/de/other') return ok(OTHER_DOC)
     if (method === 'GET' && url.startsWith('/admin/api/prompts/')) {
       return docBody ? ok(docBody) : fail(404, 'no such prompt')
     }
@@ -1114,6 +1145,40 @@ describe('workbench navigation', () => {
     await userEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
     expect(screen.getByLabelText('Agent')).toHaveValue('explainer')
     expect(screen.getByLabelText('Summary')).toHaveValue('Explains defects!')
+  })
+
+  it("opens the new document's default variant on a clean agent switch", async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    // 'Quick' exists in both documents, so a selection kept by name would
+    // survive the switch; 'Deep' is the new document's default, not its first.
+    await userEvent.click(tree().getByRole('button', { name: 'Quick' }))
+    expect(screen.getByLabelText('Variants')).toHaveValue('Quick')
+    const agent = screen.getByLabelText('Agent')
+    await within(agent).findByRole('option', { name: 'Other' })
+    await userEvent.selectOptions(agent, 'other')
+    await waitFor(() => expect(tree().getByRole('button', { name: 'Deep' })).toBeInTheDocument())
+    expect(screen.getByLabelText('Variants')).toHaveValue('Deep')
+    expect(tree().getByRole('button', { name: /Other deep/ })).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('stays on the prompt.yaml pane after a successful save', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMeta()
+    await userEvent.clear(screen.getByLabelText('Summary'))
+    await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
+    // The refetch the save triggers returns the saved document -- a NEW
+    // `document.data`, so the document reset really runs.
+    docBody = { ...DOC, summary: 'New summary' }
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText('/p/de/explainer/prompt.yaml')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
+    // Clean again: the draft was reset from the refetched document.
+    await waitFor(() => expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled())
+    expect(screen.getByTestId('prompt-header')).toBeInTheDocument()
+    expect(screen.getByLabelText('Summary')).toHaveValue('New summary')
   })
 
   it('declares an undeclared variable from the sidebar', async () => {
