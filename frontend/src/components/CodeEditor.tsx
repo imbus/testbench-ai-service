@@ -4,7 +4,7 @@ import { jinja2 } from '@codemirror/legacy-modes/mode/jinja2'
 import { type Diagnostic, setDiagnostics } from '@codemirror/lint'
 import { EditorState } from '@codemirror/state'
 import { EditorView, keymap, lineNumbers } from '@codemirror/view'
-import { useEffect, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 
 import type { LintError } from '../api/types'
 
@@ -25,12 +25,22 @@ const theme = EditorView.theme({
   '&.cm-focused': { outline: '2px solid var(--color-accent)' },
 })
 
+// Fill mode: the editor takes its container's full height and scrolls
+// internally, instead of growing with its content.
+const fillTheme = EditorView.theme({ '&': { height: '100%' }, '.cm-scroller': { overflow: 'auto' } })
+
 type Props = {
   value: string
   onChange: (value: string) => void
   diagnostics?: LintError[]
   readOnly?: boolean
   ariaLabel: string
+  fill?: boolean
+}
+
+export type CodeEditorHandle = {
+  /** Replaces the selection (or inserts at the cursor) and focuses the editor. No-op when read-only. */
+  insert: (text: string) => void
 }
 
 /**
@@ -39,12 +49,29 @@ type Props = {
  * Deliberately free of behaviour: screen tests mock this component out to a
  * plain textarea, because CM6 needs DOM APIs jsdom does not implement. Logic
  * put here would be logic nothing covers.
+ * The `insert` handle is the one imperative entry point, used by the variable sidebar.
  */
-export function CodeEditor({ value, onChange, diagnostics, readOnly, ariaLabel }: Props) {
+export const CodeEditor = forwardRef<CodeEditorHandle, Props>(function CodeEditor(
+  { value, onChange, diagnostics, readOnly, ariaLabel, fill },
+  ref,
+) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      insert(text: string) {
+        const editor = view.current
+        if (!editor || readOnly) return
+        editor.dispatch(editor.state.replaceSelection(text))
+        editor.focus()
+      },
+    }),
+    [readOnly],
+  )
 
   useEffect(() => {
     if (!host.current) return
@@ -58,6 +85,7 @@ export function CodeEditor({ value, onChange, diagnostics, readOnly, ariaLabel }
           keymap.of([...defaultKeymap, ...historyKeymap]),
           StreamLanguage.define(jinja2),
           theme,
+          ...(fill ? [fillTheme] : []),
           EditorView.lineWrapping,
           EditorState.readOnly.of(Boolean(readOnly)),
           EditorView.contentAttributes.of({ 'aria-label': ariaLabel }),
@@ -75,7 +103,7 @@ export function CodeEditor({ value, onChange, diagnostics, readOnly, ariaLabel }
     // Built once; `value` is synced by the effect below so remounting on every
     // keystroke never happens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readOnly, ariaLabel])
+  }, [readOnly, ariaLabel, fill])
 
   useEffect(() => {
     const editor = view.current
@@ -96,5 +124,5 @@ export function CodeEditor({ value, onChange, diagnostics, readOnly, ariaLabel }
     editor.dispatch(setDiagnostics(editor.state, mapped))
   }, [diagnostics])
 
-  return <div ref={host} data-testid="code-editor" />
-}
+  return <div ref={host} data-testid="code-editor" style={fill ? { height: '100%' } : undefined} />
+})

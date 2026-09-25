@@ -10,17 +10,22 @@ import { describe, expect, it, vi } from 'vitest'
 // wherever the callback body actually calls `onChange` on it, since `never`
 // has no call signatures. Typed to the slice of CodeEditor's own props this
 // mock stands in for instead.
-vi.mock('./CodeEditor', () => ({
-  CodeEditor: ({
-    value,
-    onChange,
-    ariaLabel,
-  }: {
-    value: string
-    onChange: (value: string) => void
-    ariaLabel: string
-  }) => <textarea aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)} />,
-}))
+vi.mock('./CodeEditor', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react')
+  return {
+    CodeEditor: forwardRef(function MockCodeEditor(
+      { value, onChange, ariaLabel }: {
+        value: string
+        onChange: (value: string) => void
+        ariaLabel: string
+      },
+      ref,
+    ) {
+      useImperativeHandle(ref, () => ({ insert: (text: string) => onChange(value + text) }), [value, onChange])
+      return <textarea aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)} />
+    }),
+  }
+})
 
 import { MessageList } from './MessageList'
 import type { PromptMessageDoc } from '../api/types'

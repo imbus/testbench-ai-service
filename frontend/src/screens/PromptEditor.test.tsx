@@ -25,35 +25,36 @@ import { PromptEditor } from './PromptEditor'
 // `diagnostics` as its own alert text -- the real CodeEditor feeds them into
 // CodeMirror's lint gutter, which jsdom cannot render, but a screen test
 // still needs *some* observable proof that a diagnostic reached this deep.
-vi.mock('../components/CodeEditor', () => ({
-  CodeEditor: ({
-    value,
-    onChange,
-    ariaLabel,
-    readOnly,
-    diagnostics,
-  }: {
-    value: string
-    onChange: (value: string) => void
-    ariaLabel: string
-    readOnly?: boolean
-    diagnostics?: LintError[]
-  }) => (
-    <div>
-      <textarea
-        aria-label={ariaLabel}
-        value={value}
-        readOnly={readOnly}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {(diagnostics ?? []).map((error, index) => (
-        <div key={index} role="alert">
-          {error.message}
+vi.mock('../components/CodeEditor', async () => {
+  const { forwardRef, useImperativeHandle } = await import('react')
+  return {
+    CodeEditor: forwardRef(function MockCodeEditor(
+      { value, onChange, ariaLabel, readOnly, diagnostics }: {
+        value: string
+        onChange: (value: string) => void
+        ariaLabel: string
+        readOnly?: boolean
+        diagnostics?: LintError[]
+      },
+      ref,
+    ) {
+      useImperativeHandle(ref, () => ({ insert: (text: string) => onChange(value + text) }), [value, onChange])
+      return (
+        <div>
+          <textarea
+            aria-label={ariaLabel}
+            value={value}
+            readOnly={readOnly}
+            onChange={(e) => onChange(e.target.value)}
+          />
+          {(diagnostics ?? []).map((error, index) => (
+            <div key={index} role="alert">{error.message}</div>
+          ))}
         </div>
-      ))}
-    </div>
-  ),
-}))
+      )
+    }),
+  }
+})
 
 const DOC: PromptDocument = {
   lang: 'de',
