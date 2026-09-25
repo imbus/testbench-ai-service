@@ -123,6 +123,41 @@ describe('MessagePane', () => {
     expect(screen.getByRole('button', { name: /move up/i })).toBeInTheDocument()
   })
 
+  // Task 10's controller ruling: CodeEditor rebuilds its whole CM6 view (undo
+  // history, cursor, scroll all discarded) whenever its `ariaLabel` prop
+  // changes. A label derived from the message's index/position would
+  // therefore change whenever a move shifts it, wiping out undo history
+  // mid-edit for a message the operator never touched. `editorLabel` is
+  // derived from the message itself (role, plus file when file-backed), so
+  // it must stay the same before and after the message's `index`/`count`
+  // change -- the props a move actually changes.
+  it('keeps a message editor accessible name stable across a reorder', () => {
+    const message = inline('U')
+    const props = {
+      path: 'p',
+      message,
+      readOnly: false,
+      lang: 'en' as Lang,
+      insertable: [] as string[],
+      editorRef: createRef<CodeEditorHandle>(),
+      onRemove: vi.fn(),
+      onMove: vi.fn(),
+      onRole: vi.fn(),
+      onContent: vi.fn(),
+      onSource: vi.fn(),
+      onFile: vi.fn(),
+    }
+    const { rerender } = render(<MessagePane {...props} index={1} count={2} />)
+    const beforeLabel = screen.getByLabelText('user').getAttribute('aria-label')
+
+    // Simulate the reorder a move-up/move-down action produces: the same
+    // message, shifted to a different position.
+    rerender(<MessagePane {...props} index={0} count={2} />)
+    const afterLabel = screen.getByLabelText('user').getAttribute('aria-label')
+
+    expect(afterLabel).toBe(beforeLabel)
+  })
+
   it('offers no editing controls when read-only', () => {
     setup({ readOnly: true, index: 0, count: 2 })
     expect(screen.queryByRole('button', { name: 'Delete message' })).not.toBeInTheDocument()

@@ -98,6 +98,8 @@ export function MessagePane({
           onChange={(event) => onRole(event.target.value as MessageRole)}
           style={small}
         >
+          {/* The `role:` prefix is the prompt.yaml field name, a wire token --
+              deliberately untranslated, like the role values themselves. */}
           {ROLES.map((role) => (
             <option key={role} value={role}>
               role: {role}
