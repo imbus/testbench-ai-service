@@ -6,11 +6,13 @@ const mono = 'ui-monospace, Menlo, monospace'
 const rowButton = { border: 0, background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', textAlign: 'left' as const }
 
 /** The Split layout's left column: prompt.yaml, then variants with the selected one expanded. */
-export function PromptTree({ variants, selectedVariant, selection, flagged, readOnly, lang = 'de', onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onAddVariant, onAddMessage }: {
+export function PromptTree({ variants, selectedVariant, selection, flagged, invalidVariants = [], readOnly, lang = 'de', onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onAddVariant, onAddMessage }: {
   variants: PromptVariantDoc[]
   selectedVariant: string
   selection: Selection
   flagged: number[]
+  /** Variants a save 422 named (e.g. "needs at least one message") -- marked on their row. */
+  invalidVariants?: string[]
   readOnly: boolean
   lang?: Lang
   onOpenMeta: () => void
@@ -50,10 +52,11 @@ export function PromptTree({ variants, selectedVariant, selection, flagged, read
 
       {variants.map((variant) => {
         const open = variant.name === selectedVariant
+        const invalid = invalidVariants.includes(variant.name)
         return (
           <div key={variant.name} style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', padding: '6px 14px', gap: 6, background: open && selection.kind === 'variant' ? 'var(--color-surface)' : 'transparent' }}>
-              <button type="button" aria-expanded={open} onClick={() => onPickVariant(variant.name)} style={{ ...rowButton, fontWeight: 500, padding: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button type="button" aria-expanded={open} aria-invalid={invalid || undefined} onClick={() => onPickVariant(variant.name)} style={{ ...rowButton, fontWeight: 500, padding: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6, color: invalid ? '#a33a2b' : 'inherit' }}>
                 <span aria-hidden style={{ fontSize: 10 }}>{open ? '▾' : '▸'}</span>
                 {variant.name}
               </button>

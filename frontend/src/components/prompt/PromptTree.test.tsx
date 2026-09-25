@@ -48,6 +48,12 @@ describe('PromptTree', () => {
     expect(screen.getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true')
   })
 
+  it('marks a variant a save refusal named', () => {
+    setup({ invalidVariants: ['Quick'] })
+    expect(screen.getByRole('button', { name: 'Quick' })).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('button', { name: 'Thorough' })).not.toHaveAttribute('aria-invalid')
+  })
+
   it('renders a selected variant with no messages', () => {
     setup({ selectedVariant: 'Quick', selection: { kind: 'variant' } })
     expect(screen.getByRole('button', { name: '+ message' })).toBeInTheDocument()

@@ -65,7 +65,7 @@ export const NAV_ITEMS: NavItem[] = [
     labelKey: 'prompts',
     icon: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z',
     // Read-only for a non-admin, like Agents and Projects: the tree and the
-    // editor both render through VarDeclTable/MessageList/read-only fields
+    // editor both render through VarDeclTable/MessagePane/read-only fields
     // rather than hiding the nav entry, which would conceal information the
     // operator is allowed to see.
     adminOnly: false,

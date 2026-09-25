@@ -5,14 +5,22 @@ import { ApiError } from '../api/client'
 import { useLintTemplate, usePlanPrompt, useSavePrompt } from '../api/mutations'
 import { agentsUsingVariant } from '../api/prompts'
 import { useConfig, usePromptDocument } from '../api/queries'
-import type { LintError, MessageRole, PromptDocument, PromptVarDecl } from '../api/types'
-import { MessageList } from '../components/MessageList'
+import type { LintError, PromptDocument, PromptVarDecl } from '../api/types'
+import type { CodeEditorHandle } from '../components/CodeEditor'
 import { Modal } from '../components/Modal'
+import { EditorToolbar } from '../components/prompt/EditorToolbar'
+import { MessagePane } from '../components/prompt/MessagePane'
+import { MetaPane } from '../components/prompt/MetaPane'
+import { PromptTree } from '../components/prompt/PromptTree'
+import { messagePath, uniqueVariantName, type Selection } from '../components/prompt/selection'
+import { undeclaredVars, usedTemplateVars } from '../components/prompt/templateVars'
+import { VariantPane } from '../components/prompt/VariantPane'
+import { VarSidebar } from '../components/prompt/VarSidebar'
 import { RenderPreview } from '../components/RenderPreview'
 import { SavePromptDialog } from '../components/SavePromptDialog'
 import { TestRunPanel } from '../components/TestRunPanel'
-import { VarDeclTable } from '../components/VarDeclTable'
 import { useTranslations, type Lang, type Translations } from '../i18n'
+import { useEditorLayout } from '../state/editorLayout'
 import { isDirty, promptDraftReducer } from '../state/promptDraft'
 
 function emptyDocument(lang: string, agent: string): PromptDocument {
@@ -115,8 +123,8 @@ type SaveFieldError = { kind: 'default_variant' } | { kind: 'emptyVariants'; nam
  * (unlike `config/apply`'s `ConfigIssue` list). This recognizes the two cases
  * that both name something concrete AND correspond to a single control on
  * this screen: an out-of-range `default_variant` (the header select), and a
- * variant with no messages (its tab) -- reachable because this screen lets a
- * variant's last message be removed, and `MessageList`/this screen's own test
+ * variant with no messages (its tree row) -- reachable because this screen lets
+ * a variant's last message be removed, and `PromptTree`/this screen's own test
  * suite exercise a variant that loads with zero messages already.
  *
  * Deliberately not a general parser: matching English server prose is
@@ -153,13 +161,19 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     emptyDocument(docLang, agentKey),
   )
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
-  const [newVariantName, setNewVariantName] = useState('')
+  // What the centre pane shows. A message index is into the SELECTED
+  // variant's own message list, like `diagnostics` below.
+  const [selection, setSelection] = useState<Selection>({ kind: 'message', index: 0 })
+  const [layout, setLayout] = useEditorLayout()
+  // The one open message's editor -- the sidebar inserts at its cursor.
+  const editorRef = useRef<CodeEditorHandle>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [saveFieldError, setSaveFieldError] = useState<SaveFieldError | null>(null)
   // Per-message lint results for the CURRENTLY SELECTED variant, keyed by
-  // that variant's own message index -- `MessageList`'s own `diagnostics`
-  // shape. Cleared on a variant switch (an index means something different
-  // in a different variant's message list) and on a document reset, so
+  // that variant's own message index -- what feeds the tree's red dots and
+  // the open message's editor. Cleared on a variant switch (an index means
+  // something different in a different variant's message list) and on a
+  // document reset, so
   // nothing here ever survives being stale or belonging to the wrong variant.
   const [diagnostics, setDiagnosticsMap] = useState<Record<number, LintError[]>>({})
   const [linting, setLinting] = useState(false)
@@ -218,6 +232,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     const normalized = normalizeDocument(document.data, docLang, agentKey)
     originalRef.current = normalized
     dispatch({ type: 'reset', document: normalized })
+    setSelection({ kind: 'message', index: 0 })
     clearDiagnostics()
   }, [document.data, docLang, agentKey])
 
@@ -282,6 +297,18 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const variantName = selectedVariantObj?.name ?? ''
   const vars = selectedVariantObj?.vars ?? {}
   const messages = selectedVariantObj?.messages ?? []
+
+  // A message selection that no longer points at a message (empty variant, or
+  // an index past the end after a remove) shows the variant settings instead --
+  // never an undefined message.
+  const current: Selection =
+    selection.kind === 'message' && !messages[selection.index] ? { kind: 'variant' } : selection
+  const currentMessage = current.kind === 'message' ? messages[current.index] : undefined
+  const used = currentMessage ? usedTemplateVars(currentMessage.content) : []
+  const agentVars = Object.keys(original.agent_context_skeleton ?? {}).map((k) => `agent.${k}`)
+  const declaredVars = Object.keys(vars).map((k) => `vars.${k}`)
+  const undeclared = undeclaredVars(used, Object.keys(vars))
+  const flagged = Object.keys(diagnostics).map(Number)
 
   // Names the draft dropped since the load -- renamed away or removed
   // outright -- mirrored against `config.disk` exactly as the server's own
@@ -356,8 +383,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     setSaveFieldError(null)
   }
 
-  const headerReadOnly = !isAdmin
-
   /**
    * Lints every message of the SELECTED variant, on demand.
    *
@@ -396,324 +421,271 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     }
   }
 
-  return (
-    <div
-      data-testid="prompt-editor"
-      style={{ padding: '24px 32px', display: 'flex', flexDirection: 'column', gap: 18, maxWidth: 900 }}
-    >
-      <div>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{draft.name || agentKey}</h2>
-        <div
-          className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
-        >
-          {agentKey} · {docLang} · {draft.file}
-        </div>
-      </div>
+  const pickVariant = (name: string) => {
+    setSelectedVariant(name)
+    // A message index means something different in a different variant's
+    // own message list.
+    clearDiagnostics()
+    setSelection({ kind: 'message', index: 0 })
+  }
 
-      {/* A background refetch failure (e.g. the tree/document invalidation
-          this screen's own successful save triggers) -- NOT the fatal
-          load-failure guard above, which only fires when no document has
-          ever loaded. The draft stays exactly as it was. */}
-      {document.isError && (
-        <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t.promptDocError}
-        </div>
-      )}
+  const openVariantSettings = (name: string) => {
+    setSelectedVariant(name)
+    clearDiagnostics()
+    setSelection({ kind: 'variant' })
+  }
 
-      <section
-        className="blueprint"
-        data-testid="prompt-header"
-        style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}
-      >
-        <Header
-          label={t.promptName}
-          id="prompt-name"
-          value={draft.name}
-          readOnly={headerReadOnly}
-          onChange={(value) => dispatch({ type: 'setHeader', field: 'name', value })}
-        />
-        <Header
-          label={t.promptSummary}
-          id="prompt-summary"
-          value={draft.summary ?? ''}
-          readOnly={headerReadOnly}
-          onChange={(value) => dispatch({ type: 'setHeader', field: 'summary', value })}
-        />
-        <Header
-          label={t.promptDescription}
-          id="prompt-description"
-          value={draft.description ?? ''}
-          readOnly={headerReadOnly}
-          multiline
-          onChange={(value) => dispatch({ type: 'setHeader', field: 'description', value })}
-        />
-        <Header
-          label={t.defaultModel}
-          id="prompt-default-model"
-          value={draft.default_model}
-          readOnly={headerReadOnly}
-          onChange={(value) => dispatch({ type: 'setHeader', field: 'default_model', value })}
-        />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label htmlFor="prompt-default-variant" style={{ fontSize: 12 }}>
-            {t.defaultVariant}
-          </label>
-          <select
-            className="input"
-            id="prompt-default-variant"
-            disabled={headerReadOnly}
-            aria-invalid={saveFieldError?.kind === 'default_variant' || undefined}
-            aria-describedby={
-              saveFieldError?.kind === 'default_variant' ? 'default-variant-issue' : undefined
-            }
-            value={draft.default_variant}
-            onChange={(event) => {
-              // Clears a stale 422 marker the moment the operator actually
-              // edits the field it was marking -- otherwise it would persist
-              // (with the old server text) past a fix that has already made
-              // it wrong.
-              setSaveFieldError(null)
-              dispatch({ type: 'setHeader', field: 'default_variant', value: event.target.value })
-            }}
-            style={{ maxWidth: 260 }}
-          >
-            {draft.variants.map((v) => (
-              <option key={v.name} value={v.name}>
-                {v.name}
-              </option>
-            ))}
-          </select>
-          {saveFieldError?.kind === 'default_variant' && saveErrorMessage && (
-            <span id="default-variant-issue" role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
-              {saveErrorMessage}
-            </span>
+  const addVariant = () => {
+    const name = uniqueVariantName(t.newVariantDefault, draft.variants.map((v) => v.name))
+    dispatch({ type: 'addVariant', name })
+    openVariantSettings(name)
+  }
+
+  const addMessage = () => {
+    dispatch({ type: 'addMessage', variant: variantName })
+    setSelection({ kind: 'message', index: messages.length })
+  }
+
+  const removeMessage = (index: number) => {
+    dispatch({ type: 'removeMessage', variant: variantName, index })
+    // Every remaining entry's index now names a different message than the
+    // one it was computed for -- clearing is honest; remapping would be
+    // guessing which message shifted where.
+    clearDiagnostics()
+    setSelection(
+      index > 0
+        ? { kind: 'message', index: index - 1 }
+        : messages.length > 1
+          ? { kind: 'message', index: 0 }
+          : { kind: 'variant' },
+    )
+  }
+
+  const moveMessage = (from: number, to: number) => {
+    dispatch({ type: 'moveMessage', variant: variantName, index: from, to })
+    clearDiagnostics()
+    // The selection follows the moved message.
+    setSelection({ kind: 'message', index: to })
+  }
+
+  const declareUndeclared = () => {
+    undeclared.forEach((key) => dispatch({ type: 'addVar', variant: variantName, key }))
+  }
+
+  const insert = (text: string) => {
+    editorRef.current?.insert(text)
+  }
+
+  // Kept here rather than inline in `MetaPane`: only this screen owns the
+  // 422 marker it clears.
+  const setHeader = (
+    field: 'name' | 'summary' | 'description' | 'default_model' | 'default_variant',
+    value: string,
+  ) => {
+    // Clears a stale 422 marker the moment the operator actually edits the
+    // field it was marking -- otherwise it would persist (with the old server
+    // text) past a fix that has already made it wrong.
+    if (field === 'default_variant') setSaveFieldError(null)
+    dispatch({ type: 'setHeader', field, value })
+  }
+
+  const alertStyle = { fontSize: 12, color: '#a33a2b', padding: '6px 16px' }
+
+  // Task 9 adds the Tabs layout; until then both `layout` values render Split.
+  const split = (
+    <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <PromptTree
+        variants={draft.variants}
+        selectedVariant={variantName}
+        selection={current}
+        flagged={flagged}
+        invalidVariants={saveFieldError?.kind === 'emptyVariants' ? saveFieldError.names : []}
+        readOnly={!isAdmin}
+        lang={lang}
+        onOpenMeta={() => setSelection({ kind: 'meta' })}
+        onPickVariant={pickVariant}
+        onOpenVariantSettings={openVariantSettings}
+        onPickMessage={(index) => setSelection({ kind: 'message', index })}
+        onAddVariant={addVariant}
+        onAddMessage={addMessage}
+      />
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
+          {current.kind === 'meta' && (
+            <MetaPane
+              draft={draft}
+              readOnly={!isAdmin}
+              // A plan 422 marks the field too (both requests funnel through
+              // `markSaveError`), so fall back to the plan's own message --
+              // `MetaPane` only sets `aria-invalid` when it has text to show.
+              defaultVariantIssue={
+                saveFieldError?.kind === 'default_variant'
+                  ? (saveErrorMessage ?? planErrorMessage)
+                  : null
+              }
+              lang={lang}
+              onHeader={setHeader}
+            />
           )}
-        </div>
-      </section>
-
-      <section className="blueprint" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {/* Plain toggle buttons, deliberately NOT role="tablist"/role="tab":
-            there is no `aria-controls`, no `tabpanel`, and no arrow-key
-            roving focus here, and a tab role that keeps none of those
-            promises misleads a screen reader worse than no role at all. A
-            real tablist (with its focus management) is deferred work. The
-            container keeps `role="group"`, which promises only "these
-            controls belong together" -- true, and it keeps the set's
-            accessible name. */}
-        <div role="group" aria-label={t.variants} style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {draft.variants.map((v) => {
-            const flagged =
-              saveFieldError?.kind === 'emptyVariants' && saveFieldError.names.includes(v.name)
-            return (
-              <button
-                key={v.name}
-                type="button"
-                className="tb-chip"
-                data-testid="variant-chip"
-                aria-pressed={v.name === variantName}
-                aria-invalid={flagged || undefined}
-                onClick={() => {
-                  setSelectedVariant(v.name)
-                  // A message index means something different in a
-                  // different variant's own message list.
-                  clearDiagnostics()
-                }}
-                style={{
-                  border: flagged ? '1px solid #a33a2b' : '1px solid var(--color-divider)',
-                  padding: '4px 12px',
-                  font: 'inherit',
-                  fontSize: 13,
-                  background: v.name === variantName ? 'var(--color-accent)' : 'transparent',
-                  color: v.name === variantName ? 'var(--color-bg)' : 'inherit',
-                  cursor: 'pointer',
-                }}
-              >
-                {v.name}
-              </button>
-            )
-          })}
-        </div>
-        {saveFieldError?.kind === 'emptyVariants' && saveErrorMessage && (
-          <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
-            {saveErrorMessage}
-          </span>
-        )}
-
-        {isAdmin && selectedVariantObj && (
-          <div
-            data-testid="variant-actions"
-            style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}
-          >
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label htmlFor="variant-name" style={{ fontSize: 12 }}>
-                {t.variantName}
-              </label>
-              <input
-                className="input"
-                id="variant-name"
-                value={selectedVariantObj.name}
-                onChange={(event) => {
-                  dispatch({
-                    type: 'renameVariant',
-                    from: selectedVariantObj.name,
-                    to: event.target.value,
-                  })
+          {current.kind === 'variant' && selectedVariantObj && (
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+              {messages.length === 0 && (
+                <div className="text-muted" style={{ padding: '20px 24px 0', fontSize: 13 }}>
+                  {t.noMessages}
+                </div>
+              )}
+              <VariantPane
+                variant={selectedVariantObj}
+                readOnly={!isAdmin}
+                lang={lang}
+                onRename={(to) => {
+                  dispatch({ type: 'renameVariant', from: selectedVariantObj.name, to })
                   // The selection is resolved BY NAME, so it has to follow the
                   // rename. Without this, the first keystroke makes the old
                   // name unresolvable, the selection falls through to
                   // `variants[0]`, and every later keystroke renames THAT
                   // variant instead -- leaving the intended one named after
                   // whatever the field held when the fall-through happened.
-                  setSelectedVariant(event.target.value)
+                  setSelectedVariant(to)
                 }}
+                onModel={(model) =>
+                  dispatch({ type: 'setVariantModel', variant: selectedVariantObj.name, model })
+                }
+                onRemove={() => dispatch({ type: 'removeVariant', name: selectedVariantObj.name })}
+                onAddVar={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
+                onEditVar={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
+                onRemoveVar={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}
               />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <label htmlFor="variant-model" style={{ fontSize: 12 }}>
-                {t.variantModel}
-              </label>
-              <input
-                className="input"
-                id="variant-model"
-                value={selectedVariantObj.model ?? ''}
-                onChange={(event) =>
-                  dispatch({
-                    type: 'setVariantModel',
-                    variant: selectedVariantObj.name,
-                    model: event.target.value || null,
-                  })
+          )}
+          {currentMessage && current.kind === 'message' && (
+            <>
+              {/* Keyed by variant and index so switching messages remounts
+                  `CodeEditor` cleanly -- a fresh undo history per message,
+                  since the pane only ever holds one. */}
+              <MessagePane
+                key={`${variantName}:${current.index}`}
+                editorRef={editorRef}
+                path={messagePath(draft.file, variantName, current.index, currentMessage)}
+                message={currentMessage}
+                index={current.index}
+                count={messages.length}
+                readOnly={!isAdmin}
+                lang={lang}
+                diagnostics={diagnostics[current.index]}
+                insertable={[...agentVars, ...declaredVars]}
+                onRemove={() => removeMessage(current.index)}
+                onMove={(to) => moveMessage(current.index, to)}
+                onRole={(role) =>
+                  dispatch({ type: 'setMessageRole', variant: variantName, index: current.index, role })
+                }
+                onContent={(content) => {
+                  dispatch({ type: 'setMessageContent', variant: variantName, index: current.index, content })
+                  // Only THIS message's own result is invalid -- it changed no
+                  // index, so every other message's result still points correctly.
+                  dropDiagnostic(current.index)
+                }}
+                onSource={(source) =>
+                  dispatch({ type: 'setMessageSource', variant: variantName, index: current.index, source })
+                }
+                onFile={(file) =>
+                  dispatch({ type: 'setMessageFile', variant: variantName, index: current.index, file })
                 }
               />
-            </div>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => dispatch({ type: 'removeVariant', name: selectedVariantObj.name })}
-            >
-              {t.remove}
-            </button>
-          </div>
-        )}
-
-        {isAdmin && (
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              className="input"
-              aria-label={t.newVariantName}
-              placeholder={t.newVariantName}
-              value={newVariantName}
-              onChange={(event) => setNewVariantName(event.target.value)}
-            />
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => {
-                const name = newVariantName.trim()
-                if (!name) return
-                dispatch({ type: 'addVariant', name })
-                setNewVariantName('')
-              }}
-            >
-              {t.addVariant}
-            </button>
-          </div>
-        )}
-
-        <VarDeclTable
-          vars={vars}
-          readOnly={!isAdmin}
-          lang={lang}
-          onAdd={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
-          onEdit={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
-          onRemove={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}
-        />
-
-        <MessageList
-          variantName={variantName}
-          messages={messages}
-          readOnly={!isAdmin}
-          lang={lang}
-          diagnostics={diagnostics}
-          onAdd={() => dispatch({ type: 'addMessage', variant: variantName })}
-          onRemove={(index) => {
-            dispatch({ type: 'removeMessage', variant: variantName, index })
-            // Every remaining entry's index now names a different message
-            // than the one it was computed for -- clearing is honest;
-            // remapping would be guessing which message shifted where.
-            clearDiagnostics()
-          }}
-          onMove={(from, to) => {
-            dispatch({ type: 'moveMessage', variant: variantName, index: from, to })
-            clearDiagnostics()
-          }}
-          onRole={(index, role: MessageRole) =>
-            dispatch({ type: 'setMessageRole', variant: variantName, index, role })
-          }
-          onContent={(index, content) => {
-            dispatch({ type: 'setMessageContent', variant: variantName, index, content })
-            // Only THIS message's own result is invalid -- it changed no
-            // index, so every other message's result still points correctly.
-            dropDiagnostic(index)
-          }}
-          onSource={(index, source) =>
-            dispatch({ type: 'setMessageSource', variant: variantName, index, source })
-          }
-          onFile={(index, file) =>
-            dispatch({ type: 'setMessageFile', variant: variantName, index, file })
-          }
-        />
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button type="button" className="btn btn-ghost" disabled={linting} onClick={() => void runLint()}>
-            {linting ? t.linting : t.lint}
-          </button>
-          {lintChecked && Object.keys(diagnostics).length === 0 && (
-            <span className="text-muted" style={{ fontSize: 12 }}>
-              {t.lintClean}
-            </span>
-          )}
-          {lintError && (
-            <span role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-              {lintError}
-            </span>
+              <VarSidebar
+                agentVars={agentVars}
+                declaredVars={declaredVars}
+                used={used}
+                undeclared={undeclared}
+                canInsert={isAdmin && currentMessage.readable}
+                canDeclare={isAdmin}
+                lint={{
+                  running: linting,
+                  checked: lintChecked,
+                  error: lintError,
+                  errors: diagnostics[current.index] ?? [],
+                }}
+                onInsert={insert}
+                onDeclare={declareUndeclared}
+                onLint={() => void runLint()}
+                lang={lang}
+              />
+            </>
           )}
         </div>
-      </section>
+        <div
+          data-testid="preview-pane"
+          style={{
+            height: 300,
+            flex: 'none',
+            borderTop: '1px solid var(--color-divider)',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
+            gap: 16,
+            padding: '10px 14px',
+            overflow: 'auto',
+          }}
+        >
+          <RenderPreview
+            messages={messages}
+            vars={sampleVars(vars)}
+            skeleton={original.agent_context_skeleton ?? {}}
+            isAdmin={isAdmin}
+            lang={lang}
+          />
+          <TestRunPanel
+            messages={messages}
+            vars={sampleVars(vars)}
+            agentContext={original.agent_context_skeleton ?? {}}
+            isAdmin={isAdmin}
+            lang={lang}
+          />
+        </div>
+      </div>
+    </div>
+  )
 
-      <RenderPreview
-        messages={messages}
-        vars={sampleVars(vars)}
-        skeleton={original?.agent_context_skeleton ?? {}}
-        isAdmin={isAdmin}
+  return (
+    <div
+      data-testid="prompt-editor"
+      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 52px)', minHeight: 600 }}
+    >
+      {/* Blocked, not merely flagged: design §6 has the form enforce both
+          edges, and an enum with no `choices` is refused by
+          `PromptVariableDefinition.validate_choices`, so Save could only
+          ever produce a 422. `VarDeclTable` already renders the row-level
+          alert that says why. */}
+      <EditorToolbar
+        docLang={docLang}
+        agentKey={agentKey}
+        path={`prompts/${draft.file}`}
+        variants={draft.variants.map((v) => v.name)}
+        selectedVariant={variantName}
+        layout={layout}
+        onLayout={setLayout}
+        onVariant={pickVariant}
+        showSave={isAdmin}
+        canSave={dirty && emptyEnumVariants.length === 0}
+        onSave={openConfirm}
         lang={lang}
       />
 
-      <TestRunPanel
-        messages={messages}
-        vars={sampleVars(vars)}
-        agentContext={original?.agent_context_skeleton ?? {}}
-        isAdmin={isAdmin}
-        lang={lang}
-      />
-
-      {isAdmin && (
-        <div>
-          {/* Blocked, not merely flagged: design §6 has the form enforce both
-              edges, and an enum with no `choices` is refused by
-              `PromptVariableDefinition.validate_choices`, so Save could only
-              ever produce a 422. `VarDeclTable` already renders the row-level
-              alert that says why. */}
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!dirty || emptyEnumVariants.length > 0}
-            onClick={openConfirm}
-          >
-            {t.save}
-          </button>
+      {/* A background refetch failure (e.g. the tree/document invalidation
+          this screen's own successful save triggers) -- NOT the fatal
+          load-failure guard above, which only fires when no document has
+          ever loaded. The draft stays exactly as it was. */}
+      {document.isError && (
+        <div role="alert" style={alertStyle}>
+          {t.promptDocError}
         </div>
       )}
+      {saveFieldError?.kind === 'emptyVariants' && saveErrorMessage && (
+        <div role="alert" style={alertStyle}>
+          {saveErrorMessage}
+        </div>
+      )}
+
+      {split}
 
       {confirmOpen && (
         <SavePromptDialog
@@ -750,49 +722,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
             </button>
           </div>
         </Modal>
-      )}
-    </div>
-  )
-}
-
-function Header({
-  label,
-  id,
-  value,
-  readOnly,
-  multiline,
-  onChange,
-}: {
-  label: string
-  id: string
-  value: string
-  readOnly?: boolean
-  multiline?: boolean
-  onChange: (value: string) => void
-}) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <label htmlFor={id} style={{ fontSize: 12 }}>
-        {label}
-      </label>
-      {multiline ? (
-        <textarea
-          className="input"
-          id={id}
-          readOnly={readOnly}
-          value={value}
-          rows={3}
-          onChange={(event) => onChange(event.target.value)}
-        />
-      ) : (
-        <input
-          className="input"
-          id={id}
-          type="text"
-          readOnly={readOnly}
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-        />
       )}
     </div>
   )

@@ -1,8 +1,9 @@
 /**
- * The prompt editor screen (design §5.6): header fields, a variant selector,
- * VarDeclTable and MessageList for the selected variant, and RenderPreview --
- * assembled on top of `promptDraftReducer`, seeded by a `reset` dispatched
- * from an effect once the document loads.
+ * The prompt editor screen (design §5.6): an IDE-style workbench -- toolbar,
+ * a variant/message tree, one centre pane (prompt.yaml header, variant
+ * settings, or a single message), the variable sidebar and the
+ * preview/test-run pane -- assembled on top of `promptDraftReducer`, seeded by
+ * a `reset` dispatched from an effect once the document loads.
  */
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -21,7 +22,7 @@ import { PromptEditor } from './PromptEditor'
 
 // CM6 needs DOM APIs jsdom lacks; the wrapper holds no logic (Task 10/13's
 // ruling), so replacing it with a textarea costs no coverage. Mocked at the
-// path MessageList itself resolves `./CodeEditor` to. Also renders
+// path MessagePane itself resolves `./CodeEditor` to. Also renders
 // `diagnostics` as its own alert text -- the real CodeEditor feeds them into
 // CodeMirror's lint gutter, which jsdom cannot render, but a screen test
 // still needs *some* observable proof that a diagnostic reached this deep.
@@ -212,6 +213,15 @@ beforeEach(() => {
       if (putResult.status === 200) return ok(SAVE_OK)
       return fail(putResult.status, putResult.detail)
     }
+    // The toolbar's language/agent selects read the prompt tree. ABOVE the
+    // generic document GET below only for readability -- it has no trailing
+    // slash, so it never matched that branch anyway.
+    if (method === 'GET' && url === '/admin/api/prompts') {
+      return ok({ languages: [{ lang: 'de', prompts: [
+        { agent: 'explainer', file: 'de/explainer/prompt.yaml', name: 'Explainer', variants: ['Thorough', 'Quick'], ok: true, error: null, used_by: [] },
+        { agent: 'other', file: 'de/other/prompt.yaml', name: 'Other', variants: ['A'], ok: true, error: null, used_by: [] },
+      ] }] })
+    }
     if (method === 'GET' && url.startsWith('/admin/api/prompts/')) {
       return docBody ? ok(docBody) : fail(404, 'no such prompt')
     }
@@ -281,6 +291,19 @@ function renderEditorWithNav({
   )
 }
 
+const openMeta = () => userEvent.click(screen.getByRole('button', { name: /prompt\.yaml/ }))
+const openVariantSettings = (name: string) =>
+  userEvent.click(screen.getByRole('button', { name: `Variant settings: ${name}` }))
+const openMessage = (label: RegExp) =>
+  userEvent.click(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: label }))
+
+/** The tree's message buttons for the selected variant (each starts with its role tag). */
+function treeMessages() {
+  return within(screen.getByTestId('prompt-tree')).queryAllByRole('button', {
+    name: /^(system|user|assistant)/,
+  })
+}
+
 function header() {
   return within(screen.getByTestId('prompt-header'))
 }
@@ -308,10 +331,13 @@ function renderCalls() {
 }
 
 describe('loading a document', () => {
-  it('renders the header fields, variant selector, VarDeclTable and MessageList', async () => {
+  it('renders the header fields, variant selector, VarDeclTable and message tree', async () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    expect(treeMessages()).toHaveLength(2)
+
+    await openMeta()
     expect(promptName()).toHaveValue('Explainer')
     expect(screen.getByLabelText('Summary')).toHaveValue('Explains defects')
     expect(header().getByLabelText('Description')).toHaveValue('The full description')
@@ -321,8 +347,8 @@ describe('loading a document', () => {
     expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Quick' })).toBeInTheDocument()
 
+    await openVariantSettings('Thorough')
     expect(screen.getAllByTestId('var-row')).toHaveLength(1)
-    expect(screen.getAllByTestId('message-row')).toHaveLength(2)
   })
 
   // Phase 3's AgentDetail crashed with "Rendered more hooks than during the
@@ -345,6 +371,7 @@ describe('loading a document', () => {
 
     deferred.resolve(ok(DOC))
     await ready()
+    await openMeta()
     expect(promptName()).toHaveValue('Explainer')
   })
 
@@ -352,9 +379,9 @@ describe('loading a document', () => {
     docBody = { ...DOC, variants: [], default_variant: '' }
     renderEditor({ lang: 'en' })
     await ready()
-    expect(screen.queryAllByTestId('variant-chip')).toHaveLength(0)
+    expect(screen.queryAllByRole('button', { name: /^Variant settings:/ })).toHaveLength(0)
     expect(screen.queryAllByTestId('var-row')).toHaveLength(0)
-    expect(screen.queryAllByTestId('message-row')).toHaveLength(0)
+    expect(treeMessages()).toHaveLength(0)
   })
 
   it('renders without crashing when the selected variant has no messages', async () => {
@@ -365,7 +392,9 @@ describe('loading a document', () => {
     }
     renderEditor({ lang: 'en' })
     await ready()
-    expect(screen.queryAllByTestId('message-row')).toHaveLength(0)
+    expect(treeMessages()).toHaveLength(0)
+    // The default message selection falls through to the variant settings.
+    expect(screen.getByText('This variant has no messages.')).toBeInTheDocument()
   })
 })
 
@@ -374,6 +403,7 @@ describe('a non-admin session', () => {
     renderEditor({ lang: 'en', isAdmin: false })
     await ready()
 
+    await openMeta()
     expect(promptName()).toHaveAttribute('readonly')
     expect(screen.getByLabelText('Default variant')).toBeDisabled()
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
@@ -386,6 +416,7 @@ describe('saving', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
 
@@ -402,7 +433,8 @@ describe('saving', () => {
 
   it('names a deletion the browser could not have computed', async () => {
     renderEditor({ lang: 'en' })
-    await screen.findByDisplayValue('Explainer')
+    await ready()
+    await openMeta()
 
     // Any edit at all: the dialog's contents come from the server, not from
     // the shape of the change.
@@ -417,8 +449,9 @@ describe('saving', () => {
   it('shows a plan refusal inside the dialog rather than behind it', async () => {
     planResult = { status: 422, detail: "default_variant 'Gone' names no variant. Available: Thorough" }
     renderEditor({ lang: 'en' })
-    await screen.findByDisplayValue('Explainer')
+    await ready()
 
+    await openMeta()
     await userEvent.clear(promptName())
     await userEvent.type(promptName(), 'Renamed')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -437,8 +470,9 @@ describe('saving', () => {
 
   it('does not PUT until the operator confirms', async () => {
     renderEditor({ lang: 'en' })
-    await screen.findByDisplayValue('Explainer')
+    await ready()
 
+    await openMeta()
     await userEvent.clear(promptName())
     await userEvent.type(promptName(), 'Renamed')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
@@ -451,6 +485,7 @@ describe('saving', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -466,6 +501,7 @@ describe('saving', () => {
     await ready()
 
     // Renaming the variant `config.disk` points at away from its current name.
+    await openVariantSettings('Thorough')
     await userEvent.clear(screen.getByLabelText('Variant name'))
     await userEvent.type(screen.getByLabelText('Variant name'), 'Renamed')
 
@@ -483,6 +519,7 @@ describe('saving', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -497,7 +534,7 @@ describe('saving', () => {
   })
 
   it('marks the offending field on a 422, AND shows it in the still-open dialog', async () => {
-    // The field marker lives in `<section data-testid="prompt-header">`,
+    // The field marker lives in `MetaPane`'s `data-testid="prompt-header"`,
     // which sits BEHIND the confirm dialog's `position:fixed` overlay -- an
     // operator with the dialog open must see the failure inside it too, or
     // Confirm silently does nothing from where they are looking (Task 15
@@ -509,6 +546,7 @@ describe('saving', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -532,12 +570,14 @@ describe('saving', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
     const dialog = await screen.findByRole('dialog')
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
 
+    // Marked on the tree's variant rows, the successor of the old chips.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Quick' })).toHaveAttribute('aria-invalid', 'true'),
     )
@@ -553,6 +593,7 @@ describe('saving', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -574,6 +615,7 @@ describe('saving', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -601,6 +643,7 @@ describe('saving', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -621,6 +664,7 @@ describe('unsaved changes', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
 
@@ -659,6 +703,7 @@ describe('unsaved changes', () => {
     renderEditorWithNav({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
 
@@ -676,6 +721,7 @@ describe('unsaved changes', () => {
     renderEditorWithNav({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
 
@@ -702,9 +748,11 @@ describe('variant controls', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
-    await userEvent.type(screen.getByLabelText('New variant name'), 'Extra')
-    await userEvent.click(screen.getByRole('button', { name: /^add variant$/i }))
-    expect(screen.getByRole('button', { name: 'Extra' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'New variant' }))
+    // Added under a unique default name and opened in its settings pane, so
+    // the operator renames it there.
+    expect(screen.getByLabelText('Variant name')).toHaveValue('New variant')
+    expect(screen.getByLabelText('Variants')).toHaveValue('New variant')
   })
 
   it('removes the selected variant', async () => {
@@ -712,8 +760,8 @@ describe('variant controls', () => {
     await ready()
 
     await userEvent.click(screen.getByRole('button', { name: 'Quick' }))
-    // Scoped: MessageList renders its own per-row "Remove" button, and
-    // `Quick`'s one message means there is one on screen at the same time.
+    await openVariantSettings('Quick')
+    // Scoped to the settings pane's own action block.
     const actions = screen.getByTestId('variant-actions')
     await userEvent.click(within(actions).getByRole('button', { name: /^remove$/i }))
     expect(screen.queryByRole('button', { name: 'Quick' })).not.toBeInTheDocument()
@@ -724,6 +772,7 @@ describe('variant controls', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openVariantSettings('Thorough')
     await userEvent.clear(screen.getByLabelText('Variant name'))
     await userEvent.type(screen.getByLabelText('Variant name'), 'Renamed')
     expect(screen.getByRole('button', { name: 'Renamed' })).toBeInTheDocument()
@@ -739,6 +788,7 @@ describe('variant controls', () => {
     await ready()
 
     await userEvent.click(screen.getByRole('button', { name: 'Quick' }))
+    await openVariantSettings('Quick')
     await userEvent.clear(screen.getByLabelText('Variant name'))
     await userEvent.type(screen.getByLabelText('Variant name'), 'Speedy')
 
@@ -747,6 +797,7 @@ describe('variant controls', () => {
     // The OTHER variant is untouched -- the bug renamed this one instead and
     // left 'Quick' named ''.
     expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
+    await openMeta()
     expect(screen.getByLabelText('Default variant')).toHaveValue('Thorough')
   })
 
@@ -754,6 +805,7 @@ describe('variant controls', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openVariantSettings('Thorough')
     await userEvent.type(screen.getByLabelText('Variant model'), 'gpt-5.5-mini')
     expect(screen.getByLabelText('Variant model')).toHaveValue('gpt-5.5-mini')
   })
@@ -772,6 +824,7 @@ describe('linting', () => {
     // two messages, unlike the file-backed one ("system (sys.jinja)").
     // userEvent.type treats `{`/`}` as special-key syntax, so a literal `{`
     // must be escaped as `{{`.
+    await openMessage(/Explain/)
     await userEvent.type(screen.getByLabelText('user'), '{{% bad')
     await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
 
@@ -807,7 +860,7 @@ describe('linting', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Lint is unavailable'),
     )
     // And no false "clean" verdict alongside it.
-    expect(screen.queryByText('No syntax errors.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^lint$/i })).not.toBeDisabled()
   })
 
@@ -817,7 +870,7 @@ describe('linting', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
 
-    await waitFor(() => expect(screen.getByText('No syntax errors.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/No syntax errors\./)).toBeInTheDocument())
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
@@ -850,6 +903,7 @@ describe('linting', () => {
       renderEditor({ lang: 'en' })
       await ready()
 
+      await openMessage(/Explain/)
       await userEvent.type(screen.getByLabelText('user'), 'BROKEN')
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
       await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
@@ -867,18 +921,26 @@ describe('linting', () => {
       // map (still keyed at index 1) would land on the message that shifts
       // INTO index 1 after the removal -- the one that was LAST, which never
       // had an error -- a surviving, rendered row, not an index the bug
-      // could hide behind by falling off the end of the array.
+      // could hide behind by falling off the end of the array. A message
+      // other than the open one shows its diagnostics as `aria-invalid` on
+      // its tree button, so that is where a stale marker would surface.
       docBody = docWithThreeMessages()
       flagBroken()
       renderEditor({ lang: 'en' })
       await ready()
 
+      await openMessage(/Middle message/)
       await userEvent.type(screen.getByLabelText('user'), 'BROKEN')
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
-      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+      await waitFor(() =>
+        expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Middle message/ }))
+          .toHaveAttribute('aria-invalid', 'true'),
+      )
 
-      const rows = screen.getAllByTestId('message-row')
-      await userEvent.click(within(rows[0]).getByRole('button', { name: /^remove$/i }))
+      await openMessage(/First message/)
+      await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
+      expect(treeMessages()).toHaveLength(2)
+      expect(treeMessages().filter((b) => b.getAttribute('aria-invalid') === 'true')).toHaveLength(0)
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     })
 
@@ -887,23 +949,26 @@ describe('linting', () => {
       renderEditor({ lang: 'en' })
       await ready()
 
+      await openMessage(/Explain/)
       await userEvent.type(screen.getByLabelText('user'), 'BROKEN')
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
       await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
 
       await userEvent.click(screen.getAllByRole('button', { name: /move (up|down)/i })[0])
       expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(treeMessages().filter((b) => b.getAttribute('aria-invalid') === 'true')).toHaveLength(0)
     })
 
     it('does not keep a stale "no syntax errors" result after an edit', async () => {
       renderEditor({ lang: 'en' })
       await ready()
 
+      await openMessage(/Explain/)
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
-      await waitFor(() => expect(screen.getByText('No syntax errors.')).toBeInTheDocument())
+      await waitFor(() => expect(screen.getByText(/No syntax errors\./)).toBeInTheDocument())
 
       await userEvent.type(screen.getByLabelText('user'), '!')
-      expect(screen.queryByText('No syntax errors.')).not.toBeInTheDocument()
+      expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
     })
   })
 })
@@ -935,6 +1000,7 @@ describe('the enum edge', () => {
     await ready()
 
     // Dirty, so `!dirty` is not what is keeping Save disabled.
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
 
@@ -945,6 +1011,7 @@ describe('the enum edge', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
+    await openMeta()
     await userEvent.clear(screen.getByLabelText('Summary'))
     await userEvent.type(screen.getByLabelText('Summary'), 'New summary')
 
@@ -989,6 +1056,81 @@ describe('sample vars for the render preview', () => {
     }
     expect(body.vars).toEqual({ tone: 'neutral' })
     expect(Object.values(body.vars)).not.toContain(null)
+  })
+})
+
+describe('workbench navigation', () => {
+  const tree = () => within(screen.getByTestId('prompt-tree'))
+
+  it('shows the variant settings when the selected variant has no messages', async () => {
+    docBody = { ...DOC, variants: [DOC.variants[0], { ...DOC.variants[1], messages: [] }] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(tree().getByRole('button', { name: 'Quick' }))
+    expect(screen.getByTestId('variant-actions')).toBeInTheDocument()
+    expect(screen.getByText('This variant has no messages.')).toBeInTheDocument()
+  })
+
+  it('moves the selection to the previous message after removing the open one', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMessage(/Explain/)
+    await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
+    expect(tree().getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-current', 'true')
+    expect(tree().queryByRole('button', { name: /Explain/ })).not.toBeInTheDocument()
+  })
+
+  it('moves to the variant settings when deleting the only message', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(tree().getByRole('button', { name: 'Quick' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
+    // The reducer keeps a variant's last message (PromptVariant requires
+    // one), so the message stays -- but the centre pane moves to the variant
+    // settings rather than pointing at an index that may not exist.
+    expect(treeMessages()).toHaveLength(1)
+    expect(screen.getByTestId('variant-actions')).toBeInTheDocument()
+  })
+
+  it('keeps the renamed variant selected while typing', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openVariantSettings('Thorough')
+    await userEvent.type(screen.getByLabelText('Variant name'), 'X')
+    expect(screen.getByLabelText('Variants')).toHaveValue('ThoroughX')
+    expect(tree().getByRole('button', { name: 'ThoroughX' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('keeps the current agent selected when a dirty navigation is cancelled', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMeta()
+    await userEvent.type(screen.getByLabelText('Summary'), '!')
+    const agent = screen.getByLabelText('Agent')
+    await within(agent).findByRole('option', { name: 'Other' })
+    await userEvent.selectOptions(agent, 'other')
+    expect(await screen.findByRole('heading', { name: /unsaved changes/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+    expect(screen.getByLabelText('Agent')).toHaveValue('explainer')
+    expect(screen.getByLabelText('Summary')).toHaveValue('Explains defects!')
+  })
+
+  it('declares an undeclared variable from the sidebar', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMessage(/Explain/)
+    await userEvent.type(screen.getByLabelText('user'), ' {{{{ vars.depth }}')
+    await userEvent.click(within(screen.getByTestId('var-sidebar')).getByRole('button', { name: 'declare' }))
+    await openVariantSettings('Thorough')
+    expect(screen.getAllByTestId('var-row')).toHaveLength(2)
+  })
+
+  it('inserts a variable at the cursor from the sidebar', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMessage(/Explain/)
+    await userEvent.click(within(screen.getByTestId('var-sidebar')).getByRole('button', { name: /vars\.tone/ }))
+    expect(screen.getByLabelText('user')).toHaveValue('Explain {{ agent.defect }}{{ vars.tone }}')
   })
 })
 
