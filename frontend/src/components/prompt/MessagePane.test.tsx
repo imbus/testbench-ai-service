@@ -117,6 +117,11 @@ describe('MessagePane', () => {
     expect(screen.getByRole('button', { name: /move down/i })).toBeInTheDocument()
   })
 
+  it("does not offer Delete message on a variant's only message", () => {
+    setup({ count: 1 })
+    expect(screen.queryByRole('button', { name: 'Delete message' })).not.toBeInTheDocument()
+  })
+
   it('does not offer move down on the last message', () => {
     setup({ index: 1, count: 2 })
     expect(screen.queryByRole('button', { name: /move down/i })).not.toBeInTheDocument()
@@ -166,7 +171,7 @@ describe('MessagePane', () => {
   })
 
   it('removes the message', async () => {
-    const { onRemove } = setup()
+    const { onRemove } = setup({ count: 2 })
     await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
     expect(onRemove).toHaveBeenCalled()
   })

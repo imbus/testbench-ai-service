@@ -1080,16 +1080,14 @@ describe('workbench navigation', () => {
     expect(tree().queryByRole('button', { name: /Explain/ })).not.toBeInTheDocument()
   })
 
-  it('moves to the variant settings when deleting the only message', async () => {
+  it('offers no Delete message on a one-message variant', async () => {
     renderEditor({ lang: 'en' })
     await ready()
     await userEvent.click(tree().getByRole('button', { name: 'Quick' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
     // The reducer keeps a variant's last message (PromptVariant requires
-    // one), so the message stays -- but the centre pane moves to the variant
-    // settings rather than pointing at an index that may not exist.
-    expect(treeMessages()).toHaveLength(1)
-    expect(screen.getByTestId('variant-actions')).toBeInTheDocument()
+    // one), so a Delete button there could only be a silent no-op.
+    expect(screen.getByTestId('message-pane')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete message' })).not.toBeInTheDocument()
   })
 
   it('keeps the renamed variant selected while typing', async () => {

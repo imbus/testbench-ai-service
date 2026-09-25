@@ -452,13 +452,11 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     // one it was computed for -- clearing is honest; remapping would be
     // guessing which message shifted where.
     clearDiagnostics()
-    setSelection(
-      index > 0
-        ? { kind: 'message', index: index - 1 }
-        : messages.length > 1
-          ? { kind: 'message', index: 0 }
-          : { kind: 'variant' },
-    )
+    // Selection moves to the previous message, or stays at 0 when the first
+    // was removed. Delete is only offered while the variant has more than one
+    // message (the reducer keeps the last one), so a message always remains;
+    // `current` still falls back to the variant settings if it ever did not.
+    setSelection({ kind: 'message', index: Math.max(0, index - 1) })
   }
 
   const moveMessage = (from: number, to: number) => {

@@ -194,7 +194,9 @@ export function MessagePane({
             {t.moveDown}
           </button>
         )}
-        {!readOnly && (
+        {/* Hidden on a variant's only message: the reducer refuses to remove
+            it (PromptVariant requires one), so the button would do nothing. */}
+        {!readOnly && count > 1 && (
           <button type="button" className="btn btn-ghost" style={{ fontSize: 12, color: '#a33a2b' }} onClick={onRemove}>
             {t.deleteMessage}
           </button>
