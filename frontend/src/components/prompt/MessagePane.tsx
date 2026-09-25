@@ -24,7 +24,11 @@ function editorLabel(message: PromptMessageDoc): string {
   return message.file ? `${message.role} (${message.file})` : message.role
 }
 
+const mono = 'ui-monospace, Menlo, monospace'
 const small = { minHeight: 26, padding: '1px 6px', fontSize: 12, width: 'auto' }
+// A label must never separate from its control when the row wraps (Task 10's
+// controller ruling) -- each pair is its own no-wrap inline group.
+const pair = { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' } as const
 
 /** The Split layout's centre column: one message's own toolbar and editor. */
 export function MessagePane({
@@ -73,134 +77,139 @@ export function MessagePane({
       data-testid="message-pane"
       style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column' }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '6px 12px',
-          borderBottom: '1px solid var(--color-divider)',
-          fontSize: 12,
-          flexWrap: 'wrap',
-        }}
-      >
-        <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{path}</span>
-        {/* No visually-hidden class exists in industry.css (checked); a small
-            muted visible label stands in for what would otherwise be sr-only. */}
-        <label htmlFor={roleId} className="text-muted" style={{ fontSize: 11 }}>
-          {t.messageRole}
-        </label>
-        <select
-          className="input"
-          id={roleId}
-          disabled={readOnly}
-          value={message.role}
-          onChange={(event) => onRole(event.target.value as MessageRole)}
-          style={small}
-        >
-          {/* The `role:` prefix is the prompt.yaml field name, a wire token --
-              deliberately untranslated, like the role values themselves. */}
-          {ROLES.map((role) => (
-            <option key={role} value={role}>
-              role: {role}
-            </option>
-          ))}
-        </select>
-        {!readOnly && (
-          <>
-            <label htmlFor={sourceId} style={{ fontSize: 11 }}>
-              {t.messageSourceLabel}
-            </label>
-            <select
-              className="input"
-              id={sourceId}
-              value={message.source}
-              // I3: the server refuses to save a "readable: false" file-backed
-              // message with a 409 (the loader's placeholder is an empty
-              // body, not the template's real text), but that guard only
-              // fires while the message is still `source: "file"`. Flipping
-              // it to "inline" here would carry the same empty placeholder
-              // in as the new inline text and walk straight around the
-              // guard -- the save would go through and silently truncate the
-              // template. Disabled outright rather than only the "inline"
-              // option: there is nothing useful to switch to until the file
-              // is readable again.
-              disabled={!message.readable}
-              aria-describedby={!message.readable ? unreadableId : undefined}
-              onChange={(event) => onSource(event.target.value as MessageSource)}
-              style={small}
-            >
-              <option value="inline">{t.messageSourceInline}</option>
-              <option value="file">{t.messageSourceFile}</option>
-            </select>
-          </>
-        )}
-        {message.source === 'file' && !readOnly && (
-          <>
-            <label htmlFor={fileId} style={{ fontSize: 11 }}>
-              {t.messageFileLabel}
-            </label>
-            <input
-              className="input"
-              id={fileId}
-              value={message.file ?? ''}
-              onChange={(event) => onFile(event.target.value)}
-              style={{ ...small, fontFamily: 'ui-monospace, Menlo, monospace' }}
-            />
-          </>
-        )}
-        {message.source === 'file' && readOnly && message.file && (
-          <span
-            className="text-muted"
-            style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
-          >
-            {message.file}
+      <div style={{ borderBottom: '1px solid var(--color-divider)' }}>
+        {/* Row 1: the message's own path, plus the position/removal controls
+            that act on the message as a whole. Task 10's controller ruling:
+            one row can't fit path + every control at 1440-1280px, so the
+            toolbar is two deliberate rows rather than an undirected wrap. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px 4px', fontSize: 12 }}>
+          <span style={{ fontFamily: mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {path}
           </span>
-        )}
-        <div style={{ flex: 1 }} />
-        {editable && (
-          <>
-            <label htmlFor={insertId} className="text-muted" style={{ fontSize: 11 }}>
-              {t.insertVar}
+          <div style={{ flex: 1 }} />
+          {!readOnly && index > 0 && (
+            <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onMove(index - 1)}>
+              {t.moveUp}
+            </button>
+          )}
+          {!readOnly && index < count - 1 && (
+            <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onMove(index + 1)}>
+              {t.moveDown}
+            </button>
+          )}
+          {/* Hidden on a variant's only message: the reducer refuses to remove
+              it (PromptVariant requires one), so the button would do nothing. */}
+          {!readOnly && count > 1 && (
+            <button type="button" className="btn btn-ghost" style={{ fontSize: 12, color: '#a33a2b' }} onClick={onRemove}>
+              {t.deleteMessage}
+            </button>
+          )}
+        </div>
+        {/* Row 2: how the message is edited -- role, source, file name, then
+            variable insertion. Each label+control is its own no-wrap group so
+            a label never separates from its control if this row itself wraps
+            below ~1280px. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px 6px', fontSize: 12, flexWrap: 'wrap' }}>
+          <div style={pair}>
+            {/* No visually-hidden class exists in industry.css (checked); a
+                small muted visible label stands in for what would otherwise
+                be sr-only. */}
+            <label htmlFor={roleId} className="text-muted" style={{ fontSize: 11 }}>
+              {t.messageRole}
             </label>
             <select
               className="input"
-              id={insertId}
-              value=""
+              id={roleId}
+              disabled={readOnly}
+              value={message.role}
+              onChange={(event) => onRole(event.target.value as MessageRole)}
               style={small}
-              onChange={(event) => {
-                const name = event.target.value
-                if (!name) return
-                const handle = typeof editorRef === 'object' && editorRef ? editorRef.current : null
-                handle?.insert(`{{ ${name} }}`)
-              }}
             >
-              <option value="">{t.insertVar}</option>
-              {insertable.map((name) => (
-                <option key={name} value={name}>
-                  {name}
+              {/* The `role:` prefix is the prompt.yaml field name, a wire
+                  token -- deliberately untranslated, like the role values
+                  themselves. */}
+              {ROLES.map((role) => (
+                <option key={role} value={role}>
+                  role: {role}
                 </option>
               ))}
             </select>
-          </>
-        )}
-        {!readOnly && index > 0 && (
-          <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onMove(index - 1)}>
-            {t.moveUp}
-          </button>
-        )}
-        {!readOnly && index < count - 1 && (
-          <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onMove(index + 1)}>
-            {t.moveDown}
-          </button>
-        )}
-        {/* Hidden on a variant's only message: the reducer refuses to remove
-            it (PromptVariant requires one), so the button would do nothing. */}
-        {!readOnly && count > 1 && (
-          <button type="button" className="btn btn-ghost" style={{ fontSize: 12, color: '#a33a2b' }} onClick={onRemove}>
-            {t.deleteMessage}
-          </button>
-        )}
+          </div>
+          {!readOnly && (
+            <div style={pair}>
+              <label htmlFor={sourceId} style={{ fontSize: 11 }}>
+                {t.messageSourceLabel}
+              </label>
+              <select
+                className="input"
+                id={sourceId}
+                value={message.source}
+                // I3: the server refuses to save a "readable: false" file-backed
+                // message with a 409 (the loader's placeholder is an empty
+                // body, not the template's real text), but that guard only
+                // fires while the message is still `source: "file"`. Flipping
+                // it to "inline" here would carry the same empty placeholder
+                // in as the new inline text and walk straight around the
+                // guard -- the save would go through and silently truncate the
+                // template. Disabled outright rather than only the "inline"
+                // option: there is nothing useful to switch to until the file
+                // is readable again.
+                disabled={!message.readable}
+                aria-describedby={!message.readable ? unreadableId : undefined}
+                onChange={(event) => onSource(event.target.value as MessageSource)}
+                style={small}
+              >
+                <option value="inline">{t.messageSourceInline}</option>
+                <option value="file">{t.messageSourceFile}</option>
+              </select>
+            </div>
+          )}
+          {message.source === 'file' && !readOnly && (
+            <div style={pair}>
+              <label htmlFor={fileId} style={{ fontSize: 11 }}>
+                {t.messageFileLabel}
+              </label>
+              <input
+                className="input"
+                id={fileId}
+                value={message.file ?? ''}
+                onChange={(event) => onFile(event.target.value)}
+                style={{ ...small, width: '26ch', minWidth: '26ch', fontFamily: mono }}
+              />
+            </div>
+          )}
+          {message.source === 'file' && readOnly && message.file && (
+            <span className="text-muted" style={{ fontSize: 11, fontFamily: mono }}>
+              {message.file}
+            </span>
+          )}
+          {editable && (
+            <div style={pair}>
+              <label htmlFor={insertId} className="text-muted" style={{ fontSize: 11 }}>
+                {t.insertVar}
+              </label>
+              <select
+                className="input"
+                id={insertId}
+                value=""
+                style={small}
+                onChange={(event) => {
+                  const name = event.target.value
+                  if (!name) return
+                  const handle = typeof editorRef === 'object' && editorRef ? editorRef.current : null
+                  handle?.insert(`{{ ${name} }}`)
+                }}
+              >
+                <option value="">{t.insertVar}</option>
+                {insertable.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
       {!message.readable && message.file && (
         <span id={unreadableId} role="alert" style={{ fontSize: 11, color: '#a33a2b', padding: '4px 12px' }}>
