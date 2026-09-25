@@ -33,7 +33,7 @@ function tabStyle(active: boolean) {
  * The centre and drawer contents are built by `PromptEditor` and passed in,
  * so both layouts share one wiring.
  */
-export function TabsLayout({ messages, selection, flagged, readOnly, centre, variablesDrawer, preview, testRun, status, lang = 'de', onOpenMeta, onPickMessage, onAddMessage, onLint }: {
+export function TabsLayout({ messages, selection, flagged, readOnly, centre, variablesDrawer, preview, testRun, status, variantName, lang = 'de', onOpenMeta, onOpenVariantSettings, onPickMessage, onAddMessage, onLint }: {
   messages: PromptMessageDoc[]
   selection: Selection
   flagged: number[]
@@ -43,8 +43,10 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
   preview: ReactNode
   testRun: ReactNode
   status: { lint: LintState; usedDeclared: number; declared: number; undeclared: number }
+  variantName: string
   lang?: Lang
   onOpenMeta: () => void
+  onOpenVariantSettings: () => void
   onPickMessage: (index: number) => void
   onAddMessage: () => void
   onLint: () => void
@@ -68,6 +70,19 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, padding: '8px 16px 0', borderBottom: '1px solid var(--color-divider)', flexWrap: 'wrap' }}>
           <button type="button" aria-pressed={selection.kind === 'meta'} onClick={onOpenMeta} style={{ ...tabStyle(selection.kind === 'meta'), fontFamily: mono }}>
             prompt.yaml
+          </button>
+          {/* The selected variant's settings (rename, model, remove,
+              declarations) -- Tabs has no tree to reach them from. Named like
+              PromptTree's gear button. */}
+          <button
+            type="button"
+            aria-pressed={selection.kind === 'variant'}
+            aria-label={`${t.variantSettings}: ${variantName}`}
+            onClick={onOpenVariantSettings}
+            style={tabStyle(selection.kind === 'variant')}
+          >
+            <span aria-hidden>⚙</span>
+            <span>{variantName}</span>
           </button>
           {messages.map((message, index) => {
             const current = selection.kind === 'message' && selection.index === index

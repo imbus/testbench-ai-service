@@ -1150,6 +1150,24 @@ describe('the Tabs layout', () => {
     expect(screen.queryByTestId('prompt-tree')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'prompt.yaml' })).toBeInTheDocument()
   })
+
+  it('opens the variant settings from the tab strip', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Variant settings: Thorough' }))
+    expect(screen.getByTestId('variant-actions')).toBeInTheDocument()
+  })
+
+  it('shows the variant settings for a variant with no messages', async () => {
+    docBody = { ...DOC, variants: [{ ...DOC.variants[0], messages: [] }, DOC.variants[1]] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
+    expect(screen.getByTestId('variant-actions')).toBeInTheDocument()
+    expect(screen.getByText('This variant has no messages.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Variant settings: Thorough' })).toHaveAttribute('aria-pressed', 'true')
+  })
 })
 
 // Every test above pins lang="en" to keep its English-text assertions

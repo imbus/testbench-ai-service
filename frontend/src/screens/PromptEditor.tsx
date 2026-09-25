@@ -699,8 +699,10 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         declared: declaredVars.length,
         undeclared: undeclared.length,
       }}
+      variantName={variantName}
       lang={lang}
       onOpenMeta={() => setSelection({ kind: 'meta' })}
+      onOpenVariantSettings={() => openVariantSettings(variantName)}
       onPickMessage={(index) => setSelection({ kind: 'message', index })}
       onAddMessage={addMessage}
       onLint={() => void runLint()}

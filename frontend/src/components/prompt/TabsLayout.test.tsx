@@ -15,7 +15,7 @@ function setup(overrides: Partial<Parameters<typeof TabsLayout>[0]> = {}) {
     messages: MESSAGES, selection: { kind: 'message' as const, index: 0 }, flagged: [], readOnly: false,
     centre: <div>CENTRE</div>, variablesDrawer: <div>VARIABLES</div>, preview: <div>PREVIEW</div>, testRun: <div>TESTRUN</div>,
     status: { lint: clean, usedDeclared: 1, declared: 2, undeclared: 0 }, lang: 'en' as const,
-    onOpenMeta: vi.fn(), onPickMessage: vi.fn(), onAddMessage: vi.fn(), onLint: vi.fn(), ...overrides,
+    variantName: 'Thorough', onOpenMeta: vi.fn(), onOpenVariantSettings: vi.fn(), onPickMessage: vi.fn(), onAddMessage: vi.fn(), onLint: vi.fn(), ...overrides,
   }
   render(<TabsLayout {...props} />)
   return props
@@ -30,6 +30,19 @@ describe('TabsLayout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'prompt.yaml' }))
     expect(props.onOpenMeta).toHaveBeenCalled()
     expect(screen.getByText('CENTRE')).toBeInTheDocument()
+  })
+
+  it('opens the variant settings from its own tab', async () => {
+    const props = setup()
+    const tab = screen.getByRole('button', { name: 'Variant settings: Thorough' })
+    expect(tab).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(tab)
+    expect(props.onOpenVariantSettings).toHaveBeenCalled()
+  })
+
+  it('presses the variant settings tab for a variant selection', () => {
+    setup({ selection: { kind: 'variant' } })
+    expect(screen.getByRole('button', { name: 'Variant settings: Thorough' })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('marks a flagged message tab', () => {
