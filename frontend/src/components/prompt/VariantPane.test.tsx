@@ -62,7 +62,7 @@ describe('VariantPane', () => {
       onEditVar: vi.fn(),
       onRemoveVar: vi.fn(),
     }
-    render(<VariantPane variant={V} readOnly={false} lang="en" {...props} />)
+    render(<VariantPane variant={V} readOnly={false} canRemove lang="en" {...props} />)
     await userEvent.type(screen.getByLabelText('Variant name'), 'X')
     expect(props.onRename).toHaveBeenLastCalledWith('ThoroughX')
     await userEvent.type(screen.getByLabelText('Variant model'), 'g')
@@ -80,6 +80,7 @@ describe('VariantPane', () => {
       <VariantPane
         variant={{ ...V, model: 'm' }}
         readOnly={false}
+        canRemove
         lang="en"
         onRename={vi.fn()}
         onModel={onModel}
@@ -93,11 +94,33 @@ describe('VariantPane', () => {
     expect(onModel).toHaveBeenLastCalledWith(null)
   })
 
+  it("offers no Remove on a document's only variant", () => {
+    // The reducer refuses to remove the last variant, so a Remove button
+    // there could only be a silent no-op.
+    render(
+      <VariantPane
+        variant={V}
+        readOnly={false}
+        canRemove={false}
+        lang="en"
+        onRename={vi.fn()}
+        onModel={vi.fn()}
+        onRemove={vi.fn()}
+        onAddVar={vi.fn()}
+        onEditVar={vi.fn()}
+        onRemoveVar={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText('Variant name')).toBeInTheDocument()
+    expect(within(screen.getByTestId('variant-actions')).queryByRole('button', { name: /^remove$/i })).not.toBeInTheDocument()
+  })
+
   it('shows only the declarations for a non-admin', () => {
     render(
       <VariantPane
         variant={V}
         readOnly
+        canRemove
         lang="en"
         onRename={vi.fn()}
         onModel={vi.fn()}

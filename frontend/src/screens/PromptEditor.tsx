@@ -125,9 +125,11 @@ type SaveFieldError = { kind: 'default_variant' } | { kind: 'emptyVariants'; nam
  * (unlike `config/apply`'s `ConfigIssue` list). This recognizes the two cases
  * that both name something concrete AND correspond to a single control on
  * this screen: an out-of-range `default_variant` (the header select), and a
- * variant with no messages (its tree row) -- reachable because this screen lets
- * a variant's last message be removed, and `PromptTree`/this screen's own test
- * suite exercise a variant that loads with zero messages already.
+ * variant with no messages (its tree row). Not reachable by removing messages
+ * -- the reducer keeps a variant's last one and Delete message is hidden there
+ * -- and a newly added variant starts with one (`emptyVariant`); only a
+ * variant that LOADED with zero messages (`PromptTree`/this screen's own test
+ * suite exercise that) can still be saved empty.
  *
  * Deliberately not a general parser: matching English server prose is
  * brittle by construction. Any 422 this does not recognize still surfaces
@@ -580,6 +582,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
           <VariantPane
             variant={selectedVariantObj}
             readOnly={!isAdmin}
+            canRemove={draft.variants.length > 1}
             lang={lang}
             onRename={(to) => {
               dispatch({ type: 'renameVariant', from: selectedVariantObj.name, to })
@@ -594,7 +597,12 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
             onModel={(model) =>
               dispatch({ type: 'setVariantModel', variant: selectedVariantObj.name, model })
             }
-            onRemove={() => dispatch({ type: 'removeVariant', name: selectedVariantObj.name })}
+            onRemove={() => {
+              dispatch({ type: 'removeVariant', name: selectedVariantObj.name })
+              // The selection falls through to another variant, whose
+              // message indices the old diagnostics do not describe.
+              clearDiagnostics()
+            }}
             onAddVar={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
             onEditVar={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
             onRemoveVar={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}

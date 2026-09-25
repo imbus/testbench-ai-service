@@ -83,7 +83,7 @@ export function MessagePane({
             one row can't fit path + every control at 1440-1280px, so the
             toolbar is two deliberate rows rather than an undirected wrap. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px 4px', fontSize: 12 }}>
-          <span style={{ fontFamily: mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          <span className="text-muted" style={{ fontFamily: mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
             {path}
           </span>
           <div style={{ flex: 1 }} />

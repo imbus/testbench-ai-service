@@ -802,6 +802,41 @@ describe('variant controls', () => {
     expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
   })
 
+  it('clears every diagnostic when the selected variant is removed', async () => {
+    // Diagnostics are keyed by message index; left in place, the removed
+    // variant's flag on message 0 would land on the surviving variant's
+    // message 0. Tabs, because its status-bar Lint runs from the variant
+    // settings pane (opening that pane clears diagnostics itself).
+    lintResponder = (content) =>
+      content.includes('helpful')
+        ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+        : { ok: true, errors: [] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Variant settings: Thorough' }))
+    await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true'),
+    )
+
+    await userEvent.click(within(screen.getByTestId('variant-actions')).getByRole('button', { name: /^remove$/i }))
+    expect(screen.getByRole('button', { name: /Quick/, pressed: false })).not.toHaveAttribute('aria-invalid')
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Split' }))
+    expect(treeMessages()).toHaveLength(1)
+    expect(treeMessages()[0]).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('offers no Remove on the only variant', async () => {
+    docBody = { ...DOC, variants: [DOC.variants[0]] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openVariantSettings('Thorough')
+    expect(within(screen.getByTestId('variant-actions')).queryByRole('button', { name: /^remove$/i }))
+      .not.toBeInTheDocument()
+  })
+
   it('renames the selected variant', async () => {
     renderEditor({ lang: 'en' })
     await ready()

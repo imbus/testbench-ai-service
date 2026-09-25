@@ -160,8 +160,6 @@ export const en = {
   variants: 'Variants',
   variantName: 'Variant name',
   variantModel: 'Variant model',
-  addVariant: 'Add variant',
-  newVariantName: 'New variant name',
   save: 'Save',
   saving: 'Saving…',
   confirmSaveTitle: 'Confirm save',

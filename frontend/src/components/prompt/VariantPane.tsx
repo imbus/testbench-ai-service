@@ -14,6 +14,7 @@ import { useTranslations, type Lang } from '../../i18n'
 export function VariantPane({
   variant,
   readOnly,
+  canRemove,
   lang = 'de',
   onRename,
   onModel,
@@ -24,6 +25,9 @@ export function VariantPane({
 }: {
   variant: PromptVariantDoc
   readOnly: boolean
+  /** False on a document's only variant: the reducer keeps the last one
+   * (a prompt needs a variant), so Remove there could only be a no-op. */
+  canRemove: boolean
   lang?: Lang
   onRename: (to: string) => void
   onModel: (model: string | null) => void
@@ -67,9 +71,11 @@ export function VariantPane({
               onChange={(event) => onModel(event.target.value || null)}
             />
           </div>
-          <button type="button" className="btn btn-ghost" onClick={onRemove}>
-            {t.remove}
-          </button>
+          {canRemove && (
+            <button type="button" className="btn btn-ghost" onClick={onRemove}>
+              {t.remove}
+            </button>
+          )}
         </div>
       )}
 

@@ -156,8 +156,6 @@ export const de = {
   variants: 'Varianten',
   variantName: 'Variantenname',
   variantModel: 'Varianten-Modell',
-  addVariant: 'Variante hinzufügen',
-  newVariantName: 'Neuer Variantenname',
   save: 'Speichern',
   saving: 'Wird gespeichert…',
   confirmSaveTitle: 'Speichern bestätigen',
