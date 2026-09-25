@@ -21,8 +21,13 @@ function VarButton({ name, used, disabled, onInsert }: { name: string; used: boo
   )
 }
 
-/** The Split layout's right column: insertable variables and the syntax check. */
-export function VarSidebar({ agentVars, declaredVars, used, undeclared, canInsert, canDeclare, lint, lang = 'de', onInsert, onDeclare, onLint }: {
+/**
+ * The Split layout's right column: insertable variables and the syntax check.
+ *
+ * `variant="drawer"` is the Tabs layout's Variables drawer: no column chrome
+ * (the drawer supplies its own) and no lint block (the status bar shows lint).
+ */
+export function VarSidebar({ agentVars, declaredVars, used, undeclared, canInsert, canDeclare, lint, variant = 'column', lang = 'de', onInsert, onDeclare, onLint }: {
   agentVars: string[]
   declaredVars: string[]
   used: string[]
@@ -30,6 +35,7 @@ export function VarSidebar({ agentVars, declaredVars, used, undeclared, canInser
   canInsert: boolean
   canDeclare: boolean
   lint: LintState
+  variant?: 'column' | 'drawer'
   lang?: Lang
   onInsert: (name: string) => void
   onDeclare: () => void
@@ -41,10 +47,15 @@ export function VarSidebar({ agentVars, declaredVars, used, undeclared, canInser
       <VarButton key={name} name={name} used={used.includes(name)} disabled={!canInsert} onInsert={() => onInsert(`{{ ${name} }}`)} />
     ))
 
+  const column = variant === 'column'
+  const chrome = column
+    ? { width: 230, borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', padding: 12, overflow: 'auto' }
+    : {}
+
   return (
     <aside
       data-testid="var-sidebar"
-      style={{ width: 230, flex: 'none', borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', padding: 12, display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12, overflow: 'auto' }}
+      style={{ ...chrome, flex: 'none', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}
     >
       <div className="text-muted" style={caps}>agent.*</div>
       {list(agentVars)}
@@ -60,17 +71,21 @@ export function VarSidebar({ agentVars, declaredVars, used, undeclared, canInser
           )}
         </div>
       )}
-      <div style={{ flex: 1 }} />
-      <button type="button" className="btn btn-ghost" disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }}>
-        {lint.running ? t.linting : t.lint}
-      </button>
-      {lint.error && <div role="alert" style={{ color: '#a33a2b' }}>{lint.error}</div>}
-      {lint.errors.map((error, index) => (
-        <div key={index} style={{ border: '1px solid #c0392b', background: 'color-mix(in srgb, #c0392b 10%, transparent)', padding: '6px 8px', color: '#a33a2b' }}>
-          {`${t.lintLine} ${error.line}: ${error.message}`}
-        </div>
-      ))}
-      {lint.checked && !lint.error && lint.errors.length === 0 && <div style={{ color: '#2e8b5e' }}>✓ {t.lintClean}</div>}
+      {column && (
+        <>
+          <div style={{ flex: 1 }} />
+          <button type="button" className="btn btn-ghost" disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }}>
+            {lint.running ? t.linting : t.lint}
+          </button>
+          {lint.error && <div role="alert" style={{ color: '#a33a2b' }}>{lint.error}</div>}
+          {lint.errors.map((error, index) => (
+            <div key={index} style={{ border: '1px solid #c0392b', background: 'color-mix(in srgb, #c0392b 10%, transparent)', padding: '6px 8px', color: '#a33a2b' }}>
+              {`${t.lintLine} ${error.line}: ${error.message}`}
+            </div>
+          ))}
+          {lint.checked && !lint.error && lint.errors.length === 0 && <div style={{ color: '#2e8b5e' }}>✓ {t.lintClean}</div>}
+        </>
+      )}
     </aside>
   )
 }

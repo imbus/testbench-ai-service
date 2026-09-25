@@ -13,12 +13,14 @@ import { MessagePane } from '../components/prompt/MessagePane'
 import { MetaPane } from '../components/prompt/MetaPane'
 import { PromptTree } from '../components/prompt/PromptTree'
 import { messagePath, uniqueVariantName, type Selection } from '../components/prompt/selection'
+import { TabsLayout } from '../components/prompt/TabsLayout'
 import { undeclaredVars, usedTemplateVars } from '../components/prompt/templateVars'
 import { VariantPane } from '../components/prompt/VariantPane'
-import { VarSidebar } from '../components/prompt/VarSidebar'
+import { VarSidebar, type LintState } from '../components/prompt/VarSidebar'
 import { RenderPreview } from '../components/RenderPreview'
 import { SavePromptDialog } from '../components/SavePromptDialog'
 import { TestRunPanel } from '../components/TestRunPanel'
+import { VarDeclTable } from '../components/VarDeclTable'
 import { useTranslations, type Lang, type Translations } from '../i18n'
 import { useEditorLayout } from '../state/editorLayout'
 import { isDirty, promptDraftReducer } from '../state/promptDraft'
@@ -489,7 +491,137 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
 
   const alertStyle = { fontSize: 12, color: '#a33a2b', padding: '6px 16px' }
 
-  // Task 9 adds the Tabs layout; until then both `layout` values render Split.
+  // The lint result for the open message -- the Split sidebar's lint block
+  // and the Tabs status bar both show exactly this.
+  const lintState: LintState = {
+    running: linting,
+    checked: lintChecked,
+    error: lintError,
+    errors: current.kind === 'message' ? (diagnostics[current.index] ?? []) : [],
+  }
+
+  const varSidebarProps = {
+    agentVars,
+    declaredVars,
+    used,
+    undeclared,
+    canInsert: isAdmin && !!currentMessage?.readable,
+    canDeclare: isAdmin,
+    lint: lintState,
+    lang,
+    onInsert: insert,
+    onDeclare: declareUndeclared,
+    onLint: () => void runLint(),
+  }
+
+  // Built once and handed to whichever layout is active, so Split and Tabs
+  // share one wiring: the centre pane for `current`, the preview, the test run.
+  const centre = (
+    <>
+      {current.kind === 'meta' && (
+        <MetaPane
+          draft={draft}
+          readOnly={!isAdmin}
+          // A plan 422 marks the field too (both requests funnel through
+          // `markSaveError`), so fall back to the plan's own message --
+          // `MetaPane` only sets `aria-invalid` when it has text to show.
+          defaultVariantIssue={
+            saveFieldError?.kind === 'default_variant'
+              ? (saveErrorMessage ?? planErrorMessage)
+              : null
+          }
+          lang={lang}
+          onHeader={setHeader}
+        />
+      )}
+      {current.kind === 'variant' && selectedVariantObj && (
+        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+          {messages.length === 0 && (
+            <div className="text-muted" style={{ padding: '20px 24px 0', fontSize: 13 }}>
+              {t.noMessages}
+            </div>
+          )}
+          <VariantPane
+            variant={selectedVariantObj}
+            readOnly={!isAdmin}
+            lang={lang}
+            onRename={(to) => {
+              dispatch({ type: 'renameVariant', from: selectedVariantObj.name, to })
+              // The selection is resolved BY NAME, so it has to follow the
+              // rename. Without this, the first keystroke makes the old
+              // name unresolvable, the selection falls through to
+              // `variants[0]`, and every later keystroke renames THAT
+              // variant instead -- leaving the intended one named after
+              // whatever the field held when the fall-through happened.
+              setSelectedVariant(to)
+            }}
+            onModel={(model) =>
+              dispatch({ type: 'setVariantModel', variant: selectedVariantObj.name, model })
+            }
+            onRemove={() => dispatch({ type: 'removeVariant', name: selectedVariantObj.name })}
+            onAddVar={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
+            onEditVar={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
+            onRemoveVar={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}
+          />
+        </div>
+      )}
+      {currentMessage && current.kind === 'message' && (
+        // Keyed by variant and index so switching messages remounts
+        // `CodeEditor` cleanly -- a fresh undo history per message, since
+        // the pane only ever holds one.
+        <MessagePane
+          key={`${variantName}:${current.index}`}
+          editorRef={editorRef}
+          path={messagePath(draft.file, variantName, current.index, currentMessage)}
+          message={currentMessage}
+          index={current.index}
+          count={messages.length}
+          readOnly={!isAdmin}
+          lang={lang}
+          diagnostics={diagnostics[current.index]}
+          insertable={[...agentVars, ...declaredVars]}
+          onRemove={() => removeMessage(current.index)}
+          onMove={(to) => moveMessage(current.index, to)}
+          onRole={(role) =>
+            dispatch({ type: 'setMessageRole', variant: variantName, index: current.index, role })
+          }
+          onContent={(content) => {
+            dispatch({ type: 'setMessageContent', variant: variantName, index: current.index, content })
+            // Only THIS message's own result is invalid -- it changed no
+            // index, so every other message's result still points correctly.
+            dropDiagnostic(current.index)
+          }}
+          onSource={(source) =>
+            dispatch({ type: 'setMessageSource', variant: variantName, index: current.index, source })
+          }
+          onFile={(file) =>
+            dispatch({ type: 'setMessageFile', variant: variantName, index: current.index, file })
+          }
+        />
+      )}
+    </>
+  )
+
+  const preview = (
+    <RenderPreview
+      messages={messages}
+      vars={sampleVars(vars)}
+      skeleton={original.agent_context_skeleton ?? {}}
+      isAdmin={isAdmin}
+      lang={lang}
+    />
+  )
+
+  const testRun = (
+    <TestRunPanel
+      messages={messages}
+      vars={sampleVars(vars)}
+      agentContext={original.agent_context_skeleton ?? {}}
+      isAdmin={isAdmin}
+      lang={lang}
+    />
+  )
+
   const split = (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       <PromptTree
@@ -509,107 +641,8 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       />
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
-          {current.kind === 'meta' && (
-            <MetaPane
-              draft={draft}
-              readOnly={!isAdmin}
-              // A plan 422 marks the field too (both requests funnel through
-              // `markSaveError`), so fall back to the plan's own message --
-              // `MetaPane` only sets `aria-invalid` when it has text to show.
-              defaultVariantIssue={
-                saveFieldError?.kind === 'default_variant'
-                  ? (saveErrorMessage ?? planErrorMessage)
-                  : null
-              }
-              lang={lang}
-              onHeader={setHeader}
-            />
-          )}
-          {current.kind === 'variant' && selectedVariantObj && (
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-              {messages.length === 0 && (
-                <div className="text-muted" style={{ padding: '20px 24px 0', fontSize: 13 }}>
-                  {t.noMessages}
-                </div>
-              )}
-              <VariantPane
-                variant={selectedVariantObj}
-                readOnly={!isAdmin}
-                lang={lang}
-                onRename={(to) => {
-                  dispatch({ type: 'renameVariant', from: selectedVariantObj.name, to })
-                  // The selection is resolved BY NAME, so it has to follow the
-                  // rename. Without this, the first keystroke makes the old
-                  // name unresolvable, the selection falls through to
-                  // `variants[0]`, and every later keystroke renames THAT
-                  // variant instead -- leaving the intended one named after
-                  // whatever the field held when the fall-through happened.
-                  setSelectedVariant(to)
-                }}
-                onModel={(model) =>
-                  dispatch({ type: 'setVariantModel', variant: selectedVariantObj.name, model })
-                }
-                onRemove={() => dispatch({ type: 'removeVariant', name: selectedVariantObj.name })}
-                onAddVar={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
-                onEditVar={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
-                onRemoveVar={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}
-              />
-            </div>
-          )}
-          {currentMessage && current.kind === 'message' && (
-            <>
-              {/* Keyed by variant and index so switching messages remounts
-                  `CodeEditor` cleanly -- a fresh undo history per message,
-                  since the pane only ever holds one. */}
-              <MessagePane
-                key={`${variantName}:${current.index}`}
-                editorRef={editorRef}
-                path={messagePath(draft.file, variantName, current.index, currentMessage)}
-                message={currentMessage}
-                index={current.index}
-                count={messages.length}
-                readOnly={!isAdmin}
-                lang={lang}
-                diagnostics={diagnostics[current.index]}
-                insertable={[...agentVars, ...declaredVars]}
-                onRemove={() => removeMessage(current.index)}
-                onMove={(to) => moveMessage(current.index, to)}
-                onRole={(role) =>
-                  dispatch({ type: 'setMessageRole', variant: variantName, index: current.index, role })
-                }
-                onContent={(content) => {
-                  dispatch({ type: 'setMessageContent', variant: variantName, index: current.index, content })
-                  // Only THIS message's own result is invalid -- it changed no
-                  // index, so every other message's result still points correctly.
-                  dropDiagnostic(current.index)
-                }}
-                onSource={(source) =>
-                  dispatch({ type: 'setMessageSource', variant: variantName, index: current.index, source })
-                }
-                onFile={(file) =>
-                  dispatch({ type: 'setMessageFile', variant: variantName, index: current.index, file })
-                }
-              />
-              <VarSidebar
-                agentVars={agentVars}
-                declaredVars={declaredVars}
-                used={used}
-                undeclared={undeclared}
-                canInsert={isAdmin && currentMessage.readable}
-                canDeclare={isAdmin}
-                lint={{
-                  running: linting,
-                  checked: lintChecked,
-                  error: lintError,
-                  errors: diagnostics[current.index] ?? [],
-                }}
-                onInsert={insert}
-                onDeclare={declareUndeclared}
-                onLint={() => void runLint()}
-                lang={lang}
-              />
-            </>
-          )}
+          {centre}
+          {currentMessage && <VarSidebar {...varSidebarProps} />}
         </div>
         <div
           data-testid="preview-pane"
@@ -624,23 +657,54 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
             overflow: 'auto',
           }}
         >
-          <RenderPreview
-            messages={messages}
-            vars={sampleVars(vars)}
-            skeleton={original.agent_context_skeleton ?? {}}
-            isAdmin={isAdmin}
-            lang={lang}
-          />
-          <TestRunPanel
-            messages={messages}
-            vars={sampleVars(vars)}
-            agentContext={original.agent_context_skeleton ?? {}}
-            isAdmin={isAdmin}
-            lang={lang}
-          />
+          {preview}
+          {testRun}
         </div>
       </div>
     </div>
+  )
+
+  const tabs = (
+    <TabsLayout
+      messages={messages}
+      selection={current}
+      flagged={flagged}
+      readOnly={!isAdmin}
+      centre={centre}
+      variablesDrawer={
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <VarSidebar {...varSidebarProps} variant="drawer" />
+          {/* Declarations are edited here, as in the prototype -- except
+              while the centre already shows the variant settings pane, whose
+              own VarDeclTable is this same table: two copies would render
+              duplicate element ids (VarDeclTable derives them from the var
+              name) and two editors for one piece of state. */}
+          {selectedVariantObj && current.kind !== 'variant' && (
+            <VarDeclTable
+              vars={vars}
+              readOnly={!isAdmin}
+              lang={lang}
+              onAdd={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
+              onEdit={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
+              onRemove={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}
+            />
+          )}
+        </div>
+      }
+      preview={preview}
+      testRun={testRun}
+      status={{
+        lint: lintState,
+        usedDeclared: used.filter((name) => declaredVars.includes(name)).length,
+        declared: declaredVars.length,
+        undeclared: undeclared.length,
+      }}
+      lang={lang}
+      onOpenMeta={() => setSelection({ kind: 'meta' })}
+      onPickMessage={(index) => setSelection({ kind: 'message', index })}
+      onAddMessage={addMessage}
+      onLint={() => void runLint()}
+    />
   )
 
   return (
@@ -683,7 +747,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         </div>
       )}
 
-      {split}
+      {layout === 'tabs' ? tabs : split}
 
       {confirmOpen && (
         <SavePromptDialog

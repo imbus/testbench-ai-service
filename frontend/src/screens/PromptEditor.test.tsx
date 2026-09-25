@@ -232,6 +232,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  // The Split/Tabs choice persists in localStorage; without this a test that
+  // picks Tabs would leak that layout into every later test.
+  localStorage.clear()
 })
 
 // A data router, not `<MemoryRouter>`/`<Routes>`: `PromptEditor` calls
@@ -1129,6 +1132,23 @@ describe('workbench navigation', () => {
     await openMessage(/Explain/)
     await userEvent.click(within(screen.getByTestId('var-sidebar')).getByRole('button', { name: /vars\.tone/ }))
     expect(screen.getByLabelText('user')).toHaveValue('Explain {{ agent.defect }}{{ vars.tone }}')
+  })
+})
+
+describe('the Tabs layout', () => {
+  it('replaces the tree with a tab strip, and persists across a reload', async () => {
+    const first = renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
+    expect(screen.queryByTestId('prompt-tree')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'prompt.yaml' })).toHaveAttribute('aria-pressed', 'false')
+
+    first.unmount()
+    renderEditor({ lang: 'en' })
+    await ready()
+    expect(screen.getByRole('radio', { name: 'Tabs' })).toBeChecked()
+    expect(screen.queryByTestId('prompt-tree')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'prompt.yaml' })).toBeInTheDocument()
   })
 })
 
