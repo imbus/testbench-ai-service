@@ -18,7 +18,11 @@ from testbench_ai_service.agents.requirement.context import (
     assemble_context,
 )
 from testbench_ai_service.agents.requirement.linking import test_case_set_names
-from testbench_ai_service.agents.requirement.model import RequirementAgentArgs, ThemeContext
+from testbench_ai_service.agents.requirement.model import (
+    ExtendedRequirement,
+    RequirementAgentArgs,
+    ThemeContext,
+)
 from testbench_ai_service.agents.requirement.utils import (
     load_requirements,
     patch_generated_test_ideas,
@@ -31,7 +35,6 @@ from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     ProjectRole,
-    RequirementAssignment,
     TestThemeNode,
 )
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
@@ -128,6 +131,7 @@ class RequirementAgent(Agent):
         try:
             requirements = await load_requirements(
                 conn,
+                self.args,
                 context.project_key,
                 context.root_uid,
                 context.tov_key,
@@ -138,9 +142,6 @@ class RequirementAgent(Agent):
             logger.error(
                 "Could not load the requirements of test theme '%s': %r", theme.base.name, error
             )
-            return
-
-        if not self._requirements_fit(theme.base.name, requirements):
             return
 
         test_theme_details = get_test_theme_details(
@@ -170,39 +171,13 @@ class RequirementAgent(Agent):
                 error,
             )
 
-    def _requirements_fit(self, theme_name: str, requirements: list[RequirementAssignment]) -> bool:
-        """Whether a theme has requirements at all, and no more than ``max_requirements``.
-
-        Args:
-            theme_name: Name of the theme, for the log.
-            requirements: The requirements assigned below the theme.
-
-        Returns:
-            ``True`` if generation should go ahead; the reason is logged otherwise.
-        """
-        if not requirements:
-            logger.info(
-                "No requirements are assigned below test theme '%s'; nothing to do", theme_name
-            )
-            return False
-        max_requirements = self.args.max_requirements
-        if max_requirements is not None and len(requirements) > max_requirements:
-            logger.error(
-                "Test theme '%s' has %d requirements, more than max_requirements=%d; skipping it",
-                theme_name,
-                len(requirements),
-                max_requirements,
-            )
-            return False
-        return True
-
     async def _generate_for_theme(
         self,
         *,
         theme: TestThemeNode,
         spec_key: str,
         theme_context: ThemeContext,
-        targets: list[RequirementAssignment],
+        targets: list[ExtendedRequirement],
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
@@ -281,7 +256,7 @@ class RequirementAgent(Agent):
         *,
         theme: TestThemeNode,
         theme_context: ThemeContext,
-        targets: list[RequirementAssignment],
+        targets: list[ExtendedRequirement],
         context: ExecutionContext,
         llm_client: LLMClient,
     ) -> str:

@@ -7,9 +7,9 @@ is rendered in full, followed by what the theme already contains.
 
 from collections.abc import Callable, Sequence
 
-from testbench_ai_service.agents.requirement.model import ThemeContext
+from testbench_ai_service.agents.requirement.model import ExtendedRequirement, ThemeContext
 from testbench_ai_service.models.agent import AgentData
-from testbench_ai_service.models.testbench import RequirementAssignment
+from testbench_ai_service.utils.html_utils import has_visible_text
 
 
 class RequirementAgentData(AgentData):
@@ -25,24 +25,25 @@ class RequirementAgentData(AgentData):
 
 
 #: Requirement attributes rendered on the detail line, in order.
-DETAIL_ATTRIBUTES: tuple[tuple[str, Callable[[RequirementAssignment], str | None]], ...] = (
-    ("version", lambda requirement: requirement.version),
+DETAIL_ATTRIBUTES: tuple[tuple[str, Callable[[ExtendedRequirement], str | None]], ...] = (
+    ("version", lambda requirement: requirement.key.version),
     ("status", lambda requirement: requirement.status),
     ("priority", lambda requirement: requirement.priority),
     ("owner", lambda requirement: requirement.owner),
 )
 
 
-def render_requirement(requirement: RequirementAssignment) -> str:
-    """Render a requirement as its identifier and title, followed by its attributes.
+def render_requirement(requirement: ExtendedRequirement) -> str:
+    """Render a requirement as its identifier and title, its attributes and its description.
 
-    Attributes that are unset are omitted rather than rendered empty.
+    Attributes that are unset and a description without visible text are omitted
+    rather than rendered empty.
 
     Args:
         requirement: The requirement to render.
 
     Returns:
-        One or two lines, without a trailing newline.
+        The rendered lines, without a trailing newline.
     """
     lines = [f"- {requirement.extendedId}: {requirement.name}"]
     attributes = [
@@ -52,6 +53,9 @@ def render_requirement(requirement: RequirementAssignment) -> str:
     ]
     if attributes:
         lines.append("  " + " | ".join(attributes))
+    if requirement.description and has_visible_text(requirement.description):
+        lines.append("  description:")
+        lines.extend(f"    {line}" for line in requirement.description.strip().splitlines())
     return "\n".join(lines)
 
 
@@ -68,7 +72,7 @@ def render_existing_tests(theme_context: ThemeContext) -> str:
 
 def assemble_context(
     *,
-    targets: Sequence[RequirementAssignment],
+    targets: Sequence[ExtendedRequirement],
     theme_context: ThemeContext,
 ) -> RequirementAgentData:
     """Assemble one prompt context covering every target requirement.

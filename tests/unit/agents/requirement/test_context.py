@@ -5,11 +5,11 @@ from testbench_ai_service.agents.requirement.context import (
     render_existing_tests,
     render_requirement,
 )
-from testbench_ai_service.agents.requirement.model import ThemeContext
+from testbench_ai_service.agents.requirement.model import ExtendedRequirement, ThemeContext
 from testbench_ai_service.models.testbench import RequirementAssignment
 
 
-def _requirement(extended_id: str = "ER_1", **overrides: str) -> RequirementAssignment:
+def _requirement(extended_id: str = "ER_1", **overrides: str) -> ExtendedRequirement:
     fields = {
         "key": "473",
         "name": "Automatic discount",
@@ -21,7 +21,7 @@ def _requirement(extended_id: str = "ER_1", **overrides: str) -> RequirementAssi
         "priority": "high",
         "repositoryId": "MS Excel",
     }
-    return RequirementAssignment(**(fields | overrides))
+    return ExtendedRequirement.from_assignment(RequirementAssignment(**(fields | overrides)))
 
 
 class TestRenderRequirement:
@@ -35,6 +35,22 @@ class TestRenderRequirement:
         rendered = render_requirement(_requirement(owner="", priority=""))
 
         assert rendered.splitlines()[1] == "  version: 1 | status: open"
+
+    def test_renders_description_indented_below_attributes(self):
+        requirement = _requirement().model_copy(
+            update={"description": "Orders above 100 EUR\nget 5 % off."}
+        )
+
+        assert render_requirement(requirement).splitlines()[2:] == [
+            "  description:",
+            "    Orders above 100 EUR",
+            "    get 5 % off.",
+        ]
+
+    def test_omits_description_without_visible_text(self):
+        requirement = _requirement().model_copy(update={"description": "<p> </p>"})
+
+        assert len(render_requirement(requirement).splitlines()) == 2
 
 
 class TestRenderExistingTests:

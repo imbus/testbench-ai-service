@@ -276,6 +276,12 @@ def get_requirements(
     return TypeAdapter(list[RequirementAssignment]).validate_python(requirements)
 
 
+def get_tov_baselines(conn: TBConnection, tov_key: str) -> list[dict]:
+    """Return the keys of the requirement baselines assigned to a TOV."""
+    raw = conn.legacy_session.get(f"{conn.server_legacy_url}tovs/{tov_key}/baselines").json()
+    return [baseline["key"] for baseline in raw["baselines"]]
+
+
 def has_any_allowed_role(
     conn: TBConnection, project: str, allowed_roles: list[GlobalHumanRole | ProjectRole]
 ) -> bool:

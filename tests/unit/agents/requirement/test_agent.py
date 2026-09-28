@@ -8,7 +8,10 @@ import pytest
 
 from testbench_ai_service.agents.requirement import agent as agent_module
 from testbench_ai_service.agents.requirement.agent import RequirementAgent
-from testbench_ai_service.agents.requirement.model import RequirementAgentArgs
+from testbench_ai_service.agents.requirement.model import (
+    ExtendedRequirement,
+    RequirementAgentArgs,
+)
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import RequirementAssignment, TestThemeNode
 
@@ -37,8 +40,8 @@ def _theme_node(locker_key: str | None = None) -> MagicMock:
     return theme
 
 
-def _requirement(extended_id: str = "ER_WHY299") -> RequirementAssignment:
-    return RequirementAssignment(
+def _requirement(extended_id: str = "ER_WHY299") -> ExtendedRequirement:
+    assignment = RequirementAssignment(
         key="473",
         name="Automatic discount",
         id=extended_id,
@@ -49,6 +52,7 @@ def _requirement(extended_id: str = "ER_WHY299") -> RequirementAssignment:
         priority="high",
         repositoryId="MS Excel",
     )
+    return ExtendedRequirement.from_assignment(assignment)
 
 
 class _Recorder:
