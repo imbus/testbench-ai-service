@@ -287,6 +287,54 @@ textarea.input { min-height: 90px; resize: vertical; }
 .pane-resizer:hover,
 .pane-resizer:focus-visible { background: var(--color-accent-300) !important; outline: none; }
 
+/* — switch — sliding on/off control for role="switch" buttons. */
+.switch-row { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; }
+.switch {
+  position: relative; flex: none; width: 36px; height: 20px; padding: 0;
+  border-radius: 10px; border: 1px solid var(--color-divider);
+  background: var(--color-surface); cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.switch:hover:not(:disabled) { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.switch[aria-checked='true'] { background: var(--color-accent); border-color: var(--color-accent); }
+.switch:disabled { opacity: 0.45; cursor: not-allowed; }
+.switch-knob {
+  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 7px;
+  background: var(--color-text); transition: left .15s, background .15s;
+}
+.switch[aria-checked='true'] .switch-knob { left: 18px; background: #fff; }
+.switch-caption { font-size: 13px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+
+/* — prompt variable declarations (VarDeclTable) — */
+.var-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.var-card {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-3) calc(var(--space-3) * 1.4);
+  border: 1px solid var(--color-divider); border-radius: var(--radius-md);
+  background: var(--color-bg);
+}
+.var-card-head {
+  display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;
+  padding-bottom: var(--space-2); border-bottom: 1px solid var(--color-divider);
+}
+.var-card-name {
+  margin-right: auto; font-family: ui-monospace, Menlo, monospace; font-size: 14px;
+  padding: 2px 8px; border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent); color: var(--color-text);
+}
+.var-card-required { display: inline-flex; align-items: center; gap: var(--space-2); font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent); }
+.var-card-required .switch-row { min-height: 0; }
+.var-card-grid {
+  display: grid; gap: var(--space-3);
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.var-card-wide { grid-column: 1 / -1; }
+.var-card-error { font-size: 12px; color: #a33a2b; }
+[data-theme=dark] .var-card-error { color: #e0806f; }
+.var-add { display: flex; gap: var(--space-2); align-items: center; }
+.var-add .input { flex: 1; min-width: 0; }
+
 /* — prompt test run (TestRunPanel) — */
 .testrun { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .testrun-title {

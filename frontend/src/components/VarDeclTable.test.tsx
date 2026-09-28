@@ -13,7 +13,7 @@ const decl = (over: Partial<PromptVarDecl> = {}): PromptVarDecl => ({
 describe('VarDeclTable', () => {
   it('lists each declaration by key', () => {
     render(<VarDeclTable vars={{ tone: decl() }} lang="en" onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
-    expect(screen.getByDisplayValue('tone')).toBeInTheDocument()
+    expect(screen.getByText('{{ tone }}')).toBeInTheDocument()
   })
 
   it('shows the choices field only for an enum', () => {

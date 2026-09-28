@@ -42,18 +42,14 @@ function DefaultValueControl({
   if (decl.value_type === 'boolean') {
     const checked = value === true
     return (
-      <button
-        type="button"
-        role="switch"
+      <Switch
         id={id}
-        aria-checked={checked}
-        aria-labelledby={labelId}
+        labelId={labelId}
+        checked={checked}
         disabled={readOnly}
-        className="btn btn-ghost"
-        onClick={() => onChange(!checked)}
-      >
-        {checked ? 'true' : 'false'}
-      </button>
+        caption={checked ? 'true' : 'false'}
+        onToggle={() => onChange(!checked)}
+      />
     )
   }
 
@@ -126,6 +122,47 @@ function DefaultValueControl({
   )
 }
 
+/**
+ * A sliding on/off switch. Shares its look with Field.tsx's bool control via
+ * the `.switch` class; the caption sits beside the track so the state reads
+ * in words as well as position.
+ */
+function Switch({
+  id,
+  labelId,
+  checked,
+  disabled,
+  caption,
+  onToggle,
+}: {
+  id?: string
+  labelId: string
+  checked: boolean
+  disabled?: boolean
+  caption: string
+  onToggle: () => void
+}) {
+  return (
+    <span className="switch-row">
+      <button
+        type="button"
+        role="switch"
+        id={id}
+        aria-checked={checked}
+        aria-labelledby={labelId}
+        disabled={disabled}
+        className="switch"
+        onClick={onToggle}
+      >
+        <span className="switch-knob" />
+      </button>
+      <span className="switch-caption" aria-hidden="true">
+        {caption}
+      </span>
+    </span>
+  )
+}
+
 function VarRow({
   name,
   decl,
@@ -160,28 +197,30 @@ function VarRow({
   const invalidEnum = decl.value_type === 'enum' && (decl.choices ?? []).length === 0
 
   return (
-    <div
-      data-testid="var-row"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 6,
-        padding: '10px 0',
-        borderBottom: '1px solid var(--color-divider)',
-      }}
-    >
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center' }}>
-        <input
-          className="input"
-          aria-label={t.varName}
-          value={name}
-          readOnly
-          style={{ width: 140, fontFamily: 'ui-monospace, Menlo, monospace' }}
-        />
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 160 }}>
-          <label htmlFor={descriptionId} style={{ fontSize: 11 }}>
-            {t.varDescription}
-          </label>
+    <div data-testid="var-row" className="var-card">
+      <div className="var-card-head">
+        <code className="var-card-name">
+          {`{{ ${name} }}`}
+        </code>
+        <span className="var-card-required">
+          <span id={requiredLabelId}>{t.varRequired}</span>
+          <Switch
+            labelId={requiredLabelId}
+            checked={decl.required}
+            disabled={readOnly}
+            caption={decl.required ? t.varRequiredOn : t.varRequiredOff}
+            onToggle={() => onEdit({ ...decl, required: !decl.required })}
+          />
+        </span>
+        {!readOnly && (
+          <button type="button" className="btn btn-ghost" onClick={onRemove}>
+            {t.remove}
+          </button>
+        )}
+      </div>
+      <div className="var-card-grid">
+        <div className="field var-card-wide">
+          <label htmlFor={descriptionId}>{t.varDescription}</label>
           <input
             className="input"
             id={descriptionId}
@@ -190,10 +229,8 @@ function VarRow({
             onChange={(event) => onEdit({ ...decl, description: event.target.value || null })}
           />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <label htmlFor={typeId} style={{ fontSize: 11 }}>
-            {t.varType}
-          </label>
+        <div className="field">
+          <label htmlFor={typeId}>{t.varType}</label>
           <select
             className="input"
             id={typeId}
@@ -218,24 +255,23 @@ function VarRow({
           </select>
         </div>
         {decl.value_type === 'enum' && (
-          <div style={{ display: 'flex', flexDirection: 'column', minWidth: 160 }}>
-            <label htmlFor={choicesId} style={{ fontSize: 11 }}>
-              {t.varChoices}
-            </label>
+          <div className="field">
+            <label htmlFor={choicesId}>{t.varChoices}</label>
             <input
               className="input"
               id={choicesId}
               placeholder={t.varChoicesPlaceholder}
               disabled={readOnly}
+              aria-invalid={invalidEnum || undefined}
               value={(decl.choices ?? []).join(', ')}
               onChange={(event) => onEdit({ ...decl, choices: parseChoices(event.target.value) })}
             />
           </div>
         )}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span id={defaultLabelId} style={{ fontSize: 11 }}>
+        <div className={decl.value_type === 'text' ? 'field var-card-wide' : 'field'}>
+          <label id={defaultLabelId} htmlFor={defaultId}>
             {t.varDefaultValue}
-          </span>
+          </label>
           <DefaultValueControl
             id={defaultId}
             labelId={defaultLabelId}
@@ -244,30 +280,9 @@ function VarRow({
             onChange={(value) => onEdit({ ...decl, default_value: value })}
           />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          <span id={requiredLabelId} style={{ fontSize: 11 }}>
-            {t.varRequired}
-          </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={decl.required}
-            aria-labelledby={requiredLabelId}
-            disabled={readOnly}
-            className="btn btn-ghost"
-            onClick={() => onEdit({ ...decl, required: !decl.required })}
-          >
-            {decl.required ? t.varRequiredOn : t.varRequiredOff}
-          </button>
-        </div>
-        {!readOnly && (
-          <button type="button" className="btn btn-ghost" onClick={onRemove}>
-            {t.remove}
-          </button>
-        )}
       </div>
       {invalidEnum && (
-        <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
+        <span role="alert" className="var-card-error">
           {t.varEnumNeedsChoices}
         </span>
       )}
@@ -294,7 +309,7 @@ export function VarDeclTable({
   const [pending, setPending] = useState('')
 
   return (
-    <div>
+    <div className="var-list">
       {Object.entries(vars).map(([name, decl]) => (
         <VarRow
           key={name}
@@ -307,7 +322,16 @@ export function VarDeclTable({
         />
       ))}
       {!readOnly && (
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', paddingTop: 10 }}>
+        <form
+          className="var-add"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const key = pending.trim()
+            if (!key) return
+            onAdd(key)
+            setPending('')
+          }}
+        >
           <input
             className="input"
             aria-label={t.varNewName}
@@ -315,19 +339,10 @@ export function VarDeclTable({
             value={pending}
             onChange={(event) => setPending(event.target.value)}
           />
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => {
-              const key = pending.trim()
-              if (!key) return
-              onAdd(key)
-              setPending('')
-            }}
-          >
+          <button type="submit" className="btn btn-secondary" disabled={!pending.trim()}>
             {t.add}
           </button>
-        </div>
+        </form>
       )}
     </div>
   )
