@@ -1,7 +1,14 @@
 """Tests for loading the requirements the agent works from."""
 
+import logging
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+import requests
+from fastapi import HTTPException
+
+from testbench_ai_service.agents.requirement import utils as utils_module
 from testbench_ai_service.agents.requirement.model import (
     ExtendedRequirement,
     RequirementAgentArgs,
@@ -104,3 +111,98 @@ class TestFetchRequirementDetails:
 
         assert extended == [ExtendedRequirement.from_assignment(assignment)]
         conn.legacy_session.get.assert_not_called()
+
+    async def test_the_first_baseline_that_knows_the_requirement_wins(self, rm):
+        rm.known = {("Old", "473"), ("New", "473")}
+
+        (extended,) = await fetch_requirement_details(MagicMock(), RM_ARGS, TOV, [_assignment()])
+
+        assert extended.baseline == "Old"
+        assert [url for url, _ in rm.posted] == [_rm_url("Old")]
+
+    async def test_keeps_the_order_of_the_requirements(self, rm):
+        rm.known = {("New", "1"), ("Old", "2"), ("New", "3")}
+        assignments = [_assignment(requirement_id) for requirement_id in ("1", "2", "3")]
+
+        extended = await fetch_requirement_details(MagicMock(), RM_ARGS, TOV, assignments)
+
+        assert [requirement.key.id for requirement in extended] == ["1", "2", "3"]
+        assert [requirement.baseline for requirement in extended] == ["New", "Old", "New"]
+
+    async def test_falls_back_to_the_tov_data_warning_once(self, rm, caplog):
+        assignment = _assignment()
+
+        with caplog.at_level(logging.DEBUG, logger="testbench_ai_service"):
+            extended = await fetch_requirement_details(MagicMock(), RM_ARGS, TOV, [assignment])
+
+        assert extended == [ExtendedRequirement.from_assignment(assignment)]
+        assert len(rm.posted) == 2
+        warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
+        assert [
+            record.getMessage() for record in warnings if "not found" in record.getMessage()
+        ] == [
+            "Requirement '473' (version '1') was not found in any baseline of repository "
+            "'MS Excel'; continuing with its TOV data only"
+        ]
+
+    async def test_an_rm_server_error_surfaces_as_502(self, rm):
+        rm.status_code = 500
+
+        with pytest.raises(HTTPException) as exc:
+            await fetch_requirement_details(MagicMock(), RM_ARGS, TOV, [_assignment()])
+
+        assert exc.value.status_code == 502
+
+
+RM_URL = "http://rm/"
+RM_ARGS = RequirementAgentArgs(rm_service_url=RM_URL, rm_username="u", rm_password="p")
+#: Two baselines of the requirements' repository, in the order the TOV lists them.
+BASELINES = [
+    {"repository": "MS Excel", "name": name, "reqProjectName": "Shop"} for name in ("Old", "New")
+]
+
+
+def _assignment(requirement_id: str = "473") -> RequirementAssignment:
+    return RequirementAssignment.model_validate(ASSIGNMENT | {"id": requirement_id})
+
+
+def _rm_url(baseline: str) -> str:
+    return f"{RM_URL}projects/Shop/baselines/{baseline}/extended-requirement"
+
+
+@pytest.fixture
+def rm(monkeypatch):
+    """Fake the TOV baselines and the RM service; ``known`` holds (baseline, id) pairs."""
+    state = SimpleNamespace(known=set(), posted=[], status_code=None)
+
+    def _post(url, json):
+        state.posted.append((url, json))
+        baseline = url.split("/baselines/")[1].split("/")[0]
+        response = MagicMock()
+        if state.status_code is not None:
+            response.status_code = state.status_code
+            response.raise_for_status.side_effect = requests.exceptions.HTTPError()
+        elif (baseline, json["id"]) in state.known:
+            response.status_code = 200
+            response.json.return_value = {
+                "name": f"Requirement {json['id']}",
+                "extendedID": f"ER_{json['id']}",
+                "key": {"id": json["id"], "version": json["version"]},
+                "owner": "someone",
+                "status": "open",
+                "priority": "high",
+                "requirement": True,
+                "description": "Details",
+                "documents": [],
+                "baseline": baseline,
+            }
+        else:
+            response.status_code = 404
+        return response
+
+    session = MagicMock()
+    session.__enter__.return_value = session
+    session.post.side_effect = _post
+    monkeypatch.setattr(utils_module, "get_tov_baselines", lambda _conn, _tov: BASELINES)
+    monkeypatch.setattr(utils_module, "_rm_session", lambda _args: session)
+    return state

@@ -23,6 +23,11 @@ from testbench_ai_service.models.testbench import (
     RichTextInfo,
     SpecificationDetailsForUpdate,
 )
+from testbench_ai_service.transport import (
+    DEFAULT_MAX_RETRIES,
+    ResilientHTTPAdapter,
+    build_retry,
+)
 from testbench_ai_service.utils.html_utils import escape_html, has_visible_text
 from testbench_ai_service.utils.template_utils import render_template, resolve_template_path
 from testbench_ai_service.utils.testbench import (
@@ -37,6 +42,9 @@ AGENT_KEY = "requirement"
 
 #: Timeout (connect, read) in seconds for calls to the RM service.
 RM_REQUEST_TIMEOUT_SEC = (10, 60)
+
+#: Upper bound on the requests to the RM service in flight at once.
+RM_MAX_CONCURRENT_REQUESTS = 8
 
 
 async def load_requirements(
@@ -110,29 +118,42 @@ async def fetch_requirement_details(
                 [_baseline_name(baseline) for baseline in baselines],
             )
 
-    extended_requirements: list[ExtendedRequirement] = []
-    for requirement in requirements:
-        baseline, extended = await _find_extended_requirement(
-            baselines_by_repo.get(requirement.repositoryId, []), requirement, rm_service
-        )
-        if baseline is None or extended is None:
-            logger.warning(
-                "Requirement '%s' (version '%s') was not found in any baseline of repository "
-                "'%s'; continuing with its TOV data only",
-                requirement.id,
-                requirement.version,
-                requirement.repositoryId,
+    # One pooled session for all lookups; the semaphore caps the requests in flight.
+    semaphore = asyncio.Semaphore(RM_MAX_CONCURRENT_REQUESTS)
+    with _rm_session(rm_service) as session:
+        tasks = [
+            asyncio.create_task(
+                _resolve_requirement(
+                    session,
+                    semaphore,
+                    rm_service.rm_service_url,
+                    baselines_by_repo.get(requirement.repositoryId, []),
+                    requirement,
+                )
             )
-            extended = ExtendedRequirement.from_assignment(requirement)
-        else:
-            logger.debug(
-                "Requirement '%s' resolved to baseline '%s'",
-                requirement.id,
-                _baseline_name(baseline),
-            )
-        extended_requirements.append(extended)
+            for requirement in requirements
+        ]
+        try:
+            return list(await asyncio.gather(*tasks))
+        except BaseException:
+            # Stop the lookups not yet started instead of letting them run on unobserved.
+            for task in tasks:
+                task.cancel()
+            raise
 
-    return extended_requirements
+
+def _rm_session(rm_service: RequirementAgentArgs) -> requests.Session:
+    """Create a session authenticated against the RM service, pooled for concurrent use."""
+    session = requests.Session()
+    session.auth = HTTPBasicAuth(rm_service.rm_username, rm_service.rm_password)
+    adapter = ResilientHTTPAdapter(
+        timeout=RM_REQUEST_TIMEOUT_SEC,
+        max_retries=build_retry(DEFAULT_MAX_RETRIES),
+        pool_maxsize=RM_MAX_CONCURRENT_REQUESTS,
+    )
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
 
 
 def _baseline_name(baseline: dict) -> str:
@@ -140,42 +161,72 @@ def _baseline_name(baseline: dict) -> str:
     return f"{baseline['name']} ({baseline['reqProjectName']})"
 
 
-async def _find_extended_requirement(
+async def _resolve_requirement(
+    session: requests.Session,
+    semaphore: asyncio.Semaphore,
+    rm_service_url: str,
     baselines: list[dict],
     requirement: RequirementAssignment,
-    rm_service: RequirementAgentArgs,
-) -> tuple[dict | None, ExtendedRequirement | None]:
-    """Find the baseline a requirement belongs to by asking each candidate in turn.
+) -> ExtendedRequirement:
+    """Resolve a requirement's extended data, falling back to its TOV data.
 
     The requirement assignment only names its repository, so when a repository has
-    several baselines in the TOV the first baseline that knows the requirement wins.
+    several baselines in the TOV they are asked in turn and the first baseline that
+    knows the requirement wins.
 
     Returns:
-        The matching baseline key and the requirement's extended data, or
-        ``(None, None)`` when no candidate baseline contains the requirement.
+        The requirement's extended data from the RM service, or one built from its
+        TOV data alone when no candidate baseline contains it.
     """
     for baseline in baselines:
-        extended = await asyncio.to_thread(
-            get_extended_requirement,
-            rm_service,
-            baseline["reqProjectName"],
-            baseline["name"],
-            requirement.id,
-            requirement.version,
-        )
+        async with semaphore:
+            extended = await asyncio.to_thread(
+                get_extended_requirement,
+                session,
+                rm_service_url,
+                baseline["reqProjectName"],
+                baseline["name"],
+                requirement.id,
+                requirement.version,
+            )
         if extended is not None:
-            return baseline, extended
-    return None, None
+            logger.debug(
+                "Requirement '%s' resolved to baseline '%s'",
+                requirement.id,
+                _baseline_name(baseline),
+            )
+            return extended
+
+    logger.warning(
+        "Requirement '%s' (version '%s') was not found in any baseline of repository "
+        "'%s'; continuing with its TOV data only",
+        requirement.id,
+        requirement.version,
+        requirement.repositoryId,
+    )
+    return ExtendedRequirement.from_assignment(requirement)
 
 
 def get_extended_requirement(
-    rm_service: RequirementAgentArgs,
+    session: requests.Session,
+    rm_service_url: str,
     req_project: str,
     baseline: str,
     requirement_id: str,
     version: str,
 ) -> ExtendedRequirement | None:
     """Fetch a requirement's extended data from a baseline of the RM service.
+
+    A miss is logged at debug level only: with several baselines per repository
+    misses are expected, and the caller warns once if no baseline has the requirement.
+
+    Args:
+        session: Session authenticated against the RM service (see ``_rm_session``).
+        rm_service_url: Base URL of the RM service, with a trailing slash.
+        req_project: Name of the RM project the baseline belongs to.
+        baseline: Name of the baseline to look in.
+        requirement_id: ID of the requirement.
+        version: Version of the requirement.
 
     Returns:
         The extended requirement, or ``None`` when the baseline does not contain it
@@ -186,22 +237,17 @@ def get_extended_requirement(
         HTTPException: ``502`` when the RM service is unreachable, answers with any
             other error status, or returns a body that is not an extended requirement.
     """
-    url = f"{rm_service.rm_service_url}projects/{req_project}/baselines/{baseline}/extended-requirement"
+    url = f"{rm_service_url}projects/{req_project}/baselines/{baseline}/extended-requirement"
     body = {"id": requirement_id, "version": version}
     try:
-        response = requests.post(
-            url,
-            json=body,
-            auth=HTTPBasicAuth(rm_service.rm_username, rm_service.rm_password),
-            timeout=RM_REQUEST_TIMEOUT_SEC,
-        )
+        response = session.post(url, json=body)
     except TRANSPORT_ERRORS as e:
         detail = f"Could not reach RM service at '{url}': {e!s}"
         logger.error(detail)
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from e
 
     if response.status_code in (HTTPStatus.BAD_REQUEST, HTTPStatus.NOT_FOUND):
-        logger.warning(
+        logger.debug(
             "Requirement '%s' (version '%s') not found in project '%s', baseline '%s': %s - %s",
             requirement_id,
             version,
