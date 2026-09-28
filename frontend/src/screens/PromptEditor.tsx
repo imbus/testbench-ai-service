@@ -11,6 +11,7 @@ import { Modal } from '../components/Modal'
 import { EditorToolbar } from '../components/prompt/EditorToolbar'
 import { MessagePane } from '../components/prompt/MessagePane'
 import { MetaPane } from '../components/prompt/MetaPane'
+import { PaneResizer } from '../components/prompt/PaneResizer'
 import { PromptTree } from '../components/prompt/PromptTree'
 import { messagePath, uniqueVariantName, type Selection } from '../components/prompt/selection'
 import { TabsLayout } from '../components/prompt/TabsLayout'
@@ -22,7 +23,7 @@ import { SavePromptDialog } from '../components/SavePromptDialog'
 import { TestRunPanel } from '../components/TestRunPanel'
 import { VarDeclTable } from '../components/VarDeclTable'
 import { useTranslations, type Lang, type Translations } from '../i18n'
-import { useEditorLayout } from '../state/editorLayout'
+import { MIN_PANE_HEIGHT, useEditorLayout, usePaneHeight } from '../state/editorLayout'
 import { isDirty, promptDraftReducer } from '../state/promptDraft'
 
 function emptyDocument(lang: string, agent: string): PromptDocument {
@@ -169,6 +170,8 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   // variant's own message list, like `diagnostics` below.
   const [selection, setSelection] = useState<Selection>({ kind: 'message', index: 0 })
   const [layout, setLayout] = useEditorLayout()
+  const [paneHeight, setPaneHeight] = usePaneHeight()
+  const splitColumnRef = useRef<HTMLDivElement>(null)
   // The one open message's editor -- the sidebar inserts at its cursor.
   const editorRef = useRef<CodeEditorHandle>(null)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -683,17 +686,27 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         onAddVariant={addVariant}
         onAddMessage={addMessage}
       />
-      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div ref={splitColumnRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           {centre}
           {currentMessage && <VarSidebar {...varSidebarProps} />}
         </div>
+        {/* The editor above keeps at least 160px; the rest is the viewer's
+            to hand to Preview / Test run. */}
+        <PaneResizer
+          height={paneHeight}
+          min={MIN_PANE_HEIGHT}
+          max={() => (splitColumnRef.current?.clientHeight ?? 0) - 160}
+          label={t.resizePreviewPane}
+          onResize={setPaneHeight}
+        />
         <div
           data-testid="preview-pane"
           style={{
-            height: 230,
+            height: paneHeight,
+            // A height remembered from a taller window must not crush the editor.
+            maxHeight: 'calc(100% - 160px)',
             flex: 'none',
-            borderTop: '1px solid var(--color-divider)',
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
             gap: 16,

@@ -209,6 +209,7 @@ export const de = {
   varsUsed: 'deklarierte Variablen genutzt',
   undeclaredCount: 'nicht deklariert',
   previewPane: 'Vorschau',
+  resizePreviewPane: 'Höhe von Vorschau und Testlauf ändern',
   drawerVariables: 'Variablen',
   noMessages: 'Diese Variante hat keine Nachrichten.',
 } as const

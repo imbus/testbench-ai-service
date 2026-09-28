@@ -213,6 +213,7 @@ export const en = {
   varsUsed: 'declared vars used',
   undeclaredCount: 'undeclared',
   previewPane: 'Preview',
+  resizePreviewPane: 'Resize preview and test run',
   drawerVariables: 'Variables',
   noMessages: 'This variant has no messages.',
 } as const
