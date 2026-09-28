@@ -1,6 +1,6 @@
 /**
- * The prompt tree screen (design §5.6): one section per language, one link
- * per agent, pointed at its editor.
+ * The prompt tree screen (design §5.6): one row per agent, one column per
+ * language, each cell linking to that language's editor.
  */
 import { render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -103,13 +103,44 @@ function renderPromptsDefault() {
 }
 
 describe('Prompts', () => {
-  it('lists each language and its agents', async () => {
+  it('lists each agent once, with a column per language', async () => {
     renderPrompts()
     await waitFor(() => expect(screen.getByTestId('prompt-lang-de')).toBeInTheDocument())
     expect(screen.getByTestId('prompt-lang-en')).toBeInTheDocument()
-    expect(
-      within(screen.getByTestId('prompt-lang-de')).getByRole('link', { name: 'Reviewer' }),
-    ).toBeInTheDocument()
+    expect(screen.getAllByTestId('prompt-row-reviewer')).toHaveLength(1)
+    const row = screen.getByTestId('prompt-row-reviewer')
+    expect(row.textContent).toMatch(/Reviewer/)
+    expect(within(row).getAllByRole('link')).toHaveLength(2)
+  })
+
+  it('shows the variants of each language file as tags', async () => {
+    renderPrompts()
+    await waitFor(() => expect(screen.getByTestId('prompt-agent-en-reviewer')).toBeInTheDocument())
+    expect(within(screen.getByTestId('prompt-agent-en-reviewer')).getByText('Thorough')).toBeInTheDocument()
+  })
+
+  it('marks a language that has no file for the agent', async () => {
+    renderPrompts()
+    await waitFor(() => expect(screen.getByTestId('prompt-row-explainer')).toBeInTheDocument())
+    expect(screen.queryByTestId('prompt-agent-en-explainer')).not.toBeInTheDocument()
+    expect(screen.getByTestId('prompt-row-explainer').textContent).toMatch(/no file/)
+  })
+
+  it('lists who uses the file, and says so when nobody does', async () => {
+    const tree = structuredClone(TREE)
+    tree.languages[0].prompts[0].used_by = [
+      { agent: 'reviewer', project: null },
+      { agent: 'reviewer', project: 'ALPHA' },
+    ]
+    tree.languages[1].prompts[0].used_by = [{ agent: 'reviewer', project: null }]
+    treeBody = tree
+    renderPrompts()
+    await waitFor(() => expect(screen.getByTestId('prompt-row-reviewer')).toBeInTheDocument())
+    const row = screen.getByTestId('prompt-row-reviewer')
+    // Deduplicated across languages: one global tag, not one per file.
+    expect(within(row).getAllByText('Global')).toHaveLength(1)
+    expect(within(row).getByText('ALPHA')).toBeInTheDocument()
+    expect(screen.getByTestId('prompt-row-explainer').textContent).toMatch(/unused/)
   })
 
   it('links each agent to its editor', async () => {
