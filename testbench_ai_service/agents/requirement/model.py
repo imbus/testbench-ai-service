@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from testbench_ai_service.models.agent import AgentArgs
 from testbench_ai_service.models.testbench import RequirementAssignment
@@ -23,15 +23,29 @@ class RequirementAgentArgs(AgentArgs):
         gt=0,
         description="Skip themes with more requirements than this. Unset means no limit.",
     )
-    rm_service_url: str
-    rm_username: str
-    rm_password: str
+    rm_service_url: str | None = Field(
+        default=None,
+        description="RM service to fetch requirement details from. Unset means TOV data only.",
+    )
+    rm_username: str | None = None
+    rm_password: str | None = None
 
     @field_validator("rm_service_url", mode="after")
     @classmethod
-    def ensure_trailing_slash(cls, rm_service_url: str) -> str:
+    def ensure_trailing_slash(cls, rm_service_url: str | None) -> str | None:
         """Append a trailing slash so paths can be joined onto the URL directly."""
-        return rm_service_url if rm_service_url.endswith("/") else f"{rm_service_url}/"
+        if rm_service_url is None or rm_service_url.endswith("/"):
+            return rm_service_url
+        return f"{rm_service_url}/"
+
+    @model_validator(mode="after")
+    def require_rm_credentials(self) -> "RequirementAgentArgs":
+        """Reject an RM service URL configured without the credentials to call it."""
+        if self.rm_service_url is not None and (
+            self.rm_username is None or self.rm_password is None
+        ):
+            raise ValueError("rm_service_url requires rm_username and rm_password")
+        return self
 
 
 class Requirement(BaseModel):

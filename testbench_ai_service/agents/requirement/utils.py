@@ -41,13 +41,12 @@ RM_REQUEST_TIMEOUT_SEC = (10, 60)
 
 async def load_requirements(
     conn: TBConnection,
-    rm_service: RequirementAgentArgs,
     project_key: str,
     root_uid: str,
     tov_key: str,
     cycle_key: str | None = None,
     filtering: FilteringOptions | None = None,
-) -> list[ExtendedRequirement]:
+) -> list[RequirementAssignment]:
     """Load the requirements assigned below a tree root of a TOV or cycle.
 
     Args:
@@ -62,7 +61,7 @@ async def load_requirements(
         The requirements assigned below ``root_uid``.
     """
     logger.debug("Loading requirements of TOV '%s' (cycle '%s')", tov_key, cycle_key)
-    requirements = await asyncio.to_thread(
+    return await asyncio.to_thread(
         get_requirements,
         conn,
         project_key,
@@ -71,6 +70,31 @@ async def load_requirements(
         cycle_key=cycle_key,
         filtering=filtering,
     )
+
+
+async def fetch_requirement_details(
+    conn: TBConnection,
+    rm_service: RequirementAgentArgs,
+    tov_key: str,
+    requirements: list[RequirementAssignment],
+) -> list[ExtendedRequirement]:
+    """Look up each requirement's details in the RM service.
+
+    A requirement that no baseline of its repository contains keeps its TOV data
+    only. Without a configured ``rm_service_url`` every requirement does.
+
+    Args:
+        conn: The active TestBench connection.
+        rm_service: The agent args holding the RM service URL and credentials.
+        tov_key: Key of the TOV whose baselines are searched.
+        requirements: The requirements loaded from the TOV.
+
+    Returns:
+        One extended requirement per entry of ``requirements``, in the same order.
+    """
+    if rm_service.rm_service_url is None:
+        logger.debug("No rm_service_url configured; using the TOV requirement data only")
+        return [ExtendedRequirement.from_assignment(requirement) for requirement in requirements]
 
     baselines_by_repo: dict[str, list[dict]] = defaultdict(list)
     for baseline in await asyncio.to_thread(get_tov_baselines, conn, tov_key):

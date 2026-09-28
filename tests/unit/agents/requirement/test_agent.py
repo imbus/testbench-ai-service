@@ -8,10 +8,7 @@ import pytest
 
 from testbench_ai_service.agents.requirement import agent as agent_module
 from testbench_ai_service.agents.requirement.agent import RequirementAgent
-from testbench_ai_service.agents.requirement.model import (
-    ExtendedRequirement,
-    RequirementAgentArgs,
-)
+from testbench_ai_service.agents.requirement.model import RequirementAgentArgs
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import RequirementAssignment, TestThemeNode
 
@@ -40,8 +37,8 @@ def _theme_node(locker_key: str | None = None) -> MagicMock:
     return theme
 
 
-def _requirement(extended_id: str = "ER_WHY299") -> ExtendedRequirement:
-    assignment = RequirementAssignment(
+def _requirement(extended_id: str = "ER_WHY299") -> RequirementAssignment:
+    return RequirementAssignment(
         key="473",
         name="Automatic discount",
         id=extended_id,
@@ -52,7 +49,6 @@ def _requirement(extended_id: str = "ER_WHY299") -> ExtendedRequirement:
         priority="high",
         repositoryId="MS Excel",
     )
-    return ExtendedRequirement.from_assignment(assignment)
 
 
 class _Recorder:
@@ -190,6 +186,21 @@ class TestMaxRequirements:
 
         assert wired.recorder.calls == []
         assert wired.ai_calls == []
+
+    async def test_skips_the_rm_lookup_for_a_theme_over_the_limit(self, wired, monkeypatch):
+        fetched = []
+
+        async def _fetch(*args, **_kwargs):
+            fetched.append(args)
+            return []
+
+        monkeypatch.setattr(agent_module, "fetch_requirement_details", _fetch)
+        wired.requirements = [_requirement("ER_1"), _requirement("ER_2"), _requirement("ER_3")]
+        agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
+
+        await agent.run(_context(), MagicMock(), MagicMock(), [])
+
+        assert fetched == []
 
     async def test_generates_when_the_requirements_are_within_the_limit(self, wired):
         wired.requirements = [_requirement("ER_1"), _requirement("ER_2")]

@@ -2,8 +2,15 @@
 
 from unittest.mock import MagicMock
 
-from testbench_ai_service.agents.requirement.utils import load_requirements
-from testbench_ai_service.models.testbench import FilteringOptions
+from testbench_ai_service.agents.requirement.model import (
+    ExtendedRequirement,
+    RequirementAgentArgs,
+)
+from testbench_ai_service.agents.requirement.utils import (
+    fetch_requirement_details,
+    load_requirements,
+)
+from testbench_ai_service.models.testbench import FilteringOptions, RequirementAssignment
 
 SERVER = "https://tb/"
 PROJECT = "7"
@@ -86,3 +93,14 @@ class TestLoadRequirements:
 
     async def test_returns_an_empty_list_when_nothing_is_assigned(self):
         assert await load_requirements(_conn([]), PROJECT, ROOT, TOV) == []
+
+
+class TestFetchRequirementDetails:
+    async def test_uses_the_tov_data_only_without_an_rm_service(self):
+        conn = _conn()
+        assignment = RequirementAssignment.model_validate(ASSIGNMENT)
+
+        extended = await fetch_requirement_details(conn, RequirementAgentArgs(), TOV, [assignment])
+
+        assert extended == [ExtendedRequirement.from_assignment(assignment)]
+        conn.legacy_session.get.assert_not_called()

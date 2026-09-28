@@ -24,6 +24,7 @@ from testbench_ai_service.agents.requirement.model import (
     ThemeContext,
 )
 from testbench_ai_service.agents.requirement.utils import (
+    fetch_requirement_details,
     load_requirements,
     patch_generated_test_ideas,
     patch_generation_failed,
@@ -35,6 +36,7 @@ from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     ProjectRole,
+    RequirementAssignment,
     TestThemeNode,
 )
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
@@ -128,20 +130,8 @@ class RequirementAgent(Agent):
             logger.warning("Theme '%s' is locked by another user; skipping it", theme.base.name)
             return
 
-        try:
-            requirements = await load_requirements(
-                conn,
-                self.args,
-                context.project_key,
-                context.root_uid,
-                context.tov_key,
-                cycle_key=context.cycle_key,
-                filtering=context.filtering,
-            )
-        except Exception as error:
-            logger.error(
-                "Could not load the requirements of test theme '%s': %r", theme.base.name, error
-            )
+        requirements = await self._load_targets(theme.base.name, context, conn)
+        if requirements is None:
             return
 
         test_theme_details = get_test_theme_details(
@@ -170,6 +160,73 @@ class RequirementAgent(Agent):
                 [requirement.extendedId for requirement in requirements],
                 error,
             )
+
+    async def _load_targets(
+        self, theme_name: str, context: ExecutionContext, conn: TBConnection
+    ) -> list[ExtendedRequirement] | None:
+        """Load the theme's requirements from the TOV and their details from the RM service.
+
+        Args:
+            theme_name: Name of the theme, for the log.
+            context: The resolved execution context.
+            conn: TestBench connection.
+
+        Returns:
+            The requirements to generate for, or ``None`` if generation should not go
+            ahead; the reason is logged then.
+        """
+        try:
+            assignments = await load_requirements(
+                conn,
+                context.project_key,
+                context.root_uid,
+                context.tov_key,
+                cycle_key=context.cycle_key,
+                filtering=context.filtering,
+            )
+        except Exception as error:
+            logger.error(
+                "Could not load the requirements of test theme '%s': %r", theme_name, error
+            )
+            return None
+
+        # Checked before the RM lookup, which costs a request per requirement and baseline.
+        if not self._requirements_fit(theme_name, assignments):
+            return None
+
+        try:
+            return await fetch_requirement_details(conn, self.args, context.tov_key, assignments)
+        except Exception as error:
+            logger.error(
+                "Could not fetch the requirement details of test theme '%s': %r", theme_name, error
+            )
+            return None
+
+    def _requirements_fit(self, theme_name: str, requirements: list[RequirementAssignment]) -> bool:
+        """Whether a theme has requirements at all, and no more than ``max_requirements``.
+
+        Args:
+            theme_name: Name of the theme, for the log.
+            requirements: The requirements assigned below the theme.
+
+        Returns:
+            ``True`` if generation should go ahead; the reason is logged otherwise.
+        """
+        if not requirements:
+            logger.info(
+                "No requirements are assigned below test theme '%s'; nothing to do", theme_name
+            )
+            return False
+        max_requirements = self.args.max_requirements
+        if max_requirements is not None and len(requirements) > max_requirements:
+            logger.error(
+                "Test theme '%s' has %d requirements, more than max_requirements=%d; skipping it",
+                theme_name,
+                len(requirements),
+                max_requirements,
+            )
+            return False
+        return True
 
     async def _generate_for_theme(
         self,

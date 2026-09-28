@@ -91,6 +91,10 @@ class TestStartupValidation:
 
         assert ("agents", "requirement", "args", "max_requirements") in _error_locs(exc.value)
 
+    def test_rm_service_url_without_credentials_is_rejected(self):
+        with pytest.raises(ValidationError, match="requires rm_username and rm_password"):
+            _make_app_config(args={"rm_service_url": "http://rm"})
+
     def test_missing_required_arg_is_rejected(self, required_args):
         with pytest.raises(ValidationError) as exc:
             _make_app_config()
