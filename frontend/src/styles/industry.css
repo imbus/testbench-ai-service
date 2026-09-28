@@ -286,3 +286,62 @@ textarea.input { min-height: 90px; resize: vertical; }
 /* Prompt editor: drag handle above the Preview / Test run pane. */
 .pane-resizer:hover,
 .pane-resizer:focus-visible { background: var(--color-accent-300) !important; outline: none; }
+
+/* — prompt test run (TestRunPanel) — */
+.testrun { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.testrun-title {
+  margin: 0; padding-bottom: var(--space-2); font-size: 17px;
+  border-bottom: 1px solid var(--color-divider);
+}
+.testrun-fields {
+  display: grid; gap: var(--space-3) var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+  align-items: start;
+}
+.testrun-fields .field { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.testrun-fields .field > label { margin-bottom: 0; }
+.testrun-model-id { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+.testrun-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.testrun-chip {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+  padding: 2px 8px; font-size: 11px; line-height: 1.5;
+  border: 1px solid var(--color-divider);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+  color: color-mix(in srgb, var(--color-text) 80%, transparent);
+}
+.testrun-chip code { font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+.testrun-chip-label { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.testrun-chip-warn {
+  border-color: color-mix(in srgb, var(--tb-orange) 55%, transparent);
+  background: color-mix(in srgb, var(--tb-orange) 12%, transparent);
+  color: var(--color-text);
+}
+.testrun-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.testrun-status {
+  display: inline-flex; align-items: center; gap: var(--space-2); font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.testrun-spinner {
+  width: 12px; height: 12px; border-radius: 50%;
+  border: 2px solid color-mix(in srgb, var(--color-accent) 25%, transparent);
+  border-top-color: var(--color-accent);
+  animation: testrun-spin .8s linear infinite;
+}
+@keyframes testrun-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .testrun-spinner { animation-duration: 2.4s; } }
+.testrun-error {
+  padding: var(--space-2) var(--space-3); font-size: 12px; color: #a33a2b;
+  border-left: 3px solid #a33a2b; background: color-mix(in srgb, #a33a2b 8%, transparent);
+  overflow-wrap: anywhere;
+}
+[data-theme=dark] .testrun-error { color: #e0806f; border-left-color: #e0806f; }
+.testrun-result {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-3); border: 1px solid var(--color-divider);
+  border-left: 3px solid var(--color-accent); background: var(--color-surface);
+}
+.testrun-output {
+  margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.55;
+}
+.testrun-hint { font-size: 12px; }

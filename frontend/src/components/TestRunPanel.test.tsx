@@ -67,18 +67,67 @@ test('marks a fallback model so a degraded call is visible', async () => {
   expect(option.textContent).toMatch(/fallback/i)
 })
 
+/** Opens the free-text model field via the picker's "Other model…" entry. */
+async function typeCustomModel(user: ReturnType<typeof userEvent.setup>, text: string) {
+  await user.selectOptions(screen.getByLabelText('Model'), 'Other model…')
+  const field = screen.getByLabelText('Model ID')
+  await user.clear(field)
+  if (text) await user.type(field, text)
+  return field
+}
+
 test('a free-text model reaches the request', async () => {
   renderPanel()
   const user = userEvent.setup()
 
-  const field = screen.getByLabelText(/model/i)
-  await user.clear(field)
-  await user.type(field, 'typed-model')
+  await typeCustomModel(user, 'typed-model')
   await user.click(screen.getByRole('button', { name: /test run/i }))
 
   await waitFor(() =>
     expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ model: 'typed-model' })),
   )
+})
+
+test('the free-text field stays hidden until "Other model…" is picked', async () => {
+  renderPanel()
+  expect(screen.queryByLabelText('Model ID')).not.toBeInTheDocument()
+
+  await userEvent.setup().selectOptions(screen.getByLabelText('Model'), 'Other model…')
+  expect(screen.getByLabelText('Model ID')).toBeInTheDocument()
+})
+
+test('without a catalogue the free-text field is the model control', () => {
+  modelsState = { isLoading: false, isError: true, data: undefined }
+  renderPanel()
+  const field = screen.getByLabelText('Model')
+  expect(field.tagName).toBe('INPUT')
+})
+
+test('the picker shows the catalogue model it selected', async () => {
+  renderPanel()
+  const user = userEvent.setup()
+  const picker = screen.getByLabelText('Model') as HTMLSelectElement
+
+  await user.selectOptions(picker, 'claude-opus-5')
+
+  expect(picker.value).toBe('claude-opus-5')
+  expect(screen.queryByLabelText('Model ID')).not.toBeInTheDocument()
+})
+
+test('the picker reads "Other model…" for a model the catalogue lacks', async () => {
+  renderPanel()
+  const user = userEvent.setup()
+  const picker = screen.getByLabelText('Model') as HTMLSelectElement
+
+  await typeCustomModel(user, 'typed-model')
+
+  expect(picker.selectedOptions[0].textContent).toBe('Other model…')
+})
+
+test('a picked fallback model says so beside the picker', async () => {
+  renderPanel()
+  await userEvent.setup().selectOptions(screen.getByLabelText('Model'), 'my-model')
+  expect(screen.getByText(/no tuned routing/i)).toBeInTheDocument()
 })
 
 test('shows the resolved route including the credential scope', async () => {
@@ -105,15 +154,15 @@ test('shows the resolved route including the credential scope', async () => {
 test('the button is disabled while a run is in flight', async () => {
   runState = { isPending: true, data: undefined, error: null }
   renderPanel()
-  // A model is typed first, so this asserts the in-flight gate specifically
+  // A model is picked first, so this asserts the in-flight gate specifically
   // rather than passing because the (empty) model gate happens to fire.
-  await userEvent.setup().type(screen.getByLabelText(/model/i), 'claude-opus-5')
+  await userEvent.setup().selectOptions(screen.getByLabelText('Model'), 'claude-opus-5')
   expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
 })
 
 test('a non-admin cannot start a run', async () => {
   renderPanel({ isAdmin: false })
-  await userEvent.setup().type(screen.getByLabelText(/model/i), 'claude-opus-5')
+  await userEvent.setup().selectOptions(screen.getByLabelText('Model'), 'claude-opus-5')
   expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
 })
 
@@ -125,8 +174,7 @@ test('the button is disabled until a model is given', async () => {
   expect(button).toBeDisabled()
 
   const user = userEvent.setup()
-  const field = screen.getByLabelText(/model/i)
-  await user.type(field, '   ')
+  const field = await typeCustomModel(user, '   ')
   expect(button).toBeDisabled()
 
   await user.clear(field)
