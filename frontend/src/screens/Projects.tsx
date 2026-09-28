@@ -11,7 +11,7 @@ import {
 import { useRefreshProjects } from '../api/mutations'
 import { useConfig, useProjects } from '../api/queries'
 import type { ConfigIssue } from '../api/types'
-import { TriState } from '../components/TriState'
+import { AgentSwitch } from '../components/AgentSwitch'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
 import { LANGUAGES } from './agentFields'
@@ -76,7 +76,7 @@ export function Projects({
         display: 'flex',
         flexDirection: 'column',
         gap: 20,
-        maxWidth: 1100,
+        maxWidth: 1400,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
@@ -172,7 +172,10 @@ export function Projects({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            // Wide enough for an agent row (switch, name, variant, override
+            // tag, state) on one line; min() keeps a narrow window from
+            // scrolling sideways.
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(460px, 100%), 1fr))',
             gap: 24,
           }}
         >
@@ -248,7 +251,9 @@ function ProjectCard({
       className="card blueprint"
       data-testid={`project-${name}`}
       data-in-testbench={String(inTestBench)}
-      style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12 }}
+      // minWidth 0: a grid item otherwise refuses to shrink below its content
+      // and pushes past its column.
+      style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}
     >
       {/* The frame's corner marks. Hidden under [data-corners=soft], but they
           are what the square-cornered brand draws, so they are always emitted
@@ -278,7 +283,15 @@ function ProjectCard({
       {/* Three states, one control: the language override is exactly the
           inherit/de/en choice, so it reads as a segmented switch rather than a
           select whose empty option means "inherit". */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          fontSize: 13,
+          flexWrap: 'wrap',
+        }}
+      >
         <span
           id={`${encodeURIComponent(languagePath)}-label`}
           style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}
@@ -356,7 +369,7 @@ function ProjectCard({
                 borderTop: '1px solid var(--color-divider)',
               }}
             >
-              <TriState
+              <AgentSwitch
                 path={path}
                 saved={valueAt(disk, path)}
                 inherited={
@@ -370,25 +383,37 @@ function ProjectCard({
                 label={`${agentKey} · ${name}`}
                 readOnly={!isAdmin}
                 lang={lang}
-              />
-              <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', flex: 1 }}>
-                {agentKey}
-              </span>
-              {/* Which prompt this agent runs here, since the toggle only says
-                  whether it runs at all. */}
-              {typeof variant === 'string' && variant && (
+              >
                 <span
-                  className="text-muted"
-                  style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+                  style={{
+                    fontFamily: 'ui-monospace, Menlo, monospace',
+                    flex: 1,
+                    minWidth: 0,
+                    overflowWrap: 'anywhere',
+                  }}
                 >
-                  {variant}
+                  {agentKey}
                 </span>
-              )}
-              {hasOverride && (
-                <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
-                  {t.override}
-                </span>
-              )}
+                {/* Which prompt this agent runs here, since the switch only says
+                    whether it runs at all. */}
+                {typeof variant === 'string' && variant && (
+                  <span
+                    className="text-muted"
+                    style={{
+                      fontSize: 11,
+                      fontFamily: 'ui-monospace, Menlo, monospace',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {variant}
+                  </span>
+                )}
+                {hasOverride && (
+                  <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
+                    {t.override}
+                  </span>
+                )}
+              </AgentSwitch>
             </div>
           )
         })}

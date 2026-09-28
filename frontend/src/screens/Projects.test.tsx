@@ -179,20 +179,25 @@ describe('a project card', () => {
     expect(inheriting.closest('label')?.textContent).toMatch(/de/)
   })
 
-  it('has a tri-state per agent', async () => {
+  it('has an on/off switch per agent', async () => {
     renderProjects()
     await ready()
     const card = screen.getByTestId('project-Alpha')
     expect(within(card).getByLabelText(/reviewer/)).toHaveAttribute('data-state', 'off')
     expect(within(card).getByLabelText(/explainer/)).toHaveAttribute('data-state', 'inherit')
+    expect(within(card).getByRole('switch', { name: /reviewer/ })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    )
   })
 
   it('writes an agent toggle to the project override path', async () => {
     renderProjects()
     await ready()
     const card = screen.getByTestId('project-Fresh')
+    // explainer is off globally, so switching it here turns it on.
     await userEvent.click(within(card).getByLabelText(/explainer/))
-    expect(edits()).toEqual({ 'projects.Fresh.agents.explainer.enabled': false })
+    expect(edits()).toEqual({ 'projects.Fresh.agents.explainer.enabled': true })
   })
 
   it('removes every override for the project as a single edit', async () => {
@@ -435,7 +440,7 @@ describe('removing every override for a project', () => {
     await ready()
     const alpha = within(screen.getByTestId('project-Alpha'))
 
-    await userEvent.click(alpha.getByRole('button', { name: /reviewer · Alpha/ }))
+    await userEvent.click(alpha.getByRole('switch', { name: /reviewer · Alpha/ }))
     await userEvent.click(alpha.getByRole('button', { name: 'Remove all overrides' }))
 
     // Not both: the server refuses an overlay carrying a path and a prefix of
