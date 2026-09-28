@@ -48,7 +48,7 @@ from testbench_ai_service.webui.models import (
     PromptVariantMeta,
 )
 from testbench_ai_service.webui.prompt_io import document_to_yaml, prune_none, schema_header
-from testbench_ai_service.webui.prompt_render import context_skeleton
+from testbench_ai_service.webui.prompt_render import context_skeleton, lint_template
 from testbench_ai_service.webui.security import require_single_segment, resolve_within
 
 #: Prompt metadata is YAML. ``prompts_dir`` also holds the Jinja templates the
@@ -735,7 +735,8 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
 
     Raises:
         HTTPException 422: the document is not a usable ``PromptDefinition``,
-            ``default_variant`` names no variant, or a variant has no messages.
+            ``default_variant`` names no variant, a variant has no messages, or
+            a message body is not valid Jinja.
         HTTPException 400: a ``file`` message points outside ``prompts_dir``, at
             a disallowed suffix, or (for a new file) names more than one path
             segment.
@@ -822,6 +823,7 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
         )
 
     _validate_document(document)
+    _refuse_invalid_jinja(request)
 
     plan = WritePlan(creates=created)
     for target, text in bodies.items():
@@ -836,6 +838,30 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
         Path(prompt_path), base, previous_refs, set(bodies)
     )
     return plan
+
+
+def _refuse_invalid_jinja(request: PromptSaveRequest) -> None:
+    """Refuse a save whose message bodies Jinja cannot parse.
+
+    Every variant, not only the one the editor has open: the runtime renders
+    whichever variant an agent selects, and a template that fails to parse
+    there fails the agent's request, not the save. The same parse as
+    ``POST /prompts/lint``, so the editor's live check and this refusal agree.
+    """
+    for variant in request.variants:
+        for number, message in enumerate(variant.messages, start=1):
+            result = lint_template(message.content)
+            if result.ok:
+                continue
+            error = result.errors[0]
+            where = f"message {number}" + (f" ({message.file})" if message.source == "file" else "")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Invalid Jinja in variant {variant.name!r}, {where}, "
+                    f"line {error.line}: {error.message}"
+                ),
+            )
 
 
 def _validate_document(document: dict[str, Any]) -> None:

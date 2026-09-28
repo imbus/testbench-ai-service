@@ -3,12 +3,13 @@ import { useTranslations, type Lang } from '../../i18n'
 
 /**
  * What the lint block shows. `errors` are the OPEN message's own results;
- * `clean` means the last run found no error in ANY message of the variant --
- * the "no syntax errors" verdict is about the whole variant, so it must not
- * appear on a clean message (or a non-message pane) while another message is
- * flagged.
+ * `clean` means the open message (or, on a non-message pane, every message)
+ * has a current clean result AND no message of the variant is flagged -- so
+ * "no syntax errors" never appears on a clean message while another message
+ * is flagged. `checking` is the live check's request in flight, shown apart
+ * from `running` (the Lint button's own run).
  */
-export type LintState = { running: boolean; clean: boolean; error: string | null; errors: LintError[] }
+export type LintState = { running: boolean; checking?: boolean; clean: boolean; error: string | null; errors: LintError[] }
 
 const caps = { fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' as const }
 const mono = 'ui-monospace, Menlo, monospace'
@@ -84,6 +85,7 @@ export function VarSidebar({ agentVars, declaredVars, used, undeclared, canInser
           <button type="button" className="btn btn-ghost" disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }}>
             {lint.running ? t.linting : t.lint}
           </button>
+          {lint.checking && !lint.running && <div className="text-muted">{t.lintChecking}</div>}
           {lint.error && <div role="alert" style={{ color: '#a33a2b' }}>{lint.error}</div>}
           {lint.errors.map((error, index) => (
             <div key={index} style={{ border: '1px solid #c0392b', background: 'color-mix(in srgb, #c0392b 10%, transparent)', padding: '6px 8px', color: '#a33a2b' }}>

@@ -116,6 +116,7 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
           <button type="button" className="btn btn-ghost" style={{ fontSize: 12, padding: '0 6px' }} disabled={lint.running} onClick={onLint}>
             {lint.running ? t.linting : t.lint}
           </button>
+          {lint.checking && !lint.running && <span className="text-muted">{t.lintChecking}</span>}
           {lint.error && <span role="alert" style={{ color: '#a33a2b' }}>{lint.error}</span>}
           {lint.errors.map((error, index) => (
             <span key={index} style={{ color: '#a33a2b' }}>{`${t.lintLine} ${error.line}: ${error.message}`}</span>

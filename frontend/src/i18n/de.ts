@@ -175,6 +175,8 @@ export const de = {
   leaveAnyway: 'Trotzdem verlassen',
   lint: 'Prüfen',
   linting: 'Wird geprüft…',
+  lintChecking: 'Syntax wird geprüft…',
+  saveBlockedJinja: 'Speichern nicht möglich: ungültiges Jinja in Nachricht',
   lintClean: 'Keine Syntaxfehler.',
   lintFailed: 'Die Syntaxprüfung konnte nicht ausgeführt werden.',
   models: 'Modelle',

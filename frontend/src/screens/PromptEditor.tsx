@@ -13,6 +13,7 @@ import { MessagePane } from '../components/prompt/MessagePane'
 import { MetaPane } from '../components/prompt/MetaPane'
 import { PaneResizer } from '../components/prompt/PaneResizer'
 import { PromptTree } from '../components/prompt/PromptTree'
+import { useLiveLint } from '../components/prompt/liveLint'
 import { messagePath, uniqueVariantName, type Selection } from '../components/prompt/selection'
 import { TabsLayout } from '../components/prompt/TabsLayout'
 import { undeclaredVars, usedTemplateVars } from '../components/prompt/templateVars'
@@ -149,6 +150,21 @@ function referenceLabel(t: Translations, scope: Scope): string {
   return scope.kind === 'global' ? t.orphanGlobalTable : `${t.orphanProjectPrefix} '${scope.project}'`
 }
 
+/** The variant the centre pane works on. Never `variants[0]` unguarded: an
+ * empty list (or a stale selection after a rename) falls back to
+ * `undefined`, not a throw. */
+function selectedVariantOf(draft: PromptDocument, selected: string | null) {
+  const name = selected ?? draft.default_variant
+  return draft.variants.find((v) => v.name === name) ?? draft.variants[0]
+}
+
+function withoutIndex(set: ReadonlySet<number>, index: number): ReadonlySet<number> {
+  if (!set.has(index)) return set
+  const next = new Set(set)
+  next.delete(index)
+  return next
+}
+
 export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: boolean }) {
   const t = useTranslations(lang)
   // The route's own `:lang` names the PROMPT FILE's language (which
@@ -184,7 +200,14 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   // nothing here ever survives being stale or belonging to the wrong variant.
   const [diagnostics, setDiagnosticsMap] = useState<Record<number, LintError[]>>({})
   const [linting, setLinting] = useState(false)
-  const [lintChecked, setLintChecked] = useState(false)
+  // Which message indices `diagnostics` holds a current result for, clean or
+  // not -- by the button (every message) or the live check (the open one).
+  // "No syntax errors" is only ever claimed for text in here.
+  const [checked, setChecked] = useState<ReadonlySet<number>>(new Set())
+  // Bumped by every wholesale invalidation, so the live check re-runs on the
+  // open message even when neither its text nor its index changed (a save's
+  // reload, a reorder that kept it in place).
+  const [lintEpoch, setLintEpoch] = useState(0)
   // Why the last lint run produced no results: a 403, a 500, a dropped
   // connection. Without it a failed request just stopped the spinner and said
   // nothing, unlike every other action on this screen.
@@ -193,12 +216,13 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   /** Every prior lint result is invalid: a variant switch, a document reset,
    * a removed message, or a reordering (`diagnostics` is keyed by index, so
    * a shifted index would otherwise annotate a message that never produced
-   * that error -- worse than no marker at all). `lintChecked` goes with it,
+   * that error -- worse than no marker at all). `checked` goes with it,
    * so a stale "no syntax errors" cannot survive either. */
   const clearDiagnostics = () => {
     setDiagnosticsMap({})
-    setLintChecked(false)
+    setChecked(new Set())
     setLintError(null)
+    setLintEpoch((epoch) => epoch + 1)
   }
 
   /** Only the edited message's own result is invalid -- the operator changed
@@ -212,7 +236,19 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       delete next[index]
       return next
     })
-    setLintChecked(false)
+    setChecked((current) => withoutIndex(current, index))
+  }
+
+  /** The live check's verdict on message `index`; `null` is a failed request,
+   * which leaves that message unchecked rather than clean. */
+  const applyLiveResult = (index: number, errors: LintError[] | null) => {
+    setDiagnosticsMap((current) => {
+      const next = { ...current }
+      if (errors && errors.length > 0) next[index] = errors
+      else delete next[index]
+      return next
+    })
+    setChecked((current) => (errors ? new Set(current).add(index) : withoutIndex(current, index)))
   }
   // The normalized document the reducer was last `reset` from -- what the
   // draft is diffed against. NOT `document.data` directly: on the very render
@@ -299,6 +335,21 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   // tab close or a refresh, since neither is a router navigation.
   const blocker = useBlocker(dirty)
 
+  // The live check is a hook, so it runs above the loading guards below and
+  // derives the open message itself -- only once `original` says the draft
+  // belongs to this route, never from a previous agent's leftover draft.
+  const liveVariant = original ? selectedVariantOf(draft, selectedVariant) : undefined
+  const liveIndex = selection.kind === 'message' ? selection.index : -1
+  const liveMessage = liveVariant?.messages[liveIndex]
+  const liveLint = useLintTemplate()
+  const live = useLiveLint(
+    liveVariant && liveMessage
+      ? { key: `${liveVariant.name}:${liveIndex}:${lintEpoch}`, content: liveMessage.content }
+      : null,
+    async (content) => (await liveLint.mutateAsync(content)).errors,
+    (errors) => applyLiveResult(liveIndex, errors),
+  )
+
   // `document.isLoading` is only true on the FIRST load. A failed refetch
   // after this screen's own successful save (`useSavePrompt`'s
   // `invalidateQueries`) sets `document.isError` while `document.data` still
@@ -331,10 +382,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
 
   const disk = config.data?.disk ?? {}
 
-  const selectedName = selectedVariant ?? draft.default_variant
-  // Never `variants[0]` unguarded: an empty list (or a stale selection after
-  // a rename) must fall back to `undefined`, not throw.
-  const selectedVariantObj = draft.variants.find((v) => v.name === selectedName) ?? draft.variants[0]
+  const selectedVariantObj = selectedVariantOf(draft, selectedVariant)
   const variantName = selectedVariantObj?.name ?? ''
   const vars = selectedVariantObj?.vars ?? {}
   const messages = selectedVariantObj?.messages ?? []
@@ -377,6 +425,14 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   // Any variant -- not only the selected one -- holding an enum var with no
   // choices. The save sends every variant, so any one of them 422s it.
   const emptyEnumVariants = variantsWithEmptyEnum(draft)
+  // Messages of the selected variant with a current syntax error. Save stays
+  // disabled while any is flagged; a broken message in a variant the
+  // operator never opened is not known here, and the server's own Jinja
+  // check refuses that save instead (named in the confirm dialog).
+  const invalidJinja = flagged
+    .filter((index) => messages[index])
+    .sort((a, b) => a - b)
+    .map((index) => ({ index, message: messages[index], error: diagnostics[index][0] }))
 
   /**
    * Which control a 422 names, whichever of the two requests it came from.
@@ -427,18 +483,18 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   /**
    * Lints every message of the SELECTED variant, on demand.
    *
-   * Not per-keystroke and not on blur: `POST /prompts/lint` is a real
-   * network round trip, and `CodeEditor` is deliberately free of behaviour
-   * (Task 10's ruling) -- it exposes no blur hook to drive lint-on-blur from
-   * without giving that finished, tested component a new job. A single
-   * button lints the whole variant in one action, matching how Save and
-   * Render are already the screen's other on-demand actions. Open to a
-   * non-admin: `POST /prompts/lint` is session-gated, not admin-gated
-   * (unlike render), so a read-only operator must still be able to run it.
+   * The open message is already checked live (`useLiveLint`, above): once
+   * when it opens, then after each pause in the typing -- the parse is cheap
+   * enough server-side for that round trip. This button covers what the live
+   * check does not: every OTHER message of the variant, in one action, and
+   * it is the one place a failed request is reported aloud (the live check
+   * stays quiet rather than alerting on every pause). Open to a non-admin:
+   * `POST /prompts/lint` is session-gated, not admin-gated (unlike render),
+   * so a read-only operator must still be able to run it.
    */
   const runLint = async () => {
     setLinting(true)
-    setLintChecked(false)
+    setChecked(new Set())
     setLintError(null)
     try {
       const results = await Promise.all(messages.map((message) => lint.mutateAsync(message.content)))
@@ -447,7 +503,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         if (result.errors.length > 0) next[index] = result.errors
       })
       setDiagnosticsMap(next)
-      setLintChecked(true)
+      setChecked(new Set(messages.map((_, index) => index)))
     } catch (error) {
       // A 403, a 500 or a dropped connection. Surfaced the way
       // `RenderPreview` surfaces its own mutation error -- the message from
@@ -531,12 +587,18 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const alertStyle = { fontSize: 12, color: '#a33a2b', padding: '6px 16px' }
 
   // The lint result for the open message -- the Split sidebar's lint block
-  // and the Tabs status bar both show exactly this. "Clean" is the whole
-  // variant's verdict: a clean open message (or the prompt.yaml / settings
-  // pane) says nothing while any other message is still flagged.
+  // and the Tabs status bar both show exactly this. "Clean" needs the open
+  // message checked (or, on the prompt.yaml / settings pane, every message)
+  // AND nothing flagged anywhere: a clean open message says nothing while
+  // any other message is still flagged.
   const lintState: LintState = {
     running: linting,
-    clean: lintChecked && flagged.length === 0,
+    checking: live.checking,
+    clean:
+      flagged.length === 0 &&
+      (current.kind === 'message'
+        ? checked.has(current.index)
+        : messages.length > 0 && messages.every((_, index) => checked.has(index))),
     error: lintError,
     errors: current.kind === 'message' ? (diagnostics[current.index] ?? []) : [],
   }
@@ -786,7 +848,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         onLayout={setLayout}
         onVariant={pickVariant}
         showSave={isAdmin}
-        canSave={dirty && emptyEnumVariants.length === 0}
+        canSave={dirty && emptyEnumVariants.length === 0 && invalidJinja.length === 0}
         onSave={openConfirm}
         lang={lang}
       />
@@ -798,6 +860,18 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       {document.isError && (
         <div role="alert" style={alertStyle}>
           {t.promptDocError}
+        </div>
+      )}
+      {isAdmin && invalidJinja.length > 0 && (
+        // `status`, not `alert`: the error itself is already the alert (the
+        // editor's marker, the sidebar's line) -- this says what it blocks.
+        <div role="status" data-testid="save-blocked-jinja" style={alertStyle}>
+          {t.saveBlockedJinja}{' '}
+          {invalidJinja
+            .map(({ index, message, error }) =>
+              `${index + 1} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t.lintLine} ${error.line}: ${error.message}`,
+            )
+            .join(' · ')}
         </div>
       )}
       {saveFieldError?.kind === 'emptyVariants' && saveErrorMessage && (

@@ -243,3 +243,55 @@ def test_an_unchanged_yaml_is_left_out_of_the_write_set(prompt):
     first = build_write_set(request, path, prompt)
     path.write_text(first.writes[path], encoding="utf-8", newline="")
     assert build_write_set(request, path, prompt).writes == {}
+
+
+def test_an_inline_message_with_invalid_jinja_is_refused(prompt):
+    with pytest.raises(HTTPException) as e:
+        build_write_set(
+            request_with([inline("fine"), inline("line one\n{% if vars.tone %}formal")]),
+            prompt / "de/explainer/prompt.yaml",
+            prompt,
+        )
+    assert e.value.status_code == 422
+    # Names where, not just that: the variant, the 1-based message, the line.
+    assert e.value.detail.startswith("Invalid Jinja in variant 'A', message 2, line 2: ")
+    assert "endif" in e.value.detail
+
+
+def test_a_file_message_with_invalid_jinja_is_refused_naming_the_file(prompt):
+    with pytest.raises(HTTPException) as e:
+        build_write_set(
+            request_with([external("system.jinja", "Hello {{ agent.defect }")]),
+            prompt / "de/explainer/prompt.yaml",
+            prompt,
+        )
+    assert e.value.status_code == 422
+    assert e.value.detail.startswith(
+        "Invalid Jinja in variant 'A', message 1 (system.jinja), line 1: "
+    )
+
+
+def test_invalid_jinja_in_a_variant_other_than_the_default_is_refused(prompt):
+    request = PromptSaveRequest(
+        name="Erklärer",
+        default_model="gpt-5.5",
+        default_variant="A",
+        variants=[
+            PromptVariantDoc(name="A", messages=[inline("fine")]),
+            PromptVariantDoc(name="B", messages=[inline("{{ }}")]),
+        ],
+    )
+    with pytest.raises(HTTPException) as e:
+        build_write_set(request, prompt / "de/explainer/prompt.yaml", prompt)
+    assert e.value.status_code == 422
+    assert "variant 'B', message 1" in e.value.detail
+
+
+def test_valid_jinja_and_plain_braces_are_saved(prompt):
+    # Only syntax is checked: an unknown variable or single braces are fine.
+    plan = build_write_set(
+        request_with([inline("Use { and } with {{ agent.missing }}{% if x %}y{% endif %}")]),
+        prompt / "de/explainer/prompt.yaml",
+        prompt,
+    )
+    assert prompt / "de/explainer/prompt.yaml" in plan.writes

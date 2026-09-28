@@ -946,6 +946,10 @@ describe('linting', () => {
   it('makes one lint request per message in the selected variant', async () => {
     renderEditor({ lang: 'en' })
     await ready()
+    // The live check of the message opened on load, which is not the
+    // button's own request.
+    await waitFor(() => expect(lintCalls()).toHaveLength(1))
+    fetchMock.mockClear()
 
     await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
 
@@ -954,6 +958,75 @@ describe('linting', () => {
     expect(
       lintCalls().every((call) => (call[1] as RequestInit | undefined)?.method === 'POST'),
     ).toBe(true)
+  })
+
+  // The open message is re-checked by itself: once when it opens, then after
+  // every pause in the typing. The button stays for the whole variant.
+  describe('live', () => {
+    it('flags a syntax error while typing, without the Lint button', async () => {
+      lintResponder = (content) =>
+        content.includes('{% bad')
+          ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+          : { ok: true, errors: [] }
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      await openMessage(/Explain/)
+      await userEvent.type(screen.getByLabelText('user'), '{{% bad')
+
+      await waitFor(() =>
+        expect(screen.getByRole('alert')).toHaveTextContent('Unexpected end of template'),
+      )
+      expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Explain/ }))
+        .toHaveAttribute('aria-invalid', 'true')
+    })
+
+    it('clears the marker once the error is fixed', async () => {
+      lintResponder = (content) =>
+        content.includes('BROKEN')
+          ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+          : { ok: true, errors: [] }
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      await openMessage(/Explain/)
+      const editor = screen.getByLabelText('user')
+      await userEvent.type(editor, 'BROKEN')
+      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+
+      await userEvent.type(editor, '{Backspace>6/}')
+      await waitFor(() => expect(screen.getByText(/No syntax errors\./)).toBeInTheDocument())
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+
+    it('checks a message as soon as it is opened', async () => {
+      lintResponder = (content) =>
+        content.includes('helpful')
+          ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+          : { ok: true, errors: [] }
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      // Message 0 (sys.jinja, containing "helpful") is open on load.
+      await waitFor(() =>
+        expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }))
+          .toHaveAttribute('aria-invalid', 'true'),
+      )
+    })
+
+    it('stays quiet when the live check cannot reach the server', async () => {
+      // Only the button reports a failure; an alert on every typing pause
+      // would drown the editor.
+      lintFailure = { status: 500, detail: 'Lint is unavailable' }
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      await openMessage(/Explain/)
+      await userEvent.type(screen.getByLabelText('user'), '!')
+      await waitFor(() => expect(lintCalls().length).toBeGreaterThan(1))
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
+    })
   })
 
   // A lint result is a snapshot of the content at the moment it ran. Editing,
@@ -1009,8 +1082,13 @@ describe('linting', () => {
       await openMessage(/First message/)
       await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
       expect(treeMessages()).toHaveLength(2)
-      expect(treeMessages().filter((b) => b.getAttribute('aria-invalid') === 'true')).toHaveLength(0)
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      // The live check re-flags the broken message where it now sits (index
+      // 0, open after the delete) -- the only marker is on the message that
+      // actually has the error, never on the one that shifted into index 1.
+      await waitFor(() =>
+        expect(treeMessages().map((b) => b.getAttribute('aria-invalid') === 'true')).toEqual([true, false]),
+      )
+      expect(treeMessages()[0]).toHaveAccessibleName(/Middle message/)
     })
 
     it('clears every diagnostic when messages are reordered', async () => {
@@ -1024,8 +1102,14 @@ describe('linting', () => {
       await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
 
       await userEvent.click(screen.getAllByRole('button', { name: /move (up|down)/i })[0])
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-      expect(treeMessages().filter((b) => b.getAttribute('aria-invalid') === 'true')).toHaveLength(0)
+      // Only the moved (still broken) message is flagged, at its new index,
+      // by the live check -- never the clean one that took its old place.
+      await waitFor(() =>
+        expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Explain/ }))
+          .toHaveAttribute('aria-invalid', 'true'),
+      )
+      expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }))
+        .not.toHaveAttribute('aria-invalid')
     })
 
     it('shows no "no syntax errors" on a clean message while another message is flagged', async () => {
@@ -1079,6 +1163,30 @@ describe('linting', () => {
 })
 
 describe('the enum edge', () => {
+  it('disables Save and says why while a message holds invalid Jinja', async () => {
+    lintResponder = (content) =>
+      content.includes('{% bad')
+        ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+        : { ok: true, errors: [] }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await openMessage(/Explain/)
+    const editor = screen.getByLabelText('user')
+    await userEvent.type(editor, '{{% bad')
+
+    // Dirty, so `!dirty` is not what is keeping Save disabled.
+    await waitFor(() => expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled())
+    expect(screen.getByTestId('save-blocked-jinja')).toHaveTextContent(
+      'Cannot save: invalid Jinja in message 2 (user), Line 1: Unexpected end of template',
+    )
+
+    // Fixed, and still dirty (backspacing alone would restore the loaded text).
+    await userEvent.type(editor, '{Backspace>6/}!')
+    await waitFor(() => expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled())
+    expect(screen.queryByTestId('save-blocked-jinja')).not.toBeInTheDocument()
+  })
+
   it('disables Save while ANY variant declares an enum var with no choices', async () => {
     // The offending var sits in 'Quick', which is NOT the selected variant --
     // the save sends every variant, so any one of them 422s it.

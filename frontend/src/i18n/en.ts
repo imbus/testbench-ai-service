@@ -179,6 +179,8 @@ export const en = {
   leaveAnyway: 'Leave anyway',
   lint: 'Lint',
   linting: 'Linting…',
+  lintChecking: 'Checking syntax…',
+  saveBlockedJinja: 'Cannot save: invalid Jinja in message',
   lintClean: 'No syntax errors.',
   lintFailed: 'The syntax check could not be run.',
   models: 'Models',
