@@ -74,6 +74,7 @@ export const en = {
   viewList: 'List',
   viewMatrix: 'Matrix',
   noOverrides: 'No project overrides',
+  activeIn: 'active in',
   noProjects: 'No projects known.',
   projectsUnavailable: 'The project list could not be read from TestBench.',
   notInTestBench: 'not in TestBench',

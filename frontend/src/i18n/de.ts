@@ -70,6 +70,7 @@ export const de = {
   viewList: 'Liste',
   viewMatrix: 'Matrix',
   noOverrides: 'Keine Projektüberschreibungen',
+  activeIn: 'aktiv in',
   noProjects: 'Keine Projekte bekannt.',
   projectsUnavailable: 'Projektliste konnte nicht von TestBench geladen werden.',
   notInTestBench: 'nicht in TestBench',

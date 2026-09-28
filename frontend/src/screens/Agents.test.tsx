@@ -169,7 +169,7 @@ describe('list view', () => {
     expect(within(row).getByTestId('override-count')).toHaveTextContent('2')
   })
 
-  it('names the overriding projects when the row is expanded', async () => {
+  it('lists every project the agent is active in when the row is expanded', async () => {
     renderAgents()
     await waitFor(() => expect(screen.getByText('reviewer')).toBeInTheDocument())
 
@@ -180,8 +180,41 @@ describe('list view', () => {
     )
 
     const detail = screen.getByTestId('agent-overrides-reviewer')
-    expect(within(detail).getByText('Alpha')).toBeInTheDocument()
-    expect(within(detail).getByText('Release 2.0')).toBeInTheDocument()
+    // Release 2.0 overrides only the variant, so it inherits `enabled` and
+    // runs the agent; Gone overrides nothing of reviewer's and inherits too.
+    expect(within(detail).getByTestId('agent-project-Release 2.0')).toBeInTheDocument()
+    expect(within(detail).getByTestId('agent-project-Gone')).toBeInTheDocument()
+    // Alpha's override switches it off, so it is not listed.
+    expect(within(detail).queryByTestId('agent-project-Alpha')).toBeNull()
+    expect(within(screen.getByTestId('agent-row-reviewer')).getByTestId('active-count')).toHaveTextContent('2')
+  })
+
+  it('lists only the overriding projects for an agent that is off globally', async () => {
+    renderAgents()
+    await waitFor(() => expect(screen.getByText('explainer')).toBeInTheDocument())
+
+    await userEvent.click(
+      within(screen.getByTestId('agent-row-explainer')).getByRole('button', {
+        name: /overrides/i,
+      }),
+    )
+
+    const detail = screen.getByTestId('agent-overrides-explainer')
+    const gone = within(detail).getByTestId('agent-project-Gone')
+    expect(within(gone).getByText('Override')).toBeInTheDocument()
+    expect(within(detail).queryByTestId('agent-project-Alpha')).toBeNull()
+    expect(within(detail).queryByTestId('agent-project-Release 2.0')).toBeNull()
+  })
+
+  it('follows a pending global switch in the per-project list', async () => {
+    renderAgents()
+    await waitFor(() => expect(screen.getByText('reviewer')).toBeInTheDocument())
+    const row = screen.getByTestId('agent-row-reviewer')
+    await waitFor(() => expect(within(row).getByTestId('active-count')).toHaveTextContent('2'))
+
+    await userEvent.click(screen.getByRole('switch', { name: /reviewer/ }))
+
+    expect(within(row).getByTestId('active-count')).toHaveTextContent('0')
   })
 
   it('counts the projects that override an agent', async () => {
@@ -192,7 +225,7 @@ describe('list view', () => {
     expect(within(row).getByTestId('override-count')).toHaveTextContent('1')
   })
 
-  it('offers no expander for an agent no project overrides', async () => {
+  it('offers no expander for an agent that is off everywhere', async () => {
     fetchMock.mockImplementation(async (url: string) => {
       if (url.startsWith('/admin/api/config'))
         return ok({

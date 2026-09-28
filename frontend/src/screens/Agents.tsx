@@ -16,7 +16,19 @@ import { valueAt } from './fields'
 
 /** The list's column track. The header strip and every row share it, or
  *  the columns stop lining up the moment one of them is edited. */
-const GRID_COLUMNS = '32px minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.3fr) 170px 190px'
+const GRID_COLUMNS =
+  '32px minmax(0, 1.4fr) minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 1.4fr) 190px'
+
+/** A mono cell that clips to its track. Paths and endpoints have no break
+ *  points, so without this they run on under the next column. */
+const MONO_CELL = {
+  fontSize: 12,
+  fontFamily: 'ui-monospace, Menlo, monospace',
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+} as const
 
 type View = 'list' | 'matrix'
 
@@ -172,10 +184,30 @@ function AgentRow({
   // way in to fix the path.
   const meta = usePromptMeta(language, agentKey, typeof promptFile === 'string' ? promptFile : undefined)
 
+  const projects = useProjects()
   const overriders = overridingProjects(running, agentKey)
   const enabledPath = agentPath(agentKey, 'enabled')
   const savedEnabled = valueAt(disk, enabledPath)
   const enabled = draft.valueOf(enabledPath, savedEnabled ?? agent.enabled) === true
+
+  // Every project the agent answers in, not just the ones that say so: an
+  // inheriting project runs the agent as surely as an overriding one, and a
+  // list of overrides alone reads as "active only here". The same union of
+  // TestBench and config the matrix draws its columns from, resolved through
+  // the draft so a pending switch is reflected before it is applied.
+  const known = [
+    ...new Set([
+      ...(projects.data?.projects ?? []).map((entry) => entry.name),
+      ...configuredProjects(running),
+    ]),
+  ]
+  const perProject = known.map((project) => {
+    const path = projectAgentPath(project, agentKey, 'enabled')
+    const own = draft.valueOf(path, valueAt(disk, path))
+    const overridden = typeof own === 'boolean'
+    return { project, overridden, active: overridden ? own : enabled }
+  })
+  const active = perProject.filter((entry) => entry.active)
 
   const promptLabel = [agent.prompt?.file, agent.prompt?.variant]
     .filter((part): part is string => typeof part === 'string' && part !== '')
@@ -198,9 +230,9 @@ function AgentRow({
         }}
       >
         {/* Only an expander when there is something to expand. A control
-            that announces itself as collapsible and then opens "no overrides"
-            is noise. */}
-        {overriders.length === 0 ? (
+            that announces itself as collapsible and then opens an empty
+            panel is noise. */}
+        {active.length === 0 ? (
           <span aria-hidden="true" className="text-muted" style={{ fontSize: 12 }}>
             ·
           </span>
@@ -208,7 +240,7 @@ function AgentRow({
           <button
             type="button"
             aria-expanded={expanded}
-            aria-label={`${overriders.length} ${t.overrides}`}
+            aria-label={`${t.activeIn} ${active.length} · ${overriders.length} ${t.overrides}`}
             onClick={() => setExpanded(!expanded)}
             style={{
               background: 'none',
@@ -246,24 +278,19 @@ function AgentRow({
           )}
         </Link>
 
-        <span
-          className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
-        >
+        <span className="text-muted" style={MONO_CELL} title={meta.data?.default_model}>
           {meta.data?.default_model ?? '—'}
         </span>
 
         <span
           className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+          style={MONO_CELL}
+          title={typeof agent.endpoint_path === 'string' ? agent.endpoint_path : undefined}
         >
           {String(agent.endpoint_path ?? '—')}
         </span>
 
-        <span
-          className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
-        >
+        <span className="text-muted" style={MONO_CELL} title={promptLabel || undefined}>
           {promptLabel || '—'}
         </span>
 
@@ -302,6 +329,7 @@ function AgentRow({
             />
           </button>
           <span className="text-muted" style={{ fontSize: 11 }}>
+            {t.activeIn} <span data-testid="active-count">{active.length}</span> ·{' '}
             <span data-testid="override-count">{overriders.length}</span> {t.overrides}
           </span>
         </span>
@@ -325,23 +353,24 @@ function AgentRow({
           >
             {t.perProject}
           </div>
-          {overriders.length === 0 ? (
-            <span className="text-muted" style={{ fontSize: 12 }}>
-              {t.noOverrides}
-            </span>
-          ) : (
-            overriders.map((project) => (
-              <div
-                key={project}
-                style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}
-              >
-                <span style={{ flex: 1 }}>{project}</span>
+          {active.map(({ project, overridden }) => (
+            <div
+              key={project}
+              data-testid={`agent-project-${project}`}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}
+            >
+              <span style={{ flex: 1 }}>{project}</span>
+              {overridden ? (
                 <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
                   {t.override}
                 </span>
-              </div>
-            ))
-          )}
+              ) : (
+                <span className="text-muted" style={{ fontSize: 10 }}>
+                  {t.inherit}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
