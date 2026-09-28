@@ -13,7 +13,6 @@ export const de = {
     'Das JWT wird gegen die TestBench-REST-API geprüft. Admin: Vollzugriff · Testmanager: nur lesend.',
   username: 'Benutzername',
   password: 'Passwort',
-  server: 'TestBench-Server',
   signIn: 'Mit TestBench anmelden',
   logout: 'Abmelden',
   running: 'Läuft',

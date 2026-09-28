@@ -6,7 +6,6 @@ import { useTranslations, type Lang } from '../i18n'
 import type { Theme } from '../theme'
 
 interface LoginProps {
-  serverUrl: string
   lang: Lang
   theme: Theme
   busy: boolean
@@ -25,7 +24,6 @@ interface LoginProps {
  * TestBench issues and is not the operator's to choose.
  */
 export function Login({
-  serverUrl,
   lang,
   theme,
   busy,
@@ -94,18 +92,6 @@ export function Login({
             source for it would let the login screen and the Status card
             disagree about which version is running. */}
         <BrandMark size="login" subtitle={t.consoleSubtitle} />
-
-        <div className="field">
-          <label htmlFor="login-server">{t.server}</label>
-          {/* One service, one TestBench: prefilled from config and not editable. */}
-          <input
-            id="login-server"
-            className="input"
-            value={serverUrl}
-            readOnly
-            style={{ opacity: 0.7 }}
-          />
-        </div>
 
         <div className="field">
           <label htmlFor="login-user">{t.username}</label>

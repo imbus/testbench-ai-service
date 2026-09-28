@@ -13,7 +13,6 @@ export const en = {
     'The JWT is validated against the TestBench REST API. Admin: full access · Test manager: read-only.',
   username: 'Username',
   password: 'Password',
-  server: 'TestBench server',
   signIn: 'Sign in with TestBench',
   logout: 'Sign out',
   running: 'Running',

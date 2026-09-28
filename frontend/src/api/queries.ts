@@ -3,7 +3,6 @@ import { apiFetch } from './client'
 import type {
   ConfigResponse,
   LogLine,
-  MetaResponse,
   ModelCatalogue,
   ProjectsResponse,
   PromptDocument,
@@ -11,15 +10,6 @@ import type {
   PromptTreeResponse,
   StatusResponse,
 } from './types'
-
-/** Unauthenticated: lets the login screen name the TestBench server. */
-export function useMeta() {
-  return useQuery({
-    queryKey: ['meta'],
-    queryFn: () => apiFetch<MetaResponse>('/meta'),
-    staleTime: Infinity,
-  })
-}
 
 export function useStatus({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({

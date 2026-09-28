@@ -13,7 +13,6 @@ import '../styles/brand.css'
 const signedIn = !new URLSearchParams(location.search).has('login')
 
 const FIXTURES: Record<string, unknown> = {
-  '/admin/api/meta': { tb_server_url: 'https://tb.example.com:9443/api/' },
   '/admin/api/session': {
     username: 'a.mueller',
     roles: ['Administrator'],

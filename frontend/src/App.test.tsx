@@ -97,16 +97,6 @@ test('renders nothing decisive while the session is still loading', () => {
   expect(screen.queryByRole('button', { name: /anmelden/i })).toBeNull()
 })
 
-test('the login screen shows the server from /meta', async () => {
-  asSession(null)
-  renderWithoutSession()
-  await waitFor(() =>
-    expect(screen.getByLabelText('TestBench-Server')).toHaveValue(
-      'https://tb:9443/api/',
-    ),
-  )
-})
-
 it('shows the pending-changes banner when the draft has edits', async () => {
   window.localStorage.setItem('tbai_admin_draft', JSON.stringify({ port: 9999 }))
 

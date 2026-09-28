@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { Login } from './Login'
 
 const props = {
-  serverUrl: 'https://tb.example.com:9443/api/',
   lang: 'de' as const,
   theme: 'light' as const,
   onSignIn: vi.fn(),
@@ -15,11 +14,10 @@ const props = {
 
 beforeEach(() => vi.clearAllMocks())
 
-test('shows the configured server read-only', () => {
+test('does not show the TestBench server', () => {
   render(<Login {...props} />)
-  const field = screen.getByLabelText('TestBench-Server')
-  expect(field).toHaveValue('https://tb.example.com:9443/api/')
-  expect(field).toHaveAttribute('readonly')
+  expect(screen.queryByLabelText('TestBench-Server')).toBeNull()
+  expect(document.body).not.toHaveTextContent('tb.example.com')
 })
 
 test('submits the credentials', async () => {

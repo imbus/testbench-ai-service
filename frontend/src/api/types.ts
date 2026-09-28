@@ -56,10 +56,6 @@ export interface ConfigResponse {
   config_path: string
 }
 
-export interface MetaResponse {
-  tb_server_url: string
-}
-
 export interface ConfigIssue {
   path: string
   message: string

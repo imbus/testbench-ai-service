@@ -14,7 +14,7 @@ import { Prompts } from './screens/Prompts'
 import { Raw } from './screens/Raw'
 import { Status } from './screens/Status'
 import type { ConfigIssue } from './api/types'
-import { useConfig, useMeta, useStatus } from './api/queries'
+import { useConfig, useStatus } from './api/queries'
 import { DraftProvider } from './state/draft'
 import { useSession } from './state/session'
 import { useTranslations, type Lang } from './i18n'
@@ -22,7 +22,6 @@ import { applyTheme, preferredTheme, storedTheme, type Theme } from './theme'
 
 export function App() {
   const { session, loading, busy, error, signIn, signOut } = useSession()
-  const meta = useMeta()
   const [lang, setLang] = useState<Lang>('de')
   const [theme, setTheme] = useState<Theme>(() => storedTheme() ?? preferredTheme())
   const [issues, setIssues] = useState<ConfigIssue[]>([])
@@ -55,9 +54,6 @@ export function App() {
   if (!session) {
     return (
       <Login
-        // From the unauthenticated /meta route: the operator should see which
-        // TestBench they are signing into before they type a password.
-        serverUrl={meta.data?.tb_server_url ?? ''}
         lang={lang}
         theme={theme}
         busy={busy}
