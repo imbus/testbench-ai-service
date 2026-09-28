@@ -40,8 +40,26 @@ const FIXTURES: Record<string, unknown> = {
     restart_required: [],
   },
   '/admin/api/config': {
-    running: { host: '127.0.0.1', port: 8010, language: 'de' },
-    disk: { host: '127.0.0.1', port: 8010 },
+    running: {
+      host: '127.0.0.1',
+      port: 8010,
+      language: 'de',
+      agents: {
+        test_case_set_reviewer: {
+          enabled: true,
+          prompt: { variant: 'Gründlich', vars: { tone: 'sachlich und sehr ausführlich formuliert' } },
+        },
+      },
+    },
+    disk: {
+      host: '127.0.0.1',
+      port: 8010,
+      agents: {
+        test_case_set_reviewer: {
+          prompt: { variant: 'Gründlich', vars: { tone: 'sachlich und sehr ausführlich formuliert' } },
+        },
+      },
+    },
     config_path: 'C:/ProgramData/TestBench/config.toml',
   },
   '/admin/api/projects': {
@@ -52,6 +70,36 @@ const FIXTURES: Record<string, unknown> = {
     fetched_at: null,
     source: 'testbench',
     error: null,
+  },
+  '/admin/api/prompts/test': {
+    text: [
+      'Die Testfallmenge deckt die Anmeldung vollständig ab.',
+      '',
+      '- TC-12 und TC-14 prüfen denselben Pfad; einer davon genügt.',
+      '- Für gesperrte Konten fehlt ein Negativtest.',
+    ].join('\n'),
+    latency_ms: 1840,
+    resolved: { provider: 'openai', model: 'gpt-5', credential_scope: 'global' },
+  },
+  '/admin/api/models': {
+    providers: [
+      {
+        provider: 'openai',
+        key_present: true,
+        models: [
+          { id: 'gpt-5', routing: 'adaptive', source: 'builtin' },
+          { id: 'gpt-5-mini', routing: 'adaptive', source: 'builtin' },
+        ],
+      },
+      {
+        provider: 'anthropic',
+        key_present: false,
+        models: [
+          { id: 'claude-opus-5-5', routing: 'adaptive', source: 'builtin' },
+          { id: 'claude-local-proxy', routing: 'fallback', source: 'config' },
+        ],
+      },
+    ],
   },
   '/admin/api/prompts': {
     languages: [
@@ -82,6 +130,38 @@ const FIXTURES: Record<string, unknown> = {
             used_by: [],
           },
         ],
+      },
+    ],
+  },
+  '/admin/api/prompts/de/test_case_set_reviewer/meta': {
+    name: 'Testfallsatz-Review',
+    summary: null,
+    description: null,
+    default_model: 'gpt-4o',
+    default_variant: 'Gründlich',
+    variants: [
+      {
+        name: 'Gründlich',
+        description: null,
+        model: null,
+        vars: {
+          tone: {
+            name: 'Tonfall',
+            description: 'Wie die Rückmeldung formuliert wird',
+            value_type: 'string',
+            choices: null,
+            default_value: 'sachlich',
+            required: false,
+          },
+          notes: {
+            name: 'Hinweise',
+            description: null,
+            value_type: 'text',
+            choices: null,
+            default_value: null,
+            required: false,
+          },
+        },
       },
     ],
   },
