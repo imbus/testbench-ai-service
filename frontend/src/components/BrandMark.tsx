@@ -1,7 +1,9 @@
+import logoUrl from '../assets/logo.svg'
+
 /**
- * The console's identity, taken from the artboard: a dashed ring around a
- * solid core, and the wordmark whose "Bench" carries the TestBench orange
- * (`--tb-orange`, defined in brand.css).
+ * The console's identity: the TestBench logo (assets/logo.svg) and the
+ * wordmark whose "Bench" carries the TestBench orange (`--tb-orange`,
+ * defined in brand.css).
  *
  * Two sizes, both the artboard's: 36px mark over a 24px wordmark on the login
  * card, 26px over 20px in the top bar. The mark is decorative — the wordmark
@@ -12,18 +14,7 @@ export function BrandMark({ size, subtitle }: { size: 'login' | 'header'; subtit
   const mark = login ? 36 : 26
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-      <svg width={mark} height={mark} viewBox="0 0 32 32" fill="none" aria-hidden="true">
-        <circle
-          cx="16"
-          cy="16"
-          r="11"
-          stroke="var(--color-accent)"
-          strokeWidth="3.5"
-          strokeDasharray="9 5"
-          strokeLinecap="round"
-        />
-        <circle cx="16" cy="16" r="4" fill="var(--color-accent)" />
-      </svg>
+      <img src={logoUrl} width={mark} height={mark} alt="" style={{ flex: 'none' }} />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div
           style={{
