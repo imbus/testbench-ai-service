@@ -51,9 +51,7 @@ def build_plan(
     existing = [
         i
         for i in candidates
-        if params.existing == ExistingMode.KEEP
-        and test_cases[i].planned
-        and i not in mandatory_set
+        if params.existing == ExistingMode.KEEP and test_cases[i].planned and i not in mandatory_set
     ]
     seeds = mandatory + existing
 

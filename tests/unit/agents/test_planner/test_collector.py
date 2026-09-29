@@ -26,8 +26,19 @@ def _call(name, phase="TestStep", **params):
     )
 
 
-def _test_case(uid, key, *, status="NotPlanned", duration=0, params=None, sequence=None,
-               tags=(), exec_tags=(), reqs=(), with_exec=True):
+def _test_case(
+    uid,
+    key,
+    *,
+    status="NotPlanned",
+    duration=0,
+    params=None,
+    sequence=None,
+    tags=(),
+    exec_tags=(),
+    reqs=(),
+    with_exec=True,
+):
     execution = (
         SimpleNamespace(
             status=SimpleNamespace(value=status),
@@ -39,22 +50,34 @@ def _test_case(uid, key, *, status="NotPlanned", duration=0, params=None, sequen
     )
     return SimpleNamespace(
         uniqueID=uid,
-        spec=SimpleNamespace(key=key, tags=[_tag(t) for t in tags], requirements=[_req(r) for r in reqs]),
+        spec=SimpleNamespace(
+            key=key, tags=[_tag(t) for t in tags], requirements=[_req(r) for r in reqs]
+        ),
         testSequence=sequence or [],
         parameters=[SimpleNamespace(name=k, value=v) for k, v in (params or {}).items()],
         exec=execution,
     )
 
 
-def _set(uid, name, test_cases, *, description="<html><body><p>Desc</p></body></html>",
-         sequence=None, tags=(), reqs=()):
+def _set(
+    uid,
+    name,
+    test_cases,
+    *,
+    description="<html><body><p>Desc</p></body></html>",
+    sequence=None,
+    tags=(),
+    reqs=(),
+):
     details = SimpleNamespace(
         key=f"K-{uid}",
         uniqueID=uid,
         name=name,
         path=f"/Root/{name}",
         spec=SimpleNamespace(
-            description=description, tags=[_tag(t) for t in tags], requirements=[_req(r) for r in reqs]
+            description=description,
+            tags=[_tag(t) for t in tags],
+            requirements=[_req(r) for r in reqs],
         ),
         testSequence=sequence or [],
     )
@@ -94,8 +117,9 @@ def test_test_case_sequence_wins_over_set_sequence():
 
 
 def test_duration_status_tags_and_requirements():
-    tc = _test_case("TC-1", "1", status="Planned", duration=90_000, tags=("a",),
-                    exec_tags=("b",), reqs=("R2",))
+    tc = _test_case(
+        "TC-1", "1", status="Planned", duration=90_000, tags=("a",), exec_tags=("b",), reqs=("R2",)
+    )
     catalog = {"S1": _set("S1", "S", [tc], tags=("mandatory",), reqs=("R1",))}
 
     [case] = test_cases_from_catalog(catalog)

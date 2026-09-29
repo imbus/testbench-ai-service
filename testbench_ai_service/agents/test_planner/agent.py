@@ -69,30 +69,13 @@ class TestPlannerAgent(Agent):
         self._warnings: list[str] = []
 
     async def precheck(self, context: ExecutionContext, conn: TBConnection) -> PrecheckResult:
-        if unsupported_version := check_min_testbench_version(context, conn):
-            return unsupported_version
+        if failure := _check_scope(context, conn):
+            return failure
+        params = _parse_params(context)
+        if isinstance(params, PrecheckResult):
+            return params
+
         language = context.language
-        if not context.tov_key:
-            return _failed(get_translation("shared.precheck.missing_tov_key", language))
-        if not context.cycle_key:
-            return _failed(get_translation("shared.precheck.missing_cycle_key", language))
-        if not is_json_based_tov(conn, context.project_key, context.tov_key):
-            return _failed(
-                get_translation("test_planner.precheck.unsupported_tov_format", language)
-            )
-
-        try:
-            params = parse_run_params(context.prompt_config)
-        except UnknownVariantError as e:
-            return _failed(
-                get_translation("test_planner.precheck.unknown_variant", language, variant=e.variant)
-            )
-        except ValidationError as e:
-            details = "; ".join(error["msg"] for error in e.errors())
-            return _failed(
-                get_translation("test_planner.precheck.invalid_vars", language, details=details)
-            )
-
         test_cases = await asyncio.to_thread(collect_test_cases, conn, context)
         candidates = [case for case in test_cases if not case.executed]
         if len(candidates) < MIN_TEST_CASES:
@@ -141,7 +124,10 @@ class TestPlannerAgent(Agent):
             self.args.mandatory_tag,
             self.args.cluster_threshold,
         )
-        result.warnings = [*self._warnings, *(_note_text(note, params, context.language) for note in notes)]
+        result.warnings = [
+            *self._warnings,
+            *(_note_text(note, params, context.language) for note in notes),
+        ]
         logger.info(
             "Test planner preview | project='%s' | cycle='%s' | mode=%s | selected=%d/%d\n%s",
             context.project_name,
@@ -155,6 +141,36 @@ class TestPlannerAgent(Agent):
 
 def _failed(message: str) -> PrecheckResult:
     return PrecheckResult(passed=False, warnings=[message])
+
+
+def _check_scope(context: ExecutionContext, conn: TBConnection) -> PrecheckResult | None:
+    """A failed result if server version, TOV or cycle do not fit, else ``None``."""
+    if unsupported_version := check_min_testbench_version(context, conn):
+        return unsupported_version
+    language = context.language
+    if not context.tov_key:
+        return _failed(get_translation("shared.precheck.missing_tov_key", language))
+    if not context.cycle_key:
+        return _failed(get_translation("shared.precheck.missing_cycle_key", language))
+    if not is_json_based_tov(conn, context.project_key, context.tov_key):
+        return _failed(get_translation("test_planner.precheck.unsupported_tov_format", language))
+    return None
+
+
+def _parse_params(context: ExecutionContext) -> PlannerRunParams | PrecheckResult:
+    """The run parameters, or a failed result explaining why they are invalid."""
+    language = context.language
+    try:
+        return parse_run_params(context.prompt_config)
+    except UnknownVariantError as e:
+        return _failed(
+            get_translation("test_planner.precheck.unknown_variant", language, variant=e.variant)
+        )
+    except ValidationError as e:
+        details = "; ".join(error["msg"] for error in e.errors())
+        return _failed(
+            get_translation("test_planner.precheck.invalid_vars", language, details=details)
+        )
 
 
 def _data_warnings(
@@ -187,9 +203,10 @@ def _data_warnings(
 
 
 def _note_text(note: CutoffNote, params: PlannerRunParams, language: LanguageOption) -> str:
-    return get_translation(
+    text: str = get_translation(
         f"test_planner.run.{note.value}",
         language,
         count=params.count,
         budget=params.budget_minutes,
     )
+    return text

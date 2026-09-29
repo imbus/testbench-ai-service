@@ -15,6 +15,8 @@ from testbench_ai_service.agents.test_planner.model import (
 
 #: Picks at or below this distance are indistinguishable duplicates.
 EPS_ZERO = 1e-6
+#: Below this many points a curve has no knee.
+MIN_KNEE_POINTS = 3
 
 
 @dataclass(frozen=True)
@@ -48,7 +50,7 @@ def knee_index(scores: Sequence[float]) -> int:
     that is too short or has no point below that line has its last point as knee.
     """
     count = len(scores)
-    if count < 3:
+    if count < MIN_KNEE_POINTS:
         return count - 1
     values = np.asarray(scores, dtype=np.float64)
     low, high = values.min(), values.max()

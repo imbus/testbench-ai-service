@@ -43,9 +43,11 @@ class TestArgs:
             TestPlannerArgs(cluster_threshold=1.0)
 
     def test_local_provider_needs_fastembed(self):
-        with patch("importlib.util.find_spec", return_value=None):
-            with pytest.raises(ValidationError, match="local-embeddings"):
-                EmbeddingArgs(provider=EmbeddingProvider.LOCAL)
+        with (
+            patch("importlib.util.find_spec", return_value=None),
+            pytest.raises(ValidationError, match="local-embeddings"),
+        ):
+            EmbeddingArgs(provider=EmbeddingProvider.LOCAL)
 
     def test_local_provider_accepted_when_fastembed_is_importable(self):
         with patch("importlib.util.find_spec", return_value=object()):

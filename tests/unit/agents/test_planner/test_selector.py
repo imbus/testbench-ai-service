@@ -1,3 +1,5 @@
+from itertools import pairwise
+
 import numpy as np
 
 from testbench_ai_service.agents.test_planner.distance import normalize
@@ -51,7 +53,7 @@ def test_scores_are_non_increasing():
 
     scores = farthest_point_ranking(unit, list(range(50)), [], []).scores
 
-    assert all(a >= b for a, b in zip(scores, scores[1:]))
+    assert all(a >= b for a, b in pairwise(scores))
 
 
 def test_duplicates_score_zero():

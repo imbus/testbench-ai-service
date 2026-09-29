@@ -6,8 +6,10 @@ import numpy as np
 import pytest
 
 from testbench_ai_service.agents.test_planner.embeddings.factory import create_embedding_client
+from testbench_ai_service.agents.test_planner.embeddings.local import FastEmbedClient
 from testbench_ai_service.agents.test_planner.embeddings.openai import OpenAIEmbeddingClient
 from testbench_ai_service.agents.test_planner.model import EmbeddingArgs
+from testbench_ai_service.llm.azure_auth import EntraIdCredentials
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.models.config import LLMConfig
 
@@ -72,8 +74,6 @@ def test_factory_azure_with_api_key():
 
 
 def test_factory_azure_with_entra_id():
-    from testbench_ai_service.llm.azure_auth import EntraIdCredentials
-
     config = LLMConfig(
         provider=LLMProvider.AZURE_OPENAI,
         auth_method=AzureAuthMethod.ENTRA_ID,
@@ -110,8 +110,6 @@ def test_factory_local_builds_fastembed_client():
 
 @pytest.mark.skipif(importlib.util.find_spec("fastembed") is None, reason="fastembed not installed")
 async def test_fastembed_client_embeds():
-    from testbench_ai_service.agents.test_planner.embeddings.local import FastEmbedClient
-
     vectors = await FastEmbedClient("BAAI/bge-small-en-v1.5").embed(["hello", "world"])
 
     assert vectors.shape[0] == 2

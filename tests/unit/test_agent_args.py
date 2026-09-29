@@ -20,9 +20,7 @@ from testbench_ai_service.models.config import (
 from testbench_ai_service.utils.config import get_agent_config
 
 AGENT_KEY = "test_case_set_reviewer"
-REVIEWER_CLASS_PATH = (
-    "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
-)
+REVIEWER_CLASS_PATH = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
 
 
 class _OptionalArgs(AgentArgs):
@@ -151,9 +149,7 @@ class TestProjectMerge:
 
     def test_project_without_args_override_uses_global_args(self):
         config = _make_app_config(args={"max_items": 20})
-        config.projects["P2"] = ProjectConfig(
-            agents={AGENT_KEY: ProjectAgentConfig(enabled=False)}
-        )
+        config.projects["P2"] = ProjectConfig(agents={AGENT_KEY: ProjectAgentConfig(enabled=False)})
 
         agent_config = get_agent_config(AGENT_KEY, config, "P2")
 

@@ -4,6 +4,8 @@ import numpy as np
 
 from testbench_ai_service.agents.test_planner.distance import close_pairs
 
+MIN_CLUSTER_SIZE = 2
+
 
 def redundancy_clusters(
     unit: np.ndarray, threshold: float, block_size: int = 1024
@@ -34,6 +36,6 @@ def redundancy_clusters(
     for index in range(len(unit)):
         groups.setdefault(find(index), []).append(index)
 
-    clusters = [group for group in groups.values() if len(group) >= 2]
+    clusters = [group for group in groups.values() if len(group) >= MIN_CLUSTER_SIZE]
     clusters.sort(key=lambda group: (-len(group), group[0]))
     return clusters

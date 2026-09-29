@@ -23,7 +23,9 @@ def mean_distances(unit: np.ndarray) -> np.ndarray:
     return np.clip(1.0 - unit @ unit.mean(axis=0), 0.0, 1.0)
 
 
-def close_pairs(unit: np.ndarray, threshold: float, block_size: int = 1024) -> list[tuple[int, int]]:
+def close_pairs(
+    unit: np.ndarray, threshold: float, block_size: int = 1024
+) -> list[tuple[int, int]]:
     """All index pairs ``i < j`` whose distance is below ``threshold``."""
     pairs: list[tuple[int, int]] = []
     for start in range(0, len(unit), block_size):

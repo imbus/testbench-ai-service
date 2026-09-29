@@ -1,7 +1,6 @@
 """File cache for embeddings, one ``.npy`` file per content hash."""
 
 import hashlib
-import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -47,7 +46,7 @@ class EmbeddingCache:
         temp_path = path.with_suffix(".tmp")
         with temp_path.open("wb") as file:
             np.save(file, np.asarray(vector, dtype=np.float32), allow_pickle=False)
-        os.replace(temp_path, path)
+        temp_path.replace(path)
 
 
 async def embed_with_cache(

@@ -22,8 +22,8 @@ def _prompt_file(language):
     return PROMPTS_DIR / language / "test_planner" / "prompt.yaml"
 
 
-def _config(language="de", variant=None, vars=None):
-    return PromptConfig(file=_prompt_file(language), variant=variant, vars=vars)
+def _config(language="de", variant=None, variables=None):
+    return PromptConfig(file=_prompt_file(language), variant=variant, vars=variables)
 
 
 @pytest.mark.parametrize("language", LANGUAGES)
@@ -62,25 +62,27 @@ def test_variant_defaults(language, variant, field, default):
 
 
 def test_request_vars_override_defaults():
-    params = parse_run_params(_config(variant="Anzahl", vars={"count": "12", "existing": "replan"}))
+    params = parse_run_params(
+        _config(variant="Anzahl", variables={"count": "12", "existing": "replan"})
+    )
 
     assert params.count == 12
     assert params.existing == ExistingMode.REPLAN
 
 
 def test_empty_string_var_falls_back_to_default():
-    assert parse_run_params(_config(variant="Anzahl", vars={"count": ""})).count == 40
+    assert parse_run_params(_config(variant="Anzahl", variables={"count": ""})).count == 40
 
 
 def test_vars_of_other_variants_are_ignored():
-    params = parse_run_params(_config(variant="Anzahl", vars={"budget_minutes": "5"}))
+    params = parse_run_params(_config(variant="Anzahl", variables={"budget_minutes": "5"}))
 
     assert params.budget_minutes is None
 
 
 def test_invalid_value_raises_validation_error():
     with pytest.raises(ValidationError):
-        parse_run_params(_config(variant="Anzahl", vars={"count": "-3"}))
+        parse_run_params(_config(variant="Anzahl", variables={"count": "-3"}))
 
 
 def test_unknown_variant():

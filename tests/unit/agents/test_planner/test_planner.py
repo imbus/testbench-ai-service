@@ -5,9 +5,7 @@ from testbench_ai_service.agents.test_planner.model import PlannerRunParams, Pla
 from testbench_ai_service.agents.test_planner.planner import build_plan
 from testbench_ai_service.models.testbench import ActivityStatus
 
-UNIT = normalize(
-    np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
-)
+UNIT = normalize(np.array([[1.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]))
 
 
 def _cases(overrides=None):

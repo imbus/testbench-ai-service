@@ -73,7 +73,9 @@ class TestModes:
     def test_budget_seeds_over_budget_note(self):
         seeds = [_entry(9, 1.0, minutes=60, reason="mandatory")]
 
-        outcome = apply_cutoff(seeds + PICKS, 1, PlannerRunParams(mode="budget", budget_minutes=30), REQS)
+        outcome = apply_cutoff(
+            seeds + PICKS, 1, PlannerRunParams(mode="budget", budget_minutes=30), REQS
+        )
 
         assert outcome.length == 1
         assert outcome.notes == [CutoffNote.SEEDS_EXCEED_BUDGET]

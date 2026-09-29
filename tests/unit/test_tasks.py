@@ -10,7 +10,7 @@ from testbench2robotframework.json_reader import TestBenchJsonReader
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
 from testbench_ai_service.config import DEFAULT_AGENTS, AppConfig
-from testbench_ai_service.llm.base import LLMClient
+from testbench_ai_service.llm.base import LLMClient, NoLLMClient
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.testbench import (
@@ -327,9 +327,6 @@ class TestRunAgentReviewTask:
 
 class TestRunAgentWithoutLLM:
     async def test_agent_without_llm_gets_no_llm_client(self):
-        from testbench_ai_service.llm.base import NoLLMClient
-        from testbench_ai_service.tasks import run_agent
-
         agent = MagicMock()
         agent.USES_LLM = False
         agent.run = AsyncMock()
@@ -349,8 +346,6 @@ class TestRunAgentWithoutLLM:
         assert isinstance(agent.run.call_args.kwargs["llm_client"], NoLLMClient)
 
     async def test_agents_without_the_flag_still_get_the_factory_client(self):
-        from testbench_ai_service.tasks import run_agent
-
         agent = MagicMock(spec=["run"])  # no USES_LLM attribute, like an old custom agent
         agent.run = AsyncMock()
         llm_factory = MagicMock()
@@ -368,7 +363,5 @@ class TestRunAgentWithoutLLM:
         assert agent.run.call_args.kwargs["llm_client"] is llm_factory.get_client.return_value
 
     async def test_no_llm_client_refuses_queries(self):
-        from testbench_ai_service.llm.base import NoLLMClient
-
         with pytest.raises(RuntimeError, match="does not use an LLM"):
             await NoLLMClient().query_llm("m", [])

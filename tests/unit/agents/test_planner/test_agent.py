@@ -18,7 +18,7 @@ from testbench_ai_service.utils.i18n import load_translations
 _MODULE = "testbench_ai_service.agents.test_planner.agent"
 
 
-def _context(variant=None, vars=None, **overrides):
+def _context(variant=None, variables=None, **overrides):
     fields = {
         "user_key": "U1",
         "project_key": "P1",
@@ -28,7 +28,9 @@ def _context(variant=None, vars=None, **overrides):
         "language": LanguageOption.ENGLISH,
         "llm_config": LLMConfig(provider=LLMProvider.OPENAI),
         "prompt_config": PromptConfig(
-            file=PROMPTS_DIR / "en" / "test_planner" / "prompt.yaml", variant=variant, vars=vars
+            file=PROMPTS_DIR / "en" / "test_planner" / "prompt.yaml",
+            variant=variant,
+            vars=variables,
         ),
         "templates_dir": "templates",
     }
@@ -44,8 +46,15 @@ def _conn():
 
 def _case(i, status=ActivityStatus.NotPlanned, minutes=10.0, reqs=()):
     return PlannerTestCase(
-        unique_id=f"TC-{i}", key=str(i), set_key="S", set_name=f"Set {i}", path=f"/{i}",
-        text=f"text {i}", planned_minutes=minutes, status=status, requirement_keys=frozenset(reqs),
+        unique_id=f"TC-{i}",
+        key=str(i),
+        set_key="S",
+        set_name=f"Set {i}",
+        path=f"/{i}",
+        text=f"text {i}",
+        planned_minutes=minutes,
+        status=status,
+        requirement_keys=frozenset(reqs),
     )
 
 
@@ -119,7 +128,7 @@ class TestPrecheck:
 
     async def test_invalid_vars_fail(self):
         result = await TestPlannerAgent().precheck(
-            _context(variant="Count", vars={"count": "-1"}), _conn()
+            _context(variant="Count", variables={"count": "-1"}), _conn()
         )
 
         assert not result.passed
@@ -160,11 +169,9 @@ class TestRun:
         agent = TestPlannerAgent(TestPlannerArgs(embedding={"cache_dir": str(tmp_path)}))
         cases = [_case(0), _case(1), _case(2)]
         client = MagicMock()
-        client.embed = AsyncMock(
-            return_value=np.eye(3, dtype=np.float32)
-        )
+        client.embed = AsyncMock(return_value=np.eye(3, dtype=np.float32))
         client.close = AsyncMock()
-        context = _context(variant="Count", vars={"count": "2"})
+        context = _context(variant="Count", variables={"count": "2"})
 
         with _collect(cases):
             await agent.precheck(context, _conn())
@@ -184,7 +191,9 @@ class TestRun:
 
     async def test_cutoff_notes_become_translated_warnings(self, caplog, tmp_path):
         agent = TestPlannerAgent(TestPlannerArgs(embedding={"cache_dir": str(tmp_path)}))
-        client = MagicMock(embed=AsyncMock(return_value=np.eye(2, dtype=np.float32)), close=AsyncMock())
+        client = MagicMock(
+            embed=AsyncMock(return_value=np.eye(2, dtype=np.float32)), close=AsyncMock()
+        )
         context = _context(variant="Requirement coverage")
 
         with _collect([_case(0), _case(1)]):
@@ -209,8 +218,10 @@ class TestRun:
 
         with _collect([_case(0), _case(1)]):
             await agent.precheck(_context(), _conn())
-        with patch(f"{_MODULE}.create_embedding_client", return_value=client):
-            with pytest.raises(RuntimeError, match="api down"):
-                await agent.run(_context(), _conn(), NoLLMClient(), [])
+        with (
+            patch(f"{_MODULE}.create_embedding_client", return_value=client),
+            pytest.raises(RuntimeError, match="api down"),
+        ):
+            await agent.run(_context(), _conn(), NoLLMClient(), [])
 
         client.close.assert_awaited_once()
