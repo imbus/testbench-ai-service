@@ -76,6 +76,34 @@ def raise_field_validation_error(
     ) from error
 
 
+def raise_nested_validation_error(model_instance, prefix: tuple, error: ValidationError):
+    """
+    Re-raise a ValidationError of a nested model with every location prefixed.
+
+    Keeps all individual errors (e.g. several missing fields) and makes them point
+    at their place in the config, e.g. ("agents", "foo", "args", "max_items").
+
+    Args:
+        model_instance: Pydantic model instance (self in validators)
+        prefix: Location of the nested model within ``model_instance``
+        error: The ValidationError raised while validating the nested model
+    """
+    line_errors = []
+    for detail in error.errors():
+        line_error = InitErrorDetails(
+            type=detail["type"],
+            loc=(*prefix, *detail["loc"]),
+            input=detail["input"],
+        )
+        if "ctx" in detail:
+            line_error["ctx"] = detail["ctx"]
+        line_errors.append(line_error)
+    raise ValidationError.from_exception_data(
+        title=model_instance.__class__.__name__,
+        line_errors=line_errors,
+    ) from error
+
+
 def validate_class_path(class_path: str) -> str:
     """
     Check that class_path is valid and importable.
