@@ -16,6 +16,9 @@ class Ranking:
     order: list[int]
     #: Distance of each pick to everything taken before it; non-increasing.
     scores: list[float]
+    #: True when the first pick had nothing before it, so its score 1.0 is a
+    #: placeholder rather than a measured distance.
+    first_unscored: bool = False
 
 
 def farthest_point_ranking(
@@ -66,14 +69,17 @@ def farthest_point_ranking(
         remaining[index] = False
         take(index)
 
-    if remaining.any() and not seeds and not blockers:
+    first_unscored = bool(remaining.any() and not seeds and not blockers)
+    if first_unscored:
         pick(_argmax_where(mean_distances(unit), remaining), 1.0)
 
     while remaining.any():
         index = _argmax_where(min_dist, remaining)
         pick(index, _score(min_dist[index]))
 
-    return Ranking(seed_scores=seed_scores, order=order, scores=scores)
+    return Ranking(
+        seed_scores=seed_scores, order=order, scores=scores, first_unscored=first_unscored
+    )
 
 
 def _score(value: float) -> float:

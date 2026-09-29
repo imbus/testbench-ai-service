@@ -71,7 +71,9 @@ def build_plan(
     ]
 
     all_requirements = frozenset().union(*(test_cases[i].requirement_keys for i in candidates))
-    outcome = apply_cutoff(entries, len(seeds), params, all_requirements)
+    outcome = apply_cutoff(
+        entries, len(seeds), params, all_requirements, skip_first=ranking.first_unscored
+    )
     chosen = entries[: outcome.length]
 
     selection = [
@@ -97,7 +99,9 @@ def build_plan(
         total=len(candidates),
         planned_minutes=round(sum(chosen_entry.minutes for chosen_entry in chosen), 1),
         mode=params.mode,
-        cutoff_hints=compute_hints(entries, len(seeds), all_requirements),
+        cutoff_hints=compute_hints(
+            entries, len(seeds), all_requirements, skip_first=ranking.first_unscored
+        ),
         selection=selection,
         redundancy_clusters=clusters,
     )

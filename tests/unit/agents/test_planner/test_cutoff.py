@@ -130,3 +130,38 @@ class TestHints:
 
         assert hints.full_requirement_coverage is None
         assert hints.distance_zero_from is None
+
+
+# first pick with the placeholder 1.0, then small real distances with a drop
+LOW_DISTANCE_PICKS = [
+    _entry(i, s) for i, s in enumerate([1.0, 0.30, 0.29, 0.28, 0.27, 0.10, 0.09, 0.08, 0.07, 0.06])
+]
+
+
+class TestUnscoredFirstPick:
+    """The first pick of a run without seeds has the placeholder score 1.0.
+
+    Real distances of one domain are small, so that point must not take part in
+    the knee, or the normalisation squeezes the real curve and the knee lands
+    right after the first pick.
+    """
+
+    def test_placeholder_distorts_the_knee(self):
+        assert apply_cutoff(LOW_DISTANCE_PICKS, 0, PlannerRunParams(mode="auto"), REQS).length == 2
+
+    def test_knee_without_the_placeholder(self):
+        outcome = apply_cutoff(
+            LOW_DISTANCE_PICKS, 0, PlannerRunParams(mode="auto"), REQS, skip_first=True
+        )
+
+        assert outcome.length == 6
+
+    def test_hint_without_the_placeholder(self):
+        assert compute_hints(LOW_DISTANCE_PICKS, 0, REQS, skip_first=True).knee == 6
+
+    def test_single_pick_without_predecessor(self):
+        picks = [_entry(0, 1.0)]
+
+        assert (
+            apply_cutoff(picks, 0, PlannerRunParams(mode="auto"), REQS, skip_first=True).length == 1
+        )

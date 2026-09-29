@@ -62,3 +62,9 @@ def test_duplicates_score_zero():
     ranking = farthest_point_ranking(unit, [0, 1, 2], [], [])
 
     assert ranking.scores[-1] <= 1e-6
+
+
+def test_first_pick_is_unscored_only_without_seeds_and_blockers():
+    assert farthest_point_ranking(UNIT, ALL, [], []).first_unscored is True
+    assert farthest_point_ranking(UNIT, ALL, [0], []).first_unscored is False
+    assert farthest_point_ranking(UNIT, [1, 2, 3], [], [0]).first_unscored is False

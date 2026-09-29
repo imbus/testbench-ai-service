@@ -75,6 +75,7 @@ def apply_cutoff(
     seed_count: int,
     params: PlannerRunParams,
     all_requirements: frozenset[str],
+    skip_first: bool = False,
 ) -> CutoffOutcome:
     """
     Decide how many leading entries are selected.
@@ -84,6 +85,8 @@ def apply_cutoff(
         seed_count: Number of seeds; they are selected in every mode.
         params: The run parameters with the cut-off mode and its value.
         all_requirements: Requirement keys of every selectable test case.
+        skip_first: The first pick has a placeholder score (nothing before it)
+            and is left out of the knee computation.
 
     Returns:
         The number of selected entries and notes about deviations.
@@ -109,15 +112,21 @@ def apply_cutoff(
         target = params.coverage_percent / 100 * len(all_requirements)
         length = _coverage_length(entries, seed_count, limit, all_requirements, target)
     else:
-        length = _knee_length(entries, seed_count, limit)
+        length = _knee_length(entries, seed_count, limit, skip_first)
 
     return CutoffOutcome(length=length, notes=notes)
 
 
 def compute_hints(
-    entries: Sequence[RankedEntry], seed_count: int, all_requirements: frozenset[str]
+    entries: Sequence[RankedEntry],
+    seed_count: int,
+    all_requirements: frozenset[str],
+    skip_first: bool = False,
 ) -> CutoffHints:
-    """The 1-based ranks where the knee, full coverage and duplicates start."""
+    """The 1-based ranks where the knee, full coverage and duplicates start.
+
+    ``skip_first`` as in :func:`apply_cutoff`.
+    """
     limit = duplicate_limit(entries, seed_count)
     has_picks = limit > seed_count
     full_coverage = None
@@ -129,7 +138,7 @@ def compute_hints(
                 full_coverage = rank
                 break
     return CutoffHints(
-        knee=_knee_length(entries, seed_count, limit) if has_picks else None,
+        knee=_knee_length(entries, seed_count, limit, skip_first) if has_picks else None,
         full_requirement_coverage=full_coverage,
         distance_zero_from=limit + 1 if limit < len(entries) else None,
     )
@@ -173,8 +182,16 @@ def _coverage_length(
     return length
 
 
-def _knee_length(entries: Sequence[RankedEntry], seed_count: int, limit: int) -> int:
+def _knee_length(
+    entries: Sequence[RankedEntry], seed_count: int, limit: int, skip_first: bool = False
+) -> int:
     scores = [entry.min_distance for entry in entries[seed_count:limit]]
     if not scores:
         return seed_count
+    if skip_first:
+        # The placeholder 1.0 would dominate the normalisation of the real,
+        # usually much smaller distances; the first pick is always taken.
+        if len(scores) == 1:
+            return seed_count + 1
+        return seed_count + 1 + knee_index(scores[1:]) + 1
     return seed_count + knee_index(scores) + 1

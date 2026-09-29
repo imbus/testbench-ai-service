@@ -1,5 +1,8 @@
+from unittest.mock import patch
+
 import numpy as np
 
+from testbench_ai_service.agents.test_planner.cutoff import apply_cutoff
 from testbench_ai_service.agents.test_planner.distance import normalize
 from testbench_ai_service.agents.test_planner.model import PlannerRunParams, PlannerTestCase
 from testbench_ai_service.agents.test_planner.planner import build_plan
@@ -85,3 +88,22 @@ def test_notes_are_passed_through():
     _, notes = build_plan(_cases(), UNIT, params, None, 0.05)
 
     assert [n.value for n in notes] == ["no_requirements_fallback"]
+
+
+def test_knee_skips_the_unscored_first_pick():
+    with patch(
+        "testbench_ai_service.agents.test_planner.planner.apply_cutoff", wraps=apply_cutoff
+    ) as cut:
+        build_plan(_cases(), UNIT, PlannerRunParams(mode="auto"), None, 0.05)
+
+    assert cut.call_args.kwargs["skip_first"] is True
+
+
+def test_knee_keeps_a_scored_first_pick():
+    cases = _cases({0: {"status": ActivityStatus.Performed}})
+    with patch(
+        "testbench_ai_service.agents.test_planner.planner.apply_cutoff", wraps=apply_cutoff
+    ) as cut:
+        build_plan(cases, UNIT, PlannerRunParams(mode="auto"), None, 0.05)
+
+    assert cut.call_args.kwargs["skip_first"] is False
