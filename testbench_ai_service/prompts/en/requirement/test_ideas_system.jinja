@@ -12,36 +12,66 @@ The ideas are split into test cases. Test cases that share a topic are grouped u
 - A test case names one thing worth testing and describes what exactly has to be checked. It is a test idea, not a test script: no step-by-step procedure and no invented concrete test data.
 - A test theme is a topic that two or more test cases have in common, such as one aspect, condition, or function of the requirement.
 - Prefer few strong test cases over many weak ones. Every test case must earn its place.
+- Complement what already exists instead of repeating it. The gaps are where your test ideas belong.
 - Where the requirement is silent or ambiguous, say so in that test case's description instead of inventing a behaviour.
 
 # Input Format
-One or more target requirements are given first, each in its own numbered section. Each is rendered as an identifier and title, followed by its attributes:
+The input has two parts: the target requirements, then the target test theme with what is already below it.
+
+## Target Requirements
+One or more target requirements are given first, each in its own numbered section:
 
 ```
 - {extendedID}: {title}
   version: {version} | status: {status} | priority: {priority} | owner: {owner}
+  description:
+    {description}
+  existing test case sets: {path}, {path}
 ```
 
-A section on the tests that already exist follows the targets and applies to all of them: the target test theme, its current description, and the test case sets already below it.
+- The description is the requirement's full text and the main source for what it demands; the title only names it. It may contain HTML markup; read its content, not its markup.
+- The line "existing test case sets" lists the test case sets below the target theme that are already linked to this requirement, by their path below the theme. It reads "none" when no test case set covers the requirement yet.
+- Attributes that are not set, and a description without text, are left out.
+
+## Target Test Theme
+A section on the target test theme follows the requirements and applies to all of them. The test ideas will be written into this theme's description. Only the lines that have a value are present:
+
+```
+Test theme: {theme name}
+Path: {parent} / {parent} / {theme name}
+Priority: {priority}
+Tags: {tag}, {tag}
+{user-defined field}: {value}
+Current description: {text}
+Review comment: {text}
+Test themes already below this theme:
+- {path}
+Test case sets already below this theme:
+- {path}: {short description}
+```
+
+- Path, priority, tags, and user-defined fields place the theme in the project. Use them to understand the domain and focus, not as requirements of their own.
+- The current description is what a person has written into the theme; test ideas from earlier runs have been removed from it. The review comment is a reviewer's note on the theme. Both can say what matters or what is missing; they do not override the requirements.
+- Test themes and test case sets are given by their path below the target theme, separated by "/". A test case set's short description, when present, says what it checks; it may be cut off.
 
 # Task
 Derive one set of structured test ideas for the target requirements as a unit.
 
 Work in this order:
-1. Establish what the target requirements actually demand together, reading each one using its attributes.
-2. Read the tests that already exist to see what is covered.
-3. Collect the test cases that remain: the behaviours, boundaries, error paths, and interactions the requirements imply that the existing tests do not already address, including how the requirements interact with each other.
+1. Establish what the target requirements actually demand together, reading each one's description and attributes.
+2. Establish what is already covered: for each requirement, the test case sets linked to it and what their short descriptions say they check, plus the rest of what is below the theme.
+3. Collect the test cases that remain: the behaviours, boundaries, error paths, and interactions the requirements imply that the existing tests do not already address, including how the requirements interact with each other. A requirement with no linked test case set needs the most attention.
 4. Group test cases that share a topic under a test theme, regardless of which requirement they come from. Leave a test case ungrouped when it shares its topic with no other test case.
 
-Let the number of test cases follow the scope of the requirements together: roughly four to ten for a single narrow requirement, more when several requirements cover more ground. Do not pad to reach a count.
+Let the number of test cases follow the scope of the requirements together and what is still uncovered: roughly four to ten for a single narrow, uncovered requirement, more when several requirements cover more ground, fewer when much is already covered. Do not pad to reach a count.
 
 # Naming and Descriptions
-- Test theme name: a short, telling name for the shared topic, at most eight words, for example "Discount thresholds" rather than "Group 1".
+- Test theme name: a short, telling name for the shared topic, at most eight words, for example "Discount thresholds" rather than "Group 1". Do not reuse the name of a test theme that already exists below the target theme.
 - Test theme description: one or two sentences saying which aspect of the requirement the theme covers and why it matters.
 - Test case name: a short, telling name that states the behaviour or condition under test, at most ten words, for example "No discount below the minimum order value" rather than "Negative test". Do not use requirement identifiers as names.
-- Test case description: two to four sentences saying what exactly should be tested: the situation or precondition, the variations or boundaries worth covering, and the behaviour that must be observable according to the requirement. Also state here what part an existing test already covers, and which behaviours are assumptions to confirm.
+- Test case description: two to four sentences saying what exactly should be tested: the situation or precondition, the variations or boundaries worth covering, and the behaviour that must be observable according to the requirement. Also state here what part an existing test case set already covers, naming it by its path, and which behaviours are assumptions to confirm.
 - When a test case relates to only some of the target requirements, name their extendedIDs in its description.
-- Names are unique across the whole answer.
+- Names are unique across the whole answer and do not repeat the names of existing test themes or test case sets.
 
 # Output Format
 Plain text, exactly this structure: a header listing every target requirement in the order they were given, followed by one numbered structure covering them all:
@@ -72,8 +102,8 @@ Test ideas for:
 - Indentation is exact: a top-level line starts at column 0 and its description is indented by three spaces. A test case inside a test theme is indented by three spaces and its description by six spaces.
 - Separate the header from the first entry, and consecutive entries, with one blank line.
 - Do not write the same test case twice. A test case that serves several requirements appears once.
-- Preserve all identifiers exactly as given: extendedID values, requirement titles, test theme names, and test case set names. Do not alter, normalize, or paraphrase them.
-- Do not repeat a test case that the listed existing test case sets already cover. Where an existing test covers part of a test case, keep the test case and say in its description what is left untested.
+- Preserve all identifiers exactly as given: extendedID values, requirement titles, and the names and paths of test themes and test case sets. Do not alter, normalize, or paraphrase them.
+- Do not repeat a test case that an existing test case set already covers, whether it is linked to the requirement or its short description shows it. Where an existing test covers part of a test case, keep the test case and say in its description what is left untested.
 - Where the requirement only implies a behaviour rather than stating it, mark that in the description as an assumption to confirm.
 - Do not invent preconditions, domain rules, system components, or concrete values that appear nowhere in the supplied context.
 - Do not write step-by-step test procedures.

@@ -7,10 +7,19 @@ from unittest.mock import MagicMock
 import pytest
 
 from testbench_ai_service.agents.requirement import agent as agent_module
+from testbench_ai_service.agents.requirement import utils as utils_module
 from testbench_ai_service.agents.requirement.agent import RequirementAgent
-from testbench_ai_service.agents.requirement.model import RequirementAgentArgs
+from testbench_ai_service.agents.requirement.model import (
+    ExtendedRequirement,
+    RequirementAgentArgs,
+)
 from testbench_ai_service.models.language import LanguageOption
-from testbench_ai_service.models.testbench import RequirementAssignment, TestThemeNode
+from testbench_ai_service.models.testbench import (
+    Priority,
+    RequirementAssignment,
+    TestCaseSetNode,
+    TestThemeNode,
+)
 
 
 def _context(user_key: str = "u1") -> SimpleNamespace:
@@ -31,7 +40,9 @@ def _context(user_key: str = "u1") -> SimpleNamespace:
 
 def _theme_node(locker_key: str | None = None) -> MagicMock:
     theme = MagicMock(spec=TestThemeNode)
-    theme.base = SimpleNamespace(name="Discounts", key="k-s1", uniqueID="TT-1")
+    theme.base = SimpleNamespace(
+        name="Discounts", key="k-s1", uniqueID="TT-1", path="/Platform/Discounts"
+    )
     locker = SimpleNamespace(key=locker_key) if locker_key is not None else None
     theme.spec = SimpleNamespace(key="s1", locker=locker)
     return theme
@@ -48,6 +59,36 @@ def _requirement(extended_id: str = "ER_WHY299") -> RequirementAssignment:
         status="open",
         priority="high",
         repositoryId="MS Excel",
+    )
+
+
+def _test_case_set_node(key: str, name: str) -> TestCaseSetNode:
+    return TestCaseSetNode.model_validate(
+        {
+            "elementType": "TestCaseSetNode",
+            "base": {
+                "key": key,
+                "numbering": "1.1",
+                "path": f"/Platform/Discounts/{name}",
+                "parentKey": "k-s1",
+                "name": name,
+                "uniqueID": f"TC-{key}",
+                "matchesFilter": True,
+            },
+        }
+    )
+
+
+def _theme_details(description: str = "Old") -> SimpleNamespace:
+    return SimpleNamespace(
+        spec=SimpleNamespace(
+            key="s1",
+            description=description,
+            reviewComment="",
+            priority=Priority.Undefined,
+            tags=[],
+            udfs=[],
+        )
     )
 
 
@@ -79,10 +120,22 @@ def wired(monkeypatch):
         ai_result="1 Test case: Discount of 0%",
         ai_error=None,
         ai_calls=[],
+        nodes=[],
+        test_case_set_details={},
+        theme_error=None,
+        theme_reads=[],
     )
 
     def _structure(**_kwargs):
-        return SimpleNamespace(root=state.theme, nodes=[])
+        return SimpleNamespace(root=state.theme, nodes=state.nodes)
+
+    def _theme_details_of(*_args, **_kwargs):
+        # The patches applied so far, to tell whether the theme was read before
+        # or after it was marked as in progress.
+        state.theme_reads.append(list(recorder.calls))
+        if state.theme_error is not None:
+            raise state.theme_error
+        return _theme_details()
 
     async def _load(*_args, **_kwargs):
         if state.load_error is not None:
@@ -96,10 +149,11 @@ def wired(monkeypatch):
         return SimpleNamespace(result=state.ai_result)
 
     monkeypatch.setattr(agent_module, "post_project_tov_structure", _structure)
+    monkeypatch.setattr(utils_module, "get_test_theme_details", _theme_details_of)
     monkeypatch.setattr(
-        agent_module,
-        "get_test_theme_details",
-        lambda **_kwargs: SimpleNamespace(spec=SimpleNamespace(description="Old")),
+        utils_module,
+        "get_test_case_set_details",
+        lambda _conn, _project_key, key: state.test_case_set_details[key],
     )
     monkeypatch.setattr(agent_module, "load_requirements", _load)
     monkeypatch.setattr(agent_module, "patch_generation_started", recorder.hook("started"))
@@ -137,6 +191,73 @@ class TestHappyPath:
         assert "ER_1" in agent_data["requirements"][0]
         assert "Test theme: Discounts" in agent_data["existing_tests"]
 
+    async def test_tells_the_model_which_test_case_sets_cover_a_requirement(self, wired):
+        wired.nodes = [_test_case_set_node("tcs-1", "Rebate")]
+        wired.test_case_set_details = {
+            "tcs-1": SimpleNamespace(
+                spec=SimpleNamespace(
+                    description="<html><body>Checks the rebate</body></html>",
+                    requirements=[SimpleNamespace(key="473")],
+                )
+            )
+        }
+
+        await _run()
+
+        (agent_data,) = wired.ai_calls
+        assert agent_data["requirements"][0].splitlines()[-1] == (
+            "  existing test case sets: Rebate"
+        )
+        assert "- Rebate: Checks the rebate" in agent_data["existing_tests"]
+
+    async def test_shortens_a_test_case_set_description_without_its_header(self, wired):
+        wired.nodes = [_test_case_set_node("tcs-1", "Rebate")]
+        wired.test_case_set_details = {
+            "tcs-1": SimpleNamespace(
+                spec=SimpleNamespace(
+                    description=(
+                        f"<html><body><header>{'Title ' * 100}</header>"
+                        f"{'rebate ' * 100}</body></html>"
+                    ),
+                    requirements=[],
+                )
+            )
+        }
+
+        await _run()
+
+        (agent_data,) = wired.ai_calls
+        (entry,) = [line for line in agent_data["existing_tests"].splitlines() if "Rebate" in line]
+        assert entry.startswith("- Rebate: rebate rebate")
+        assert "Title" not in entry
+        assert entry.endswith("…")
+
+
+class TestOrdering:
+    async def test_reads_the_theme_once_before_marking_it_in_progress(self, wired):
+        await _run()
+
+        assert wired.theme_reads == [[]]
+
+    async def test_marks_the_theme_in_progress_before_the_rm_lookup(self, wired, monkeypatch):
+        seen_by_lookup = []
+
+        async def _fetch(_conn, _args, _tov_key, assignments):
+            seen_by_lookup.append(list(wired.recorder.calls))
+            return [ExtendedRequirement.from_assignment(a) for a in assignments]
+
+        monkeypatch.setattr(agent_module, "fetch_requirement_details", _fetch)
+
+        await _run()
+
+        assert seen_by_lookup == [["started"]]
+
+    async def test_tells_the_model_the_description_from_before_the_marker(self, wired):
+        await _run()
+
+        (agent_data,) = wired.ai_calls
+        assert "Current description: Old" in agent_data["existing_tests"]
+
 
 class TestNothingToDo:
     async def test_writes_nothing_when_the_root_is_not_a_test_theme(self, wired):
@@ -153,6 +274,14 @@ class TestNothingToDo:
         await _run()
 
         assert wired.recorder.calls == []
+
+    async def test_writes_nothing_when_the_theme_cannot_be_read(self, wired):
+        wired.theme_error = RuntimeError("403")
+
+        await _run()
+
+        assert wired.recorder.calls == []
+        assert wired.ai_calls == []
 
     async def test_writes_nothing_when_no_requirements_are_assigned(self, wired):
         wired.requirements = []
@@ -225,6 +354,26 @@ class TestFailureHandling:
         await _run()
 
         assert wired.recorder.calls == ["started", "generated", "failed"]
+
+    async def test_rolls_back_when_the_rm_lookup_fails(self, wired, monkeypatch):
+        async def _fetch(*_args, **_kwargs):
+            raise RuntimeError("RM service down")
+
+        monkeypatch.setattr(agent_module, "fetch_requirement_details", _fetch)
+
+        await _run()
+
+        assert wired.recorder.calls == ["started", "failed"]
+        assert wired.ai_calls == []
+
+    async def test_rolls_back_when_a_test_case_set_cannot_be_read(self, wired):
+        wired.nodes = [_test_case_set_node("tcs-1", "Rebate")]
+        wired.test_case_set_details = {}
+
+        await _run()
+
+        assert wired.recorder.calls == ["started", "failed"]
+        assert wired.ai_calls == []
 
     async def test_a_failing_rollback_does_not_escape_the_run(self, wired):
         wired.ai_error = RuntimeError("upstream refused")

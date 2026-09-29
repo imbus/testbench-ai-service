@@ -9,9 +9,14 @@ from pydantic import ValidationError
 from requests.auth import HTTPBasicAuth
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
+from testbench_ai_service.agents.requirement.context import html_text
 from testbench_ai_service.agents.requirement.model import (
+    ExistingTestCaseSet,
     ExtendedRequirement,
+    Requirement,
     RequirementAgentArgs,
+    Theme,
+    ThemeContext,
 )
 from testbench_ai_service.exceptions import TRANSPORT_ERRORS
 from testbench_ai_service.log import logger
@@ -19,9 +24,14 @@ from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
     FilteringOptions,
     OptionalUser,
+    Priority,
     RequirementAssignment,
     RichTextInfo,
     SpecificationDetailsForUpdate,
+    TestCaseSetNode,
+    TestStructureTree,
+    TestThemeNode,
+    TestThemeSpecification,
 )
 from testbench_ai_service.transport import (
     DEFAULT_MAX_RETRIES,
@@ -32,6 +42,8 @@ from testbench_ai_service.utils.html_utils import escape_html, has_visible_text
 from testbench_ai_service.utils.template_utils import render_template, resolve_template_path
 from testbench_ai_service.utils.testbench import (
     get_requirements,
+    get_test_case_set_details,
+    get_test_theme_details,
     get_tov_baselines,
     patch_test_structure_element_spec,
 )
@@ -45,6 +57,12 @@ RM_REQUEST_TIMEOUT_SEC = (10, 60)
 
 #: Upper bound on the requests to the RM service in flight at once.
 RM_MAX_CONCURRENT_REQUESTS = 8
+
+#: Upper bound on the requests to TestBench in flight at once.
+TB_MAX_CONCURRENT_REQUESTS = 4
+
+#: Length a test case set's description is cut to in the prompt.
+DESCRIPTION_SHORT_MAX_CHARS = 300
 
 
 async def load_requirements(
@@ -394,3 +412,103 @@ async def patch_generation_failed(
         description=RichTextInfo(html=description_html, images=[]),
     )
     return await patch_test_structure_element_spec(conn, project_key, spec_key, spec_update)
+
+
+async def get_theme_spec(
+    conn: TBConnection, project_key: str, theme: TestThemeNode
+) -> TestThemeSpecification:
+    """Read a test theme's specification.
+
+    Read before the theme is marked as in progress: afterwards its description is
+    the progress marker and its locker the triggering user.
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the theme.
+        theme: The theme to read.
+
+    Returns:
+        The theme's specification as it stands.
+    """
+    details = await asyncio.to_thread(get_test_theme_details, conn, project_key, theme.base.key)
+    return details.spec
+
+
+async def get_test_theme(
+    conn: TBConnection,
+    project_key: str,
+    tree: TestStructureTree,
+    theme: TestThemeNode,
+    spec: TestThemeSpecification,
+    requirements: list[Requirement],
+) -> ThemeContext:
+    """Gather what the target theme and everything below it already contain.
+
+    The tree nodes carry names only, so each test case set's details are read to
+    learn its description and the requirements it is linked to.
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the theme.
+        tree: The test structure tree loaded below the theme.
+        theme: The target theme, the root of ``tree``.
+        spec: The theme's specification, as read by :func:`get_theme_spec` before
+            generation started.
+        requirements: The theme's requirements.
+
+    Returns:
+        The theme's context for the prompt.
+    """
+    subthemes: list[str] = []
+    test_case_set_nodes: list[TestCaseSetNode] = []
+    for node in tree.nodes:
+        if isinstance(node, TestThemeNode) and node.base.key != theme.base.key:
+            subthemes.append(_relative_path(node, theme))
+        elif isinstance(node, TestCaseSetNode):
+            test_case_set_nodes.append(node)
+
+    semaphore = asyncio.Semaphore(TB_MAX_CONCURRENT_REQUESTS)
+
+    async def _existing(node: TestCaseSetNode) -> ExistingTestCaseSet:
+        async with semaphore:
+            tcs = await asyncio.to_thread(
+                get_test_case_set_details, conn, project_key, node.base.key
+            )
+        return ExistingTestCaseSet(
+            key=node.base.key,
+            title=node.base.name,
+            path=_relative_path(node, theme),
+            description_short=_shorten(html_text(tcs.spec.description)),
+            requirement_keys=[reference.key for reference in tcs.spec.requirements],
+        )
+
+    existing_test_case_sets = await asyncio.gather(
+        *(_existing(node) for node in test_case_set_nodes)
+    )
+
+    return ThemeContext(
+        theme=Theme(
+            key=theme.base.key,
+            title=theme.base.name,
+            description=spec.description,
+            review_comment=spec.reviewComment,
+            path=[segment for segment in theme.base.path.split("/") if segment],
+            priority=None if spec.priority == Priority.Undefined else spec.priority.value,
+            tags=[tag.name for tag in spec.tags],
+            udfs={udf.name: udf.value for udf in spec.udfs if udf.value.strip()},
+        ),
+        requirements=requirements,
+        existing_subthemes=subthemes,
+        existing_test_case_sets=list(existing_test_case_sets),
+    )
+
+
+def _relative_path(node: TestThemeNode | TestCaseSetNode, theme: TestThemeNode) -> str:
+    """Return a node's path below the theme, e.g. ``Subtheme/Test case set``."""
+    return node.base.path.removeprefix(f"{theme.base.path}/")
+
+
+def _shorten(text: str, limit: int = DESCRIPTION_SHORT_MAX_CHARS) -> str:
+    """Collapse whitespace and cut the text to ``limit`` characters."""
+    text = " ".join(text.split())
+    return text if len(text) <= limit else f"{text[: limit - 1].rstrip()}…"

@@ -4,17 +4,6 @@ from testbench_ai_service.models.agent import AgentArgs
 from testbench_ai_service.models.testbench import RequirementAssignment
 
 
-class ThemeContext(BaseModel):
-    """Test-side context gathered for the target test theme."""
-
-    theme_name: str
-    #: The theme's description as it stands before generation, so ideas can
-    #: complement existing coverage instead of repeating it.
-    description: str = ""
-    #: Names of the test case sets already below the theme.
-    test_case_sets: list[str] = Field(default_factory=list)
-
-
 class RequirementAgentArgs(AgentArgs):
     """Arguments of the requirement agent, set in its ``args`` config table."""
 
@@ -49,6 +38,9 @@ class RequirementAgentArgs(AgentArgs):
 
 
 class Requirement(BaseModel):
+    """A requirement as the model sees it: its TOV assignment merged with its RM details."""
+
+    #: TestBench key, which test case sets reference the requirement by.
     key: str
     version: str
     title: str
@@ -58,6 +50,23 @@ class Requirement(BaseModel):
     owner: str | None
     documents: list[str]
     external_ref: str | None
+
+    @classmethod
+    def from_details(
+        cls, assignment: RequirementAssignment, extended: "ExtendedRequirement"
+    ) -> "Requirement":
+        """Merge a requirement's TOV assignment with its extended data."""
+        return cls(
+            key=assignment.key,
+            version=extended.key.version,
+            title=extended.name,
+            description=extended.description,
+            status=extended.status or None,
+            priority=extended.priority or None,
+            owner=extended.owner or None,
+            documents=extended.documents or [],
+            external_ref=extended.extendedId or None,
+        )
 
 
 class ExtendedRequirementKey(BaseModel):
@@ -98,25 +107,46 @@ class ExtendedRequirement(BaseModel):
 
 
 class ExistingTestCaseSet(BaseModel):
+    """A test case set already somewhere below the target theme."""
+
     key: str
     title: str
+    path: str
     description_short: str
     requirement_keys: list[str]
-    ai_generated: bool
 
 
 class Theme(BaseModel):
+    """The target test theme."""
+
     key: str
     title: str
-    description: str
-    path: list[str]
+    description: str = ""
+    review_comment: str = ""
+    path: list[str] = Field(default_factory=list)
+    priority: str | None = None
+    tags: list[str] = Field(default_factory=list)
+    udfs: dict[str, str] = Field(default_factory=dict)
 
 
-class PromptContext(BaseModel):
+class ThemeContext(BaseModel):
+    """Everything the model is told about the target theme and its requirements."""
+
     theme: Theme
-    requirements: list[Requirement]
-    existing_subthemes: list[str]
-    existing_test_case_sets: list[ExistingTestCaseSet]
-    context_requirement_titles: list[str]  # Eltern, nur Orientierung
+    requirements: list[Requirement] = Field(default_factory=list)
+    existing_subthemes: list[str] = Field(default_factory=list)
+    existing_test_case_sets: list[ExistingTestCaseSet] = Field(default_factory=list)
+    context_requirement_titles: list[str] = Field(default_factory=list)
 
-    def coverage(self) -> dict[str, list[str]]: ...
+    def coverage(self) -> dict[str, list[str]]:
+        """Map each requirement's key to the paths of the test case sets linked to it.
+
+        Every requirement of the theme has an entry, an empty list when no set
+        covers it. Links to requirements outside the theme are left out.
+        """
+        coverage: dict[str, list[str]] = {requirement.key: [] for requirement in self.requirements}
+        for test_case_set in self.existing_test_case_sets:
+            for key in test_case_set.requirement_keys:
+                if key in coverage:
+                    coverage[key].append(test_case_set.path)
+        return coverage
