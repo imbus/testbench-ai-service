@@ -117,7 +117,9 @@ class TestPlannerAgent(Agent):
         finally:
             await client.close()
 
-        result, notes = build_plan(
+        # CPU-bound for large suites; a worker thread keeps the service responsive.
+        result, notes = await asyncio.to_thread(
+            build_plan,
             self._test_cases,
             normalize(embeddings),
             params,

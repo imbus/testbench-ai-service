@@ -1,10 +1,13 @@
+import asyncio
 import json
 import logging
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
 import pytest
 
+from testbench_ai_service.agents.test_planner import planner
 from testbench_ai_service.agents.test_planner.agent import TestPlannerAgent
 from testbench_ai_service.agents.test_planner.model import PlannerTestCase, TestPlannerArgs
 from testbench_ai_service.config import PROMPTS_DIR
@@ -225,3 +228,35 @@ class TestRun:
             await agent.run(_context(), _conn(), NoLLMClient(), [])
 
         client.close.assert_awaited_once()
+
+
+@pytest.mark.usefixtures("json_tov")
+async def test_run_keeps_the_event_loop_responsive(tmp_path):
+
+    real_build_plan = planner.build_plan
+
+    def slow_build_plan(*args, **kwargs):
+        time.sleep(0.3)  # stands in for the CPU-bound selection of a large suite
+        return real_build_plan(*args, **kwargs)
+
+    agent = TestPlannerAgent(TestPlannerArgs(embedding={"cache_dir": str(tmp_path)}))
+    client = MagicMock(embed=AsyncMock(return_value=np.eye(2, dtype=np.float32)), close=AsyncMock())
+    ticks = 0
+
+    async def ticker():
+        nonlocal ticks
+        while True:
+            await asyncio.sleep(0.02)
+            ticks += 1
+
+    with _collect([_case(0), _case(1)]):
+        await agent.precheck(_context(), _conn())
+    with (
+        patch(f"{_MODULE}.create_embedding_client", return_value=client),
+        patch(f"{_MODULE}.build_plan", side_effect=slow_build_plan),
+    ):
+        task = asyncio.create_task(ticker())
+        await agent.run(_context(), _conn(), NoLLMClient(), [])
+        task.cancel()
+
+    assert ticks >= 5
