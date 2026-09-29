@@ -26,6 +26,12 @@ Execution-level agents, such as the Defect Explainer, do not support XML-based t
 | [`test_case_set_describer`](test-case-set-describer.md) | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
 | [`defect_explainer`](defect-explainer.md)               | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview.     |
 
+Opt-in (not part of the default agents, enable it in the `config.toml`):
+
+| Agent key                             | Description                                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [`test_planner`](test-planner.md)     | Preview: suggests the most diverse test selection of a cycle via embeddings. The result is written to the service log. |
+
 ---
 
 ## Custom Agents
@@ -141,6 +147,7 @@ Allowed project roles and required API token permissions differ per agent. See e
 - [Test Case Set Reviewer](test-case-set-reviewer.md#authorization)
 - [Test Case Set Describer](test-case-set-describer.md#authorization)
 - [Defect Explainer](defect-explainer.md#authorization)
+- [Test Planner](test-planner.md#authorization)
 
 For custom agents, implement your own permission and role checks inside `precheck()`. See [Custom Agent: 1. Implement the agent class](custom-agent.md#1-implement-the-agent-class) for details.
 
