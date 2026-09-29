@@ -15,6 +15,8 @@ from testbench_ai_service.agents.requirement.model import (
     ExtendedRequirement,
     Requirement,
     RequirementAgentArgs,
+    TestIdea,
+    TestIdeaResult,
     Theme,
     ThemeContext,
 )
@@ -39,6 +41,7 @@ from testbench_ai_service.transport import (
     build_retry,
 )
 from testbench_ai_service.utils.html_utils import escape_html, has_visible_text
+from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.template_utils import render_template, resolve_template_path
 from testbench_ai_service.utils.testbench import (
     get_requirements,
@@ -347,7 +350,7 @@ async def patch_generated_test_ideas(
         conn: The active TestBench connection.
         project_key: Key of the project owning the specification.
         spec_key: The theme specification to patch.
-        test_ideas: The model's output, escaped before rendering.
+        test_ideas: The rendered test ideas, escaped before rendering.
         previous_description: The description to preserve above the ideas.
         language: Language of the rendered wrapper.
         user_key: The triggering user, recorded as reviewer.
@@ -512,3 +515,57 @@ def _shorten(text: str, limit: int = DESCRIPTION_SHORT_MAX_CHARS) -> str:
     """Collapse whitespace and cut the text to ``limit`` characters."""
     text = " ".join(text.split())
     return text if len(text) <= limit else f"{text[: limit - 1].rstrip()}…"
+
+
+def render_test_ideas(
+    result: TestIdeaResult, requirements: list[Requirement], language: LanguageOption
+) -> str:
+    """Render the validated test ideas as the plain text written into the theme.
+
+    A header lists the theme's requirements, followed by the numbered subthemes
+    with their ideas and then the ideas directly under the theme. An empty result
+    renders the header and a notice that no ideas were generated.
+
+    Args:
+        result: The test ideas after :func:`apply_guardrails`.
+        requirements: The theme's requirements, for the header.
+        language: Language of the labels.
+
+    Returns:
+        The rendered text, unescaped.
+    """
+    test_theme = get_translation("requirement.run.test_theme", language)
+    test_case = get_translation("requirement.run.test_case", language)
+    covers = get_translation("requirement.run.covers", language)
+
+    def _idea(number: str, idea: TestIdea, indent: str) -> list[str]:
+        lines = [f"{indent}{number} {test_case}: {idea.title}"]
+        body = [*idea.description.splitlines()]
+        if idea.covered_requirements:
+            body.append(f"{covers}: {', '.join(idea.covered_requirements)}")
+        lines.extend(f"{indent}   {line}" if line.strip() else "" for line in body)
+        return lines
+
+    header = [get_translation("requirement.run.ideas_for", language)]
+    header.extend(
+        f"{requirement.external_ref or requirement.key}: {requirement.title}"
+        for requirement in requirements
+    )
+    entries: list[list[str]] = []
+    number = 0
+    for group in result.groups:
+        if group.theme_name is None:
+            for idea in group.ideas:
+                number += 1
+                entries.append(_idea(str(number), idea, ""))
+            continue
+        number += 1
+        entry = [f"{number} {test_theme}: {group.theme_name}"]
+        for index, idea in enumerate(group.ideas, start=1):
+            entry.append("")
+            entry.extend(_idea(f"{number}.{index}", idea, "   "))
+        entries.append(entry)
+    if not entries:
+        entries.append([get_translation("requirement.run.no_ideas", language)])
+
+    return "\n\n".join("\n".join(block) for block in [header, *entries])

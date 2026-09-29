@@ -5,12 +5,12 @@ Deine Stärke ist es, Anforderungen im Zusammenhang mit den bereits vorhandenen 
 # Ziel
 Erzeuge eine gemeinsame Menge strukturierter Testideen für die unten angegebenen Zielanforderungen, gestützt auf diese Anforderungen und den mitgelieferten Kontext. Alle Zielanforderungen sind mit demselben Testthema verknüpft; betrachte sie daher als Einheit: Leite die Testideen für das ab, was sie gemeinsam verlangen, nicht getrennt pro Anforderung.
 
-Die Ideen werden in Testfälle aufgeteilt. Testfälle mit einem gemeinsamen Thema werden unter einem Testthema gruppiert; ein Testfall ohne gemeinsames Thema steht für sich.
+Die Ideen werden in Testfälle aufgeteilt. Fallen die Testfälle in klar abgrenzbare fachliche Aspekte, werden sie unter einem Subthema gruppiert; andernfalls stehen sie direkt unter dem Zieltestthema.
 
 # Arbeitsprinzipien
 - Behandle die gelieferten Anforderungen und ihren Kontext als einzige Quelle der Wahrheit.
 - Ein Testfall benennt eine prüfenswerte Sache und beschreibt, was genau zu prüfen ist. Er ist eine Testidee, kein Testskript: kein Schritt-für-Schritt-Ablauf und keine erfundenen konkreten Testdaten.
-- Ein Testthema ist ein Thema, das zwei oder mehr Testfälle gemeinsam haben, etwa ein Aspekt, eine Bedingung oder eine Funktion der Anforderung.
+- Ein Subthema ist ein klar abgrenzbarer fachlicher Aspekt, den zwei oder mehr Testfälle gemeinsam haben, etwa eine Bedingung oder eine Funktion der Anforderung.
 - Wenige starke Testfälle sind besser als viele schwache. Jeder Testfall muss seinen Platz rechtfertigen.
 - Ergänze, was bereits vorhanden ist, statt es zu wiederholen. In die Lücken gehören deine Testideen.
 - Wo die Anforderung schweigt oder mehrdeutig ist, halte das in der Beschreibung des Testfalls fest, statt ein Verhalten zu erfinden.
@@ -61,50 +61,51 @@ Gehe in dieser Reihenfolge vor:
 1. Kläre, was die Zielanforderungen gemeinsam tatsächlich verlangen; nutze dafür bei jeder ihre Beschreibung und ihre Attribute.
 2. Kläre, was bereits abgedeckt ist: je Anforderung die mit ihr verknüpften Testfallsätze und was diese laut Kurzbeschreibung prüfen, dazu alles Übrige unter dem Thema.
 3. Sammle die Testfälle, die übrig bleiben: die Verhaltensweisen, Grenzfälle, Fehlerpfade und Wechselwirkungen, die die Anforderungen nahelegen und die vorhandenen Tests noch nicht abdecken, einschließlich der Wechselwirkungen der Anforderungen untereinander. Eine Anforderung ohne verknüpften Testfallsatz braucht die meiste Aufmerksamkeit.
-4. Gruppiere Testfälle mit gemeinsamem Thema unter einem Testthema, unabhängig davon, aus welcher Anforderung sie stammen. Lass einen Testfall ungruppiert, wenn er sein Thema mit keinem anderen Testfall teilt.
+4. Entscheide, ob eine Gruppierung hilft (siehe Gruppierung). Wenn ja, gruppiere die Testfälle nach fachlichem Aspekt, unabhängig davon, aus welcher Anforderung sie stammen.
 
 Richte die Anzahl der Testfälle nach dem gemeinsamen Umfang der Anforderungen und danach, was noch ungedeckt ist: etwa vier bis zehn für eine einzelne, eng gefasste, ungedeckte Anforderung, mehr, wenn mehrere Anforderungen mehr abdecken, weniger, wenn vieles bereits abgedeckt ist. Fülle nicht auf, um eine Anzahl zu erreichen.
 
+# Gruppierung
+- Gruppiere nur, wenn die Testfälle in klar abgrenzbare fachliche Aspekte fallen, jeder mit mindestens zwei Testfällen.
+- Gruppiere nicht, wenn es nur wenige Testfälle sind oder das Thema homogen ist; stelle sie dann direkt unter das Zieltestthema.
+- Gruppen sind eine Ebene tief: Ein Subthema enthält nur Testfälle, niemals weitere Subthemen.
+- Ein Testfall, der in kein Subthema passt, steht direkt unter dem Zieltestthema.
+
 # Namen und Beschreibungen
-- Name des Testthemas: ein kurzer, sprechender Name für das gemeinsame Thema, höchstens acht Wörter, zum Beispiel "Rabattschwellen" statt "Gruppe 1". Verwende nicht den Namen eines Testthemas, das bereits unter dem Zieltestthema liegt.
-- Beschreibung des Testthemas: ein bis zwei Sätze dazu, welchen Aspekt der Anforderung das Thema abdeckt und warum er wichtig ist.
-- Name des Testfalls: ein kurzer, sprechender Name, der das geprüfte Verhalten oder die geprüfte Bedingung benennt, höchstens zehn Wörter, zum Beispiel "Kein Rabatt unter dem Mindestbestellwert" statt "Negativtest". Verwende keine Anforderungskennungen als Namen.
+- Name des Subthemas: ein kurzer, sprechender Name für den fachlichen Aspekt, höchstens acht Wörter, zum Beispiel "Rabattschwellen" statt "Gruppe 1". Verwende nicht den Namen eines Testthemas, das bereits unter dem Zieltestthema liegt.
+- Titel des Testfalls: ein kurzer, sprechender Name, der das geprüfte Verhalten oder die geprüfte Bedingung benennt, höchstens zehn Wörter, zum Beispiel "Kein Rabatt unter dem Mindestbestellwert" statt "Negativtest". Verwende keine Anforderungskennungen als Titel.
 - Beschreibung des Testfalls: zwei bis vier Sätze dazu, was genau geprüft werden soll: die Situation oder Vorbedingung, die abzudeckenden Varianten oder Grenzen und das Verhalten, das laut Anforderung beobachtbar sein muss. Halte hier auch fest, welchen Teil ein vorhandener Testfallsatz bereits abdeckt, benannt mit seinem Pfad, und welche Verhaltensweisen zu bestätigende Annahmen sind.
-- Betrifft ein Testfall nur einen Teil der Zielanforderungen, nenne deren extendedIDs in seiner Beschreibung.
-- Namen sind in der gesamten Antwort eindeutig und wiederholen nicht die Namen vorhandener Testthemen oder Testfallsätze.
+- covered_requirements: die extendedIDs der Zielanforderungen, die der Testfall abdeckt, genau wie in der Eingabe angegeben. Verwende nur Zielanforderungen.
+- Titel sind in der gesamten Antwort eindeutig und wiederholen nicht die Namen vorhandener Testthemen oder Testfallsätze.
 
 # Ausgabeformat
-Reiner Text, genau diese Struktur: ein Kopf, der alle Zielanforderungen in der angegebenen Reihenfolge auflistet, gefolgt von einer nummerierten Struktur, die sie alle abdeckt:
+Antworte mit genau einem JSON-Objekt und sonst nichts, nach diesem Schema:
 ```
-Testideen zu:
-[extendedID]: [Titel der Anforderung]
-[extendedID]: [Titel der Anforderung]
-
-1 Testthema: [Name des Testthemas]
-   [Beschreibung des Testthemas]
-
-   1.1 Testfall: [Name des Testfalls]
-      [Beschreibung des Testfalls]
-
-   1.2 Testfall: [Name des Testfalls]
-      [Beschreibung des Testfalls]
-
-2 Testfall: [Name des Testfalls]
-   [Beschreibung des Testfalls]
+{
+  "groups": [
+    {
+      "theme_name": "[Name des Subthemas, oder null für Testfälle direkt unter dem Zieltestthema]",
+      "ideas": [
+        {
+          "title": "[Titel des Testfalls]",
+          "description": "[Beschreibung des Testfalls]",
+          "covered_requirements": ["[extendedID]"]
+        }
+      ]
+    }
+  ]
+}
 ```
+- Fasse alle Testfälle, die direkt unter dem Zieltestthema stehen, in einer einzigen Gruppe mit "theme_name": null zusammen.
+- Bleibt nach dem Vorhandenen kein Testfall übrig, antworte mit {"groups": []}.
 
 # Regeln
-- Die endgültige Antwort besteht ausschließlich aus reinem Text. Kein Markdown. Kein HTML. Keine Fettschrift, keine Backticks, keine Aufzählungszeichen.
-- Keine führenden Leerzeichen und keine Leerzeilen vor der ersten Zeile.
-- Schreibe eine gemeinsame Struktur für alle Zielanforderungen. Teile sie nicht in Abschnitte pro Anforderung auf, und schreibe keine Testideen für andere Anforderungen.
-- Nummeriere die Einträge der obersten Ebene ab 1. Ein Eintrag der obersten Ebene ist entweder ein Testthema oder ein ungruppierter Testfall. Nummeriere die Testfälle innerhalb eines Testthemas mit der Nummer des Themas, einem Punkt und einer laufenden Nummer ab 1, zum Beispiel 1.1, 1.2.
-- Jedes Testthema enthält mindestens zwei Testfälle. Verschachtele keine Testthemen in Testthemen.
-- Die Einrückung ist genau: Eine Zeile der obersten Ebene beginnt in Spalte 0, ihre Beschreibung ist um drei Leerzeichen eingerückt. Ein Testfall innerhalb eines Testthemas ist um drei Leerzeichen eingerückt, seine Beschreibung um sechs Leerzeichen.
-- Trenne den Kopf vom ersten Eintrag und aufeinanderfolgende Einträge durch genau eine Leerzeile.
-- Schreibe denselben Testfall nicht zweimal. Ein Testfall, der mehreren Anforderungen dient, erscheint einmal.
+- Die endgültige Antwort ist ausschließlich das JSON-Objekt: kein Markdown, keine Codeblöcke, kein Text davor oder danach.
+- Beschreibungen sind reiner Text: kein Markdown, kein HTML, keine Aufzählungszeichen.
+- Schreibe eine gemeinsame Struktur für alle Zielanforderungen. Teile sie nicht in Gruppen pro Anforderung auf, und schreibe keine Testideen für andere Anforderungen.
+- Schreibe denselben Testfall nicht zweimal. Ein Testfall, der mehreren Anforderungen dient, erscheint einmal und nennt alle in covered_requirements.
 - Übernimm alle Bezeichner unverändert: extendedID-Werte, Anforderungstitel sowie Namen und Pfade von Testthemen und Testfallsätzen. Ändere, normalisiere oder umschreibe sie nicht.
 - Wiederhole keinen Testfall, den ein vorhandener Testfallsatz bereits abdeckt, sei es, weil er mit der Anforderung verknüpft ist, oder weil seine Kurzbeschreibung es zeigt. Deckt ein vorhandener Test einen Testfall nur teilweise ab, behalte den Testfall und benenne in der Beschreibung, was ungeprüft bleibt.
 - Legt die Anforderung ein Verhalten nur nahe, ohne es festzuschreiben, kennzeichne das in der Beschreibung als zu bestätigende Annahme.
 - Erfinde keine Vorbedingungen, Fachregeln, Systemkomponenten oder konkreten Werte, die im gelieferten Kontext nicht vorkommen.
 - Schreibe keine Schritt-für-Schritt-Testabläufe.
-- Schreibe keine Einleitung vor der ersten Zeile und keine Zusammenfassung nach dem letzten Testfall.

@@ -20,7 +20,9 @@ from testbench_ai_service.agents.requirement.context import (
 from testbench_ai_service.agents.requirement.model import (
     Requirement,
     RequirementAgentArgs,
+    TestIdeaResult,
     ThemeContext,
+    apply_guardrails,
 )
 from testbench_ai_service.agents.requirement.utils import (
     fetch_requirement_details,
@@ -30,6 +32,7 @@ from testbench_ai_service.agents.requirement.utils import (
     patch_generated_test_ideas,
     patch_generation_failed,
     patch_generation_started,
+    render_test_ideas,
 )
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
@@ -300,11 +303,12 @@ class RequirementAgent(Agent):
                 context=context,
                 llm_client=llm_client,
             )
+            print(test_ideas.model_dump_json())
             await patch_generated_test_ideas(
                 conn=conn,
                 project_key=context.project_key,
                 spec_key=spec.key,
-                test_ideas=test_ideas,
+                test_ideas=render_test_ideas(test_ideas, requirements, context.language),
                 previous_description=previous_description,
                 language=context.language,
                 user_key=context.user_key,
@@ -336,8 +340,11 @@ class RequirementAgent(Agent):
         theme_context: ThemeContext,
         context: ExecutionContext,
         llm_client: LLMClient,
-    ) -> str:
+    ) -> TestIdeaResult:
         """Ask the AI, in one prompt, for test ideas for all requirements of a theme.
+
+        The model answers with JSON; its grouping is then normalised by
+        :func:`apply_guardrails` rather than trusted to follow the prompt.
 
         Args:
             theme: The theme the ideas are for.
@@ -346,16 +353,32 @@ class RequirementAgent(Agent):
             llm_client: Initialised LLM client.
 
         Returns:
-            The generated test ideas.
+            The generated test ideas, possibly none.
+
+        Raises:
+            StructuredOutputError: The answer was invalid even after the repair retry.
         """
         agent_data = assemble_context(theme_context)
-        response = await self.get_ai_response(
-            llm_client, context.llm_config, context.prompt_config, agent_data
+        result = await self.get_structured_ai_response(
+            llm_client, context.llm_config, context.prompt_config, TestIdeaResult, agent_data
+        )
+        ideas = apply_guardrails(
+            result,
+            allowed_requirements={
+                requirement.external_ref or requirement.key
+                for requirement in theme_context.requirements
+            },
+            existing_theme_names={
+                path.rsplit("/", 1)[-1] for path in theme_context.existing_subthemes
+            },
+            max_ideas=self.args.max_ideas_per_theme,
         )
         logger.debug(
-            "Test ideas for requirements %s into theme '%s':\n\t%s",
+            "Test ideas for requirements %s into theme '%s' (%d of %d kept):\n\t%s",
             [requirement.external_ref for requirement in theme_context.requirements],
             theme.base.name,
-            response.result,
+            len(ideas.ideas),
+            len(result.ideas),
+            ideas.model_dump_json(),
         )
-        return response.result
+        return ideas

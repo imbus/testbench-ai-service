@@ -11,7 +11,10 @@ from testbench_ai_service.agents.requirement import utils as utils_module
 from testbench_ai_service.agents.requirement.agent import RequirementAgent
 from testbench_ai_service.agents.requirement.model import (
     ExtendedRequirement,
+    IdeaGroup,
     RequirementAgentArgs,
+    TestIdea,
+    TestIdeaResult,
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
@@ -20,6 +23,8 @@ from testbench_ai_service.models.testbench import (
     TestCaseSetNode,
     TestThemeNode,
 )
+from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.utils.structured_output import StructuredOutputError
 
 
 def _context(user_key: str = "u1") -> SimpleNamespace:
@@ -97,11 +102,13 @@ class _Recorder:
 
     def __init__(self):
         self.calls: list[str] = []
+        self.kwargs: dict[str, dict] = {}
         self.failing: set[str] = set()
 
     def hook(self, label: str):
-        async def _patch(*_args, **_kwargs):
+        async def _patch(*_args, **kwargs):
             self.calls.append(label)
+            self.kwargs[label] = kwargs
             if label in self.failing:
                 raise RuntimeError(f"{label} failed")
 
@@ -117,7 +124,19 @@ def wired(monkeypatch):
         theme=_theme_node(),
         requirements=[_requirement()],
         load_error=None,
-        ai_result="1 Test case: Discount of 0%",
+        ai_result=TestIdeaResult(
+            groups=[
+                IdeaGroup(
+                    ideas=[
+                        TestIdea(
+                            title="Discount of 0%",
+                            description="Checks the lower bound.",
+                            covered_requirements=["ER_WHY299", "ER_OTHER"],
+                        )
+                    ]
+                )
+            ]
+        ),
         ai_error=None,
         ai_calls=[],
         nodes=[],
@@ -142,11 +161,11 @@ def wired(monkeypatch):
             raise state.load_error
         return state.requirements
 
-    async def _ai(self, llm_client, llm_config, prompt_config, agent_data=None):
+    async def _ai(self, llm_client, llm_config, prompt_config, schema, agent_data=None):
         state.ai_calls.append(agent_data)
         if state.ai_error is not None:
             raise state.ai_error
-        return SimpleNamespace(result=state.ai_result)
+        return state.ai_result
 
     monkeypatch.setattr(agent_module, "post_project_tov_structure", _structure)
     monkeypatch.setattr(utils_module, "get_test_theme_details", _theme_details_of)
@@ -159,7 +178,7 @@ def wired(monkeypatch):
     monkeypatch.setattr(agent_module, "patch_generation_started", recorder.hook("started"))
     monkeypatch.setattr(agent_module, "patch_generated_test_ideas", recorder.hook("generated"))
     monkeypatch.setattr(agent_module, "patch_generation_failed", recorder.hook("failed"))
-    monkeypatch.setattr(RequirementAgent, "get_ai_response", _ai)
+    monkeypatch.setattr(RequirementAgent, "get_structured_ai_response", _ai)
     return state
 
 
@@ -231,6 +250,52 @@ class TestHappyPath:
         assert entry.startswith("- Rebate: rebate rebate")
         assert "Title" not in entry
         assert entry.endswith("…")
+
+
+class TestWrittenIdeas:
+    @pytest.fixture(autouse=True)
+    def setup(self):
+        load_translations()
+
+    async def test_writes_the_rendered_ideas(self, wired):
+        await _run()
+
+        written = wired.recorder.kwargs["generated"]["test_ideas"]
+        assert written == (
+            "Test ideas for:\n"
+            "ER_WHY299: Automatic discount\n"
+            "\n"
+            "1 Test case: Discount of 0%\n"
+            "   Checks the lower bound.\n"
+            "   Covers: ER_WHY299"
+        )
+
+    async def test_drops_requirement_keys_outside_the_theme(self, wired):
+        await _run()
+
+        written = wired.recorder.kwargs["generated"]["test_ideas"]
+        assert "ER_OTHER" not in written
+
+    async def test_writes_a_notice_when_no_ideas_remain(self, wired):
+        wired.ai_result = TestIdeaResult(groups=[])
+
+        await _run()
+
+        assert wired.recorder.calls == ["started", "generated"]
+        written = wired.recorder.kwargs["generated"]["test_ideas"]
+        assert written.endswith("No new test ideas were generated.")
+
+    async def test_caps_the_ideas_at_max_ideas_per_theme(self, wired):
+        wired.ai_result = TestIdeaResult(
+            groups=[IdeaGroup(ideas=[TestIdea(title=f"Idea {n}") for n in range(5)])]
+        )
+        agent = RequirementAgent(RequirementAgentArgs(max_ideas_per_theme=2))
+
+        await agent.run(_context(), MagicMock(), MagicMock(), [])
+
+        written = wired.recorder.kwargs["generated"]["test_ideas"]
+        assert "Idea 1" in written
+        assert "Idea 2" not in written
 
 
 class TestOrdering:
@@ -343,6 +408,13 @@ class TestMaxRequirements:
 class TestFailureHandling:
     async def test_rolls_back_when_generation_fails(self, wired):
         wired.ai_error = RuntimeError("upstream refused")
+
+        await _run()
+
+        assert wired.recorder.calls == ["started", "failed"]
+
+    async def test_rolls_back_when_the_answer_cannot_be_parsed(self, wired):
+        wired.ai_error = StructuredOutputError("not JSON", raw_response="nope")
 
         await _run()
 
