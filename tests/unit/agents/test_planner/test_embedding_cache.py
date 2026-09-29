@@ -1,4 +1,5 @@
 import hashlib
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -92,3 +93,53 @@ async def test_wrong_number_of_vectors_raises(cache):
 
     with pytest.raises(ValueError, match="returned 1 vectors for 2 texts"):
         await embed_with_cache(ShortClient(), cache, ["a", "b"], 10)
+
+
+async def test_failing_cache_write_does_not_abort_the_run(cache, caplog):
+    with patch("pathlib.Path.replace", side_effect=PermissionError("locked")):
+        vectors = await embed_with_cache(FakeClient(), cache, ["a", "b"], 10)
+
+    assert vectors.shape == (2, 4)
+    assert "Could not cache embedding" in caplog.text
+    assert cache.get("a") is None
+
+
+async def test_write_does_not_collide_with_another_writers_temp_file(cache):
+    # a fixed '<hash>.tmp' name would clash with a concurrent writer
+    blocker = cache.path_for("a").with_suffix(".tmp")
+    blocker.mkdir(parents=True)
+
+    await embed_with_cache(FakeClient(), cache, ["a"], 10)
+
+    assert cache.get("a") is not None
+
+
+async def test_failing_discard_of_a_broken_file_is_ignored(cache):
+    await embed_with_cache(FakeClient(), cache, ["a"], 10)
+    cache.path_for("a").write_bytes(b"broken")
+
+    with patch("pathlib.Path.unlink", side_effect=PermissionError("locked")):
+        assert cache.get("a") is None
+
+
+async def test_mixed_cached_dimensions_without_missing_texts(cache):
+    for text in ["a", "b", "c"]:
+        cache.put(text, np.ones(4, dtype=np.float32))
+    cache.put("d", np.ones(8, dtype=np.float32))
+    client = FakeClient(dimension=8)
+
+    vectors = await embed_with_cache(client, cache, ["a", "b", "c", "d"], 10)
+
+    assert vectors.shape == (4, 8)
+
+
+async def test_client_with_inconsistent_dimensions_raises_a_clear_error(cache):
+    class WobblyClient(FakeClient):
+        async def embed(self, texts):
+            self.calls.append(list(texts))
+            return np.ones((len(texts), 4 + len(self.calls)), dtype=np.float32)
+
+    cache.put("a", np.ones(3, dtype=np.float32))
+
+    with pytest.raises(ValueError, match="different dimensions"):
+        await embed_with_cache(WobblyClient(), cache, ["a", "b"], 1)
