@@ -180,6 +180,26 @@ class _LegacyAgent(TestCaseSetReviewer):
         self.initialised = True
 
 
+class _AgentWithOwnArgs(TestCaseSetReviewer):
+    """A custom agent that already used ``self.args`` for something else."""
+
+    ARGS_CLASS = AgentArgs
+
+    def __init__(self):
+        self.args = ["--own", "value"]
+
+
+class _AgentWithReadOnlyArgs(TestCaseSetReviewer):
+    ARGS_CLASS = AgentArgs
+
+    def __init__(self):
+        pass
+
+    @property
+    def args(self):
+        return "fixed"
+
+
 class TestBackwardCompatibility:
     def test_custom_agent_with_own_no_arg_init_still_loads(self):
         config = _reviewer_agent({"max_items": 3}).model_copy(
@@ -198,3 +218,17 @@ class TestBackwardCompatibility:
             "defect_explainer",
         }
         assert all(agent.args == {} for agent in DEFAULT_AGENTS.values())
+
+    def test_own_args_attribute_is_kept_without_an_args_table(self):
+        config = _reviewer_agent().model_copy(
+            update={"class_path": f"{__name__}._AgentWithOwnArgs"}
+        )
+
+        assert load_agent(config).args == ["--own", "value"]
+
+    def test_read_only_args_property_still_loads(self):
+        config = _reviewer_agent().model_copy(
+            update={"class_path": f"{__name__}._AgentWithReadOnlyArgs"}
+        )
+
+        assert load_agent(config).args == "fixed"
