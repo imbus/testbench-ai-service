@@ -1,5 +1,6 @@
 import logging
 import logging.config
+import logging.handlers
 
 from testbench_ai_service.models.logging import LoggingConfig, LogLevel
 
@@ -35,6 +36,15 @@ class ColoredFormatter(logging.Formatter):
         return super().format(updated_record)
 
 
+is_reloader_process = False
+
+
+def create_file_handler(**kwargs) -> logging.Handler:
+    if is_reloader_process:
+        return logging.NullHandler()
+    return logging.handlers.RotatingFileHandler(**kwargs)
+
+
 def setup_logging(config: LoggingConfig):
     dict_config = get_log_config_dict(config)
     logging.config.dictConfig(dict_config)
@@ -65,7 +75,7 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
                 "stream": "ext://sys.stdout",
             },
             "file": {
-                "class": "logging.handlers.RotatingFileHandler",
+                "()": "testbench_ai_service.log.create_file_handler",
                 "level": config.file.log_level.value,
                 "formatter": "file",
                 "filters": ["request_id"],

@@ -4,6 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
+from testbench_ai_service import log
 from testbench_ai_service.log import (
     ColoredFormatter,
     RequestIdFilter,
@@ -142,6 +143,10 @@ class TestGetLogConfigDict:
         assert file_handler["maxBytes"] == 1 * 1024 * 1024
         assert file_handler["backupCount"] == 2
 
+    def test_file_handler_is_built_by_reloader_aware_factory(self):
+        file_handler = self.result["handlers"]["file"]
+        assert file_handler["()"] == "testbench_ai_service.log.create_file_handler"
+
     def test_root_logger_level_is_minimum_of_console_and_file(self):
         tb_logger = self.result["loggers"]["testbench_ai_service"]
         # min(DEBUG=10, INFO=20) == DEBUG == 10
@@ -165,3 +170,20 @@ class TestSetupLogging:
 
         mock_get_dict.assert_called_once_with(config)
         mock_dict_config.assert_called_once_with(fake_config)
+
+
+class TestCreateFileHandler:
+    """create_file_handler keeps the log file out of the uvicorn reloader process."""
+
+    def test_returns_rotating_handler_in_worker(self, tmp_path):
+        handler = log.create_file_handler(filename=tmp_path / "app.log", delay=True)
+        try:
+            assert isinstance(handler, logging.handlers.RotatingFileHandler)
+        finally:
+            handler.close()
+
+    def test_returns_null_handler_in_reloader(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(log, "is_reloader_process", True)
+        handler = log.create_file_handler(filename=tmp_path / "app.log")
+        assert isinstance(handler, logging.NullHandler)
+        assert not (tmp_path / "app.log").exists()
