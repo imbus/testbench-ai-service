@@ -3,6 +3,7 @@ import time
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.llm.base import LLMClient, NoLLMClient
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
@@ -35,11 +36,15 @@ async def run_agent(
         context.project_name,
     )
     try:
-        llm_client = llm_factory.get_client(
-            config=context.llm_config,
-            prompt_model=get_prompt_model(context.prompt_config),
-            project_name=context.project_name,
-        )
+        llm_client: LLMClient
+        if getattr(agent, "USES_LLM", True):
+            llm_client = llm_factory.get_client(
+                config=context.llm_config,
+                prompt_model=get_prompt_model(context.prompt_config),
+                project_name=context.project_name,
+            )
+        else:
+            llm_client = NoLLMClient()
         logger.debug("Initialised llm_client for agent '%s': %s", agent_key, llm_client.__class__)
 
         await agent.run(context=context, conn=conn, llm_client=llm_client, item_ids=item_ids)
