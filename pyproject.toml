@@ -64,6 +64,7 @@ dependencies = [
   "tomli-w>=1.2.0,<2.0.0",
   "jsonschema>=4.26.0,<5.0.0",
   "PyJWT>=2.12.1,<3.0.0",
+  "numpy>=2.3,<3",
 ]
 
 [project.optional-dependencies]
@@ -80,6 +81,9 @@ dev = [
   "pytest>=9.0.2",
   "pytest-asyncio>=1.3.0",
   "pytest-mock>=3.15.1",
+]
+local-embeddings = [
+  "fastembed>=0.7,<1",
 ]
 
 [project.urls]
@@ -170,4 +174,5 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
   "prompt_engineering: Tests requiring real LLM API keys (expensive, excluded from CI)",
+  "slow: Performance smoke tests (deselect with -m 'not slow')",
 ]
