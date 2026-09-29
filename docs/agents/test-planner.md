@@ -83,7 +83,7 @@ Embedding providers:
 
 - **openai** uses `OPENAI_API_KEY`, or the project key `<PROJECT>_OPENAI_API_KEY`.
 - **azure_openai** takes `azure_endpoint`, `api_version` and `auth_method` (API key or Entra ID) from the `llm_config`; `model` is the name of the embedding deployment.
-- **local** computes embeddings inside the service with [fastembed](https://github.com/qdrant/fastembed), e.g. `model = "BAAI/bge-small-en-v1.5"`. Install the extra with `pip install testbench-ai-service[local-embeddings]`. The model is downloaded on first use; for offline use, place it in the fastembed cache beforehand. No LLM API key is needed.
+- **local** computes embeddings inside the service with [fastembed](https://github.com/qdrant/fastembed), e.g. `model = "BAAI/bge-small-en-v1.5"`. Install the extra with `pip install testbench-ai-service[local-embeddings]`. The model is downloaded on first use; for offline use, place it in the fastembed cache beforehand. The planner itself makes no LLM or embedding API calls then, but the service still creates the client of the configured `llm_config` at startup, so the key of that provider (e.g. `OPENAI_API_KEY`) must still be set.
 
 ## Result
 
