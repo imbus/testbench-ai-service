@@ -1,4 +1,3 @@
-import os
 import re
 from typing import Any
 
@@ -9,6 +8,7 @@ from testbench_ai_service.llm.azure_auth import (
     resolve_entra_credentials,
 )
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMClient, LLMProvider
+from testbench_ai_service.llm.credentials import get_api_key, get_project_api_key, uses_entra_id
 from testbench_ai_service.llm.openai import AzureOpenAIClient, OpenAIClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import LLMConfig
@@ -110,15 +110,7 @@ class LLMFactory:
         """
         Load the API key from environment variables using the pattern '{PROVIDER}_API_KEY'.
         """
-        if provider == LLMProvider.CUSTOM:
-            return None  # Do not force 'CUSTOM_API_KEY' as environment variable
-        env_key = f"{provider.value.upper()}_API_KEY"
-        api_key = os.getenv(env_key)
-        if not api_key:
-            raise ValueError(
-                f"API key for provider '{provider.value}' not found in environment variables."
-            )
-        return api_key
+        return get_api_key(provider)
 
     def _normalize_project_name(self, project_name: str) -> str:
         """
@@ -130,18 +122,13 @@ class LLMFactory:
         """
         Load the project API key from environment variables using the pattern '{NORMALIZED_PROJECT_NAME}_{PROVIDER}_API_KEY'.
         """
-        normalized = self._normalize_project_name(project_name)
-        env_key = f"{normalized}_{provider.value.upper()}_API_KEY"
-        return os.getenv(env_key)
+        return get_project_api_key(project_name, provider)
 
     def _uses_entra_id(self, provider: LLMProvider, config: LLMConfig) -> bool:
         """
         Return True when this provider/config combination authenticates via Entra ID.
         """
-        return (
-            provider == LLMProvider.AZURE_OPENAI
-            and config.auth_method == AzureAuthMethod.ENTRA_ID
-        )
+        return uses_entra_id(provider, config)
 
     def _get_credential(
         self, provider: LLMProvider, config: LLMConfig
