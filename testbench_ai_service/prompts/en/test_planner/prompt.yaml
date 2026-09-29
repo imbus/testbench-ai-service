@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Test Planner"
+summary: "Suggest a test selection for a cycle"
+description: >
+  This agent selects the test cases of the cycle that differ most in content,
+  so few tests cover as much functionality as possible. In this version the
+  result is a preview in the service log; nothing in the cycle is changed.
+default_model: "text-embedding-3-small"
+default_variant: "Automatic"
+variants:
+  - name: "Automatic"
+    description: "Selects up to the point from which each further test adds much less."
+    vars: &existing_only
+      existing:
+        name: "Existing planning"
+        description: "keep: planned test cases stay set and are added to. replan: the selection starts without the existing planning."
+        value_type: "enum"
+        choices: ["keep", "replan"]
+        default_value: "keep"
+        required: false
+    messages: []
+  - name: "Count"
+    description: "Selects a fixed number of test cases."
+    vars:
+      <<: *existing_only
+      count:
+        name: "Number of test cases"
+        value_type: "number"
+        default_value: 40
+        required: false
+    messages: []
+  - name: "Time budget"
+    description: "Selects until the planned durations reach the budget."
+    vars:
+      <<: *existing_only
+      budget_minutes:
+        name: "Time budget (minutes)"
+        value_type: "number"
+        default_value: 240
+        required: false
+    messages: []
+  - name: "Requirement coverage"
+    description: "Selects until the share of covered requirements reaches the target."
+    vars:
+      <<: *existing_only
+      coverage_percent:
+        name: "Target coverage (%)"
+        value_type: "number"
+        default_value: 100
+        required: false
+    messages: []

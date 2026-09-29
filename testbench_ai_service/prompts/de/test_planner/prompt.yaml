@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Test-Planer"
+summary: "Testauswahl für einen Zyklus vorschlagen"
+description: >
+  Dieser Agent wählt aus dem Zyklus die Testfälle aus, die sich inhaltlich am
+  stärksten voneinander unterscheiden, sodass mit wenigen Tests möglichst viel
+  Funktionalität abgedeckt wird. In dieser Version ist das Ergebnis eine
+  Vorschau im Log des Service; im Zyklus wird nichts geändert.
+default_model: "text-embedding-3-small"
+default_variant: "Automatisch"
+variants:
+  - name: "Automatisch"
+    description: "Wählt bis zu dem Punkt aus, ab dem jeder weitere Test deutlich weniger Neues bringt."
+    vars: &existing_only
+      existing:
+        name: "Bestehende Planung"
+        description: "keep: bereits geplante Testfälle bleiben gesetzt und werden ergänzt. replan: die Auswahl beginnt ohne die bestehende Planung."
+        value_type: "enum"
+        choices: ["keep", "replan"]
+        default_value: "keep"
+        required: false
+    messages: []
+  - name: "Anzahl"
+    description: "Wählt eine feste Anzahl von Testfällen aus."
+    vars:
+      <<: *existing_only
+      count:
+        name: "Anzahl Testfälle"
+        value_type: "number"
+        default_value: 40
+        required: false
+    messages: []
+  - name: "Zeitbudget"
+    description: "Wählt aus, bis die geplanten Ausführungsdauern das Budget erreichen."
+    vars:
+      <<: *existing_only
+      budget_minutes:
+        name: "Zeitbudget (Minuten)"
+        value_type: "number"
+        default_value: 240
+        required: false
+    messages: []
+  - name: "Requirement-Abdeckung"
+    description: "Wählt aus, bis der Anteil abgedeckter Requirements den Zielwert erreicht."
+    vars:
+      <<: *existing_only
+      coverage_percent:
+        name: "Ziel-Abdeckung (%)"
+        value_type: "number"
+        default_value: 100
+        required: false
+    messages: []
