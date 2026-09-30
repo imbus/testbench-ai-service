@@ -8,8 +8,8 @@ from pydantic import ValidationError
 from requests.auth import HTTPBasicAuth
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.requirement.context import html_text
-from testbench_ai_service.agents.requirement.model import (
+from testbench_ai_service.agents.generate_test_idears.context import html_text
+from testbench_ai_service.agents.generate_test_idears.model import (
     ExistingTestCaseSet,
     ExtendedRequirement,
     Requirement,

@@ -2,14 +2,14 @@
 
 import pytest
 
-from testbench_ai_service.agents.requirement.model import (
+from testbench_ai_service.agents.generate_test_idears.model import (
     IdeaGroup,
     Requirement,
     TestIdea,
     TestIdeaResult,
     apply_guardrails,
 )
-from testbench_ai_service.agents.requirement.utils import render_test_ideas
+from testbench_ai_service.agents.generate_test_idears.utils import render_test_ideas
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.utils.i18n import load_translations
 

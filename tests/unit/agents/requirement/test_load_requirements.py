@@ -7,12 +7,12 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from testbench_ai_service.agents.requirement import utils as utils_module
-from testbench_ai_service.agents.requirement.model import (
+from testbench_ai_service.agents.generate_test_idears import utils as utils_module
+from testbench_ai_service.agents.generate_test_idears.model import (
     ExtendedRequirement,
     RequirementAgentArgs,
 )
-from testbench_ai_service.agents.requirement.utils import (
+from testbench_ai_service.agents.generate_test_idears.utils import (
     fetch_requirement_details,
     load_requirements,
 )

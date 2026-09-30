@@ -1,13 +1,13 @@
 """Tests for rendering the context sent to the model."""
 
-from testbench_ai_service.agents.requirement.context import (
+from testbench_ai_service.agents.generate_test_idears.context import (
     assemble_context,
     html_text,
     render_existing_tests,
     render_requirement,
     strip_generated_ideas,
 )
-from testbench_ai_service.agents.requirement.model import (
+from testbench_ai_service.agents.generate_test_idears.model import (
     ExistingTestCaseSet,
     Requirement,
     Theme,

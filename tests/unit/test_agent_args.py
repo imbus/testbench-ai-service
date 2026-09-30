@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pytest
 from pydantic import Field, ValidationError
 
-from testbench_ai_service.agents.requirement.agent import RequirementAgent
-from testbench_ai_service.agents.requirement.model import RequirementAgentArgs
+from testbench_ai_service.agents.generate_test_idears.agent import RequirementAgent
+from testbench_ai_service.agents.generate_test_idears.model import RequirementAgentArgs
 from testbench_ai_service.agents.routes import load_agent
 from testbench_ai_service.config import DEFAULT_AGENTS, PROMPTS_DIR, AppConfig
 from testbench_ai_service.models.agent import AgentArgs
