@@ -4,7 +4,6 @@ from http import HTTPStatus
 from pathlib import Path
 
 import requests
-from fastapi import HTTPException, status
 from pydantic import ValidationError
 from requests.auth import HTTPBasicAuth
 from testbench_cli_reporter.testbench import Connection as TBConnection
@@ -20,7 +19,6 @@ from testbench_ai_service.agents.requirement.model import (
     Theme,
     ThemeContext,
 )
-from testbench_ai_service.exceptions import TRANSPORT_ERRORS
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
@@ -238,8 +236,11 @@ def get_extended_requirement(
 ) -> ExtendedRequirement | None:
     """Fetch a requirement's extended data from a baseline of the RM service.
 
-    A miss is logged at debug level only: with several baselines per repository
-    misses are expected, and the caller warns once if no baseline has the requirement.
+    Never raises: the RM details are optional, so any failure is logged and treated
+    as a miss, and the caller falls back to the requirement's TOV data (without
+    description and documents). A plain miss is logged at debug level only: with
+    several baselines per repository misses are expected, and the caller warns once
+    if no baseline has the requirement.
 
     Args:
         session: Session authenticated against the RM service (see ``_rm_session``).
@@ -252,20 +253,16 @@ def get_extended_requirement(
     Returns:
         The extended requirement, or ``None`` when the baseline does not contain it
         (the RM service answers ``400`` for an unknown project and ``404`` for an
-        unknown baseline or requirement).
-
-    Raises:
-        HTTPException: ``502`` when the RM service is unreachable, answers with any
-            other error status, or returns a body that is not an extended requirement.
+        unknown baseline or requirement), the RM service is unreachable, answers with
+        any other error status, or returns a body that is not an extended requirement.
     """
     url = f"{rm_service_url}projects/{req_project}/baselines/{baseline}/extended-requirement"
     body = {"id": requirement_id, "version": version}
     try:
         response = session.post(url, json=body)
-    except TRANSPORT_ERRORS as e:
-        detail = f"Could not reach RM service at '{url}': {e!s}"
-        logger.error(detail)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from e
+    except requests.exceptions.RequestException as e:
+        logger.warning("Could not reach RM service at '%s': %s", url, e)
+        return None
 
     if response.status_code in (HTTPStatus.BAD_REQUEST, HTTPStatus.NOT_FOUND):
         logger.debug(
@@ -281,17 +278,17 @@ def get_extended_requirement(
 
     try:
         response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
-        detail = f"RM service error {response.status_code} for '{url}': {response.text.strip()}"
-        logger.error(detail)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from e
+    except requests.exceptions.HTTPError:
+        logger.warning(
+            "RM service error %s for '%s': %s", response.status_code, url, response.text.strip()
+        )
+        return None
 
     try:
         return ExtendedRequirement.model_validate(response.json())
     except (ValueError, ValidationError) as e:
-        detail = f"Invalid extended requirement returned by RM service for '{url}': {e!s}"
-        logger.error(detail)
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=detail) from e
+        logger.warning("Invalid extended requirement returned by RM service for '%s': %s", url, e)
+        return None
 
 
 async def patch_generation_started(

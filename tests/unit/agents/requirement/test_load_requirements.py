@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 import pytest
 import requests
-from fastapi import HTTPException
 
 from testbench_ai_service.agents.requirement import utils as utils_module
 from testbench_ai_service.agents.requirement.model import (
@@ -145,13 +144,36 @@ class TestFetchRequirementDetails:
             "'MS Excel'; continuing with its TOV data only"
         ]
 
-    async def test_an_rm_server_error_surfaces_as_502(self, rm):
-        rm.status_code = 500
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            {"status_code": 500},
+            {"error": requests.exceptions.ConnectionError("refused")},
+            {"error": requests.exceptions.Timeout("slow")},
+            {"invalid_body": True},
+        ],
+        ids=["server-error", "unreachable", "timeout", "invalid-body"],
+    )
+    async def test_an_rm_failure_falls_back_to_the_tov_data(self, rm, failure):
+        rm.known = {("Old", "473"), ("New", "473")}
+        for name, value in failure.items():
+            setattr(rm, name, value)
+        assignment = _assignment()
 
-        with pytest.raises(HTTPException) as exc:
-            await fetch_requirement_details(MagicMock(), RM_ARGS, TOV, [_assignment()])
+        extended = await fetch_requirement_details(MagicMock(), RM_ARGS, TOV, [assignment])
 
-        assert exc.value.status_code == 502
+        assert extended == [ExtendedRequirement.from_assignment(assignment)]
+        assert extended[0].description is None
+        assert extended[0].documents is None
+
+    async def test_a_failing_baseline_does_not_stop_the_next_one(self, rm):
+        rm.known = {("New", "473")}
+        rm.failing_baselines = {"Old"}
+
+        (extended,) = await fetch_requirement_details(MagicMock(), RM_ARGS, TOV, [_assignment()])
+
+        assert extended.baseline == "New"
+        assert extended.description == "Details"
 
 
 RM_URL = "http://rm/"
@@ -173,13 +195,27 @@ def _rm_url(baseline: str) -> str:
 @pytest.fixture
 def rm(monkeypatch):
     """Fake the TOV baselines and the RM service; ``known`` holds (baseline, id) pairs."""
-    state = SimpleNamespace(known=set(), posted=[], status_code=None)
+    state = SimpleNamespace(
+        known=set(),
+        posted=[],
+        status_code=None,
+        error=None,
+        invalid_body=False,
+        failing_baselines=set(),
+    )
 
     def _post(url, json):
         state.posted.append((url, json))
         baseline = url.split("/baselines/")[1].split("/")[0]
+        if state.error is not None:
+            raise state.error
         response = MagicMock()
-        if state.status_code is not None:
+        if baseline in state.failing_baselines:
+            raise requests.exceptions.ConnectionError("refused")
+        if state.invalid_body:
+            response.status_code = 200
+            response.json.side_effect = ValueError("not JSON")
+        elif state.status_code is not None:
             response.status_code = state.status_code
             response.raise_for_status.side_effect = requests.exceptions.HTTPError()
         elif (baseline, json["id"]) in state.known:
