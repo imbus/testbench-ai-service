@@ -384,6 +384,10 @@ The `name`, `summary`, and `description` shown in the OpenAPI UI and in TestBenc
 
 For details on how prompts work, see the [Prompts](prompts.md) page.
 
+**`[testbench-ai-service.agents.<agent_key>.args]`**
+
+Optional agent-specific arguments. Which keys are accepted depends on the agent. They are validated when the service starts. In a project override, the `args` are merged over the global ones, key by key. Of the shipped agents, only the [Test Idea Generator](agents/generate-test-ideas.md#agent-arguments) accepts arguments.
+
 **Example:**
 
 ```toml
