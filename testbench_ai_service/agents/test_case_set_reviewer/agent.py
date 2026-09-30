@@ -109,12 +109,19 @@ class TestCaseSetReviewer(Agent):
 
             details = get_test_case_set_details(conn, context.project_key, node.base.key)
             if (responsible := details.spec.responsible) and responsible.key != context.user_key:
-                msg = get_translation(
-                    "shared.precheck.spec_responsible_other_user",
-                    context.language,
-                    uid=node.base.uniqueID,
-                    user=responsible.name,
-                )
+                if responsible.name.strip():
+                    msg = get_translation(
+                        "shared.precheck.spec_responsible_other_user",
+                        context.language,
+                        uid=node.base.uniqueID,
+                        user=responsible.name,
+                    )
+                else:
+                    msg = get_translation(
+                        "shared.precheck.spec_responsible_unknown_user",
+                        context.language,
+                        uid=node.base.uniqueID,
+                    )
                 warnings.append(msg)
                 continue
 
