@@ -160,6 +160,14 @@ files = ["testbench_ai_service", "tests"]
 module = ["testbench2robotframework.*", "testbench_cli_reporter.*"]
 ignore_missing_imports = true
 
+# numpy (pulled in by fastembed/onnxruntime) ships stubs using the 3.12
+# `type` statement, which mypy rejects under python_version = "3.10".
+# Nothing here imports numpy directly, so skip analysing it.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
