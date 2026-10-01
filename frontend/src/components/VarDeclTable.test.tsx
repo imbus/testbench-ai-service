@@ -63,7 +63,7 @@ describe('VarDeclTable', () => {
     expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument()
   })
 
-  // The component defaults to German (matching Field.tsx/TriState.tsx's own
+  // The component defaults to German (matching Field.tsx/AgentSwitch.tsx's own
   // `lang = 'de'` default) -- every other test above pins lang="en" to keep
   // its English-regex assertions meaningful. This test is the one that
   // actually exercises the German dictionary, so a key present in en.ts but

@@ -123,7 +123,7 @@ describe('RenderPreview', () => {
     )
   })
 
-  // The component defaults to German (Field.tsx/TriState.tsx's own `lang = 'de'`
+  // The component defaults to German (Field.tsx/AgentSwitch.tsx's own `lang = 'de'`
   // default) -- every other test above pins lang="en" to keep its English-regex
   // assertions meaningful. This one exercises the German dictionary for real.
   it('renders German labels by default', () => {

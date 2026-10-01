@@ -7,8 +7,9 @@ import { useDraft } from '../state/draft'
  *
  * The switch shows what actually applies: the project's override when it has
  * one, the global agent's `enabled` otherwise. Flipping it always writes an
- * explicit override. Two states alone would make "no opinion" unreachable once
- * an override is set (see TriState), so while one exists a "Clear override"
+ * explicit override. A project override in `config.toml` is sparse -- a project
+ * that says nothing inherits -- so two states alone would make "no opinion"
+ * unreachable once an override is set. While one exists a "Clear override"
  * button sits beside the switch and queues its removal.
  */
 export function AgentSwitch({

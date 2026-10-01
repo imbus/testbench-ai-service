@@ -292,12 +292,13 @@ describe('matrix view', () => {
     expect(screen.getByLabelText(/explainer.*Alpha/)).toHaveAttribute('data-state', 'inherit')
   })
 
-  it('writes a tri-state cycle to the project override path', async () => {
+  it('writes a flipped switch to the project override path', async () => {
     await showMatrix()
 
+    // explainer is off globally, so flipping the inheriting cell switches it on.
     await userEvent.click(screen.getByLabelText(/explainer.*Release 2\.0/))
 
-    expect(edits()).toEqual({ 'projects."Release 2.0".agents.explainer.enabled': false })
+    expect(edits()).toEqual({ 'projects."Release 2.0".agents.explainer.enabled': true })
   })
 
   it('says so instead of drawing an empty grid when there are no projects', async () => {

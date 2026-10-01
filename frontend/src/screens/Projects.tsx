@@ -347,8 +347,9 @@ function ProjectCard({
         </span>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <div className="text-muted" style={{ fontSize: 11 }}>
+      {/* No gap between rows: the hover band must meet the next divider. */}
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="text-muted" style={{ fontSize: 11, marginBottom: 6 }}>
           {t.agents}
         </div>
         {keys.map((agentKey) => {
@@ -365,7 +366,10 @@ function ProjectCard({
                 alignItems: 'center',
                 gap: 10,
                 fontSize: 13,
-                padding: '4px 0',
+                // Bled into the card padding so the hover band has an inset
+                // while the switches stay aligned with the label above.
+                padding: '7px 8px',
+                margin: '0 -8px',
                 borderTop: '1px solid var(--color-divider)',
               }}
             >

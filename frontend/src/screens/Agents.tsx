@@ -9,7 +9,7 @@ import {
   projectAgentPath,
 } from '../api/agents'
 import { useConfig, useProjects, usePromptMeta } from '../api/queries'
-import { TriState } from '../components/TriState'
+import { AgentSwitch } from '../components/AgentSwitch'
 import { useTranslations, type Lang } from '../i18n'
 import { useDraft } from '../state/draft'
 import { valueAt } from './fields'
@@ -298,35 +298,13 @@ function AgentRow({
           <button
             type="button"
             role="switch"
+            className="switch"
             aria-checked={enabled}
             aria-label={`${agentKey} ${t.agentsOn}`}
             disabled={!isAdmin}
             onClick={() => draft.setValue(enabledPath, !enabled)}
-            style={{
-              width: 36,
-              height: 20,
-              flex: 'none',
-              borderRadius: 10,
-              border: '1px solid var(--color-divider)',
-              background: enabled ? 'var(--color-accent)' : 'transparent',
-              position: 'relative',
-              cursor: isAdmin ? 'pointer' : 'default',
-              opacity: isAdmin ? 1 : 0.5,
-              padding: 0,
-            }}
           >
-            <span
-              style={{
-                position: 'absolute',
-                top: 2,
-                left: enabled ? 18 : 2,
-                width: 14,
-                height: 14,
-                borderRadius: 7,
-                background: enabled ? 'var(--color-bg)' : 'var(--color-neutral-500)',
-                transition: 'left .15s',
-              }}
-            />
+            <span className="switch-knob" />
           </button>
           <span className="text-muted" style={{ fontSize: 11 }}>
             {t.activeIn} <span data-testid="active-count">{active.length}</span> ·{' '}
@@ -511,13 +489,12 @@ function Matrix({
                       key={project}
                       style={{
                         padding: '4px 12px',
-                        textAlign: 'center',
                         borderLeft: '1px solid var(--color-divider)',
                         borderBottom: '1px solid var(--color-divider)',
                         background: overridden ? 'var(--color-accent-100)' : 'transparent',
                       }}
                     >
-                      <TriState
+                      <AgentSwitch
                         path={path}
                         saved={valueAt(disk, path)}
                         inherited={inherited}
