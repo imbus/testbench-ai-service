@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { agentsUsingVariant, emptyMessage, emptyVariant, mergeContext } from './prompts'
+import { agentContextOf, agentsUsingVariant, emptyMessage, emptyVariant, mergeContext } from './prompts'
 
 describe('emptyVariant / emptyMessage', () => {
   it('makes a variant with one user message', () => {
@@ -13,6 +13,21 @@ describe('emptyVariant / emptyMessage', () => {
     // Phase 4a never creates a file, so a new message must be inline.
     expect(emptyMessage().source).toBe('inline')
     expect(emptyMessage().file).toBeNull()
+  })
+})
+
+describe('agentContextOf', () => {
+  it('keeps every typed field the agent provides', () => {
+    expect(agentContextOf({ a: '<str>', o: { x: '<int>' } }, {})).toEqual({ a: '<str>', o: { x: '<int>' } })
+  })
+  it("the typed placeholder wins over the skeleton's empty string", () => {
+    expect(agentContextOf({ a: '<str>' }, { a: '' })).toEqual({ a: '<str>' })
+  })
+  it('keeps a referenced path the agent does not provide', () => {
+    expect(agentContextOf({ o: { x: '<int>' } }, { o: { typo: '' }, b: '' })).toEqual({
+      o: { x: '<int>', typo: '' },
+      b: '',
+    })
   })
 })
 

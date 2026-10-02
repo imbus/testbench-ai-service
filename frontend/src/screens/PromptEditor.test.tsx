@@ -1267,8 +1267,79 @@ describe('sample vars for the render preview', () => {
     const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
       vars: Record<string, unknown>
     }
-    expect(body.vars).toEqual({ tone: 'neutral' })
+    expect(body.vars).toEqual({ tone: 'neutral', glossary: '' })
     expect(Object.values(body.vars)).not.toContain(null)
+  })
+
+  it('sends false for an optional boolean with no default', async () => {
+    // The runtime renders with a lenient Environment, where a missing
+    // `vars.validate_output` is simply falsy; the preview's StrictUndefined
+    // would instead fail `{% if vars.validate_output %}` outright.
+    docBody = {
+      ...DOC,
+      variants: [
+        {
+          ...DOC.variants[0],
+          vars: {
+            ...DOC.variants[0].vars,
+            validate_output: {
+              name: 'validate_output',
+              description: null,
+              value_type: 'boolean',
+              choices: null,
+              default_value: null,
+              required: false,
+            },
+          },
+        },
+        DOC.variants[1],
+      ],
+    }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+
+    await waitFor(() => expect(renderCalls()).toHaveLength(1))
+    const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
+      vars: Record<string, unknown>
+    }
+    expect(body.vars).toEqual({ tone: 'neutral', validate_output: false })
+  })
+
+  it('still omits a required var with no default', async () => {
+    // Required means the caller must supply it, so the preview should keep
+    // reporting it as missing rather than paper over it.
+    docBody = {
+      ...DOC,
+      variants: [
+        {
+          ...DOC.variants[0],
+          vars: {
+            ...DOC.variants[0].vars,
+            audience: {
+              name: 'audience',
+              description: null,
+              value_type: 'text',
+              choices: null,
+              default_value: null,
+              required: true,
+            },
+          },
+        },
+        DOC.variants[1],
+      ],
+    }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+
+    await waitFor(() => expect(renderCalls()).toHaveLength(1))
+    const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
+      vars: Record<string, unknown>
+    }
+    expect(body.vars).toEqual({ tone: 'neutral' })
   })
 })
 

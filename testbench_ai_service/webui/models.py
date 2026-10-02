@@ -317,6 +317,9 @@ class PromptDocumentResponse(BaseModel):
     #: Nested skeleton of every agent.* path the templates reference, for the
     #: render pane to prefill. Computed from the real Jinja AST server-side.
     agent_context_skeleton: dict[str, Any] = {}
+    #: Typed sample of every agent.* field the agent(s) using this prompt
+    #: provide, from their AGENT_DATA_CLASS. Leaves name their type ("<str>").
+    agent_context_sample: dict[str, Any] = {}
 
 
 class PromptSaveRequest(BaseModel):

@@ -193,6 +193,8 @@ export type PromptDocument = {
   default_variant: string
   variants: PromptVariantDoc[]
   agent_context_skeleton: Record<string, unknown>
+  /** Typed sample of every agent.* field the agent provides (`"<str>"` leaves). */
+  agent_context_sample?: Record<string, unknown>
 }
 
 export type LintError = { line: number; column: number; message: string }

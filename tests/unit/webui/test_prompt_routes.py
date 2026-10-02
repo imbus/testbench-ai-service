@@ -185,6 +185,12 @@ class TestDocument:
         body = client.get("/admin/api/prompts/de/explainer").json()
         assert body["agent_context_skeleton"] == {"role": ""}
 
+    def test_includes_the_agents_typed_context_sample(self, client, login):
+        login(roles=[])
+        body = client.get("/admin/api/prompts/de/explainer").json()
+        # No configured agent's prompt lives in ``explainer/``.
+        assert body["agent_context_sample"] == {}
+
     def test_an_unknown_agent_is_404(self, client, login):
         login(roles=[])
         assert client.get("/admin/api/prompts/de/absent").status_code == 404

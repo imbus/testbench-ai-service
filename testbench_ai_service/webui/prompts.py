@@ -430,7 +430,11 @@ def _plan_deletions(
 
 
 def read_prompt_document(
-    prompt_path: Path, prompts_dir: Path, lang: str, agent: str
+    prompt_path: Path,
+    prompts_dir: Path,
+    lang: str,
+    agent: str,
+    agent_context_sample: dict[str, Any] | None = None,
 ) -> PromptDocumentResponse:
     """The full editable document: the YAML plus every referenced template body.
 
@@ -466,6 +470,7 @@ def read_prompt_document(
         default_variant=definition.default_variant,
         variants=variants,
         agent_context_skeleton=context_skeleton(bodies),
+        agent_context_sample=agent_context_sample or {},
     )
 
 

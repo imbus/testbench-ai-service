@@ -65,6 +65,25 @@ export function mergeContext(
   return merged
 }
 
+/**
+ * The agent context the editor works with: everything the agent provides
+ * (`sample`, typed placeholders) plus every path the templates reference
+ * (`skeleton`) even where the agent declares no such field -- so a typo'd
+ * path still shows up as an empty value to fill in rather than vanishing.
+ */
+export function agentContextOf(
+  sample: Record<string, unknown>,
+  skeleton: Record<string, unknown>,
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...sample }
+  for (const [key, shape] of Object.entries(skeleton)) {
+    const existing = merged[key]
+    if (isRecord(shape) && isRecord(existing)) merged[key] = agentContextOf(existing, shape)
+    else if (!(key in merged)) merged[key] = shape
+  }
+  return merged
+}
+
 function variantOf(block: unknown): string | null {
   if (!isRecord(block)) return null
   const prompt = block.prompt

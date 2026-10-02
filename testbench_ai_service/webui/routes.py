@@ -12,6 +12,7 @@ from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import LLMConfig
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
+from testbench_ai_service.webui.agent_context import agent_context_sample
 from testbench_ai_service.webui.atomic import write_atomic
 from testbench_ai_service.webui.auth import (
     authenticate,
@@ -571,7 +572,9 @@ def read_prompt_doc(
     """The full editable document for one agent's prompt."""
     prompts_dir = _require_prompts_dir(config)
     path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
-    return read_prompt_document(path, prompts_dir, lang, agent)
+    return read_prompt_document(
+        path, prompts_dir, lang, agent, agent_context_sample(config.agents, agent)
+    )
 
 
 @router.post("/prompts/lint", response_model=LintResponse)

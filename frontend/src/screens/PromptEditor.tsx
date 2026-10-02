@@ -1,9 +1,9 @@
-import { useEffect, useReducer, useRef, useState } from 'react'
+import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useBlocker, useParams } from 'react-router-dom'
 import type { Scope } from '../api/agents'
 import { ApiError } from '../api/client'
 import { useLintTemplate, usePlanPrompt, useSavePrompt } from '../api/mutations'
-import { agentsUsingVariant } from '../api/prompts'
+import { agentContextOf, agentsUsingVariant } from '../api/prompts'
 import { useConfig, usePromptDocument } from '../api/queries'
 import type { LintError, PromptDocument, PromptVarDecl } from '../api/types'
 import type { CodeEditorHandle } from '../components/CodeEditor'
@@ -64,25 +64,37 @@ function normalizeDocument(doc: PromptDocument, lang: string, agent: string): Pr
     default_variant: doc.default_variant ?? '',
     variants: doc.variants ?? [],
     agent_context_skeleton: doc.agent_context_skeleton ?? {},
+    agent_context_sample: doc.agent_context_sample ?? {},
   }
 }
 
 /**
  * Sample values a render preview can send: each declared default.
  *
- * A var with no `default_value` is OMITTED, never sent as `null`.
+ * A var with no `default_value` is never sent as `null`.
  * `RenderRequest.vars` is `dict[str, PromptVarValue]` (`str | bool | int |
  * float`), so a single `null` 422s the whole request -- and FastAPI's 422
  * `detail` is a list, which `apiFetch` cannot render, so the operator would
  * see only "Request failed with status 422" for four of this repo's eight
- * prompts. Left out, `StrictUndefined` reports the missing variable against
- * the one message that actually uses it, which is the useful feedback.
+ * prompts.
+ *
+ * An OPTIONAL var with no default is sent as the value it effectively has at
+ * runtime: `build_prompt_utils` renders with a lenient `Environment`, where a
+ * missing var is falsy and renders empty, so `false` for a boolean and `""`
+ * otherwise. Without this, the preview's `StrictUndefined` fails a plain
+ * `{% if vars.validate_output %}` that the agent renders fine.
+ *
+ * A REQUIRED var with no default is OMITTED, so `StrictUndefined` reports it
+ * against the one message that actually uses it, which is the useful feedback.
  */
 function sampleVars(vars: Record<string, PromptVarDecl>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const [key, decl] of Object.entries(vars)) {
-    if (decl.default_value === null || decl.default_value === undefined) continue
-    out[key] = decl.default_value
+    if (decl.default_value !== null && decl.default_value !== undefined) {
+      out[key] = decl.default_value
+    } else if (!decl.required) {
+      out[key] = decl.value_type === 'boolean' ? false : ''
+    }
   }
   return out
 }
@@ -313,6 +325,13 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   const original =
     originalRouteRef.current === `${docLang}/${agentKey}` ? originalRef.current : null
   const dirty = original ? isDirty(original, draft) : false
+  // What the agent provides plus what the templates reference -- the variable
+  // tree and the render/test context both work from this one object, and the
+  // render pane re-merges only when its identity changes.
+  const agentContext = useMemo(
+    () => agentContextOf(original?.agent_context_sample ?? {}, original?.agent_context_skeleton ?? {}),
+    [original],
+  )
 
   // Warns on a tab close or refresh. `useBlocker` below covers an IN-APP
   // navigation instead -- neither is a router navigation, so this effect is
@@ -394,7 +413,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     selection.kind === 'message' && !messages[selection.index] ? { kind: 'variant' } : selection
   const currentMessage = current.kind === 'message' ? messages[current.index] : undefined
   const used = currentMessage ? usedTemplateVars(currentMessage.content) : []
-  const agentVars = Object.keys(original.agent_context_skeleton ?? {}).map((k) => `agent.${k}`)
+  const agentVars = Object.keys(agentContext).map((k) => `agent.${k}`)
   const declaredVars = Object.keys(vars).map((k) => `vars.${k}`)
   const undeclared = undeclaredVars(used, Object.keys(vars))
   const flagged = Object.keys(diagnostics).map(Number)
@@ -605,6 +624,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
 
   const varSidebarProps = {
     agentVars,
+    agentContext,
     declaredVars,
     used,
     undeclared,
@@ -715,7 +735,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     <RenderPreview
       messages={messages}
       vars={sampleVars(vars)}
-      skeleton={original.agent_context_skeleton ?? {}}
+      skeleton={agentContext}
       isAdmin={isAdmin}
       lang={lang}
     />
@@ -725,7 +745,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     <TestRunPanel
       messages={messages}
       vars={sampleVars(vars)}
-      agentContext={original.agent_context_skeleton ?? {}}
+      agentContext={agentContext}
       isAdmin={isAdmin}
       lang={lang}
     />

@@ -80,4 +80,35 @@ describe('VarSidebar', () => {
     setup({ variant: 'drawer' })
     expect(screen.queryByRole('button', { name: /^lint$/i })).not.toBeInTheDocument()
   })
+
+  describe('with the agent context', () => {
+    const agentContext = {
+      test_case_set: '<str>',
+      test_case_set_obj: { details: { uniqueID: '<str>' }, testCases: [{ index: '<int>' }] },
+      typo: '',
+    }
+
+    it('lists every field the agent provides, with its type', () => {
+      setup({ agentContext })
+      expect(screen.getByRole('button', { name: /agent\.test_case_set\s*str/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /agent\.test_case_set_obj\s*object/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /agent\.typo/ })).toBeInTheDocument()
+    })
+
+    it('unfolds an object and inserts its nested path', async () => {
+      const props = setup({ agentContext })
+      await userEvent.click(screen.getByRole('button', { name: '▸ agent.test_case_set_obj' }))
+      await userEvent.click(screen.getByRole('button', { name: '▸ agent.test_case_set_obj.details' }))
+      await userEvent.click(screen.getByRole('button', { name: /\.uniqueID/ }))
+      expect(props.onInsert).toHaveBeenLastCalledWith('{{ agent.test_case_set_obj.details.uniqueID }}')
+    })
+
+    it("shows a list item's fields as a hint, not as an insertable path", async () => {
+      setup({ agentContext })
+      await userEvent.click(screen.getByRole('button', { name: '▸ agent.test_case_set_obj' }))
+      await userEvent.click(screen.getByRole('button', { name: '▸ agent.test_case_set_obj.testCases' }))
+      expect(screen.getByText('[].index')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /\[\]\.index/ })).not.toBeInTheDocument()
+    })
+  })
 })

@@ -224,6 +224,20 @@ const FIXTURES: Record<string, unknown> = {
       },
     ],
     agent_context_skeleton: { test_case_set: '', test_cases: [], project_name: '' },
+    agent_context_sample: {
+      test_case_set: '<str>',
+      parameter_combinations: '<str | None>',
+      test_case_set_description: '<str | None>',
+      test_case_set_obj: {
+        details: {
+          uniqueID: '<str>',
+          name: '<str>',
+          spec: { description: '<str>', status: '<SpecStatus>', tags: ['<Tag>'] },
+          testCases: [{ uniqueID: '<str>', index: '<int>' }],
+        },
+        test_cases: { '<key>': { uniqueID: '<str>' } },
+      },
+    },
   },
 }
 
