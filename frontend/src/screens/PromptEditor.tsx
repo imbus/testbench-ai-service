@@ -735,6 +735,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     <RenderPreview
       messages={messages}
       vars={sampleVars(vars)}
+      decls={vars}
       skeleton={agentContext}
       isAdmin={isAdmin}
       lang={lang}

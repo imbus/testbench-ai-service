@@ -9,7 +9,7 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Lang } from '../i18n'
-import type { PromptMessageDoc, RenderResponse } from '../api/types'
+import type { PromptMessageDoc, PromptVarDecl, RenderResponse } from '../api/types'
 import { RenderPreview } from './RenderPreview'
 
 let fetchMock: ReturnType<typeof vi.fn>
@@ -35,6 +35,7 @@ function ok(body: unknown) {
 type Props = {
   messages: PromptMessageDoc[]
   vars: Record<string, unknown>
+  decls?: Record<string, PromptVarDecl>
   skeleton: Record<string, unknown>
   isAdmin: boolean
   lang?: Lang
@@ -129,5 +130,78 @@ describe('RenderPreview', () => {
   it('renders German labels by default', () => {
     renderPreview({ messages: [], vars: {}, skeleton: {}, isAdmin: true })
     expect(screen.getByRole('button', { name: 'Rendern' })).toBeInTheDocument()
+  })
+
+  describe('variables', () => {
+    function decl(overrides: Partial<PromptVarDecl>): PromptVarDecl {
+      return {
+        name: 'x',
+        description: null,
+        value_type: 'string',
+        choices: null,
+        default_value: null,
+        required: false,
+        ...overrides,
+      }
+    }
+
+    function sentVars(): Record<string, unknown> {
+      const call = fetchMock.mock.calls.find((c) =>
+        String(c[0]).startsWith('/admin/api/prompts/render'),
+      )
+      return JSON.parse(String((call?.[1] as RequestInit).body)).vars
+    }
+
+    it('prefills one control per declared var and sends what the operator typed', async () => {
+      renderPreview({
+        messages: [],
+        vars: { tone: 'formal', strict: false },
+        decls: {
+          tone: decl({ name: 'tone', default_value: 'formal' }),
+          strict: decl({ name: 'strict', value_type: 'boolean' }),
+        },
+        skeleton: {},
+        isAdmin: true,
+        lang: 'en',
+      })
+      const tone = screen.getByLabelText('tone')
+      expect(tone).toHaveValue('formal')
+      await userEvent.clear(tone)
+      await userEvent.type(tone, 'casual')
+      await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+      await waitFor(() => expect(sentVars()).toEqual({ tone: 'casual', strict: false }))
+    })
+
+    it('omits a cleared required var and sends a cleared optional one as empty', async () => {
+      renderPreview({
+        messages: [],
+        vars: { must: 'a', may: 'b' },
+        decls: {
+          must: decl({ name: 'must', required: true, default_value: 'a' }),
+          may: decl({ name: 'may', default_value: 'b' }),
+        },
+        skeleton: {},
+        isAdmin: true,
+        lang: 'en',
+      })
+      await userEvent.clear(screen.getByLabelText(/must/))
+      await userEvent.clear(screen.getByLabelText('may'))
+      await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+      await waitFor(() => expect(sentVars()).toEqual({ may: '' }))
+    })
+
+    it('resets edits back to the declared defaults', async () => {
+      renderPreview({
+        messages: [],
+        vars: { tone: 'formal' },
+        decls: { tone: decl({ name: 'tone', default_value: 'formal' }) },
+        skeleton: {},
+        isAdmin: true,
+        lang: 'en',
+      })
+      await userEvent.type(screen.getByLabelText('tone'), '!')
+      await userEvent.click(screen.getByRole('button', { name: /reset to defaults/i }))
+      expect(screen.getByLabelText('tone')).toHaveValue('formal')
+    })
   })
 })

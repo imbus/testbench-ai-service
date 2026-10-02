@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { DefaultValueControl } from './VarDeclTable'
 import { useRenderPrompt } from '../api/mutations'
 import { mergeContext } from '../api/prompts'
-import type { PromptMessageDoc } from '../api/types'
+import type { PromptMessageDoc, PromptVarDecl } from '../api/types'
 import { useTranslations, type Lang } from '../i18n'
 
 /** `null` on anything that is not a JSON object -- an array or a scalar is
@@ -19,6 +20,36 @@ function parseContext(text: string): Record<string, unknown> | null {
 }
 
 /**
+ * The vars a render sends: the sample defaults, overlaid with what the
+ * operator typed into the variables section.
+ *
+ * A cleared field (`null` from `DefaultValueControl`) follows the same rule
+ * as `sampleVars`: a required var is OMITTED so `StrictUndefined` names it,
+ * an optional one is sent as its lenient-runtime value (`false` / `""`) --
+ * a `null` would 422 the whole request. Edits for keys the variant no longer
+ * declares are dropped rather than sent as stray vars.
+ */
+function effectiveVars(
+  vars: Record<string, unknown>,
+  decls: Record<string, PromptVarDecl>,
+  edits: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...vars }
+  for (const [key, value] of Object.entries(edits)) {
+    const decl = decls[key]
+    if (!decl) continue
+    if (value !== null && value !== undefined) {
+      out[key] = value
+    } else if (decl.required) {
+      delete out[key]
+    } else {
+      out[key] = decl.value_type === 'boolean' ? false : ''
+    }
+  }
+  return out
+}
+
+/**
  * Renders a draft variant's messages against sample vars and an editable
  * `agent_context` (design §5.6).
  *
@@ -29,12 +60,15 @@ function parseContext(text: string): Record<string, unknown> | null {
 export function RenderPreview({
   messages,
   vars,
+  decls = {},
   skeleton,
   isAdmin,
   lang = 'de',
 }: {
   messages: PromptMessageDoc[]
   vars: Record<string, unknown>
+  /** The variant's declared vars, one sample-value control each. */
+  decls?: Record<string, PromptVarDecl>
   skeleton: Record<string, unknown>
   isAdmin: boolean
   lang?: Lang
@@ -43,6 +77,12 @@ export function RenderPreview({
   const render = useRenderPrompt()
   const [contextText, setContextText] = useState(() => JSON.stringify(skeleton, null, 2))
   const [parseError, setParseError] = useState(false)
+  // Only what the operator changed, keyed by var name. The sample defaults
+  // stay live underneath, so editing a declared default in the variant pane
+  // still shows here for every var the operator has not touched.
+  const [varEdits, setVarEdits] = useState<Record<string, unknown>>({})
+  const sending = effectiveVars(vars, decls, varEdits)
+  const declEntries = Object.entries(decls)
   // Tracks the skeleton this pane was last reconciled against, so the merge
   // below runs only when the skeleton itself actually changes (a different
   // variant, or its Jinja edited) -- not on every keystroke in the textarea.
@@ -68,11 +108,55 @@ export function RenderPreview({
       return
     }
     setParseError(false)
-    render.mutate({ messages, vars, agent_context: context })
+    render.mutate({ messages, vars: sending, agent_context: context })
   }
 
   return (
     <div data-testid="render-preview" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <fieldset
+        data-testid="render-vars"
+        style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}
+      >
+        <legend
+          style={{ fontSize: 12, padding: 0, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}
+        >
+          <span>{t.renderVars}</span>
+          {Object.keys(varEdits).length > 0 && (
+            <button
+              type="button"
+              className="btn btn-ghost"
+              style={{ marginLeft: 'auto', fontSize: 11 }}
+              onClick={() => setVarEdits({})}
+            >
+              {t.renderVarsReset}
+            </button>
+          )}
+        </legend>
+        {declEntries.length === 0 && (
+          <span className="text-muted" style={{ fontSize: 12 }}>
+            {t.renderVarsEmpty}
+          </span>
+        )}
+        {declEntries.map(([key, decl]) => {
+          const id = `render-var-${encodeURIComponent(key)}`
+          const labelId = `${id}-label`
+          return (
+            <div key={key} className="field">
+              <label id={labelId} htmlFor={id} title={decl.description ?? undefined}>
+                <code>{key}</code>
+                {decl.required && <span aria-hidden="true"> *</span>}
+              </label>
+              <DefaultValueControl
+                id={id}
+                labelId={labelId}
+                decl={{ ...decl, default_value: key in sending ? sending[key] : null }}
+                onChange={(value) => setVarEdits((current) => ({ ...current, [key]: value }))}
+              />
+            </div>
+          )
+        })}
+      </fieldset>
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <label htmlFor="render-context" style={{ fontSize: 12 }}>
           {t.renderContext}

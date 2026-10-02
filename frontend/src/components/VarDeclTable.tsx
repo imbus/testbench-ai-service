@@ -23,8 +23,11 @@ function parseChoices(raw: string): string[] {
  * drift from its own `choices`. The boolean face reads literal `true`/`false`
  * -- it represents the serialized value, not an on/off UI state -- so it
  * isn't translated either.
+ *
+ * Also the render preview's sample-value control: it reads `default_value`,
+ * so the preview hands it a decl carrying the operator's sample instead.
  */
-function DefaultValueControl({
+export function DefaultValueControl({
   id,
   labelId,
   decl,
