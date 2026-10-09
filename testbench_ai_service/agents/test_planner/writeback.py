@@ -4,16 +4,19 @@ import asyncio
 import json
 import tempfile
 import zipfile
+from collections import Counter
 from collections.abc import Iterable, Mapping, Sequence
 from copy import deepcopy
 from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
+from typing import NamedTuple
 
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench2robotframework.model import (
     ActivityStatus,
     ExecutionResultForImport,
+    TestCaseDetails,
     TestCaseExecutionForImport,
     TestCaseSetDetails,
     TestCaseSetExecutionForImport,
@@ -28,8 +31,15 @@ from testbench_ai_service.agents.test_planner.model import EXECUTED_STATUSES, PL
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
 
-#: Planned and assigned test cases stay as they are; executed ones keep their results.
-_UNTOUCHED = frozenset(status.value for status in EXECUTED_STATUSES | PLANNED_STATUSES)
+_PLANNED = frozenset(status.value for status in PLANNED_STATUSES)
+_EXECUTED = frozenset(status.value for status in EXECUTED_STATUSES)
+
+
+class PlanningImport(NamedTuple):
+    protocol: list[TestCaseSetExecutionForImport]
+    details: list[TestCaseSetDetails]
+    #: Number of selected test cases left alone, by reason.
+    skipped: Counter[str]
 
 
 async def plan_test_cases(
@@ -49,75 +59,109 @@ async def plan_test_cases(
     Raises:
         RuntimeError: If the import job could not be triggered.
     """
-    protocol, details = build_planning_import(catalog, unique_ids)
-    planned = sum(len(entry.testCases) for entry in protocol)
+    planning = build_planning_import(catalog, unique_ids)
+    if planning.skipped:
+        logger.info(
+            "Test planner skipped %d selected test cases | %s | cycle='%s'",
+            planning.skipped.total(),
+            ", ".join(f"{reason}={count}" for reason, count in sorted(planning.skipped.items())),
+            context.cycle_key,
+        )
+    planned = sum(len(entry.testCases) for entry in planning.protocol)
     if not planned:
         return 0
 
     with tempfile.TemporaryDirectory() as tmpdir:
         zip_path = Path(tmpdir) / "planning.zip"
-        write_import_zip(protocol, details, zip_path)
+        write_import_zip(planning.protocol, planning.details, zip_path)
         await _import(conn, context, zip_path)
     return planned
 
 
 def build_planning_import(
     catalog: Mapping[str, TestCaseSet], unique_ids: Iterable[str]
-) -> tuple[list[TestCaseSetExecutionForImport], list[TestCaseSetDetails]]:
+) -> PlanningImport:
     """
     The import protocol and the updated set details that plan ``unique_ids``.
 
     Marks the test cases as planned in ``catalog`` as well, so the set details
     agree with the protocol. Only sets with at least one change are returned,
-    sorted by unique ID.
+    sorted by unique ID, together with the reasons for every test case left alone.
     """
     wanted = set(unique_ids)
     protocol: list[TestCaseSetExecutionForImport] = []
     details: list[TestCaseSetDetails] = []
+    skipped: Counter[str] = Counter()
     for uid in sorted(catalog):
         test_case_set = catalog[uid]
         set_details = test_case_set.details
-        if set_details.exec is None:
-            continue
-        planned = [
+        selected = [
             test_case
             for test_case_uid, test_case in test_case_set.test_cases.items()
             if test_case_uid in wanted
-            and test_case.exec is not None
-            and test_case.exec.status.value not in _UNTOUCHED
         ]
-        if not planned:
+        if not selected:
             continue
+        wanted.difference_update(test_case.uniqueID for test_case in selected)
+        if set_details.exec is None:
+            skipped["set without execution"] += len(selected)
+            continue
+        planned = []
+        for test_case in selected:
+            if reason := _skip_reason(test_case):
+                skipped[reason] += 1
+            else:
+                planned.append(test_case)
+        if planned:
+            protocol.append(_mark_planned(set_details, planned))
+            details.append(set_details)
+    if wanted:
+        skipped["not in report"] = len(wanted)
+    return PlanningImport(protocol, details, skipped)
 
-        planned_ids = {test_case.uniqueID for test_case in planned}
-        for test_case in planned:
-            test_case.exec.status = ActivityStatus.Planned
-        for summary in set_details.testCases:
-            if summary.uniqueID in planned_ids and summary.exec is not None:
-                summary.exec.status = ActivityStatus.Planned
 
-        protocol.append(
-            TestCaseSetExecutionForImport(
-                testCaseSetKey=set_details.key,
-                executionKey=set_details.exec.key,
+def _skip_reason(test_case: TestCaseDetails) -> str | None:
+    """Why ``test_case`` cannot be set to planned, or ``None`` if it can."""
+    if test_case.exec is None:
+        return "no execution"
+    if test_case.exec.status.value in _PLANNED:
+        return "already planned"
+    if test_case.exec.status.value in _EXECUTED:
+        return "executed"
+    return None
+
+
+def _mark_planned(
+    set_details: TestCaseSetDetails, planned: Sequence[TestCaseDetails]
+) -> TestCaseSetExecutionForImport:
+    """Mark ``planned`` as planned in ``set_details`` and build their protocol entry."""
+    assert set_details.exec is not None
+    planned_ids = {test_case.uniqueID for test_case in planned}
+    for summary in set_details.testCases:
+        if summary.uniqueID in planned_ids and summary.exec is not None:
+            summary.exec.status = ActivityStatus.Planned
+    entries = []
+    for test_case in planned:
+        assert test_case.exec is not None
+        test_case.exec.status = ActivityStatus.Planned
+        entries.append(
+            TestCaseExecutionForImport(
+                uniqueID=test_case.uniqueID,
+                testCaseExecutionKey=test_case.exec.key,
                 durationMillis=0,
-                testCases=[
-                    TestCaseExecutionForImport(
-                        uniqueID=test_case.uniqueID,
-                        testCaseExecutionKey=test_case.exec.key,
-                        durationMillis=0,
-                        result=ExecutionResultForImport(
-                            status=ActivityStatus.Planned,
-                            execStatus=test_case.exec.execStatus,
-                            verdict=test_case.exec.verdict,
-                        ),
-                    )
-                    for test_case in planned
-                ],
+                result=ExecutionResultForImport(
+                    status=ActivityStatus.Planned,
+                    execStatus=test_case.exec.execStatus,
+                    verdict=test_case.exec.verdict,
+                ),
             )
         )
-        details.append(set_details)
-    return protocol, details
+    return TestCaseSetExecutionForImport(
+        testCaseSetKey=set_details.key,
+        executionKey=set_details.exec.key,
+        durationMillis=0,
+        testCases=entries,
+    )
 
 
 def write_import_zip(

@@ -92,7 +92,7 @@ Embedding providers:
 
 Selected test cases that are `NotPlanned`, `Skipped` or `Canceled` are set to `Planned`. Test cases that are already `Planned` or `Assigned` stay as they are, and test cases that are not selected are never changed, not even with `existing = replan`. The import runs as a TestBench background job; its outcome shows in TestBench, not in the service log.
 
-The log contains a line `Test planner looked at A test cases, B of them in the cycle, C of them not executed yet`, a line `Test planner set N of M selected test cases to planned` and a line `Test planner selection | project=… | cycle=… | mode=… | selected=…/…` followed by JSON:
+The log contains a line `Test planner looked at A test cases, B of them in the cycle, C of them not executed yet`, a line `Test planner skipped K selected test cases | already planned=…, executed=…, …` when some selected test cases could not be changed, a line `Test planner set N of M selected test cases to planned` and a line `Test planner selection | project=… | cycle=… | mode=… | selected=…/…` followed by JSON:
 
 ```json
 {

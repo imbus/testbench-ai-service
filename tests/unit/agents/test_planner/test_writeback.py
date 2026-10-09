@@ -1,4 +1,5 @@
 import json
+import logging
 import zipfile
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -51,16 +52,17 @@ class TestBuildPlanningImport:
             "S1": _set("S1", {"TC-1": ActivityStatus.NotPlanned, "TC-2": ActivityStatus.NotPlanned})
         }
 
-        protocol, details = build_planning_import(catalog, ["TC-1"])
+        planning = build_planning_import(catalog, ["TC-1"])
 
-        [entry] = protocol
+        [entry] = planning.protocol
         assert entry.testCaseSetKey == "K-S1"
         assert entry.executionKey == "X-S1"
         [case] = entry.testCases
         assert case.uniqueID == "TC-1"
         assert case.testCaseExecutionKey == "E-TC-1"
         assert case.result.status is ActivityStatus.Planned
-        assert [d.uniqueID for d in details] == ["S1"]
+        assert [d.uniqueID for d in planning.details] == ["S1"]
+        assert planning.skipped == {}
 
     def test_keeps_exec_status_and_verdict(self):
         catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.Skipped})}
@@ -68,7 +70,7 @@ class TestBuildPlanningImport:
         execution.execStatus = ExecStatus.Blocked
         execution.verdict = VerdictStatus.ToVerify
 
-        [entry], _ = build_planning_import(catalog, ["TC-1"])
+        [entry] = build_planning_import(catalog, ["TC-1"]).protocol
 
         result = entry.testCases[0].result
         assert result.execStatus is ExecStatus.Blocked
@@ -87,7 +89,10 @@ class TestBuildPlanningImport:
             )
         }
 
-        assert build_planning_import(catalog, ["TC-1", "TC-2", "TC-3", "TC-4"]) == ([], [])
+        planning = build_planning_import(catalog, ["TC-1", "TC-2", "TC-3", "TC-4"])
+
+        assert planning.protocol == planning.details == []
+        assert planning.skipped == {"already planned": 2, "executed": 2}
 
     def test_skips_test_cases_and_sets_without_execution(self):
         catalog = {
@@ -95,12 +100,20 @@ class TestBuildPlanningImport:
             "S2": _set("S2", {"TC-2": ActivityStatus.NotPlanned}, with_exec=False),
         }
 
-        assert build_planning_import(catalog, ["TC-1", "TC-2"]) == ([], [])
+        planning = build_planning_import(catalog, ["TC-1", "TC-2"])
+
+        assert planning.protocol == planning.details == []
+        assert planning.skipped == {"no execution": 1, "set without execution": 1}
+
+    def test_counts_test_cases_missing_from_the_report(self):
+        catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.NotPlanned})}
+
+        assert build_planning_import(catalog, ["TC-1", "TC-9"]).skipped == {"not in report": 1}
 
     def test_marks_the_set_details_as_planned_too(self):
         catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.NotPlanned})}
 
-        _, [details] = build_planning_import(catalog, ["TC-1"])
+        [details] = build_planning_import(catalog, ["TC-1"]).details
 
         assert details.testCases[0].exec.status is ActivityStatus.Planned
 
@@ -111,10 +124,10 @@ class TestBuildPlanningImport:
             "S3": _set("S3", {"TC-3": ActivityStatus.NotPlanned}),
         }
 
-        protocol, details = build_planning_import(catalog, ["TC-2", "TC-1"])
+        planning = build_planning_import(catalog, ["TC-2", "TC-1"])
 
-        assert [e.testCaseSetKey for e in protocol] == ["K-S1", "K-S2"]
-        assert [d.uniqueID for d in details] == ["S1", "S2"]
+        assert [e.testCaseSetKey for e in planning.protocol] == ["K-S1", "K-S2"]
+        assert [d.uniqueID for d in planning.details] == ["S1", "S2"]
 
 
 @dataclass
@@ -125,7 +138,7 @@ class _Details:
 
 def test_zip_holds_protocol_and_set_details(tmp_path):
     catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.NotPlanned})}
-    protocol, _ = build_planning_import(catalog, ["TC-1"])
+    protocol = build_planning_import(catalog, ["TC-1"]).protocol
     path = tmp_path / "planning.zip"
 
     write_import_zip(protocol, [_Details("S1", ActivityStatus.Planned)], path)
@@ -158,6 +171,20 @@ class TestPlanTestCases:
         assert parameters.cycleKey == "C"
         assert parameters.importConfig.ignoreNonExecutedTestCases is False
         importer.trigger.assert_called_once()
+
+    async def test_logs_why_selected_test_cases_were_skipped(self, caplog):
+        catalog = {
+            "S1": _set("S1", {"TC-1": ActivityStatus.Planned, "TC-2": ActivityStatus.Assigned}),
+            "S2": _set("S2", {"TC-3": ActivityStatus.NotPlanned}, with_exec=False),
+        }
+
+        with caplog.at_level(logging.INFO, logger="testbench_ai_service"):
+            await plan_test_cases(MagicMock(), _context(), catalog, ["TC-1", "TC-2", "TC-3"])
+
+        assert (
+            "Test planner skipped 3 selected test cases | already planned=2, "
+            "set without execution=1 | cycle='C'" in caplog.messages
+        )
 
     async def test_imports_nothing_when_nothing_changes(self):
         catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.Planned})}
