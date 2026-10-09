@@ -18,7 +18,7 @@
     "shared.precheck.missing_cycle_key": "Missing cycle key. Please select a cycle to continue.",
     "shared.precheck.missing_tov_key": "Missing test object version key. Please select a version to continue.",
     "shared.precheck.spec_locked": "The specification is currently locked (UID: {uid}).",
-    "shared.precheck.spec_responsible_other_user": "The AI agent cannot process the test case set because {user} is entered as the responsible person (UID: {uid}).",
+    "shared.precheck.spec_responsible_other_user": "The AI agent cannot process the test case set because '{user}' is entered as the responsible person (UID: {uid}).",
     "shared.precheck.spec_responsible_unknown_user": "The AI agent cannot process the test case set because someone else is entered as the responsible person (UID: {uid}).",
     "routes.error.insufficient_permissions": "Insufficient permissions to execute the AI agent.",
     "routes.error.insufficient_role": "Insufficient role to execute the AI agent.\nYou need one of the following roles:\n{allowed_roles}",
