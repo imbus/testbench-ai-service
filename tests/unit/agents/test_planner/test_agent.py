@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -72,8 +73,22 @@ def json_tov():
         yield
 
 
+@contextmanager
 def _collect(cases):
-    return patch(f"{_MODULE}.collect_test_cases", return_value=cases)
+    with (
+        patch(f"{_MODULE}.load_catalog", return_value=CATALOG),
+        patch(f"{_MODULE}.test_cases_from_catalog", return_value=cases),
+    ):
+        yield
+
+
+CATALOG = {"S": "catalog"}
+
+
+@pytest.fixture(autouse=True)
+def plan_test_cases():
+    with patch(f"{_MODULE}.plan_test_cases", new=AsyncMock(return_value=0)) as plan:
+        yield plan
 
 
 class TestClassSetup:
@@ -185,12 +200,27 @@ class TestRun:
             await agent.run(context, _conn(), NoLLMClient(), ["TC-0", "TC-1", "TC-2"])
 
         client.close.assert_awaited_once()
-        record = next(r for r in caplog.records if "Test planner preview" in r.getMessage())
+        record = next(r for r in caplog.records if "Test planner selection" in r.getMessage())
         payload = json.loads(record.getMessage().split("\n", 1)[1])
         assert payload["selected"] == 2
         assert payload["total"] == 3
         assert payload["mode"] == "count"
         assert [e["unique_id"] for e in payload["selection"]] == ["TC-0", "TC-1"]
+
+    async def test_sets_the_selection_to_planned(self, plan_test_cases, tmp_path):
+        agent = TestPlannerAgent(TestPlannerArgs(embedding={"cache_dir": str(tmp_path)}))
+        client = MagicMock(
+            embed=AsyncMock(return_value=np.eye(3, dtype=np.float32)), close=AsyncMock()
+        )
+        context = _context(variant="Count", variables={"count": "2"})
+        conn = _conn()
+
+        with _collect([_case(0), _case(1), _case(2)]):
+            await agent.precheck(context, conn)
+        with patch(f"{_MODULE}.create_embedding_client", return_value=client):
+            await agent.run(context, conn, NoLLMClient(), ["TC-0", "TC-1", "TC-2"])
+
+        plan_test_cases.assert_awaited_once_with(conn, context, CATALOG, ["TC-0", "TC-1"])
 
     async def test_cutoff_notes_become_translated_warnings(self, caplog, tmp_path):
         agent = TestPlannerAgent(TestPlannerArgs(embedding={"cache_dir": str(tmp_path)}))
@@ -207,7 +237,7 @@ class TestRun:
         ):
             await agent.run(context, _conn(), NoLLMClient(), ["TC-0", "TC-1"])
 
-        record = next(r for r in caplog.records if "Test planner preview" in r.getMessage())
+        record = next(r for r in caplog.records if "Test planner selection" in r.getMessage())
         warnings = json.loads(record.getMessage().split("\n", 1)[1])["warnings"]
         assert warnings[-1].startswith("No test case has requirement links")
 

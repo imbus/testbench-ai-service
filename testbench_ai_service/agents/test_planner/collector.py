@@ -16,10 +16,10 @@ from testbench_ai_service.utils.testbench import get_test_case_set_catalog
 MILLISECONDS_PER_MINUTE = 60_000
 
 
-def collect_test_cases(conn: TBConnection, context: ExecutionContext) -> list[PlannerTestCase]:
-    """Load every test case in the scope of ``context``, sorted by unique ID."""
+def load_catalog(conn: TBConnection, context: ExecutionContext) -> dict[str, TestCaseSet]:
+    """Load every test case set in the scope of ``context`` from the JSON report."""
     assert context.tov_key is not None
-    catalog = get_test_case_set_catalog(
+    return get_test_case_set_catalog(
         conn,
         context.project_key,
         context.tov_key,
@@ -27,7 +27,6 @@ def collect_test_cases(conn: TBConnection, context: ExecutionContext) -> list[Pl
         context.root_uid,
         context.filtering,
     )
-    return test_cases_from_catalog(catalog)
 
 
 def test_cases_from_catalog(catalog: Mapping[str, TestCaseSet]) -> list[PlannerTestCase]:

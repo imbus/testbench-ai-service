@@ -1,15 +1,15 @@
 ---
 sidebar_position: 4.5
-title: Test Planner (Preview)
+title: Test Planner
 ---
-# Test Planner (Preview)
+# Test Planner
 
-Suggests a test selection for a test cycle: the test cases that differ most in content, so a small selection covers as much functionality as possible and near-identical tests are not planned twice.
+Plans a test selection for a test cycle: the test cases that differ most in content, so a small selection covers as much functionality as possible and near-identical tests are not planned twice.
 
 **Endpoint:** `POST /test-planner` (configurable, see [Configuration](#configuration))
 
 :::warning
-This is a **preview**. The result is written to the **service log** only; nothing in the cycle is changed yet.
+The selected test cases are set to **Planned** in the cycle (see [Result](#result)); the full result is written to the **service log**.
 The agent is **opt-in**: it is not part of the default agents and only runs when it is added to the `config.toml`.
 It requires **TestBench 4.1 or newer** and a **JSON-based** test object version (TOV).
 :::
@@ -18,13 +18,14 @@ It requires **TestBench 4.1 or newer** and a **JSON-based** test object version 
 
 The triggering user must hold the **project role** `TestManager`.
 
-For JWT tokens the following API token permissions are required: `ReadOwnUserDetails`, `ReadProjectDetails`, `ReadTovReport`, `ReadCycleReport`, `ReadReportingJobDetails`, `DownloadReportFile`, `ReadTestThemeTree`, `ReadTestCaseSetDetails`.
+For JWT tokens the following API token permissions are required: `ReadOwnUserDetails`, `ReadProjectDetails`, `ReadTovReport`, `ReadCycleReport`, `ReadReportingJobDetails`, `DownloadReportFile`, `ReadTestThemeTree`, `ReadTestCaseSetDetails`, `ImportExecutionResults`.
 
 ## How it works
 
 1. Every test case of the cycle (below `root_uid`, if given) is turned into a text: test case set name, description, test sequence and the parameter values of the test case. The text is embedded; embeddings are cached in `cache_dir` by content hash.
 2. The selection starts at the test case with the largest mean distance to all others and then repeatedly takes the test case that is farthest from everything selected so far (farthest point sampling). Equal data gives the same ranking.
 3. The prompt variant decides where the selection ends.
+4. The selected test cases are set to `Planned` through one JSON execution results import (`protocol.json` plus the details of each affected test case set). Their blocked state and verdict are kept.
 
 Rules that apply in every variant:
 
@@ -87,7 +88,9 @@ Embedding providers:
 
 ## Result
 
-The log contains a line `Test planner preview | project=… | cycle=… | mode=… | selected=…/…` followed by JSON:
+Selected test cases that are `NotPlanned`, `Skipped` or `Canceled` are set to `Planned`. Test cases that are already `Planned` or `Assigned` stay as they are, and test cases that are not selected are never changed, not even with `existing = replan`. The import runs as a TestBench background job; its outcome shows in TestBench, not in the service log.
+
+The log contains a line `Test planner set N of M selected test cases to planned` and a line `Test planner selection | project=… | cycle=… | mode=… | selected=…/…` followed by JSON:
 
 ```json
 {

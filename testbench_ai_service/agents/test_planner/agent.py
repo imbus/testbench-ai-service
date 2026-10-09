@@ -1,10 +1,14 @@
 import asyncio
 
 from pydantic import ValidationError
+from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
-from testbench_ai_service.agents.test_planner.collector import collect_test_cases
+from testbench_ai_service.agents.test_planner.collector import (
+    load_catalog,
+    test_cases_from_catalog,
+)
 from testbench_ai_service.agents.test_planner.cutoff import CutoffNote
 from testbench_ai_service.agents.test_planner.distance import normalize
 from testbench_ai_service.agents.test_planner.embeddings.cache import (
@@ -20,6 +24,7 @@ from testbench_ai_service.agents.test_planner.model import (
 )
 from testbench_ai_service.agents.test_planner.params import UnknownVariantError, parse_run_params
 from testbench_ai_service.agents.test_planner.planner import build_plan
+from testbench_ai_service.agents.test_planner.writeback import plan_test_cases
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData, ExecutionContext, PrecheckResult
@@ -37,7 +42,7 @@ class TestPlannerAgentData(AgentData, total=False):
 
 
 class TestPlannerAgent(Agent):
-    """Suggests the most diverse test selection of a cycle and logs it as a preview."""
+    """Plans the most diverse test selection of a cycle and logs it."""
 
     __test__ = False  # not a pytest test class
 
@@ -55,6 +60,7 @@ class TestPlannerAgent(Agent):
             PermissionWithCode.DownloadReportFile,
             PermissionWithCode.ReadTestThemeTree,
             PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ImportExecutionResults,
         }
     )
     ALLOWED_ROLES = frozenset({ProjectRole.TestManager})
@@ -65,6 +71,7 @@ class TestPlannerAgent(Agent):
         # precheck() can be handed to run() on the instance instead of exporting
         # the report twice.
         self._params: PlannerRunParams | None = None
+        self._catalog: dict[str, TestCaseSet] = {}
         self._test_cases: list[PlannerTestCase] = []
         self._warnings: list[str] = []
 
@@ -76,7 +83,8 @@ class TestPlannerAgent(Agent):
             return params
 
         language = context.language
-        test_cases = await asyncio.to_thread(collect_test_cases, conn, context)
+        catalog = await asyncio.to_thread(load_catalog, conn, context)
+        test_cases = test_cases_from_catalog(catalog)
         candidates = [case for case in test_cases if not case.executed]
         if len(candidates) < MIN_TEST_CASES:
             return _failed(
@@ -86,6 +94,7 @@ class TestPlannerAgent(Agent):
             )
 
         self._params = params
+        self._catalog = catalog
         self._test_cases = test_cases
         self._warnings = _data_warnings(params, candidates, language)
         return PrecheckResult(
@@ -131,13 +140,23 @@ class TestPlannerAgent(Agent):
             *(_note_text(note, params, context.language) for note in notes),
         ]
         logger.info(
-            "Test planner preview | project='%s' | cycle='%s' | mode=%s | selected=%d/%d\n%s",
+            "Test planner selection | project='%s' | cycle='%s' | mode=%s | selected=%d/%d\n%s",
             context.project_name,
             context.cycle_key,
             params.mode.value,
             result.selected,
             result.total,
             result.model_dump_json(indent=2),
+        )
+
+        planned = await plan_test_cases(
+            conn, context, self._catalog, [entry.unique_id for entry in result.selection]
+        )
+        logger.info(
+            "Test planner set %d of %d selected test cases to planned | cycle='%s'",
+            planned,
+            result.selected,
+            context.cycle_key,
         )
 
 

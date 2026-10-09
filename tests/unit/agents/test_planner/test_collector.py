@@ -2,7 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 from testbench_ai_service.agents.test_planner.collector import (
-    collect_test_cases,
+    load_catalog,
     test_cases_from_catalog,
 )
 from testbench_ai_service.models.testbench import ActivityStatus
@@ -148,6 +148,6 @@ def test_collect_passes_the_scope_to_the_report():
         "testbench_ai_service.agents.test_planner.collector.get_test_case_set_catalog",
         return_value={},
     ) as catalog:
-        assert collect_test_cases(conn, context) == []
+        assert load_catalog(conn, context) == {}
 
     catalog.assert_called_once_with(conn, "P", "T", "C", "R", None)

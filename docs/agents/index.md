@@ -30,7 +30,7 @@ Opt-in (not part of the default agents, enable it in the `config.toml`):
 
 | Agent key                             | Description                                                                                                         |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| [`test_planner`](test-planner.md)     | Preview: suggests the most diverse test selection of a cycle via embeddings. The result is written to the service log. |
+| [`test_planner`](test-planner.md)     | Plans the most diverse test selection of a cycle via embeddings: sets the selected test cases to Planned and logs the result. |
 
 ---
 
