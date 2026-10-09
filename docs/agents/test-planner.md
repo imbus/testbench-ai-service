@@ -22,7 +22,7 @@ For JWT tokens the following API token permissions are required: `ReadOwnUserDet
 
 ## How it works
 
-1. Every test case of the cycle (below `root_uid`, if given) is turned into a text; test cases that are not executable in the cycle are ignored, since they cannot be planned. The text consists of the test case set name, description, test sequence and the parameter values of the test case. The text is embedded; embeddings are cached in `cache_dir` by content hash.
+1. Every test case of the cycle (below `root_uid`, if given) is turned into a text; test cases of the TOV that have no execution in the cycle are ignored, since they cannot be planned. The text consists of the test case set name, description, test sequence and the parameter values of the test case. The text is embedded; embeddings are cached in `cache_dir` by content hash.
 2. The selection starts at the test case with the largest mean distance to all others and then repeatedly takes the test case that is farthest from everything selected so far (farthest point sampling). Equal data gives the same ranking.
 3. The prompt variant decides where the selection ends.
 4. The selected test cases are set to `Planned` through one JSON execution results import (`protocol.json` plus the details of each affected test case set). Their blocked state and verdict are kept.

@@ -149,5 +149,4 @@ def test_collect_passes_the_scope_to_the_report():
     ) as catalog:
         assert load_catalog(conn, context) == {}
 
-    # only test cases executable in the cycle can be planned
-    catalog.assert_called_once_with(conn, "P", "T", "C", "R", None, suppress_not_executable=True)
+    catalog.assert_called_once_with(conn, "P", "T", "C", "R", None)

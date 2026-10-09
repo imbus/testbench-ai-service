@@ -58,8 +58,6 @@ def get_json_report_data(
     cycle_key: str | None,
     root_uid: str | None,
     filtering: FilteringOptions | None = None,
-    *,
-    suppress_not_executable: bool = False,
 ) -> bytes:
     if filtering and filtering.appliedFilters:
         filters = [FilterInfo.from_dict(f.model_dump()) for f in filtering.appliedFilters]
@@ -75,7 +73,7 @@ def get_json_report_data(
             basedOnExecution=True,
             suppressEmptyTestThemes=True,
             suppressFilteredData=True,
-            suppressNotExecutable=suppress_not_executable,
+            suppressNotExecutable=False,
             executionMode=ExecutionMode.VIEW,
             filters=filters,
         ),
@@ -92,8 +90,6 @@ def get_json_report_reader(
     root_uid: str | None,
     filtering: FilteringOptions | None,
     report_dir: str,
-    *,
-    suppress_not_executable: bool = False,
 ) -> TestBenchJsonReader:
     report_data = get_json_report_data(
         conn=conn,
@@ -102,7 +98,6 @@ def get_json_report_reader(
         cycle_key=cycle_key,
         root_uid=root_uid,
         filtering=filtering,
-        suppress_not_executable=suppress_not_executable,
     )
     report_zip = zipfile.ZipFile(BytesIO(report_data))
     report_zip.extractall(report_dir)
@@ -116,8 +111,6 @@ def get_test_case_set_catalog(
     cycle_key: str | None,
     root_uid: str | None,
     filtering: FilteringOptions | None,
-    *,
-    suppress_not_executable: bool = False,
 ) -> dict[str, TestCaseSet]:
     with tempfile.TemporaryDirectory() as report_dir:
         report_reader = get_json_report_reader(
@@ -128,7 +121,6 @@ def get_test_case_set_catalog(
             root_uid=root_uid,
             filtering=filtering,
             report_dir=report_dir,
-            suppress_not_executable=suppress_not_executable,
         )
         test_case_set_catalog: dict[str, TestCaseSet] = report_reader.get_test_case_set_catalog()
         return test_case_set_catalog

@@ -177,23 +177,3 @@ class TestGetTestCaseSetNodes:
         result = get_test_case_set_nodes(MagicMock(), context)
 
         assert [node.base.uniqueID for node in result] == ["CarConfig-TC-7"]
-
-
-class TestGetJsonReportData:
-    """Tests for ``get_json_report_data``."""
-
-    @staticmethod
-    def _report_options(**kwargs):
-        conn = MagicMock()
-        conn.wait_for_tmp_json_report_name.return_value = "tmp"
-        conn.get_json_report_data.return_value = b"zip"
-        assert testbench_utils.get_json_report_data(conn, "P", "T", "C", "R", **kwargs) == b"zip"
-        return conn.trigger_json_report_generation.call_args.kwargs["report_config"]
-
-    def test_keeps_not_executable_test_cases_by_default(self):
-        assert self._report_options().suppressNotExecutable is False
-
-    def test_can_suppress_not_executable_test_cases(self):
-        options = self._report_options(suppress_not_executable=True)
-
-        assert options.suppressNotExecutable is True
