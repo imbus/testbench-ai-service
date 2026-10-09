@@ -130,13 +130,12 @@ def test_duration_status_tags_and_requirements():
     assert case.requirement_keys == frozenset({"R1", "R2"})
 
 
-def test_missing_execution_means_not_planned_and_zero_minutes():
-    catalog = {"S1": _set("S1", "S", [_test_case("TC-1", "1", with_exec=False)])}
+def test_test_cases_without_execution_in_the_cycle_are_left_out():
+    catalog = {
+        "S1": _set("S1", "S", [_test_case("TC-1", "1", with_exec=False), _test_case("TC-2", "2")])
+    }
 
-    [case] = test_cases_from_catalog(catalog)
-
-    assert case.status == ActivityStatus.NotPlanned
-    assert case.planned_minutes == 0.0
+    assert [case.unique_id for case in test_cases_from_catalog(catalog)] == ["TC-2"]
 
 
 def test_collect_passes_the_scope_to_the_report():

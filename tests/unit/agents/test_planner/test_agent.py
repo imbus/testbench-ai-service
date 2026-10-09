@@ -3,6 +3,7 @@ import json
 import logging
 import time
 from contextlib import contextmanager
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -82,7 +83,7 @@ def _collect(cases):
         yield
 
 
-CATALOG = {"S": "catalog"}
+CATALOG = {"S": SimpleNamespace(test_cases={})}
 
 
 @pytest.fixture(autouse=True)
@@ -113,13 +114,18 @@ class TestPrecheck:
 
     async def test_logs_how_many_test_cases_were_looked_at(self, caplog):
         cases = [_case(0), _case(1), _case(2, status=ActivityStatus.Performed)]
+        catalog = {"S": SimpleNamespace(test_cases=dict.fromkeys(range(5)))}
 
-        with _collect(cases), caplog.at_level(logging.INFO, logger="testbench_ai_service"):
+        with (
+            patch(f"{_MODULE}.load_catalog", return_value=catalog),
+            patch(f"{_MODULE}.test_cases_from_catalog", return_value=cases),
+            caplog.at_level(logging.INFO, logger="testbench_ai_service"),
+        ):
             await TestPlannerAgent().precheck(_context(), _conn())
 
         assert (
-            "Test planner looked at 3 test cases, 2 of them not executed yet | cycle='C1'"
-            in caplog.messages
+            "Test planner looked at 5 test cases, 3 of them in the cycle, "
+            "2 of them not executed yet | cycle='C1'" in caplog.messages
         )
 
     async def test_missing_tov_fails(self):

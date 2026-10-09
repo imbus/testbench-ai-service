@@ -87,7 +87,9 @@ class TestPlannerAgent(Agent):
         test_cases = test_cases_from_catalog(catalog)
         candidates = [case for case in test_cases if not case.executed]
         logger.info(
-            "Test planner looked at %d test cases, %d of them not executed yet | cycle='%s'",
+            "Test planner looked at %d test cases, %d of them in the cycle, "
+            "%d of them not executed yet | cycle='%s'",
+            sum(len(test_case_set.test_cases) for test_case_set in catalog.values()),
             len(test_cases),
             len(candidates),
             context.cycle_key,

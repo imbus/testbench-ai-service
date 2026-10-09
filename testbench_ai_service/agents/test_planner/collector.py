@@ -30,7 +30,12 @@ def load_catalog(conn: TBConnection, context: ExecutionContext) -> dict[str, Tes
 
 
 def test_cases_from_catalog(catalog: Mapping[str, TestCaseSet]) -> list[PlannerTestCase]:
-    """Turn a test case set catalog into planner test cases, sorted by unique ID."""
+    """
+    Turn a test case set catalog into planner test cases, sorted by unique ID.
+
+    The report holds every test case of the TOV; those without an execution
+    are not part of the cycle and cannot be planned, so they are left out.
+    """
     test_cases: list[PlannerTestCase] = []
     for test_case_set in catalog.values():
         details = test_case_set.details
@@ -39,6 +44,8 @@ def test_cases_from_catalog(catalog: Mapping[str, TestCaseSet]) -> list[PlannerT
         set_requirements = {requirement.key for requirement in details.spec.requirements}
         for test_case in test_case_set.test_cases.values():
             execution = test_case.exec
+            if execution is None:
+                continue
             sequence = test_case.testSequence or details.testSequence
             test_cases.append(
                 PlannerTestCase(
@@ -53,22 +60,12 @@ def test_cases_from_catalog(catalog: Mapping[str, TestCaseSet]) -> list[PlannerT
                         [_format_step(call) for call in sequence],
                         {param.name: param.value or "" for param in test_case.parameters},
                     ),
-                    planned_minutes=(
-                        execution.plannedDuration / MILLISECONDS_PER_MINUTE if execution else 0.0
-                    ),
-                    tags=frozenset(
-                        set_tags
-                        | _names(test_case.spec.tags)
-                        | (_names(execution.tags) if execution else set())
-                    ),
+                    planned_minutes=execution.plannedDuration / MILLISECONDS_PER_MINUTE,
+                    tags=frozenset(set_tags | _names(test_case.spec.tags) | _names(execution.tags)),
                     requirement_keys=frozenset(
                         set_requirements | {req.key for req in test_case.spec.requirements}
                     ),
-                    status=(
-                        ActivityStatus(execution.status.value)
-                        if execution
-                        else ActivityStatus.NotPlanned
-                    ),
+                    status=ActivityStatus(execution.status.value),
                 )
             )
     return sorted(test_cases, key=lambda test_case: test_case.unique_id)

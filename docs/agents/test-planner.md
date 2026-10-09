@@ -22,7 +22,7 @@ For JWT tokens the following API token permissions are required: `ReadOwnUserDet
 
 ## How it works
 
-1. Every test case of the cycle (below `root_uid`, if given) is turned into a text: test case set name, description, test sequence and the parameter values of the test case. The text is embedded; embeddings are cached in `cache_dir` by content hash.
+1. Every test case of the cycle (below `root_uid`, if given) is turned into a text; test cases of the TOV that have no execution in the cycle are ignored, since they cannot be planned. The text consists of the test case set name, description, test sequence and the parameter values of the test case. The text is embedded; embeddings are cached in `cache_dir` by content hash.
 2. The selection starts at the test case with the largest mean distance to all others and then repeatedly takes the test case that is farthest from everything selected so far (farthest point sampling). Equal data gives the same ranking.
 3. The prompt variant decides where the selection ends.
 4. The selected test cases are set to `Planned` through one JSON execution results import (`protocol.json` plus the details of each affected test case set). Their blocked state and verdict are kept.
@@ -90,7 +90,7 @@ Embedding providers:
 
 Selected test cases that are `NotPlanned`, `Skipped` or `Canceled` are set to `Planned`. Test cases that are already `Planned` or `Assigned` stay as they are, and test cases that are not selected are never changed, not even with `existing = replan`. The import runs as a TestBench background job; its outcome shows in TestBench, not in the service log.
 
-The log contains a line `Test planner set N of M selected test cases to planned` and a line `Test planner selection | project=… | cycle=… | mode=… | selected=…/…` followed by JSON:
+The log contains a line `Test planner looked at A test cases, B of them in the cycle, C of them not executed yet`, a line `Test planner set N of M selected test cases to planned` and a line `Test planner selection | project=… | cycle=… | mode=… | selected=…/…` followed by JSON:
 
 ```json
 {
