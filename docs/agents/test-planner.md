@@ -37,12 +37,14 @@ Rules that apply in every variant:
 
 | Variant (en / de)                              | Ends …                                                        | Variables                          |
 | ---------------------------------------------- | ------------------------------------------------------------- | ---------------------------------- |
-| Automatic / Automatisch (default)              | at the knee of the curve, where each further test adds little | `existing`                         |
+| Automatic / Automatisch (default)              | at the knee of the curve, where each further test adds little | `knee_percent`, `existing`         |
 | Count / Anzahl                                 | after `count` test cases (default 40)                         | `count`, `existing`                |
 | Time budget / Zeitbudget                       | before the planned durations exceed `budget_minutes` (240)    | `budget_minutes`, `existing`       |
 | Requirement coverage / Requirement-Abdeckung   | when `coverage_percent` % of the requirements are covered     | `coverage_percent`, `existing`     |
 
 `existing = keep` (default) keeps already planned test cases and adds to them; `replan` selects without them.
+
+`knee_percent` (default 100) moves the end of the automatic selection relative to the knee: 150 selects one and a half times as many test cases as the knee, 50 half as many. Mandatory and already planned test cases are not counted and always stay selected; the selection takes at least one further test case and never reaches the first duplicate. `cutoff_hints.knee` still shows the unscaled knee.
 
 Example request:
 

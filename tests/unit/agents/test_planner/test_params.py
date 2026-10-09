@@ -49,9 +49,11 @@ def test_default_variant_is_auto_with_keep():
 @pytest.mark.parametrize(
     ("language", "variant", "field", "default"),
     [
+        ("de", "Automatisch", "knee_percent", 100),
         ("de", "Anzahl", "count", 40),
         ("de", "Zeitbudget", "budget_minutes", 240),
         ("de", "Requirement-Abdeckung", "coverage_percent", 100),
+        ("en", "Automatic", "knee_percent", 100),
         ("en", "Count", "count", 40),
         ("en", "Time budget", "budget_minutes", 240),
         ("en", "Requirement coverage", "coverage_percent", 100),
@@ -78,6 +80,20 @@ def test_vars_of_other_variants_are_ignored():
     params = parse_run_params(_config(variant="Anzahl", variables={"budget_minutes": "5"}))
 
     assert params.budget_minutes is None
+
+
+def test_request_var_scales_the_knee():
+    params = parse_run_params(
+        _config(variant="Automatic", language="en", variables={"knee_percent": "150"})
+    )
+
+    assert params.knee_percent == 150
+
+
+@pytest.mark.parametrize("value", ["0", "-50"])
+def test_knee_percent_must_be_positive(value):
+    with pytest.raises(ValidationError):
+        parse_run_params(_config(variant="Automatisch", variables={"knee_percent": value}))
 
 
 def test_invalid_value_raises_validation_error():

@@ -83,6 +83,8 @@ class PlannerRunParams(BaseModel):
     count: int | None = Field(None, gt=0)
     budget_minutes: float | None = Field(None, gt=0)
     coverage_percent: float | None = Field(None, gt=0, le=100)
+    #: Size of the automatic selection relative to the knee; 100 ends at the knee.
+    knee_percent: float = Field(100, gt=0)
 
     @model_validator(mode="after")
     def check_mode_value(self) -> "PlannerRunParams":

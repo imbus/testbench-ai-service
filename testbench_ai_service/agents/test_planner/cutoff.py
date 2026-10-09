@@ -112,7 +112,8 @@ def apply_cutoff(
         target = params.coverage_percent / 100 * len(all_requirements)
         length = _coverage_length(entries, seed_count, limit, all_requirements, target)
     else:
-        length = _knee_length(entries, seed_count, limit, skip_first)
+        knee = _knee_length(entries, seed_count, limit, skip_first)
+        length = _scale_picks(knee, seed_count, limit, params.knee_percent)
 
     return CutoffOutcome(length=length, notes=notes)
 
@@ -180,6 +181,15 @@ def _coverage_length(
         covered |= entry.requirements & all_requirements
         length += 1
     return length
+
+
+def _scale_picks(length: int, seed_count: int, limit: int, percent: float) -> int:
+    """Scale the picks of ``length`` by ``percent``; seeds stay, duplicates stay out."""
+    picks = length - seed_count
+    if picks <= 0:
+        return length
+    scaled = max(1, int(picks * percent / 100 + 0.5))
+    return min(seed_count + scaled, limit)
 
 
 def _knee_length(

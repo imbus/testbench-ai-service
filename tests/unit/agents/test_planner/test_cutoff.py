@@ -101,6 +101,24 @@ class TestModes:
     def test_auto_uses_the_knee(self):
         assert apply_cutoff(PICKS, 0, PlannerRunParams(mode="auto"), REQS).length == 2
 
+    @pytest.mark.parametrize(
+        ("percent", "length"), [(100, 2), (150, 3), (200, 4), (50, 1), (300, 5), (10, 1)]
+    )
+    def test_auto_scales_the_knee(self, percent, length):
+        params = PlannerRunParams(mode="auto", knee_percent=percent)
+
+        assert apply_cutoff(PICKS, 0, params, REQS).length == length
+
+    def test_auto_scales_only_the_picks(self):
+        seeds = [_entry(9, 1.0, reason="mandatory")]
+        params = PlannerRunParams(mode="auto", knee_percent=200)
+
+        # seed, then the knee after two picks; doubled to four picks
+        assert apply_cutoff(seeds + PICKS, 1, params, REQS).length == 5
+
+    def test_hints_show_the_unscaled_knee(self):
+        assert compute_hints(PICKS, 0, REQS).knee == 2
+
     def test_auto_with_only_seeds(self):
         seeds = [_entry(9, 1.0, reason="mandatory")]
 

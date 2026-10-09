@@ -5,26 +5,32 @@ summary: "Testauswahl für einen Zyklus vorschlagen"
 description: >
   Dieser Agent wählt aus dem Zyklus die Testfälle aus, die sich inhaltlich am
   stärksten voneinander unterscheiden, sodass mit wenigen Tests möglichst viel
-  Funktionalität abgedeckt wird. In dieser Version ist das Ergebnis eine
-  Vorschau im Log des Service; im Zyklus wird nichts geändert.
+  Funktionalität abgedeckt wird. Die ausgewählten Testfälle werden im Zyklus
+  auf Planned gesetzt; das Ergebnis steht im Log des Service.
 default_model: "text-embedding-3-small"
 default_variant: "Automatisch"
 variants:
   - name: "Automatisch"
     description: "Wählt bis zu dem Punkt aus, ab dem jeder weitere Test deutlich weniger Neues bringt."
-    vars: &existing_only
-      existing:
+    vars:
+      existing: &existing
         name: "Bestehende Planung"
         description: "keep: bereits geplante Testfälle bleiben gesetzt und werden ergänzt. replan: die Auswahl beginnt ohne die bestehende Planung."
         value_type: "enum"
         choices: ["keep", "replan"]
         default_value: "keep"
         required: false
+      knee_percent:
+        name: "Auswahlgröße (% des Knicks)"
+        description: "100 endet am Knick. Höhere Werte wählen mehr Testfälle aus, niedrigere weniger, z. B. 150 = anderthalbmal so viele."
+        value_type: "number"
+        default_value: 100
+        required: false
     messages: []
   - name: "Anzahl"
     description: "Wählt eine feste Anzahl von Testfällen aus."
     vars:
-      <<: *existing_only
+      existing: *existing
       count:
         name: "Anzahl Testfälle"
         value_type: "number"
@@ -34,7 +40,7 @@ variants:
   - name: "Zeitbudget"
     description: "Wählt aus, bis die geplanten Ausführungsdauern das Budget erreichen."
     vars:
-      <<: *existing_only
+      existing: *existing
       budget_minutes:
         name: "Zeitbudget (Minuten)"
         value_type: "number"
@@ -44,7 +50,7 @@ variants:
   - name: "Requirement-Abdeckung"
     description: "Wählt aus, bis der Anteil abgedeckter Requirements den Zielwert erreicht."
     vars:
-      <<: *existing_only
+      existing: *existing
       coverage_percent:
         name: "Ziel-Abdeckung (%)"
         value_type: "number"
