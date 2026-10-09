@@ -86,6 +86,12 @@ class TestPlannerAgent(Agent):
         catalog = await asyncio.to_thread(load_catalog, conn, context)
         test_cases = test_cases_from_catalog(catalog)
         candidates = [case for case in test_cases if not case.executed]
+        logger.info(
+            "Test planner looked at %d test cases, %d of them not executed yet | cycle='%s'",
+            len(test_cases),
+            len(candidates),
+            context.cycle_key,
+        )
         if len(candidates) < MIN_TEST_CASES:
             return _failed(
                 get_translation(

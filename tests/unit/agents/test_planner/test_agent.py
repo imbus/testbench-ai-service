@@ -111,6 +111,17 @@ class TestPrecheck:
         assert result.items == ["TC-0", "TC-1"]
         assert result.warnings == []
 
+    async def test_logs_how_many_test_cases_were_looked_at(self, caplog):
+        cases = [_case(0), _case(1), _case(2, status=ActivityStatus.Performed)]
+
+        with _collect(cases), caplog.at_level(logging.INFO, logger="testbench_ai_service"):
+            await TestPlannerAgent().precheck(_context(), _conn())
+
+        assert (
+            "Test planner looked at 3 test cases, 2 of them not executed yet | cycle='C1'"
+            in caplog.messages
+        )
+
     async def test_missing_tov_fails(self):
         result = await TestPlannerAgent().precheck(_context(tov_key=None), _conn())
 
