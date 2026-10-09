@@ -17,7 +17,12 @@ MILLISECONDS_PER_MINUTE = 60_000
 
 
 def load_catalog(conn: TBConnection, context: ExecutionContext) -> dict[str, TestCaseSet]:
-    """Load every test case set in the scope of ``context`` from the JSON report."""
+    """
+    Load the test case sets in the scope of ``context`` from the JSON report.
+
+    Test cases that are not executable in the cycle cannot be planned, so the
+    report leaves them out; otherwise they would be ranked and selected.
+    """
     assert context.tov_key is not None
     return get_test_case_set_catalog(
         conn,
@@ -26,6 +31,7 @@ def load_catalog(conn: TBConnection, context: ExecutionContext) -> dict[str, Tes
         context.cycle_key,
         context.root_uid,
         context.filtering,
+        suppress_not_executable=True,
     )
 
 
@@ -33,8 +39,7 @@ def test_cases_from_catalog(catalog: Mapping[str, TestCaseSet]) -> list[PlannerT
     """
     Turn a test case set catalog into planner test cases, sorted by unique ID.
 
-    The report holds every test case of the TOV; those without an execution
-    are not part of the cycle and cannot be planned, so they are left out.
+    Test cases without an execution cannot be planned, so they are left out.
     """
     test_cases: list[PlannerTestCase] = []
     for test_case_set in catalog.values():
