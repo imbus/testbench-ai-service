@@ -17,6 +17,7 @@ An asynchronous REST API service that connects [imbus TestBench](https://www.tes
 - **JWT authentication:** every request is validated against the TestBench REST API using a JWT token; no separate credential management
 - **Async processing:** Agents run as background tasks so the API responds immediately
 - **Swagger UI:** interactive API docs at `/docs`
+- **Web console:** read-only service status and configuration at `/admin`, signed in with TestBench credentials
 - **SSL/TLS & reverse proxy support:** optional HTTPS with mTLS and trusted-proxy headers
 
 ## Installation
@@ -80,6 +81,7 @@ Full documentation is available in the [docs/](https://github.com/imbus/testbenc
 - [Installation](https://github.com/imbus/testbench-ai-service/blob/main/docs/getting-started/installation.md)
 - [Quickstart](https://github.com/imbus/testbench-ai-service/blob/main/docs/getting-started/quickstart.md)
 - [Configuration](https://github.com/imbus/testbench-ai-service/blob/main/docs/configuration.md)
+- [Web Console](https://github.com/imbus/testbench-ai-service/blob/main/docs/web-console.md)
 - [Agents](https://github.com/imbus/testbench-ai-service/blob/main/docs/agents/index.md)
 - [Prompts](https://github.com/imbus/testbench-ai-service/blob/main/docs/prompts.md)
 - [TestBench Integration](https://github.com/imbus/testbench-ai-service/blob/main/docs/testbench-integration.md)

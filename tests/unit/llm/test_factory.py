@@ -3,8 +3,9 @@ from unittest.mock import AsyncMock, MagicMock, call, patch
 import pytest
 
 from testbench_ai_service.llm.azure_auth import EntraIdCredentials
-from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider, RoutingFamily
 from testbench_ai_service.llm.factory import LLMFactory
+from testbench_ai_service.models.config import LLMConfig
 
 
 def _make_llm_config(
@@ -19,6 +20,8 @@ def _make_llm_config(
     config.azure_endpoint = None
     config.api_version = None
     config.auth_method = auth_method
+    config.timeout = None
+    config.max_retries = None
     return config
 
 
@@ -228,9 +231,7 @@ class TestLLMFactoryEntraIdDispatch:
     @patch.object(LLMFactory, "_create_client")
     @patch("testbench_ai_service.llm.factory.resolve_entra_credentials")
     def test_project_principal_takes_precedence_over_global(self, mock_resolve, mock_create):
-        project_credentials = EntraIdCredentials(
-            tenant_id="tp", client_id="cp", client_secret="sp"
-        )
+        project_credentials = EntraIdCredentials(tenant_id="tp", client_id="cp", client_secret="sp")
         mock_resolve.return_value = project_credentials
         project_client = MagicMock()
         mock_create.return_value = project_client
@@ -245,9 +246,7 @@ class TestLLMFactoryEntraIdDispatch:
 
     @patch.object(LLMFactory, "_create_client")
     @patch("testbench_ai_service.llm.factory.resolve_entra_credentials")
-    def test_project_without_principal_falls_back_to_global_client(
-        self, mock_resolve, mock_create
-    ):
+    def test_project_without_principal_falls_back_to_global_client(self, mock_resolve, mock_create):
         global_credentials = EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s")
         # First call is the project lookup (None), second is the global lookup.
         mock_resolve.side_effect = [None, global_credentials]
@@ -416,3 +415,135 @@ class TestLLMFactoryAuthLogging:
         messages = [record.getMessage() for record in caplog.records]
         assert any("Entra ID" in message for message in messages)
         assert not any("secret-value" in message for message in messages)
+
+
+def test_declared_timeout_and_max_retries_reach_the_client_kwargs():
+    """timeout/max_retries are declared fields now, not model_extra."""
+    factory = LLMFactory()
+    config = LLMConfig(provider=LLMProvider.OPENAI, timeout=42.5, max_retries=7)
+
+    assert config.timeout == 42.5
+    assert config.max_retries == 7
+    assert factory._get_common_client_kwargs(config, LLMProvider.OPENAI) == {
+        "timeout": 42.5,
+        "max_retries": 7,
+    }
+
+
+def test_unset_timeout_and_max_retries_are_omitted_from_client_kwargs():
+    """An unset field must not become an explicit None the SDK would honour."""
+    factory = LLMFactory()
+
+    assert (
+        factory._get_common_client_kwargs(
+            LLMConfig(provider=LLMProvider.OPENAI), LLMProvider.OPENAI
+        )
+        == {}
+    )
+
+
+def test_strict_response_validation_still_comes_from_extra():
+    """The private SDK flag stays undeclared; it is not a config surface."""
+    factory = LLMFactory()
+    config = LLMConfig(provider=LLMProvider.OPENAI, _strict_response_validation=False)
+
+    assert factory._get_common_client_kwargs(config, LLMProvider.OPENAI) == {
+        "_strict_response_validation": False
+    }
+
+
+class TestModelRoutingForwarding:
+    def test_nothing_is_forwarded_when_no_extra_models_are_configured(self):
+        factory = LLMFactory()
+        kwargs = factory._get_common_client_kwargs(LLMConfig(), LLMProvider.OPENAI)
+        assert "model_routing" not in kwargs
+
+    def test_only_this_provider_s_entries_are_forwarded(self):
+        config = LLMConfig(
+            extra_models={
+                "gpt-6": {"provider": "openai", "routing": "reasoning"},
+                "claude-opus-6": {"provider": "anthropic", "routing": "adaptive"},
+            }
+        )
+        factory = LLMFactory()
+
+        openai_kwargs = factory._get_common_client_kwargs(config, LLMProvider.OPENAI)
+        anthropic_kwargs = factory._get_common_client_kwargs(config, LLMProvider.ANTHROPIC)
+
+        assert openai_kwargs["model_routing"] == {"gpt-6": RoutingFamily.REASONING}
+        assert anthropic_kwargs["model_routing"] == {"claude-opus-6": RoutingFamily.ADAPTIVE}
+
+    def test_custom_never_receives_model_routing(self):
+        """A CUSTOM client's kwargs must stay byte-identical to what they were.
+
+        `_create_client` splats these into a class the operator named, and a
+        third-party `__init__` that spells out `timeout`/`max_retries` without
+        `**kwargs` raises TypeError on an unexpected one -- at `init_clients`
+        during startup and at every `reload.apply`, taking all four production
+        agents down with it. Nothing is lost: a CUSTOM client implements its
+        own dispatch, so `fallback` is the only value ALLOWED_ROUTING permits
+        for it (design 5.3) and the map would be decorative.
+        """
+        config = LLMConfig(
+            provider=LLMProvider.CUSTOM,
+            class_path="testbench_ai_service.llm.openai.OpenAIClient",
+            extra_models={"my-local-llama": {"provider": "custom", "routing": "fallback"}},
+        )
+        kwargs = LLMFactory()._get_common_client_kwargs(config, LLMProvider.CUSTOM)
+        assert "model_routing" not in kwargs
+
+    def test_a_custom_entry_does_not_reach_another_provider_either(self):
+        config = LLMConfig(
+            extra_models={"my-local-llama": {"provider": "custom", "routing": "fallback"}}
+        )
+        kwargs = LLMFactory()._get_common_client_kwargs(config, LLMProvider.OPENAI)
+        assert "model_routing" not in kwargs
+
+    def test_a_project_merged_config_still_forwards_its_entries(self):
+        """After `get_llm_config` merges a project block, the entries are plain
+        dicts -- `model_copy(update=...)` skips validation. Reading
+        `entry.provider` off one would be an AttributeError at client
+        construction, on exactly the per-project catalogue design 5.3 promises.
+        """
+        merged = LLMConfig().model_copy(
+            update={"extra_models": {"gpt-6": {"provider": "openai", "routing": "reasoning"}}}
+        )
+        kwargs = LLMFactory()._get_common_client_kwargs(merged, LLMProvider.OPENAI)
+        assert kwargs["model_routing"] == {"gpt-6": RoutingFamily.REASONING}
+
+    def test_declared_fields_still_do_not_leak_into_query_kwargs(self):
+        # extra_models is declared, so it is not in model_extra and therefore
+        # never spread into query_llm by agents/base.py:92.
+        config = LLMConfig(extra_models={"gpt-6": {"provider": "openai", "routing": "reasoning"}})
+        assert "extra_models" not in (config.model_extra or {})
+
+
+class TestResolveProvider:
+    def test_delegates_to_the_private_resolver(self):
+        factory = LLMFactory()
+        config = LLMConfig(provider=LLMProvider.OPENAI)
+        assert factory.resolve_provider(config, "claude-opus-5") is LLMProvider.ANTHROPIC
+        assert factory.resolve_provider(config, "gpt-4o") is LLMProvider.OPENAI
+
+    def test_falls_back_to_the_configured_provider(self):
+        factory = LLMFactory()
+        config = LLMConfig(
+            provider=LLMProvider.CUSTOM,
+            class_path="testbench_ai_service.llm.openai.OpenAIClient",
+        )
+        assert factory.resolve_provider(config, "something-unknown") is LLMProvider.CUSTOM
+
+
+class TestHasProjectCredential:
+    def test_true_when_the_project_variable_is_set(self, monkeypatch):
+        monkeypatch.setenv("CAR_CONFIGURATOR_OPENAI_API_KEY", "sk-project")
+        factory = LLMFactory()
+        assert factory.has_project_credential("Car Configurator", LLMProvider.OPENAI, LLMConfig())
+
+    def test_false_when_only_the_global_variable_is_set(self, monkeypatch):
+        monkeypatch.delenv("CAR_CONFIGURATOR_OPENAI_API_KEY", raising=False)
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-global")
+        factory = LLMFactory()
+        assert not factory.has_project_credential(
+            "Car Configurator", LLMProvider.OPENAI, LLMConfig()
+        )

@@ -14,6 +14,7 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
+from testbench_ai_service.models.webui import AdminUiConfig
 from testbench_ai_service.transport import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_MAX_RETRIES,
@@ -25,6 +26,7 @@ from testbench_ai_service.utils.prompt_utils import (
 )
 from testbench_ai_service.validators import (
     raise_field_validation_error,
+    resolve_prompt_file_path,
     validate_prompt_file,
     validate_tb_server_url,
 )
@@ -60,6 +62,37 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         ),
     ),
 }
+
+
+def _prompt_file_is_absent(file: Path, prompts_dir: Path | None, language: str) -> bool:
+    """Whether *file* cannot be found at all, as opposed to being unreadable.
+
+    ``validate_prompt_file`` raises the same ``ValueError`` for a file that is
+    missing and for one that is present but malformed. Only the first is a
+    reason to treat an agent as simply not installed.
+    """
+    try:
+        resolve_prompt_file_path(file, prompts_dir=prompts_dir, language=language)
+    except ValueError:
+        return True
+    return False
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Merge *override* into *base*, recursing into nested tables.
+
+    Neither argument is mutated. A non-table value replaces whatever is at that
+    key; two tables are merged key by key, so ``{"prompt": {"variant": "x"}}``
+    sets the variant without discarding the prompt's ``file``.
+    """
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(existing, value)
+        else:
+            merged[key] = value
+    return merged
 
 
 class AppConfig(BaseModel):
@@ -123,11 +156,67 @@ class AppConfig(BaseModel):
         default=TEMPLATES_DIR,
         description="Directory containing jinja templates for agents.",
     )
+    usage_file: Path | None = Field(
+        default=None,
+        description="SQLite file holding the token usage per model. Relative paths are "
+        "resolved against the config file's directory; unset means 'usage.sqlite' there.",
+    )
     language: LanguageOption = LanguageOption.GERMAN
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    admin_ui: AdminUiConfig = Field(
+        default_factory=AdminUiConfig,
+        description="Browser console served at /admin",
+    )
     agents: dict[str, AgentConfig] = DEFAULT_AGENTS
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
+    loaded_from: Path | None = Field(
+        default=None,
+        exclude=True,
+        description="Path this config was loaded from; set by load_config_from_file",
+    )
+
+    @field_validator("agents", mode="before")
+    @classmethod
+    def merge_agents_onto_defaults(cls, agents: Any) -> Any:
+        """Let a partial ``[agents.<key>]`` block override one setting.
+
+        Without this, ``agents`` is a plain replacement: every ``AgentConfig``
+        field is required, so ``enabled = false`` on its own fails validation,
+        and spelling the block out in full drops every agent the operator did
+        not mention. There was no way to express "turn this agent off".
+
+        A key that names a built-in is merged onto that built-in, recursively,
+        so ``[agents.x.prompt] variant = "..."`` keeps the prompt's ``file``. A
+        key that names no built-in is passed through untouched and must still
+        be declared in full -- there is nothing to inherit from.
+
+        Merging happens *before* validation on plain dicts, rather than through
+        ``model_copy(update=...)`` on the built model: ``model_copy`` neither
+        validates nor recurses, so a nested partial would leave ``prompt`` as a
+        raw dict and every ``agent.prompt.file`` lookup would raise.
+        """
+        if not isinstance(agents, dict):
+            return agents
+
+        # Start from every built-in, so an agent the operator did not mention
+        # survives. model_dump() builds a fresh dict every call, so the shared
+        # DEFAULT_AGENTS models are never touched.
+        merged: dict[Any, Any] = {
+            key: default.model_dump() for key, default in DEFAULT_AGENTS.items()
+        }
+        for key, override in agents.items():
+            default = DEFAULT_AGENTS.get(key)
+            if default is None:
+                merged[key] = override
+                continue
+            # A Python caller passes AgentConfig objects; TOML gives dicts.
+            fields = override.model_dump() if isinstance(override, BaseModel) else override
+            if not isinstance(fields, dict):
+                merged[key] = override
+                continue
+            merged[key] = _deep_merge(merged[key], fields)
+        return merged
 
     @field_validator("tb_server_url", mode="after")
     @classmethod
@@ -177,10 +266,36 @@ class AppConfig(BaseModel):
                 raise ValueError(f"Templates path is not a directory: '{v.resolve()}'")
         return v
 
+    def _is_untouched_builtin(self, agent_key: str, agent: AgentConfig) -> bool:
+        """Whether *agent* is a built-in the operator's config left alone.
+
+        Compares the merged entry against the built-in rather than tracking
+        which keys the operator wrote: a block that spells the default out
+        again means the same thing as no block at all.
+        """
+        return agent == DEFAULT_AGENTS.get(agent_key)
+
     @model_validator(mode="after")
     def validate_prompt_paths(self):
-        """Validate and resolve all prompt file paths."""
-        for agent_key, agent in self.agents.items():
+        """Validate and resolve all prompt file paths.
+
+        Two agents are exempt, because for them a prompt file is not something
+        the operator asked for:
+
+        * a **disabled** agent -- it gets no endpoint, so requiring its prompt
+          file to exist would make ``enabled = false`` an incomplete off
+          switch, and that is the documented way to withdraw an agent;
+        * an **untouched built-in whose prompt file is absent** -- since the
+          ``agents`` table merges onto the built-ins, every config carries all
+          three, including one whose ``prompts_dir`` holds only the operator's
+          own prompts. Failing there would refuse to start a service that
+          started before the merge, naming an agent the operator never wrote
+          down. It is dropped with a warning instead: it cannot run, and that
+          is exactly the state such a config was in before.
+        """
+        for agent_key, agent in list(self.agents.items()):
+            if not agent.enabled:
+                continue
             try:
                 validate_prompt_file(
                     agent.prompt.file,
@@ -188,8 +303,29 @@ class AppConfig(BaseModel):
                     language=self.language.value,
                 )
             except ValueError as e:
+                if self._is_untouched_builtin(agent_key, agent) and _prompt_file_is_absent(
+                    agent.prompt.file, self.prompts_dir, self.language.value
+                ):
+                    logger.warning(
+                        "Built-in agent '%s' is not configured and its prompt file '%s' was not "
+                        "found under '%s'. The agent is unavailable. Configure it explicitly if "
+                        "you meant to run it; otherwise this message can be ignored.",
+                        agent_key,
+                        agent.prompt.file,
+                        self.prompts_dir,
+                    )
+                    del self.agents[agent_key]
+                    continue
                 raise_field_validation_error(self, ("agents", agent_key, "prompt", "file"), e)
         for proj_key, project in self.projects.items():
+            # The project's own language when it declares one -- matching what
+            # utils.config.get_prompt_config does at runtime. Resolving against
+            # the global language here refused to boot a config the runtime
+            # would have served correctly. Inlined rather than delegated to
+            # get_language_from_config: utils/config.py imports this module.
+            project_language = (
+                project.language.value if project.language is not None else self.language.value
+            )
             for agent_key, agent_override in (project.agents or {}).items():
                 if agent_override.prompt is None or agent_override.prompt.file is None:
                     continue
@@ -197,7 +333,7 @@ class AppConfig(BaseModel):
                     validate_prompt_file(
                         agent_override.prompt.file,
                         prompts_dir=self.prompts_dir,
-                        language=self.language.value,
+                        language=project_language,
                     )
                 except ValueError as e:
                     raise_field_validation_error(
@@ -210,6 +346,13 @@ class AppConfig(BaseModel):
     @model_validator(mode="after")
     def validate_config(self):
         for _, agent in self.agents.items():
+            # A disabled agent gets no router, so nothing here can go wrong at
+            # runtime: importing its class and matching its template variables
+            # would only be able to refuse a boot over an agent that is
+            # switched off. Same reasoning as validate_prompt_paths.
+            if not agent.enabled:
+                continue
+
             if not agent.class_path:
                 raise ValueError("'class_path' must be set.")
 

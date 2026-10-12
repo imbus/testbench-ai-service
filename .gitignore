@@ -57,6 +57,8 @@ cover/
 
 # Django stuff:
 *.log
+*.activity.jsonl
+*.activity.jsonl.*
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
@@ -190,3 +192,21 @@ prompts/
 # Local template files
 templates/
 !testbench_ai_service/templates/
+
+# Subagent-driven-development scratch workspace (ledgers, briefs, review packages)
+.superpowers/
+
+# Frontend (admin web UI)
+node_modules/
+frontend/dist/
+# Vite build output, generated into the package by `npm run build`
+testbench_ai_service/static/
+# tsc -b build info (belt-and-braces; tsBuildInfoFile already redirects these under node_modules/)
+*.tsbuildinfo
+
+# Rotated log files (`*.log` above does not match the numbered suffixes
+# RotatingFileHandler appends)
+*.log.[0-9]*
+
+# Token usage counted by a locally running service
+usage.sqlite

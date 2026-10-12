@@ -1,0 +1,474 @@
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { Button } from 'primereact/button'
+import { InputText } from 'primereact/inputtext'
+import { Message } from 'primereact/message'
+import {
+  configuredProjects,
+  effectiveAgent,
+  inheritedVars,
+  overridingProjects,
+  projectAgentPath,
+  projectPath,
+  scopedAgentPath,
+  type Scope,
+} from '../api/agents'
+import { useForkPrompt } from '../api/mutations'
+import { useConfig, useProjects, usePromptMeta } from '../api/queries'
+import type { ConfigIssue, PromptForkResponse, PromptVarDefinition } from '../api/types'
+import { Field } from '../components/Field'
+import { Modal } from '../components/Modal'
+import { ReadOnlyField } from '../components/ReadOnlyField'
+import { ScopeTabs } from '../components/ScopeTabs'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
+import { useDraft } from '../state/draft'
+import {
+  AGENT_FIELDS,
+  AGENT_READONLY_FIELDS,
+  promptVarField,
+  promptVarPath,
+  varDefault,
+} from './agentFields'
+import { valueAt } from './fields'
+
+function issueFor(issues: ConfigIssue[], key: string): string | undefined {
+  return issues.find((entry) => entry.path === key || entry.path.startsWith(key + '.'))?.message
+}
+
+/**
+ * One agent, in one scope.
+ *
+ * The scope switcher is what makes this screen serve both the global agent and
+ * every project that overrides it: the same controls, addressed at a different
+ * table. Choosing a scope is navigation, never an edit — writing an empty
+ * override table on selection would put a change in the diff the operator
+ * never asked for.
+ */
+export function AgentDetail({
+  isAdmin,
+  issues = [],
+}: {
+  isAdmin: boolean
+  issues?: ConfigIssue[]
+}) {
+  const { t } = useTranslation()
+  const { agentKey = '' } = useParams()
+  const config = useConfig()
+  const projects = useProjects()
+  const draft = useDraft()
+  const navigate = useNavigate()
+  const [project, setProject] = useState<string | null>(null)
+  const [forkOpen, setForkOpen] = useState(false)
+  const [forkDirectory, setForkDirectory] = useState('')
+
+  // Every hook is called here, above the early returns below. This component
+  // stays mounted across the loading -> loaded transition, and a hook called
+  // only on some renders of the same instance corrupts React's hook order --
+  // a hard crash, not a lint nit. So the values `usePromptMeta` needs are
+  // derived defensively from a possibly-absent config instead.
+  const running = config.data?.running ?? {}
+  const disk = config.data?.disk ?? {}
+  const globalAgent = effectiveAgent(running, agentKey, null)
+  const scope: Scope = project === null ? { kind: 'global' } : { kind: 'project', project }
+  const scopedAgent = effectiveAgent(running, agentKey, project)
+
+  // The effective language of the scope being edited. A project's `language`
+  // override decides which prompts_dir/<lang>/ its prompt files come from, so
+  // reading the global language for such a project would show the variants of
+  // an entirely different file.
+  const globalLanguage = String(valueAt(running, 'language') ?? 'de')
+  const language =
+    project === null
+      ? globalLanguage
+      : String(valueAt(running, projectPath(project, 'language')) ?? globalLanguage)
+
+  const promptFilePath = scopedAgentPath(scope, agentKey, 'prompt.file')
+  const draftFile = draft.valueOf(promptFilePath, undefined)
+  // Draft-aware: switching the prompt in the form re-reads the new file's
+  // variants before the change is applied.
+  const promptFile =
+    typeof draftFile === 'string' && draftFile
+      ? draftFile
+      : typeof scopedAgent.prompt?.file === 'string'
+        ? (scopedAgent.prompt.file as string)
+        : undefined
+
+  const meta = usePromptMeta(language, agentKey, promptFile)
+  const fork = useForkPrompt(language, agentKey)
+
+  if (config.isLoading) return <div style={{ padding: 28 }}>…</div>
+  if (config.isError || !config.data) {
+    const detail = (config.error as Error)?.message
+    return (
+      <div role="alert" style={{ padding: 28 }}>
+        <div>{t('configError')}</div>
+        {detail && (
+          <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+            {detail}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (Object.keys(globalAgent).length === 0) {
+    return (
+      <div style={{ padding: 28 }}>
+        <Message data-testid="unknown-agent" severity="error" text={t('unknownAgent')} />
+      </div>
+    )
+  }
+
+  const variantPath = scopedAgentPath(scope, agentKey, 'prompt.variant')
+  const savedVariant = scopedAgent.prompt?.variant
+  const variant = String(
+    draft.valueOf(variantPath, savedVariant) ?? meta.data?.default_variant ?? '',
+  )
+
+  const variantNames = meta.data?.variants.map((entry) => entry.name)
+  const selected = meta.data?.variants.find((entry) => entry.name === variant)
+  const declared = selected?.vars ?? {}
+
+  // Variables set in config that the selected variant does not declare. Hiding
+  // them would leave values in the file the operator can neither see nor
+  // remove.
+  const configured = Object.keys(
+    (scopedAgent.prompt?.vars as Record<string, unknown> | undefined) ?? {},
+  )
+  const undeclared = meta.data ? configured.filter((name) => !(name in declared)) : []
+
+  // What an unset variable falls back to in this scope. Empty in global scope,
+  // and empty in a project that declares any vars of its own: the runtime
+  // replaces the whole map rather than merging it key by key, so the global
+  // values do not reach such a project at all.
+  const inheritable = inheritedVars(running, agentKey, project)
+  const varsReplaced =
+    scope.kind === 'project' &&
+    Object.keys(inheritable).length === 0 &&
+    Object.keys(
+      (effectiveAgent(running, agentKey, null).prompt?.vars as Record<string, unknown>) ?? {},
+    ).length > 0
+
+  const overriders = overridingProjects(running, agentKey)
+  const known = [
+    ...(projects.data?.projects ?? []).map((entry) => entry.name),
+    ...configuredProjects(running),
+  ]
+  const addable = [...new Set(known)].filter((name) => !overriders.includes(name))
+  const tabs = [...new Set(project !== null ? [...overriders, project] : overriders)]
+
+  /** What this control falls back to when the current scope says nothing. */
+  const inherited = (setting: string) =>
+    scope.kind === 'global'
+      ? undefined
+      : { value: valueAt(globalAgent as Record<string, unknown>, setting), label: t('globalScope') }
+
+  return (
+    <div
+      data-testid="agent-detail"
+      style={{
+        padding: '24px 32px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 18,
+      }}
+    >
+      <div>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{meta.data?.name ?? agentKey}</h2>
+        <div
+          className="text-muted"
+          style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
+        >
+          {agentKey} · {config.data.config_path}
+        </div>
+      </div>
+
+      <ScopeTabs
+        projects={tabs}
+        selected={project}
+        addable={addable}
+        onSelect={setProject}
+        globalLabel={t('globalScope')}
+        addLabel={t('addProjectOverride')}
+      />
+
+      {meta.isError && (
+        <Message
+          data-testid="meta-unavailable"
+          severity="warn"
+          text={t('promptMetaUnavailable')}
+          style={{ alignSelf: 'flex-start', fontSize: 12 }}
+        />
+      )}
+
+      <div className="blueprint" data-testid="agent-settings" style={{ padding: '4px 14px' }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        {AGENT_FIELDS(scope, agentKey, variantNames, savedVariant ? String(savedVariant) : undefined).map(
+          (spec) => {
+            // From the spec, not from the shape of its path: a fourth field
+            // added to AGENT_FIELDS would otherwise be silently read as the
+            // variant.
+            const setting = spec.setting ?? ''
+            return isAdmin ? (
+              <Field
+                key={spec.key}
+                spec={spec}
+                saved={valueAt(disk, spec.key)}
+                issue={issueFor(issues, spec.key)}
+                inheritedFrom={inherited(setting)}
+              />
+            ) : (
+              <ReadOnlyField
+                key={spec.key}
+                spec={spec}
+                value={valueAt(scopedAgent as Record<string, unknown>, setting)}
+              />
+            )
+          },
+        )}
+      </div>
+
+      <section className="blueprint" data-testid="agent-vars" style={{ padding: '10px 14px' }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{t('promptVars')}</h3>
+          <span
+            className="text-muted"
+            style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}
+          >
+            prompt.vars
+          </span>
+        </div>
+        {varsReplaced && (
+          <div data-testid="vars-replaced" className="text-muted" style={{ fontSize: 12 }}>
+            {t('varsReplaceGlobal')}
+          </div>
+        )}
+        {Object.keys(declared).length === 0 && undeclared.length === 0 ? (
+          <div className="text-muted" style={{ fontSize: 12 }}>
+            {t('noPromptVars')}
+          </div>
+        ) : (
+          <>
+            {Object.entries(declared).map(([name, definition]) => (
+              <VarField
+                key={name}
+                scope={scope}
+                agentKey={agentKey}
+                varName={name}
+                definition={definition}
+                disk={disk}
+                inheritable={inheritable}
+                issues={issues}
+                isAdmin={isAdmin}
+              />
+            ))}
+            {undeclared.map((name) => (
+              <div key={name} data-testid={`undeclared-${name}`}>
+                <ReadOnlyField
+                  spec={{
+                    key: promptVarPath(scope, agentKey, name),
+                    type: 'text',
+                    label: name,
+                    hint: t('notDeclaredByVariant'),
+                  }}
+                  value={
+                    (scopedAgent.prompt?.vars as Record<string, unknown> | undefined)?.[name]
+                  }
+                />
+              </div>
+            ))}
+          </>
+        )}
+      </section>
+
+      <section className="blueprint" data-testid="agent-readonly" style={{ padding: '10px 14px' }}>
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{t('notEditableHere')}</h3>
+        {AGENT_READONLY_FIELDS(agentKey).map((spec) => (
+          <ReadOnlyField key={spec.key} spec={spec} value={valueAt(running, spec.key)} />
+        ))}
+      </section>
+
+      {scope.kind === 'project' && isAdmin && (
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+          <div>
+            <Button
+              type="button"
+              text
+              size="small"
+              label={t('removeAllOverrides')}
+              onClick={() => draft.unsetSubtree(projectAgentPath(scope.project, agentKey))}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <Button
+              type="button"
+              text
+              size="small"
+              label={t('forkPrompt')}
+              // config.toml has one writer at a time. The fork writes it directly,
+              // so a browser holding unapplied edits would make the pending count
+              // disagree with the file the moment the fork lands.
+              disabled={draft.changeCount > 0}
+              onClick={() => setForkOpen(true)}
+            />
+            {draft.changeCount > 0 && (
+              <span className="text-muted" style={{ fontSize: 11 }}>
+                {t('forkBlockedByDraft')}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {forkOpen && scope.kind === 'project' && (
+        <ForkPromptDialog
+          t={t}
+          project={scope.project}
+          directory={forkDirectory}
+          onDirectoryChange={setForkDirectory}
+          pending={fork.isPending}
+          error={fork.error instanceof Error ? fork.error.message : null}
+          onCancel={() => {
+            setForkOpen(false)
+            setForkDirectory('')
+            fork.reset()
+          }}
+          onConfirm={() => {
+            fork.mutate(
+              { project: scope.project, directory: forkDirectory.trim() || undefined },
+              {
+                onSuccess: (response: PromptForkResponse) => {
+                  setForkOpen(false)
+                  setForkDirectory('')
+                  navigate(`/admin/prompts/${response.lang}/${response.agent}`)
+                },
+              },
+            )
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+/**
+ * One prompt variable, typed by its declaration in the prompt YAML.
+ *
+ * An unset variable inherits twice over: from the project's global override if
+ * there is one, and from the prompt's own `default_value` if there is not. The
+ * note names whichever applies, so the operator can see what the agent will
+ * actually receive.
+ */
+function VarField({
+  scope,
+  agentKey,
+  varName,
+  definition,
+  disk,
+  inheritable,
+  issues,
+  isAdmin,
+}: {
+  scope: Scope
+  agentKey: string
+  varName: string
+  definition: PromptVarDefinition
+  disk: Record<string, unknown>
+  /** The variables this scope inherits, already resolved by `inheritedVars`. */
+  inheritable: Record<string, unknown>
+  issues: ConfigIssue[]
+  isAdmin: boolean
+}) {
+  const { t } = useTranslation()
+  const spec = promptVarField(scope, agentKey, varName, definition)
+  const saved = valueAt(disk, spec.key)
+
+  const fromGlobal = inheritable[varName]
+  const inheritedValue = scope.kind === 'project' ? (fromGlobal ?? varDefault(definition)) : varDefault(definition)
+  const label =
+    scope.kind === 'project' && fromGlobal !== undefined ? t('globalScope') : t('promptDefault')
+
+  if (!isAdmin) return <ReadOnlyField spec={spec} value={saved ?? inheritedValue} />
+
+  return (
+    <Field
+      spec={spec}
+      saved={saved}
+      issue={issueFor(issues, spec.key)}
+      inheritedFrom={{ value: inheritedValue, label }}
+    />
+  )
+}
+
+/**
+ * Confirms forking the current prompt for one project (spec §5.8, §3.8).
+ *
+ * The directory field is left empty rather than prefilled: the server decides
+ * the default name (it slugifies the project, dedupes against what already
+ * exists, and may accept an override), and nothing client-side can predict
+ * that before the call is made. `error` renders the server's own text — a 400
+ * for a name that slugified to nothing is exactly what this field exists to
+ * let the operator recover from.
+ */
+function ForkPromptDialog({
+  t,
+  project,
+  directory,
+  onDirectoryChange,
+  pending,
+  error,
+  onCancel,
+  onConfirm,
+}: {
+  t: TFunction
+  project: string
+  directory: string
+  onDirectoryChange: (value: string) => void
+  pending: boolean
+  error: string | null
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <Modal label={t('forkPromptTitle')}>
+      <h3 style={{ margin: 0 }}>{t('forkPromptTitle')}</h3>
+      <p style={{ margin: 0, fontSize: 13 }}>{t('forkPromptBody')}</p>
+      <div className="text-muted" style={{ fontSize: 12 }}>
+        {project}
+      </div>
+      <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+        {t('forkDirectoryLabel')}
+        <InputText
+          type="text"
+          value={directory}
+          onChange={(event) => onDirectoryChange(event.target.value)}
+        />
+      </label>
+
+      {/* `Message` carries role="alert". */}
+      {error && <Message severity="error" text={error} style={{ justifyContent: 'flex-start' }} />}
+
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <Button type="button" outlined label={t('cancel')} onClick={onCancel} />
+        <Button
+          type="button"
+          label={pending ? t('forking') : t('confirm')}
+          onClick={onConfirm}
+          disabled={pending}
+        />
+      </div>
+    </Modal>
+  )
+}

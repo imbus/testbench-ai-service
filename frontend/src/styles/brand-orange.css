@@ -1,0 +1,54 @@
+/* TestBench orange as the console's primary colour.
+
+   Layered AFTER brand.css, which stays the verbatim artboard export: this
+   file only re-points the TestBench brand's accent scale from green to the
+   logo's orange (--tb-orange, #f28c00).
+
+   Orange is light, so one value cannot serve every role:
+   - --color-accent is the true orange, for fills (primary buttons, active
+     states, the editor cursor).
+   - --color-accent-fg is the accent for TEXT and focus rings. On the light
+     theme it is a darker orange (#9a5500, 5.1:1 on --color-bg); #f28c00
+     itself is only 2.2:1 there and fails WCAG for text and for focus rings.
+   - Text on an orange fill is dark (6.7:1), never light (2.2:1). */
+
+[data-brand=testbench] {
+  --color-accent: #f28c00;
+  --color-accent-fg: #9a5500;
+  --color-accent-100: #fef3e6;
+  --color-accent-200: #fde0bd;
+  --color-accent-300: #fbc584;
+  --color-accent-400: #f8a94a;
+  --color-accent-500: #f59a1f;
+  --color-accent-600: #d47a00;
+  --color-accent-700: #9a5500;
+  --color-accent-800: #7a4300;
+  --color-accent-900: #4d2b00;
+  --color-accent-2: #d47a00;
+  --color-accent-2-100: #fef3e6;
+  --color-accent-2-200: #fde0bd;
+  --color-accent-2-300: #fbc584;
+  --color-accent-2-400: #f8a94a;
+  --color-accent-2-500: #f59a1f;
+  --color-accent-2-600: #d47a00;
+  --color-accent-2-700: #9a5500;
+  --color-accent-2-800: #7a4300;
+  --color-accent-2-900: #4d2b00;
+}
+
+/* Dark: the scale inverts -- tints become dark, text shades become light. */
+[data-brand=testbench][data-theme=dark] {
+  --color-accent: #f28c00;
+  --color-accent-fg: #ffa733;
+  --color-accent-100: #2e2010;
+  --color-accent-200: #4a3214;
+  --color-accent-300: #6b4716;
+  --color-accent-600: #ffa733;
+  --color-accent-700: #ffb54d;
+  --color-accent-800: #ffd08a;
+  --color-accent-900: #ffe6c2;
+}
+
+[data-brand=testbench] .btn-primary,
+[data-brand=testbench] .btn-primary:hover,
+[data-brand=testbench] .btn-primary:active { color: #1d1f20; }

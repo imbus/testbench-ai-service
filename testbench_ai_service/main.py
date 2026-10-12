@@ -3,6 +3,8 @@ This module serves as the API controller for the system.
 """
 
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import FastAPI
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -12,10 +14,22 @@ from testbench_ai_service.agents.routes import get_agent_routers
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import http_exception_handler
 from testbench_ai_service.llm.factory import LLMFactory
-from testbench_ai_service.middlewares import LoggingMiddleware, OutboundRequestLoggingMiddleware
+from testbench_ai_service.log import logger
+from testbench_ai_service.middlewares import (
+    LoggingMiddleware,
+    OutboundRequestLoggingMiddleware,
+    RequestScopeMiddleware,
+)
 from testbench_ai_service.routes import router
+from testbench_ai_service.usage import UsageStore, resolve_usage_file
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.webui.inflight import TaskRegistry
+from testbench_ai_service.webui.prompt_test import SingleFlight
+from testbench_ai_service.webui.routes import router as webui_router
+from testbench_ai_service.webui.security import is_loopback
+from testbench_ai_service.webui.session import SessionStore
+from testbench_ai_service.webui.static import STATIC_DIR, mount_spa
 
 
 def init_services(app: FastAPI):
@@ -23,7 +37,24 @@ def init_services(app: FastAPI):
 
     # Initialize a singleton instance of LLMFactory and add it to the application state
     app.state.llm_factory = LLMFactory()
-    app.state.llm_factory.init_clients([app.state.config.llm_config])
+    try:
+        app.state.llm_factory.init_clients([app.state.config.llm_config])
+    except Exception as e:
+        # Pre-initialising the clients is an optimisation, not a precondition:
+        # LLMFactory.get_client creates them on demand. Letting a missing
+        # credential abort startup makes the one configuration the console
+        # exists to repair the one the operator cannot start the console to
+        # repair. reload.py:173-186 already treats the same call this way
+        # after a config apply; this makes boot agree with reload.
+        #
+        # Exception, not BaseException: a KeyboardInterrupt during startup
+        # must still stop the process rather than being logged and ignored.
+        logger.warning(
+            "Could not pre-initialise the LLM clients at startup: %r. The clients will be "
+            "created on demand; a missing provider credential will surface on the next agent "
+            "request.",
+            e,
+        )
 
 
 async def close_services(app: FastAPI):
@@ -45,6 +76,26 @@ def init_routers(app: FastAPI):
         app.include_router(agent_router)
 
 
+def init_webui(app: FastAPI):
+    """Mount the browser console, unless it is disabled in config."""
+    if not app.state.config.admin_ui.enabled:
+        logger.info("Web console is disabled (admin_ui.enabled = false)")
+        return
+
+    if not is_loopback(app.state.config.host):
+        logger.warning(
+            "Web console is enabled and the service binds %s, so the console is "
+            "reachable from other hosts. Restrict access or set "
+            "admin_ui.require_loopback = true.",
+            app.state.config.host,
+        )
+
+    app.state.webui_sessions = SessionStore()
+
+    app.include_router(webui_router)
+    mount_spa(app, STATIC_DIR)
+
+
 def init_exception_handlers(app: FastAPI):
     """Initialization of app exception handlers"""
 
@@ -55,6 +106,9 @@ def init_middlewares(app: FastAPI):
     """Initialization of app middlewares"""
 
     app.add_middleware(LoggingMiddleware)
+    # Added last so it is outermost: LoggingMiddleware's records must already be
+    # request-scoped (design 4.3).
+    app.add_middleware(RequestScopeMiddleware)
     OutboundRequestLoggingMiddleware.install(app.state.config.tb_server_url)
 
 
@@ -76,8 +130,21 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app = FastAPI(title="TestBench AI Service", version=__version__, lifespan=lifespan)
 
     app.state.config = config
+    app.state.config_path = Path(getattr(config, "loaded_from", None) or "config.toml")
+    app.state.started_at = datetime.now(timezone.utc)
+    # Created unconditionally, not inside init_webui: the agent routes track
+    # into it whether or not the console is enabled, and a missing attribute
+    # would be an AttributeError on the request path.
+    app.state.task_registry = TaskRegistry()
+    # Same reasoning as task_registry: created unconditionally so the route
+    # never hits a missing attribute if it is ever reached before init_webui.
+    app.state.prompt_test_flight = SingleFlight()
+    # Created here rather than in init_services: it outlives every reload,
+    # while the LLM factory is rebuilt by each one.
+    app.state.usage_store = UsageStore(resolve_usage_file(config.usage_file, app.state.config_path))
 
     init_routers(app)
+    init_webui(app)
     init_exception_handlers(app)
     init_middlewares(app)
     init_services(app)

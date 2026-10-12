@@ -28,6 +28,7 @@ from testbench_ai_service.models.agent import (
 from testbench_ai_service.models.config import AgentConfig
 from testbench_ai_service.models.prompt import PromptDefinition
 from testbench_ai_service.tasks import run_agent
+from testbench_ai_service.usage import UsageStore, get_usage_store
 from testbench_ai_service.utils.agent import build_execution_context, has_required_permissions
 from testbench_ai_service.utils.config import agent_enabled, get_agent_config, get_prompt_config
 from testbench_ai_service.utils.i18n import get_translation
@@ -40,6 +41,7 @@ from testbench_ai_service.utils.prompt_utils import (
     validate_template_placeholders,
 )
 from testbench_ai_service.utils.testbench import get_project_roles
+from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 
 TRIGGER_AGENT_ROUTE_KWARGS: dict = {
     "response_model": TriggerAgentResponse,
@@ -100,6 +102,8 @@ async def trigger_agent_execution(
     llm_factory: LLMFactory,
     app_config: AppConfig,
     auth_info: AuthInfo,
+    registry: TaskRegistry,
+    usage_store: UsageStore | None = None,
 ) -> TriggerAgentResponse:
     """Execute the trigger flow shared by all agent endpoints.
 
@@ -115,6 +119,8 @@ async def trigger_agent_execution(
         llm_factory:      Factory for obtaining the LLM client.
         app_config:       The application configuration.
         auth_info:        Validated authentication context for this request.
+        registry:         The console's in-flight task registry.
+        usage_store:      Where the run's token usage is counted.
 
     Returns:
         ``TriggerAgentResponse`` with ``status="accepted"`` and any precheck warnings.
@@ -194,17 +200,29 @@ async def trigger_agent_execution(
         )
 
     background_tasks.add_task(
-        run_agent,
+        _tracked_run_agent,
+        registry,
         agent_key=agent_key,
         agent=agent,
         context=context,
         conn=conn,
         llm_factory=llm_factory,
         item_ids=precheck_result.items,
+        usage_store=usage_store,
     )
     logger.debug("Scheduled background task for agent '%s'", agent_key)
 
     return TriggerAgentResponse(status="accepted", warnings=precheck_result.warnings)
+
+
+async def _tracked_run_agent(registry: TaskRegistry, agent_key: str, **kwargs) -> None:
+    """Run an agent while the console's in-flight registry counts it.
+
+    A wrapper rather than a change to run_agent(): the console is an
+    observer here, and tasks.py should not have to know it exists.
+    """
+    async with registry.track(agent_key):
+        await run_agent(agent_key=agent_key, **kwargs)
 
 
 def validate_template_and_agent_vars(context, agent):
@@ -268,6 +286,8 @@ def create_agent_router(
         llm_factory: LLMFactory = Depends(get_llm_factory),
         app_config: AppConfig = Depends(get_app_config),
         auth_info: AuthInfo = Depends(validate_auth_token),
+        registry: TaskRegistry = Depends(get_task_registry),
+        usage_store: UsageStore = Depends(get_usage_store),
     ) -> TriggerAgentResponse:
         return await trigger_agent_execution(
             agent_key=agent_key,
@@ -277,6 +297,8 @@ def create_agent_router(
             llm_factory=llm_factory,
             app_config=app_config,
             auth_info=auth_info,
+            registry=registry,
+            usage_store=usage_store,
         )
 
     return router

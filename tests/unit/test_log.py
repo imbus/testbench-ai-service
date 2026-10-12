@@ -1,17 +1,25 @@
+import json
 import logging
+import sys
 from io import StringIO
 from unittest.mock import patch
 
 import pytest
 
 from testbench_ai_service.log import (
+    ActivityRecordFilter,
     ColoredFormatter,
+    JsonLineFormatter,
+    LogContextFilter,
     RequestIdFilter,
+    build_activity_handler,
     get_log_config_dict,
     get_log_level_int,
+    log_context,
     setup_logging,
 )
 from testbench_ai_service.models.logging import (
+    ActivityLoggerConfig,
     ConsoleLoggerConfig,
     FileLoggerConfig,
     LoggingConfig,
@@ -83,6 +91,125 @@ class TestRequestIdFilter:
         assert record.request_id == "request-123"
 
 
+def _record(msg="m", level=logging.INFO, exc_info=None):
+    return logging.LogRecord("testbench_ai_service.x", level, __file__, 1, msg, None, exc_info)
+
+
+class TestLogContextFilter:
+    def test_outside_any_context_is_service(self):
+        record = _record()
+        assert LogContextFilter().filter(record) is True
+        assert record.scope == "service"
+        assert record.user_key is None
+        assert record.request_id == "-"
+
+    def test_inside_a_request_is_request(self):
+        with log_context(in_request=True):
+            record = _record()
+            LogContextFilter().filter(record)
+        assert record.scope == "request"
+
+    def test_user_wins_over_request(self):
+        with log_context(in_request=True), log_context(user_key="u-1", run_id="r-1"):
+            record = _record()
+            LogContextFilter().filter(record)
+        assert record.scope == "user"
+        assert record.user_key == "u-1"
+        assert record.run_id == "r-1"
+
+    def test_values_are_restored_on_exit_also_nested(self):
+        with log_context(user_key="outer"):
+            with log_context(user_key="inner"):
+                pass
+            record = _record()
+            LogContextFilter().filter(record)
+        assert record.user_key == "outer"
+        after = _record()
+        LogContextFilter().filter(after)
+        assert after.user_key is None
+
+    def test_unknown_key_is_rejected(self):
+        with pytest.raises(TypeError), log_context(nope="x"):
+            pass
+
+
+class TestActivityRecordFilter:
+    @pytest.mark.parametrize(
+        ("scope", "passes"),
+        [("user", True), ("service", True), ("request", False)],
+    )
+    def test_scopes(self, scope, passes):
+        record = _record()
+        record.scope = scope
+        assert ActivityRecordFilter().filter(record) is passes
+
+    def test_record_without_scope_is_dropped(self):
+        assert ActivityRecordFilter().filter(_record()) is False
+
+
+class TestJsonLineFormatter:
+    def test_one_line_with_all_fields(self):
+        with log_context(user_key="u-1", agent="reviewer", project_key="p-1", run_id="r-1"):
+            record = _record("hello %s")
+            record.args = ("world",)
+            LogContextFilter().filter(record)
+        out = JsonLineFormatter().format(record)
+        assert "\n" not in out
+        entry = json.loads(out)
+        assert entry["message"] == "hello world"
+        assert entry["level"] == "INFO"
+        assert entry["source"] == "testbench_ai_service.x"
+        assert entry["scope"] == "user"
+        assert entry["user_key"] == "u-1"
+        assert entry["agent"] == "reviewer"
+        assert entry["ts"].endswith("+00:00")
+        assert "exc" not in entry
+
+    def test_traceback_stays_in_the_same_entry(self):
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            record = _record("failed", logging.ERROR, sys.exc_info())
+        LogContextFilter().filter(record)
+        out = JsonLineFormatter().format(record)
+        assert "\n" not in out
+        assert "ValueError: boom" in json.loads(out)["exc"]
+
+    def test_credentials_are_masked_in_message_and_traceback(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-secret-value-123")
+        monkeypatch.setenv("ACME_OPENAI_API_KEY", "sk-project-secret-456")
+        try:
+            raise RuntimeError("401 bad keys sk-secret-value-123 sk-project-secret-456")
+        except RuntimeError:
+            record = _record(
+                "failed with sk-secret-value-123 and sk-project-secret-456",
+                logging.ERROR,
+                sys.exc_info(),
+            )
+        LogContextFilter().filter(record)
+        out = JsonLineFormatter().format(record)
+        assert "sk-secret-value-123" not in out
+        assert "sk-project-secret-456" not in out
+        entry = json.loads(out)
+        assert entry["message"] == "failed with *** and ***"
+        assert "401 bad keys *** ***" in entry["exc"]
+
+    def test_a_value_containing_another_is_masked_whole(self, monkeypatch):
+        monkeypatch.setenv("SHORT_TOKEN", "abcdefgh")
+        monkeypatch.setenv("LONG_SECRET", "abcdefgh-and-more")
+        record = _record("value abcdefgh-and-more")
+        LogContextFilter().filter(record)
+        assert json.loads(JsonLineFormatter().format(record))["message"] == "value ***"
+
+    def test_short_and_non_credential_values_are_not_masked(self, monkeypatch):
+        monkeypatch.setenv("X_TOKEN", "abc")
+        monkeypatch.setenv("SOME_PATH", "/opt/some/long/path")
+        record = _record("abc at /opt/some/long/path")
+        LogContextFilter().filter(record)
+        message = json.loads(JsonLineFormatter().format(record))["message"]
+        assert message == "abc at /opt/some/long/path"
+
+
 class TestGetLogLevelInt:
     """get_log_level_int converts string level names to logging integer constants."""
 
@@ -136,7 +263,7 @@ class TestGetLogConfigDict:
 
     def test_file_handler_is_configured_correctly(self):
         file_handler = self.result["handlers"]["file"]
-        assert file_handler["filters"] == ["request_id"]
+        assert file_handler["filters"] == ["log_context"]
         assert file_handler["filename"] == self.config.file.file_name
         assert file_handler["encoding"] == "utf_8"
         assert file_handler["maxBytes"] == 1 * 1024 * 1024
@@ -165,3 +292,105 @@ class TestSetupLogging:
 
         mock_get_dict.assert_called_once_with(config)
         mock_dict_config.assert_called_once_with(fake_config)
+
+
+class TestActivityHandler:
+    def _emit(self, handler, msg, level=logging.INFO):
+        record = _record(msg, level)
+        if handler.filter(record):
+            handler.emit(record)
+
+    def test_writes_user_and_service_but_never_request(self, tmp_path):
+        path = tmp_path / "act.jsonl"
+        handler = build_activity_handler(str(path), 1024 * 1024, 1)
+        try:
+            self._emit(handler, "startup")
+            with log_context(in_request=True):
+                self._emit(handler, "request body")
+                with log_context(user_key="u-1"):
+                    self._emit(handler, "agent done")
+        finally:
+            handler.close()
+        entries = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        assert [(e["message"], e["scope"]) for e in entries] == [
+            ("startup", "service"),
+            ("agent done", "user"),
+        ]
+
+
+@pytest.fixture
+def restore_logging():
+    """Undo what a real setup_logging does: it replaces handlers and disables loggers."""
+    loggers = [logging.root] + [
+        lg for lg in logging.root.manager.loggerDict.values() if isinstance(lg, logging.Logger)
+    ]
+    saved = {lg: (lg.handlers[:], lg.level, lg.propagate, lg.disabled) for lg in loggers}
+    yield
+    for lg in [logging.root] + [
+        lg for lg in logging.root.manager.loggerDict.values() if isinstance(lg, logging.Logger)
+    ]:
+        handlers, level, propagate, disabled = saved.get(lg, ([], logging.NOTSET, True, False))
+        for h in lg.handlers[:]:
+            lg.removeHandler(h)
+            if h not in handlers:
+                h.close()
+        for h in handlers:
+            lg.addHandler(h)
+        lg.setLevel(level)
+        lg.propagate = propagate
+        lg.disabled = disabled
+
+
+class TestActivityConfigDict:
+    def test_enabled_by_default_and_not_on_access_log(self):
+        result = get_log_config_dict(LoggingConfig())
+        handler = result["handlers"]["activity"]
+        assert handler["()"] == "testbench_ai_service.log.build_activity_handler"
+        assert handler["file_name"] == "testbench-ai-service.activity.jsonl"
+        assert handler["level"] == "INFO"
+        for name in ("testbench_ai_service", "uvicorn", "uvicorn.error"):
+            assert "activity" in result["loggers"][name]["handlers"]
+        assert "activity" not in result["loggers"]["uvicorn.access"]["handlers"]
+
+    def test_disabled_removes_the_handler(self):
+        result = get_log_config_dict(LoggingConfig(activity=ActivityLoggerConfig(enabled=False)))
+        assert "activity" not in result["handlers"]
+        for logger_cfg in result["loggers"].values():
+            assert "activity" not in logger_cfg["handlers"]
+
+    def test_service_logger_level_covers_the_activity_level(self):
+        config = LoggingConfig(
+            console=ConsoleLoggerConfig(log_level=LogLevel.ERROR),
+            file=FileLoggerConfig(log_level=LogLevel.ERROR),
+            activity=ActivityLoggerConfig(log_level=LogLevel.INFO),
+        )
+        result = get_log_config_dict(config)
+        assert result["loggers"]["testbench_ai_service"]["level"] == logging.INFO
+
+    def test_uvicorn_logger_levels_stay_on_the_console_level(self):
+        # Deliberate trade-off: the text file and console must not change (global constraint),
+        # so uvicorn INFO events are not lowered for the activity sink.
+        config = LoggingConfig(
+            console=ConsoleLoggerConfig(log_level=LogLevel.ERROR),
+            file=FileLoggerConfig(log_level=LogLevel.INFO),
+            activity=ActivityLoggerConfig(log_level=LogLevel.INFO),
+        )
+        loggers = get_log_config_dict(config)["loggers"]
+        assert loggers["uvicorn"]["level"] == "ERROR"
+        assert loggers["uvicorn.error"]["level"] == "ERROR"
+
+    def test_reapplying_keeps_exactly_one_activity_handler(self, tmp_path, restore_logging):
+        # Review Focus 5: hot reload calls setup_logging again.
+        config = LoggingConfig(
+            file=FileLoggerConfig(file_name=str(tmp_path / "svc.log")),
+            activity=ActivityLoggerConfig(file_name=str(tmp_path / "act.jsonl")),
+        )
+        service = logging.getLogger("testbench_ai_service")
+        setup_logging(config)
+        setup_logging(config)
+        files = [h.baseFilename for h in service.handlers if hasattr(h, "baseFilename")]
+        assert files.count(str(tmp_path / "act.jsonl")) == 1
+        setup_logging(config.model_copy(update={"activity": ActivityLoggerConfig(enabled=False)}))
+        assert not any(
+            getattr(h, "baseFilename", "").endswith("act.jsonl") for h in service.handlers
+        )

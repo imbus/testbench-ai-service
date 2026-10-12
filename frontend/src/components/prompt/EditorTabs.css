@@ -1,0 +1,13 @@
+/* VS Code-style editor tabs. A stylesheet rather than inline styles only for
+   what inline styles cannot do: the hover swap of the dirty dot for the ×. */
+.editor-tab .editor-tab-x { display: inline; }
+.editor-tab .editor-tab-dirty { display: none; }
+.editor-tab[data-dirty='true'] .editor-tab-x { display: none; }
+.editor-tab[data-dirty='true'] .editor-tab-dirty { display: inline; }
+.editor-tab[data-dirty='true']:hover .editor-tab-x { display: inline; }
+.editor-tab[data-dirty='true']:hover .editor-tab-dirty { display: none; }
+.editor-tab .editor-tab-close { visibility: hidden; }
+.editor-tab[data-active='true'] .editor-tab-close,
+.editor-tab[data-dirty='true'] .editor-tab-close,
+.editor-tab:hover .editor-tab-close { visibility: visible; }
+.editor-tabs { scrollbar-width: thin; }

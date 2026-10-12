@@ -67,9 +67,10 @@ hiddenimports = (
         "jsonschema._format",
         # yaml (PyYAML)
         "yaml",
-        # tomli / tomli-w for config parsing
+        # tomli / tomli-w / tomlkit for config parsing
         "tomli",
         "tomli_w",
+        "tomlkit",
         # jinja2 template engine
         "jinja2",
         # python-dotenv
