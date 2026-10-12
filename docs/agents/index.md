@@ -25,6 +25,7 @@ Execution-level agents, such as the Defect Explainer, do not support XML-based t
 | [`test_case_set_reviewer`](test-case-set-reviewer.md)   | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification.                  |
 | [`test_case_set_describer`](test-case-set-describer.md) | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
 | [`defect_explainer`](defect-explainer.md)               | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview.     |
+| [`requirement`](generate-test-ideas.md) (opt-in)         | AI-generated test ideas for the requirements assigned below a test theme. Results are added to the description of the test theme. Not registered by default. |
 
 ---
 
@@ -141,6 +142,7 @@ Allowed project roles and required API token permissions differ per agent. See e
 - [Test Case Set Reviewer](test-case-set-reviewer.md#authorization)
 - [Test Case Set Describer](test-case-set-describer.md#authorization)
 - [Defect Explainer](defect-explainer.md#authorization)
+- [Test Idea Generator](generate-test-ideas.md#authorization)
 
 For custom agents, implement your own permission and role checks inside `precheck()`. See [Custom Agent: 1. Implement the agent class](custom-agent.md#1-implement-the-agent-class) for details.
 

@@ -22,10 +22,13 @@ from testbench_ai_service.models.testbench import (
     ProjectExchangeFormat,
     ProjectMember,
     ProjectRole,
+    RequirementAssignment,
+    RequirementsOptions,
     SpecificationDetailsForUpdate,
     TestCaseSetDetails,
     TestCaseSetNode,
     TestStructureTree,
+    TestThemeDetails,
     TOVDetails,
     TOVExchangeFormat,
     TovStructureOptions,
@@ -49,6 +52,33 @@ def get_test_case_set_details(
 ) -> TestCaseSetDetails:
     tcs_dict = conn.get_project_test_case_set(project_key, test_case_set_key)
     return TestCaseSetDetails.model_validate(tcs_dict)
+
+
+def get_test_theme_details(
+    conn: TBConnection,
+    project_key: str,
+    test_theme_key: str,
+    specification_key: str | None = None,
+) -> TestThemeDetails:
+    """Read one test theme, including its specification.
+
+    ``/projects/{projectKey}/specifications/{specificationKey}`` accepts ``PATCH``
+    only -- it is the write endpoint. A theme's specification is *read* through the
+    element itself, keyed by the theme's ``base.key``, with the specification key
+    passed as a query parameter.
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the theme.
+        test_theme_key: The theme's element key.
+        specification_key: The theme's specification key, when a specific one is
+            wanted rather than the server's default.
+
+    Returns:
+        The parsed theme details.
+    """
+    theme_dict = conn.get_project_test_theme(project_key, test_theme_key, specification_key)
+    return TestThemeDetails.model_validate(theme_dict)
 
 
 def get_json_report_data(
@@ -223,6 +253,33 @@ def get_project_roles(conn: TBConnection, project_key: str) -> list[ProjectRole]
         None,
     )
     return membership.roles if membership else []
+
+
+def get_requirements(
+    conn: TBConnection,
+    project_key: str,
+    root_uid: str,
+    tov_key: str,
+    cycle_key: str | None = None,
+    filtering: FilteringOptions | None = None,
+) -> list[RequirementAssignment]:
+    if cycle_key:
+        url = f"{conn.server_url}2/projects/{project_key}/cycles/{cycle_key}/requirements"
+    else:
+        url = f"{conn.server_url}2/projects/{project_key}/tovs/{tov_key}/requirements"
+    body = RequirementsOptions(
+        treeRootUID=root_uid,
+        filters=filtering.appliedFilters if filtering else None,
+        filtering=filtering,
+    ).model_dump(exclude_none=True)
+    requirements = conn.session.post(url, json=body).json()
+    return TypeAdapter(list[RequirementAssignment]).validate_python(requirements)
+
+
+def get_tov_baselines(conn: TBConnection, tov_key: str) -> list[dict]:
+    """Return the keys of the requirement baselines assigned to a TOV."""
+    raw = conn.legacy_session.get(f"{conn.server_legacy_url}tovs/{tov_key}/baselines").json()
+    return [baseline["key"] for baseline in raw["baselines"]]
 
 
 def has_any_allowed_role(

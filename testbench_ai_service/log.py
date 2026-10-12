@@ -151,6 +151,15 @@ class ColoredFormatter(logging.Formatter):
         return super().format(updated_record)
 
 
+is_reloader_process = False
+
+
+def create_file_handler(**kwargs) -> logging.Handler:
+    if is_reloader_process:
+        return logging.NullHandler()
+    return logging.handlers.RotatingFileHandler(**kwargs)
+
+
 def build_activity_handler(file_name: str, max_bytes: int, backup_count: int) -> logging.Handler:
     """The activity sink, filters and formatter attached (dictConfig factory)."""
     handler = logging.handlers.RotatingFileHandler(
@@ -182,7 +191,7 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
             "stream": "ext://sys.stdout",
         },
         "file": {
-            "class": "logging.handlers.RotatingFileHandler",
+            "()": "testbench_ai_service.log.create_file_handler",
             "level": config.file.log_level.value,
             "formatter": "file",
             "filters": ["log_context"],

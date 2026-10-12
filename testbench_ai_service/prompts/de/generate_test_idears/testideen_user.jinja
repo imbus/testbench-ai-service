@@ -1,0 +1,15 @@
+{% for requirement in agent.requirements %}
+# Zielanforderung {{ loop.index }} von {{ loop.length }}
+```
+{{ requirement }}
+```
+
+{% endfor %}
+# Zieltestthema
+Das Testthema, in das diese Ideen geschrieben werden, und was bereits darunter liegt. Wiederhole nicht, was die vorhandenen Testfallsätze abdecken.
+```
+{{ agent.existing_tests }}
+```
+
+# Anweisung
+Leite jetzt die Testideen für die Zielanforderungen als Einheit ab und antworte ausschließlich mit dem JSON-Objekt.

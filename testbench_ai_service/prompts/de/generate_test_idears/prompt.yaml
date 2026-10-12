@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Testideen zu Anforderung"
+summary: "Testideen zu einer Anforderung erzeugen"
+description: >
+  Dieser Agent leitet Testideen für die Anforderungen des Testthemas ab, auf dem er ausgelöst wurde,
+  und nutzt dabei die bereits vorhandenen Tests als Kontext. Die erzeugten Ideen
+  werden in die Beschreibung des Testthemas geschrieben, dem die Anforderungen
+  zugeordnet sind.
+default_model: "gpt-5.5"
+default_variant: "Testideen"
+variants:
+  - name: "Testideen"
+    description: "Leitet Testideen aus den Anforderungen und ihrem Kontext ab, strukturiert wie eine Teststruktur in TestBench: Testfälle, bei gemeinsamem Thema unter Testthemen gruppiert, jeweils mit sprechendem Namen und einer Beschreibung, was genau geprüft werden soll."
+    model: "gpt-5.5"
+    messages:
+      - role: "system"
+        file: "testideen_system.jinja"
+      - role: "user"
+        file: "testideen_user.jinja"

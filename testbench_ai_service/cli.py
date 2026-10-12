@@ -5,7 +5,7 @@ import sys
 import uvicorn
 from dotenv import load_dotenv
 
-from testbench_ai_service import __title__, __version__
+from testbench_ai_service import __title__, __version__, log
 from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT
 from testbench_ai_service.log import get_log_config_dict, logger, setup_logging
 from testbench_ai_service.main import create_app
@@ -140,13 +140,15 @@ def start_action(args):
 
     print_cli_banner()
 
+    use_reload = config.debug and not getattr(sys, "frozen", False)
+    # The reloader only supervises; the spawned worker owns the log file.
+    log.is_reloader_process = use_reload
+
     setup_logging(config.logging)
     logger.info("Starting %s v%s", __title__, __version__)
 
-    use_reload = config.debug
-    if use_reload and getattr(sys, "frozen", False):
+    if config.debug and not use_reload:
         logger.warning("Auto-reload is not supported in the executable. Running without reload.")
-        use_reload = False
 
     # Server configuration
     server_config = {

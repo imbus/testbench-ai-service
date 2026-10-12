@@ -10,6 +10,17 @@ from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import FilteringOptions
 
 
+class AgentArgs(BaseModel):
+    """Base for the arguments an agent accepts from its ``args`` config table.
+
+    Agents subclass this and set it as ``ARGS_CLASS``. Fields without a default
+    are required in the config, fields with a default are optional, and unknown
+    keys are rejected so typos surface at startup.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class PromptConfigRequest(BaseModel):
     file: Path | None = None
     name: str | None = None

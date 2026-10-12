@@ -1,26 +1,41 @@
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import ClassVar, TypeVar
 
+from pydantic import BaseModel
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
+    AgentArgs,
     AgentData,
     AgentResult,
     ExecutionContext,
     PrecheckResult,
 )
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
+from testbench_ai_service.models.prompt import Message
 from testbench_ai_service.models.testbench import GlobalHumanRole, PermissionWithCode, ProjectRole
 from testbench_ai_service.utils.build_prompt_utils import build_prompt
 from testbench_ai_service.utils.prompt_utils import pretty_messages
+from testbench_ai_service.utils.structured_output import query_structured
+
+T = TypeVar("T", bound=BaseModel)
 
 
 class Agent(ABC):
     AGENT_DATA_CLASS: ClassVar[type[AgentData]]
     REQUIRED_PERMISSIONS: ClassVar[frozenset[PermissionWithCode]] = frozenset()
     ALLOWED_ROLES: ClassVar[frozenset[GlobalHumanRole | ProjectRole] | None] = None
+    ARGS_CLASS: ClassVar[type[AgentArgs]] = AgentArgs
+
+    def __init__(self, args: AgentArgs | None = None):
+        """
+        Args:
+            args: The validated ``args`` config table of this agent. Defaults to
+                  ``ARGS_CLASS()``, which only works if it has no required fields.
+        """
+        self.args = args if args is not None else self.ARGS_CLASS()
 
     @abstractmethod
     async def precheck(
@@ -78,6 +93,41 @@ class Agent(ABC):
         agent_data: AgentData | None = None,
     ) -> AgentResult:
         """Sends the prompt to the LLM and returns the result."""
+        model, messages = self._prepare_prompt(llm_config, prompt_config, agent_data)
+        result = await llm_client.query_llm(
+            model=model, messages=messages, **(llm_config.model_extra or {})
+        )
+
+        return AgentResult(result=result)
+
+    async def get_structured_ai_response(
+        self,
+        llm_client: LLMClient,
+        llm_config: LLMConfig,
+        prompt_config: PromptConfig,
+        schema: type[T],
+        agent_data: AgentData | None = None,
+    ) -> T:
+        """Sends the prompt to the LLM and returns its reply validated against ``schema``.
+
+        The prompt must ask for JSON matching ``schema``. An invalid reply is sent
+        back once for repair, see :func:`query_structured`.
+
+        Raises:
+            StructuredOutputError: The reply failed validation after the repair retry.
+        """
+        model, messages = self._prepare_prompt(llm_config, prompt_config, agent_data)
+        return await query_structured(
+            llm_client, model, messages, schema, **(llm_config.model_extra or {})
+        )
+
+    @staticmethod
+    def _prepare_prompt(
+        llm_config: LLMConfig,
+        prompt_config: PromptConfig,
+        agent_data: AgentData | None,
+    ) -> tuple[str, list[Message]]:
+        """Build the prompt and resolve the model to send it to."""
         prompt = build_prompt(prompt_config, agent_data=agent_data)
 
         model = llm_config.model if llm_config.model is not None else prompt.model_name
@@ -88,8 +138,4 @@ class Agent(ABC):
             "Sending the following messages to the LLM: %s",
             pretty_messages(messages),
         )
-        result = await llm_client.query_llm(
-            model=model, messages=messages, **(llm_config.model_extra or {})
-        )
-
-        return AgentResult(result=result)
+        return model, messages
