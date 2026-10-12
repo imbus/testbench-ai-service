@@ -4,6 +4,7 @@ from uuid import uuid4
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.llm.base import LLMClient, NoLLMClient
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import log_context, logger
 from testbench_ai_service.models.agent import ExecutionContext
@@ -61,15 +62,19 @@ async def _run_agent(
         context.project_name,
     )
     try:
-        prompt_model = get_prompt_model(context.prompt_config)
-        llm_client = llm_factory.get_client(
-            config=context.llm_config,
-            prompt_model=prompt_model,
-            project_name=context.project_name,
-        )
-        if usage_store is not None:
-            provider = llm_factory.resolve_provider(context.llm_config, prompt_model)
-            llm_client = UsageRecordingClient(llm_client, usage_store, str(provider))
+        llm_client: LLMClient
+        if getattr(agent, "USES_LLM", True):
+            prompt_model = get_prompt_model(context.prompt_config)
+            llm_client = llm_factory.get_client(
+                config=context.llm_config,
+                prompt_model=prompt_model,
+                project_name=context.project_name,
+            )
+            if usage_store is not None:
+                provider = llm_factory.resolve_provider(context.llm_config, prompt_model)
+                llm_client = UsageRecordingClient(llm_client, usage_store, str(provider))
+        else:
+            llm_client = NoLLMClient()
         logger.debug("Initialised llm_client for agent '%s': %s", agent_key, llm_client.__class__)
 
         await agent.run(context=context, conn=conn, llm_client=llm_client, item_ids=item_ids)

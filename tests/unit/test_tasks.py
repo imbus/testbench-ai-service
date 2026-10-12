@@ -12,7 +12,7 @@ from testbench2robotframework.json_reader import TestBenchJsonReader
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
 from testbench_ai_service.config import DEFAULT_AGENTS, AppConfig
-from testbench_ai_service.llm.base import LLMClient
+from testbench_ai_service.llm.base import LLMClient, NoLLMClient
 from testbench_ai_service.log import LogContextFilter
 from testbench_ai_service.log import logger as service_logger
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
@@ -411,3 +411,45 @@ class TestRunAgentLogContext:
             if "agent u-2" in message:
                 assert record.user_key == "u-2"
         assert {r.user_key for r in capture.records} == {"u-1", "u-2"}
+
+
+class TestRunAgentWithoutLLM:
+    async def test_agent_without_llm_gets_no_llm_client(self):
+        agent = MagicMock()
+        agent.USES_LLM = False
+        agent.run = AsyncMock()
+        llm_factory = MagicMock()
+        llm_factory.get_client.side_effect = AssertionError("must not be called")
+
+        await run_agent(
+            agent_key="test_planner",
+            agent=agent,
+            context=MagicMock(project_name="P"),
+            conn=MagicMock(),
+            llm_factory=llm_factory,
+            item_ids=["TC-1"],
+        )
+
+        agent.run.assert_awaited_once()
+        assert isinstance(agent.run.call_args.kwargs["llm_client"], NoLLMClient)
+
+    async def test_agents_without_the_flag_still_get_the_factory_client(self):
+        agent = MagicMock(spec=["run"])  # no USES_LLM attribute, like an old custom agent
+        agent.run = AsyncMock()
+        llm_factory = MagicMock()
+
+        with patch("testbench_ai_service.tasks.get_prompt_model", return_value="gpt-5.5"):
+            await run_agent(
+                agent_key="custom",
+                agent=agent,
+                context=MagicMock(project_name="P"),
+                conn=MagicMock(),
+                llm_factory=llm_factory,
+                item_ids=[],
+            )
+
+        assert agent.run.call_args.kwargs["llm_client"] is llm_factory.get_client.return_value
+
+    async def test_no_llm_client_refuses_queries(self):
+        with pytest.raises(RuntimeError, match="does not use an LLM"):
+            await NoLLMClient().query_llm("m", [])

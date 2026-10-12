@@ -36,5 +36,14 @@
     "roles.Tester": "Tester",
     "roles.ReadOnlyDesigner": "Read-Only Test Designer",
     "roles.ReadOnlyImplementer": "Read-Only Test Programmer",
-    "roles.ReadOnlyTester": "Read-Only Tester"
+    "roles.ReadOnlyTester": "Read-Only Tester",
+    "test_planner.precheck.unsupported_tov_format": "The test planner does not support XML-based test object versions. Please use a JSON-based TOV.",
+    "test_planner.precheck.unknown_variant": "Unknown variant '{variant}'.",
+    "test_planner.precheck.invalid_vars": "Invalid parameters: {details}",
+    "test_planner.precheck.too_few_test_cases": "The selected scope has only {count} test cases that are not executed yet; at least 2 are needed.",
+    "test_planner.precheck.missing_requirement_links": "{missing} of {total} test cases have no requirement links; the coverage is of limited meaning.",
+    "test_planner.precheck.missing_durations": "{missing} of {total} test cases have no planned duration; they count as 0 minutes.",
+    "test_planner.run.seeds_exceed_count": "The mandatory and already planned test cases are already more than {count}; all of them were kept.",
+    "test_planner.run.seeds_exceed_budget": "The mandatory and already planned test cases already exceed the budget of {budget} minutes; all of them were kept.",
+    "test_planner.run.no_requirements_fallback": "No test case has requirement links; the selection was cut at the knee of the curve instead."
 }

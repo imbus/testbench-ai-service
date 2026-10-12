@@ -116,3 +116,16 @@ class LLMClient(ABC):
         """
         Close the client and release any allocated resources or connections.
         """
+
+
+class NoLLMClient(LLMClient):
+    """Stand-in handed to agents that do not use an LLM (``Agent.USES_LLM = False``)."""
+
+    def __init__(self, api_key: str | None = None, *args, **kwargs):
+        pass
+
+    async def query_llm(self, model: str, messages: list[Message], *args, **kwargs) -> str:
+        raise RuntimeError("This agent does not use an LLM.")
+
+    async def close(self):
+        pass

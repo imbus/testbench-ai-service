@@ -28,6 +28,9 @@ class Agent(ABC):
     REQUIRED_PERMISSIONS: ClassVar[frozenset[PermissionWithCode]] = frozenset()
     ALLOWED_ROLES: ClassVar[frozenset[GlobalHumanRole | ProjectRole] | None] = None
     ARGS_CLASS: ClassVar[type[AgentArgs]] = AgentArgs
+    #: False for agents that never query an LLM; they get a ``NoLLMClient``, so
+    #: running them needs no LLM credentials.
+    USES_LLM: ClassVar[bool] = True
 
     def __init__(self, args: AgentArgs | None = None):
         """

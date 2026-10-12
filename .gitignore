@@ -210,3 +210,6 @@ testbench_ai_service/static/
 
 # Token usage counted by a locally running service
 usage.sqlite
+
+# Local runtime data (e.g. test planner embedding cache)
+/data/

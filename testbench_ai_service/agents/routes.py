@@ -22,6 +22,7 @@ from testbench_ai_service.exceptions import (
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
+    AgentArgs,
     TriggerAgentRequest,
     TriggerAgentResponse,
 )
@@ -82,7 +83,13 @@ def load_agent(config: AgentConfig) -> Agent:
     """
     try:
         agent_class = load_class_from_path(config.class_path)
-        agent: Agent = agent_class(agent_class.ARGS_CLASS.model_validate(config.args))
+        agent: Agent = agent_class()
+        # Set after construction instead of passed in, so custom agents with an
+        # own no-argument __init__ keep loading. Agents that declare no args and
+        # get none keep whatever ``args`` attribute they set themselves.
+        args_class = getattr(agent_class, "ARGS_CLASS", AgentArgs)
+        if config.args or args_class is not AgentArgs:
+            agent.args = args_class.model_validate(config.args)
         logger.debug(
             "Successfully loaded agent '%s' from class path '%s'",
             agent_class.__name__,

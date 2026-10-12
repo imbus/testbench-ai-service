@@ -36,5 +36,14 @@
     "roles.Tester": "Tester",
     "roles.ReadOnlyDesigner": "Testdesigner (nur Leserechte)",
     "roles.ReadOnlyImplementer": "Testprogrammierer (nur Leserechte)",
-    "roles.ReadOnlyTester": "Tester (nur Leserechte)"
+    "roles.ReadOnlyTester": "Tester (nur Leserechte)",
+    "test_planner.precheck.unsupported_tov_format": "Der Test-Planer unterstützt keine XML-basierten Testobjektversionen. Bitte verwenden Sie eine JSON-basierte TOV.",
+    "test_planner.precheck.unknown_variant": "Unbekannte Variante '{variant}'.",
+    "test_planner.precheck.invalid_vars": "Ungültige Parameter: {details}",
+    "test_planner.precheck.too_few_test_cases": "Im gewählten Bereich gibt es nur {count} Testfälle, die noch nicht durchgeführt sind; mindestens 2 sind nötig.",
+    "test_planner.precheck.missing_requirement_links": "{missing} von {total} Testfällen haben keine Requirement-Links; die Abdeckung ist nur eingeschränkt aussagekräftig.",
+    "test_planner.precheck.missing_durations": "{missing} von {total} Testfällen haben keine geplante Dauer; sie zählen mit 0 Minuten.",
+    "test_planner.run.seeds_exceed_count": "Die Pflicht- und bereits geplanten Testfälle sind schon mehr als {count}; alle wurden übernommen.",
+    "test_planner.run.seeds_exceed_budget": "Die Pflicht- und bereits geplanten Testfälle überschreiten schon das Budget von {budget} Minuten; alle wurden übernommen.",
+    "test_planner.run.no_requirements_fallback": "Kein Testfall hat Requirement-Links; es wurde automatisch am Knie der Kurve abgeschnitten."
 }
