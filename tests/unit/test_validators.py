@@ -192,3 +192,47 @@ class TestValidateTbServerUrl:
 
         with pytest.raises(ValueError, match="Unable to connect to the server"):
             validate_tb_server_url("https://testserver.example.com")
+
+
+STEPS_PROMPT = """\
+name: "x"
+default_model: "m"
+default_variant: "A"
+variants:
+  - name: "A"
+    messages: []
+    steps:
+      aspects:
+        - role: "system"
+          file: "aspects_system.jinja"
+"""
+
+BOTH_PROMPT = """\
+name: "x"
+default_model: "m"
+default_variant: "A"
+variants:
+  - name: "A"
+    messages:
+      - role: "user"
+        text: "hi"
+    steps:
+      aspects:
+        - role: "user"
+          text: "hi"
+"""
+
+
+def test_a_prompt_with_steps_matches_the_schema(tmp_path):
+    path = tmp_path / "prompt.yaml"
+    path.write_text(STEPS_PROMPT, encoding="utf-8")
+
+    assert validate_yaml_to_schema(path) == path
+
+
+def test_messages_and_steps_together_do_not_match_the_schema(tmp_path):
+    path = tmp_path / "prompt.yaml"
+    path.write_text(BOTH_PROMPT, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Schema validation error"):
+        validate_yaml_to_schema(path)

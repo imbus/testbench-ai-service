@@ -61,13 +61,41 @@ class MessageTemplate(BaseModel):
 
 
 class PromptVariant(BaseModel):
-    """A variant of a prompt with specific model, variable declarations, and messages."""
+    """A variant of a prompt with specific model, variable declarations, and messages.
+
+    A variant either sends one prompt (``messages``) or drives an agent that asks
+    the model several times (``steps``: one message list per named step). Using
+    both at once is rejected, so it is always clear what an agent renders.
+    """
 
     name: str
     description: str | None = None
     model: str | None = None
     vars: dict[str, PromptVariableDefinition] = {}
     messages: list[MessageTemplate]
+    steps: dict[str, list[MessageTemplate]] = {}
+
+    @model_validator(mode="after")
+    def validate_messages_or_steps(self) -> "PromptVariant":
+        if self.messages and self.steps:
+            raise ValueError("A variant uses either 'messages' or 'steps', not both.")
+        empty = sorted(name for name, templates in self.steps.items() if not templates)
+        if empty:
+            raise ValueError(f"Steps without messages: {', '.join(empty)}")
+        return self
+
+    def templates_for(self, step: str | None) -> list[MessageTemplate]:
+        """The message templates of *step*, or the plain ``messages`` without one.
+
+        Raises:
+            ValueError: The variant has no such step.
+        """
+        if step is None:
+            return self.messages
+        try:
+            return self.steps[step]
+        except KeyError:
+            raise ValueError(f"Step '{step}' not found in variant '{self.name}'.") from None
 
 
 class PromptDefinition(BaseModel):

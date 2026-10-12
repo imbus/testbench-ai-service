@@ -56,42 +56,61 @@
           },
           "messages": {
             "type": "array",
-            "items": {
-              "type": "object",
-              "oneOf": [
-                {
-                  "required": ["text"],
-                  "properties": {
-                    "role": {
-                      "type": "string",
-                      "enum": ["system", "user", "assistant"],
-                      "default": "user"
-                    },
-                    "text": { "type": "string" }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "required": ["file"],
-                  "properties": {
-                    "role": {
-                      "type": "string",
-                      "enum": ["system", "user", "assistant"],
-                      "default": "user"
-                    },
-                    "file": {
-                      "type": "string",
-                      "description": "Path to an external template file (.jinja, .j2, or .md). Relative paths are resolved from the directory of this YAML file. Absolute paths are used as-is."
-                    }
-                  },
-                  "additionalProperties": false
-                }
-              ]
+            "items": { "$ref": "#/definitions/message" }
+          },
+          "steps": {
+            "type": "object",
+            "description": "Named message lists for agents that ask the model several times. A variant uses either 'messages' or 'steps'.",
+            "additionalProperties": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/definitions/message" }
             }
+          }
+        },
+        "not": {
+          "required": ["steps"],
+          "properties": {
+            "messages": { "minItems": 1 },
+            "steps": { "minProperties": 1 }
           }
         },
         "additionalProperties": false
       }
+    }
+  },
+  "definitions": {
+    "message": {
+      "type": "object",
+      "oneOf": [
+        {
+          "required": ["text"],
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": ["system", "user", "assistant"],
+              "default": "user"
+            },
+            "text": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        {
+          "required": ["file"],
+          "properties": {
+            "role": {
+              "type": "string",
+              "enum": ["system", "user", "assistant"],
+              "default": "user"
+            },
+            "file": {
+              "type": "string",
+              "description": "Path to an external template file (.jinja, .j2, or .md). Relative paths are resolved from the directory of this YAML file. Absolute paths are used as-is."
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
     }
   },
   "additionalProperties": false

@@ -81,13 +81,20 @@ def _build_ast_path(node: nodes.Node) -> str | None:
     return None
 
 
-def template_variables(prompt_file: Path) -> set[str]:
+def template_variables(prompt_file: Path, step: str | None = None) -> set[str]:
+    """The ``agent.*`` paths the templates of *prompt_file* reference.
+
+    Without *step* the variants' ``messages`` are read; with one, that step's
+    templates of every variant that has it.
+    """
     prompt_definition = get_prompt_definition(prompt_file)
     base_path = Path(prompt_file).parent
     extracted_paths: set[str] = set()
     env = Environment()
     for variant in prompt_definition.variants:
-        for msg_template in variant.messages:
+        if step is not None and step not in variant.steps:
+            continue
+        for msg_template in variant.templates_for(step):
             try:
                 content = msg_template.get_content(base_path)
                 ast = env.parse(content)
