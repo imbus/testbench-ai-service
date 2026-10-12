@@ -25,7 +25,6 @@ from testbench_ai_service.agents.generate_test_idears.model import (
     apply_guardrails,
 )
 from testbench_ai_service.agents.generate_test_idears.utils import (
-    fetch_requirement_details,
     get_test_theme,
     get_theme_spec,
     load_requirements,
@@ -46,6 +45,7 @@ from testbench_ai_service.models.testbench import (
     TestThemeSpecification,
 )
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
+from testbench_ai_service.utils.rm_service import fetch_requirement_details
 from testbench_ai_service.utils.testbench import (
     post_project_tov_structure,
 )

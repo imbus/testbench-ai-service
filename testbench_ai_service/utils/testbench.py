@@ -258,7 +258,7 @@ def get_project_roles(conn: TBConnection, project_key: str) -> list[ProjectRole]
 def get_requirements(
     conn: TBConnection,
     project_key: str,
-    root_uid: str,
+    root_uid: str | None,
     tov_key: str,
     cycle_key: str | None = None,
     filtering: FilteringOptions | None = None,

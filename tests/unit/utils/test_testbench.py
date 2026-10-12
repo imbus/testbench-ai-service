@@ -22,6 +22,7 @@ from testbench_ai_service.models.testbench import (
 from testbench_ai_service.utils import testbench as testbench_utils
 from testbench_ai_service.utils.testbench import (
     get_project_name,
+    get_requirements,
     get_test_case_set_nodes,
     get_user_key,
 )
@@ -177,3 +178,15 @@ class TestGetTestCaseSetNodes:
         result = get_test_case_set_nodes(MagicMock(), context)
 
         assert [node.base.uniqueID for node in result] == ["CarConfig-TC-7"]
+
+
+def test_get_requirements_without_a_root_loads_the_whole_tov():
+    conn = MagicMock()
+    conn.server_url = "https://tb/api/"
+    conn.session.post.return_value.json.return_value = []
+
+    get_requirements(conn, "7", None, "42")
+
+    (url,) = conn.session.post.call_args.args
+    assert url == "https://tb/api/2/projects/7/tovs/42/requirements"
+    assert "treeRootUID" not in conn.session.post.call_args.kwargs["json"]

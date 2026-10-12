@@ -1,3 +1,4 @@
+import re
 from html import escape
 from html.parser import HTMLParser
 
@@ -120,3 +121,17 @@ def escape_html(text: str) -> str:
     Escapes special HTML characters and converts newlines to <br/> tags.
     """
     return escape(text).replace("\n", "<br/>")
+
+
+#: A ``<head>`` element with its content; its title and styles are not visible text.
+HTML_HEADER = re.compile(r"<head\b[^>]*>.*?</head\s*>", re.DOTALL | re.IGNORECASE)
+
+
+def visible_text(html: str) -> str:
+    """Return the visible text of an HTML document or fragment, whitespace collapsed.
+
+    A ``<head>`` is left out, so styles and titles do not read as content.
+    """
+    without_head = HTML_HEADER.sub("", html)
+    text = extract_text_from_html_body(add_html_body_tags(without_head))
+    return " ".join(text.split())

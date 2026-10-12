@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 from testbench_ai_service.agents.generate_test_idears.model import Requirement, ThemeContext
 from testbench_ai_service.models.agent import AgentData
-from testbench_ai_service.utils.html_utils import add_html_body_tags, extract_text_from_html_body
+from testbench_ai_service.utils.html_utils import visible_text
 
 
 class RequirementAgentData(AgentData):
@@ -57,8 +57,7 @@ def html_text(html: str) -> str:
 
     A ``<head>`` is left out, so shortening the text keeps the description proper.
     """
-    text = extract_text_from_html_body(add_html_body_tags(strip_html_header(html)))
-    return " ".join(text.split())
+    return visible_text(html)
 
 
 def strip_generated_ideas(html: str) -> str:

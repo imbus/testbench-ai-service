@@ -7,16 +7,14 @@ from unittest.mock import MagicMock
 import pytest
 import requests
 
-from testbench_ai_service.agents.generate_test_idears import utils as utils_module
 from testbench_ai_service.agents.generate_test_idears.model import (
     ExtendedRequirement,
     RequirementAgentArgs,
 )
-from testbench_ai_service.agents.generate_test_idears.utils import (
-    fetch_requirement_details,
-    load_requirements,
-)
+from testbench_ai_service.agents.generate_test_idears.utils import load_requirements
 from testbench_ai_service.models.testbench import FilteringOptions, RequirementAssignment
+from testbench_ai_service.utils import rm_service as rm_module
+from testbench_ai_service.utils.rm_service import fetch_requirement_details
 
 SERVER = "https://tb/"
 PROJECT = "7"
@@ -239,6 +237,6 @@ def rm(monkeypatch):
     session = MagicMock()
     session.__enter__.return_value = session
     session.post.side_effect = _post
-    monkeypatch.setattr(utils_module, "get_tov_baselines", lambda _conn, _tov: BASELINES)
-    monkeypatch.setattr(utils_module, "_rm_session", lambda _args: session)
+    monkeypatch.setattr(rm_module, "get_tov_baselines", lambda _conn, _tov: BASELINES)
+    monkeypatch.setattr(rm_module, "_rm_session", lambda _args: session)
     return state
