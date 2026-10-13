@@ -32,6 +32,7 @@ Opt-in (not part of the default agents, enable it in the `config.toml`):
 | Agent key                             | Description                                                                                                         |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | [`test_planner`](test-planner.md)     | Plans the most diverse test selection of a cycle via embeddings: sets the selected test cases to Planned and logs the result. |
+| [`coverage_checker`](coverage-checker.md) | Checks whether the tests linked to a requirement prove all its aspects. Results are added to the review comment of every linked test case set. |
 
 ---
 

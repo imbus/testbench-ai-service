@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Abdeckungsprüfung"
+summary: "Prüft, ob die mit einer Anforderung verlinkten Tests alle ihre Aspekte nachweisen"
+description: >
+  Dieser Agent zerlegt die Anforderung, auf der er ausgelöst wurde, in prüfbare Aspekte,
+  liest die mit ihr verlinkten Testfälle und bildet eine Abdeckungsmatrix. Das Ergebnis wird
+  dem Review-Kommentar jedes verlinkten TestCaseSets hinzugefügt und ins Service-Log
+  geschrieben. Verknüpfungen und Testelemente werden nie geändert.
+default_model: "gpt-5.5"
+default_variant: "Abdeckungsprüfung"
+variants:
+  - name: "Abdeckungsprüfung"
+    description: "Prüft die verlinkten Tests gegen jeden Aspekt der Anforderung und begründet die Lücken."
+    vars:
+      write_review_comments:
+        name: "Review-Kommentare schreiben"
+        description: "Aus: Das Ergebnis geht nur ins Service-Log."
+        value_type: "boolean"
+        default_value: true
+        required: false
+      coverage_view:
+        name: "Abdeckungssicht"
+        description: "release: Nur TestCaseSets im Review oder freigegeben zählen. work: Auch unfertige Sets zählen."
+        value_type: "enum"
+        choices: ["release", "work"]
+        default_value: "release"
+        required: false
+    messages: []
+    steps:
+      aspects:
+        - role: "system"
+          file: "aspekte_system.jinja"
+        - role: "user"
+          file: "aspekte_user.jinja"
+      interpretation:
+        - role: "system"
+          file: "interpretation_system.jinja"
+        - role: "user"
+          file: "interpretation_user.jinja"
+      gaps:
+        - role: "system"
+          file: "luecken_system.jinja"
+        - role: "user"
+          file: "luecken_user.jinja"

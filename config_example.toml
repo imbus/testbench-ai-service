@@ -83,6 +83,27 @@ file = "defect_explainer/prompt.yaml"
 # cache_dir = "data/embedding_cache"
 # batch_size = 256
 
+# Coverage checker (opt-in): checks whether the tests linked to a requirement prove all its
+# aspects and adds the result to the review comment of every linked test case set.
+# TestBench must offer the plugin on requirements (register it as a requirement plugin).
+# [testbench-ai-service.agents.coverage_checker]
+# enabled = true
+# endpoint_path = "/coverage"
+# class_path = "testbench_ai_service.agents.coverage_checker.agent.CoverageChecker"
+
+# [testbench-ai-service.agents.coverage_checker.prompt]
+# file = "coverage_checker/prompt.yaml"
+
+# [testbench-ai-service.agents.coverage_checker.args]
+# rm_service_url = "${RM_SERVICE_URL}"   # unset: aspects from the requirement title only
+# rm_username = "${RM_USERNAME}"
+# rm_password = "${RM_PASSWORD}"
+# max_aspects = 12
+# counting_spec_status = ["InReview", "Released"]
+# write_review_comments = true
+# max_parallel_sets = 4
+# max_test_cases_per_call = 20
+
 
 # Project-specific configurations (override global configurations)
 
