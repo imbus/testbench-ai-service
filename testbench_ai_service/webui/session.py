@@ -42,6 +42,11 @@ class Session:
     created_at: datetime
     last_seen: datetime
 
+    # The TestBench user key, the identity the activity view filters on
+    # (design D2). None when the login could not read it -- the user then
+    # sees no own entries rather than anyone else's.
+    user_key: str | None = None
+
     # The TestBench project list, fetched once inside the login connection and
     # cached here for the life of the session (design D3): the token that would
     # be needed to re-fetch it may be the operator's plaintext password, so it
@@ -69,7 +74,12 @@ class SessionStore:
         self._now = now
 
     def create(
-        self, username: str, roles: list[str], is_admin: bool, tb_session_token: str
+        self,
+        username: str,
+        roles: list[str],
+        is_admin: bool,
+        tb_session_token: str,
+        user_key: str | None = None,
     ) -> Session:
         moment = self._now()
         session = Session(
@@ -81,6 +91,7 @@ class SessionStore:
             tb_session_token=tb_session_token,
             created_at=moment,
             last_seen=moment,
+            user_key=user_key,
         )
         self._sessions[session.sid] = session
         return session

@@ -76,6 +76,8 @@ def tb_connection():
     # empty answer rather than the default MagicMock, so tests that do not care
     # about projects get a realistic payload instead of an unparseable one.
     conn.get_all_projects.return_value = {"projects": []}
+    # get_user_key reads GET 2/users/self through conn.session.
+    conn.session.get.return_value.json.return_value = {"key": "u-1"}
     return conn
 
 

@@ -137,3 +137,9 @@ def test_the_project_cache_is_per_session(store: SessionStore):
     second = _create(store)
     first.projects.append(ProjectRef(name="Alpha", key="1"))
     assert second.projects == []
+
+
+def test_create_defaults_user_key_to_none():
+    store = SessionStore()
+    session = store.create(username="a", roles=[], is_admin=False, tb_session_token="t")
+    assert session.user_key is None

@@ -214,3 +214,25 @@ def test_require_loopback_refuses_remote_client(make_app, tb_connection):
     ):
         response = c.post("/admin/api/session", json={"username": "a", "password": "pw"})
     assert response.status_code == 403
+
+
+def test_login_stores_the_testbench_user_key(client, login):
+    login()
+    store = client.app.state.webui_sessions
+    (session,) = store._sessions.values()
+    assert session.user_key == "u-1"
+
+
+def test_login_survives_an_unreadable_user_key(client, login, tb_connection):
+    # Review Focus 3: TestBench 3 has no 2/users/self.
+    tb_connection.session.get.side_effect = ValueError("no such endpoint")
+    assert login().status_code == 200
+    (session,) = client.app.state.webui_sessions._sessions.values()
+    assert session.user_key is None
+
+
+def test_login_ignores_a_non_string_user_key(client, login, tb_connection):
+    tb_connection.session.get.return_value.json.return_value = {"key": 42}
+    assert login().status_code == 200
+    (session,) = client.app.state.webui_sessions._sessions.values()
+    assert session.user_key is None

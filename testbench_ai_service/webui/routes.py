@@ -210,6 +210,7 @@ def sign_in(
         roles=login.roles,
         is_admin=is_admin_role(login.roles),
         tb_session_token=login.token,
+        user_key=login.user_key,
     )
     record_projects(session, login.projects)
     set_session_cookies(response, session, config)

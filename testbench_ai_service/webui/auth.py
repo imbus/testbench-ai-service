@@ -17,6 +17,7 @@ from testbench_ai_service.transport import (
     DEFAULT_READ_TIMEOUT,
     harden_connection,
 )
+from testbench_ai_service.utils.testbench import get_user_key
 from testbench_ai_service.webui.projects import ProjectFetch, fetch_projects
 from testbench_ai_service.webui.session import (
     CSRF_COOKIE,
@@ -54,6 +55,17 @@ class LoginResult:
     token: str
     roles: list[str]
     projects: ProjectFetch
+    user_key: str | None = None
+
+
+def _read_user_key(conn: TBConnection) -> str | None:
+    """The TestBench user key, or None -- never a reason to fail the login (design 4.4)."""
+    try:
+        key = get_user_key(conn)
+    except Exception as e:  # any failure here only costs the activity view
+        logger.warning("Could not read the TestBench user key for the console session: %r", e)
+        return None
+    return key if isinstance(key, str) and key else None
 
 
 def authenticate(config: AppConfig, username: str, password: str) -> LoginResult:
@@ -105,7 +117,12 @@ def authenticate(config: AppConfig, username: str, password: str) -> LoginResult
         # list is the one thing the console needs that requires an outbound
         # call, and this is the only place it can be had without spending the
         # stored token a second time.
-        return LoginResult(token=token, roles=list(roles), projects=fetch_projects(conn))
+        return LoginResult(
+            token=token,
+            roles=list(roles),
+            projects=fetch_projects(conn),
+            user_key=_read_user_key(conn),
+        )
     except requests.exceptions.HTTPError as e:
         response_status = e.response.status_code if e.response is not None else None
         if response_status in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
