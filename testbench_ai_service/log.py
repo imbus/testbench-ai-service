@@ -1,6 +1,7 @@
 import json
 import logging
 import logging.config
+import logging.handlers
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -123,12 +124,60 @@ class ColoredFormatter(logging.Formatter):
         return super().format(updated_record)
 
 
+def build_activity_handler(file_name: str, max_bytes: int, backup_count: int) -> logging.Handler:
+    """The activity sink, filters and formatter attached (dictConfig factory)."""
+    handler = logging.handlers.RotatingFileHandler(
+        file_name, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+    )
+    # Order matters: the scope is set by LogContextFilter and read by ActivityRecordFilter.
+    handler.addFilter(LogContextFilter())
+    handler.addFilter(ActivityRecordFilter())
+    handler.setFormatter(JsonLineFormatter())
+    return handler
+
+
 def setup_logging(config: LoggingConfig):
     dict_config = get_log_config_dict(config)
     logging.config.dictConfig(dict_config)
 
 
 def get_log_config_dict(config: LoggingConfig) -> dict:
+    activity = config.activity
+    sinks = ["console", "file"]
+    with_activity = [*sinks, "activity"] if activity.enabled else sinks
+
+    handlers: dict = {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": config.console.log_level.value,
+            "formatter": "console",
+            "filters": ["log_context"],
+            "stream": "ext://sys.stdout",
+        },
+        "file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": config.file.log_level.value,
+            "formatter": "file",
+            "filters": ["log_context"],
+            "filename": config.file.file_name,
+            "mode": "a",
+            "maxBytes": 1 * 1024 * 1024,
+            "backupCount": 2,
+            "encoding": "utf_8",
+            "delay": False,
+        },
+    }
+    service_levels = [config.console.log_level.value, config.file.log_level.value]
+    if activity.enabled:
+        handlers["activity"] = {
+            "()": "testbench_ai_service.log.build_activity_handler",
+            "level": activity.log_level.value,
+            "file_name": activity.file_name,
+            "max_bytes": activity.max_bytes,
+            "backup_count": activity.backup_count,
+        }
+        service_levels.append(activity.log_level.value)
+
     return {
         "version": 1,
         "disable_existing_loggers": True,
@@ -144,58 +193,35 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
             },
             "file": {"format": config.file.log_format},
         },
-        "handlers": {
-            "console": {
-                "class": "logging.StreamHandler",
-                "level": config.console.log_level.value,
-                "formatter": "console",
-                "filters": ["log_context"],
-                "stream": "ext://sys.stdout",
-            },
-            "file": {
-                "class": "logging.handlers.RotatingFileHandler",
-                "level": config.file.log_level.value,
-                "formatter": "file",
-                "filters": ["log_context"],
-                "filename": config.file.file_name,
-                "mode": "a",
-                "maxBytes": 1 * 1024 * 1024,
-                "backupCount": 2,
-                "encoding": "utf_8",
-                "delay": False,
-            },
-        },
+        "handlers": handlers,
         "loggers": {
             "testbench_ai_service": {
-                "handlers": ["console", "file"],
-                "level": min(
-                    get_log_level_int(config.console.log_level.value),
-                    get_log_level_int(config.file.log_level.value),
-                ),
+                "handlers": with_activity,
+                "level": min(get_log_level_int(level) for level in service_levels),
                 "propagate": False,
             },
             "uvicorn": {
-                "handlers": ["console", "file"],
+                "handlers": with_activity,
                 "level": config.console.log_level.value,
                 "propagate": False,
             },
             "uvicorn.access": {
-                "handlers": ["console", "file"],
+                "handlers": sinks,
                 "level": config.console.log_level.value,
                 "propagate": False,
             },
             "uvicorn.error": {
-                "handlers": ["console", "file"],
+                "handlers": with_activity,
                 "level": config.console.log_level.value,
                 "propagate": False,
             },
             "uvicorn.asgi": {
-                "handlers": ["console", "file"],
+                "handlers": sinks,
                 "level": config.console.log_level.value,
                 "propagate": False,
             },
             "py.warnings": {
-                "handlers": ["console", "file"],
+                "handlers": sinks,
                 "level": LogLevel.WARNING.value,
             },
         },

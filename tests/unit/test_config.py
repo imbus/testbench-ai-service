@@ -23,6 +23,7 @@ from testbench_ai_service.models.config import (
     PromptConfig,
 )
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.logging import LoggingConfig
 
 
 def _make_app_config(**kwargs):
@@ -534,3 +535,12 @@ class TestBuiltinsWithNoPromptFile:
             )
 
         assert "test_case_set_reviewer" in caplog.text
+
+
+def test_logging_activity_defaults_when_section_is_missing():
+    cfg = LoggingConfig.model_validate({"file": {"file_name": "x.log"}})
+    assert cfg.activity.enabled is True
+    assert cfg.activity.file_name == "testbench-ai-service.activity.jsonl"
+    assert cfg.activity.log_level.value == "INFO"
+    assert cfg.activity.max_bytes == 5 * 1024 * 1024
+    assert cfg.activity.backup_count == 3

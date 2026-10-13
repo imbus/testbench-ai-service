@@ -12,12 +12,14 @@ from testbench_ai_service.log import (
     JsonLineFormatter,
     LogContextFilter,
     RequestIdFilter,
+    build_activity_handler,
     get_log_config_dict,
     get_log_level_int,
     log_context,
     setup_logging,
 )
 from testbench_ai_service.models.logging import (
+    ActivityLoggerConfig,
     ConsoleLoggerConfig,
     FileLoggerConfig,
     LoggingConfig,
@@ -256,3 +258,93 @@ class TestSetupLogging:
 
         mock_get_dict.assert_called_once_with(config)
         mock_dict_config.assert_called_once_with(fake_config)
+
+
+class TestActivityHandler:
+    def _emit(self, handler, msg, level=logging.INFO):
+        record = _record(msg, level)
+        if handler.filter(record):
+            handler.emit(record)
+
+    def test_writes_user_and_service_but_never_request(self, tmp_path):
+        path = tmp_path / "act.jsonl"
+        handler = build_activity_handler(str(path), 1024 * 1024, 1)
+        try:
+            self._emit(handler, "startup")
+            with log_context(in_request=True):
+                self._emit(handler, "request body")
+                with log_context(user_key="u-1"):
+                    self._emit(handler, "agent done")
+        finally:
+            handler.close()
+        entries = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        assert [(e["message"], e["scope"]) for e in entries] == [
+            ("startup", "service"),
+            ("agent done", "user"),
+        ]
+
+
+@pytest.fixture
+def restore_logging():
+    """Undo what a real setup_logging does: it replaces handlers and disables loggers."""
+    loggers = [logging.root] + [
+        lg for lg in logging.root.manager.loggerDict.values() if isinstance(lg, logging.Logger)
+    ]
+    saved = {lg: (lg.handlers[:], lg.level, lg.propagate, lg.disabled) for lg in loggers}
+    yield
+    for lg in [logging.root] + [
+        lg for lg in logging.root.manager.loggerDict.values() if isinstance(lg, logging.Logger)
+    ]:
+        handlers, level, propagate, disabled = saved.get(lg, ([], logging.NOTSET, True, False))
+        for h in lg.handlers[:]:
+            lg.removeHandler(h)
+            if h not in handlers:
+                h.close()
+        for h in handlers:
+            lg.addHandler(h)
+        lg.setLevel(level)
+        lg.propagate = propagate
+        lg.disabled = disabled
+
+
+class TestActivityConfigDict:
+    def test_enabled_by_default_and_not_on_access_log(self):
+        result = get_log_config_dict(LoggingConfig())
+        handler = result["handlers"]["activity"]
+        assert handler["()"] == "testbench_ai_service.log.build_activity_handler"
+        assert handler["file_name"] == "testbench-ai-service.activity.jsonl"
+        assert handler["level"] == "INFO"
+        for name in ("testbench_ai_service", "uvicorn", "uvicorn.error"):
+            assert "activity" in result["loggers"][name]["handlers"]
+        assert "activity" not in result["loggers"]["uvicorn.access"]["handlers"]
+
+    def test_disabled_removes_the_handler(self):
+        result = get_log_config_dict(LoggingConfig(activity=ActivityLoggerConfig(enabled=False)))
+        assert "activity" not in result["handlers"]
+        for logger_cfg in result["loggers"].values():
+            assert "activity" not in logger_cfg["handlers"]
+
+    def test_service_logger_level_covers_the_activity_level(self):
+        config = LoggingConfig(
+            console=ConsoleLoggerConfig(log_level=LogLevel.ERROR),
+            file=FileLoggerConfig(log_level=LogLevel.ERROR),
+            activity=ActivityLoggerConfig(log_level=LogLevel.INFO),
+        )
+        result = get_log_config_dict(config)
+        assert result["loggers"]["testbench_ai_service"]["level"] == logging.INFO
+
+    def test_reapplying_keeps_exactly_one_activity_handler(self, tmp_path, restore_logging):
+        # Review Focus 5: hot reload calls setup_logging again.
+        config = LoggingConfig(
+            file=FileLoggerConfig(file_name=str(tmp_path / "svc.log")),
+            activity=ActivityLoggerConfig(file_name=str(tmp_path / "act.jsonl")),
+        )
+        service = logging.getLogger("testbench_ai_service")
+        setup_logging(config)
+        setup_logging(config)
+        files = [h.baseFilename for h in service.handlers if hasattr(h, "baseFilename")]
+        assert files.count(str(tmp_path / "act.jsonl")) == 1
+        setup_logging(config.model_copy(update={"activity": ActivityLoggerConfig(enabled=False)}))
+        assert not any(
+            getattr(h, "baseFilename", "").endswith("act.jsonl") for h in service.handlers
+        )
