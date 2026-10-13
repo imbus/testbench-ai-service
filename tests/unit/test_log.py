@@ -333,26 +333,17 @@ class TestActivityConfigDict:
         result = get_log_config_dict(config)
         assert result["loggers"]["testbench_ai_service"]["level"] == logging.INFO
 
-    def test_uvicorn_service_events_reach_the_activity_sink(self):
+    def test_uvicorn_logger_levels_stay_on_the_console_level(self):
+        # Deliberate trade-off: the text file and console must not change (global constraint),
+        # so uvicorn INFO events are not lowered for the activity sink.
         config = LoggingConfig(
             console=ConsoleLoggerConfig(log_level=LogLevel.ERROR),
-            file=FileLoggerConfig(log_level=LogLevel.ERROR),
+            file=FileLoggerConfig(log_level=LogLevel.INFO),
             activity=ActivityLoggerConfig(log_level=LogLevel.INFO),
         )
         loggers = get_log_config_dict(config)["loggers"]
-        assert loggers["uvicorn"]["level"] == logging.INFO
-        assert loggers["uvicorn.error"]["level"] == logging.INFO
-        assert loggers["uvicorn.access"]["level"] == "ERROR"
-
-    def test_uvicorn_levels_without_activity_are_console_and_file_minimum(self):
-        config = LoggingConfig(
-            console=ConsoleLoggerConfig(log_level=LogLevel.ERROR),
-            file=FileLoggerConfig(log_level=LogLevel.ERROR),
-            activity=ActivityLoggerConfig(enabled=False),
-        )
-        loggers = get_log_config_dict(config)["loggers"]
-        assert loggers["uvicorn"]["level"] == logging.ERROR
-        assert loggers["uvicorn.error"]["level"] == logging.ERROR
+        assert loggers["uvicorn"]["level"] == "ERROR"
+        assert loggers["uvicorn.error"]["level"] == "ERROR"
 
     def test_reapplying_keeps_exactly_one_activity_handler(self, tmp_path, restore_logging):
         # Review Focus 5: hot reload calls setup_logging again.
