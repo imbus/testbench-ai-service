@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { Status } from './Status'
+import { formatActivityTime, Status } from './Status'
 import type { ActivityEntry, StatusResponse } from '../api/types'
 
 const STATUS: StatusResponse = {
@@ -206,4 +206,30 @@ test('shows a translated error when the status request fails', async () => {
   )
   // The raw backend detail may still appear as secondary diagnostic text.
   expect(screen.getByRole('alert')).toHaveTextContent('boom')
+})
+
+describe('formatActivityTime', () => {
+  const now = new Date('2026-10-13T15:00:00Z')
+
+  test('shows only the local time for an entry from today', () => {
+    expect(formatActivityTime('2026-10-13T10:12:03.000+00:00', now, 'de-DE', 'Europe/Berlin')).toBe(
+      '12:12:03',
+    )
+  })
+
+  test('decides "today" in the local time zone, not in UTC', () => {
+    // 22:30 UTC on the 12th is 00:30 on the 13th in Berlin.
+    expect(formatActivityTime('2026-10-12T22:30:00.000+00:00', now, 'de-DE', 'Europe/Berlin')).toBe(
+      '00:30:00',
+    )
+  })
+
+  test('adds a short local date for an older entry', () => {
+    expect(formatActivityTime('2026-10-12T10:12:03.000+00:00', now, 'de-DE', 'Europe/Berlin')).toBe(
+      '12.10.26, 12:12:03',
+    )
+    expect(formatActivityTime('2026-10-12T10:12:03.000+00:00', now, 'en-GB', 'UTC')).toBe(
+      '12/10/26, 10:12:03',
+    )
+  })
 })

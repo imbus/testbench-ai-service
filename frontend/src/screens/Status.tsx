@@ -19,6 +19,32 @@ export function formatUptime(seconds: number): string {
   return `${minutes}m`
 }
 
+const LOCALES: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
+// Wide enough for "12/10/26, 10:12:03"; the traceback is indented by time and level.
+const TIME_COLUMN = 140
+const LEVEL_COLUMN = 70
+const COLUMN_GAP = 12
+
+/**
+ * Local `HH:MM:SS` for an entry from today, a short local date plus time for an
+ * older one: the activity log persists across days. `locale` and `timeZone`
+ * default to the browser's; tests pass them for determinism.
+ */
+export function formatActivityTime(
+  iso: string,
+  now: Date = new Date(),
+  locale?: string,
+  timeZone?: string,
+): string {
+  const date = new Date(iso)
+  const time = { hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone } as const
+  const day = { day: '2-digit', month: '2-digit', year: '2-digit', timeZone } as const
+  if (date.toLocaleDateString(locale, day) === now.toLocaleDateString(locale, day)) {
+    return date.toLocaleTimeString(locale, time)
+  }
+  return date.toLocaleString(locale, { ...day, ...time })
+}
+
 function Card({ kicker, children }: { kicker: string; children: React.ReactNode }) {
   return (
     <div className="card blueprint" style={{ padding: 16 }}>
@@ -112,12 +138,14 @@ function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
                 data-testid="activity-line"
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '70px 70px 1fr',
-                  gap: 12,
+                  gridTemplateColumns: `${TIME_COLUMN}px ${LEVEL_COLUMN}px 1fr`,
+                  gap: COLUMN_GAP,
                   whiteSpace: 'pre',
                 }}
               >
-                <span className="text-muted">{entry.timestamp.slice(11, 19)}</span>
+                <span className="text-muted">
+                  {formatActivityTime(entry.timestamp, undefined, LOCALES[lang])}
+                </span>
                 <span
                   style={{
                     color: LEVEL_COLORS[entry.level] ?? 'var(--color-accent-700)',
@@ -136,7 +164,7 @@ function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
                 </span>
               </div>
               {entry.exc && (
-                <details style={{ marginLeft: 152 }}>
+                <details style={{ marginLeft: TIME_COLUMN + COLUMN_GAP + LEVEL_COLUMN }}>
                   <summary className="text-muted">Traceback</summary>
                   <pre style={{ margin: 0 }}>{entry.exc}</pre>
                 </details>
