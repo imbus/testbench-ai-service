@@ -226,6 +226,19 @@ class TestFailures:
         assert response.status_code == 502
         assert "model not found" in response.text
 
+    def test_a_provider_error_is_logged_for_the_user(
+        self, client, login, app, fake_client, capture
+    ):
+        fake_client.query_llm = AsyncMock(side_effect=RuntimeError("provider down"))
+        login(roles=["Administrator"])
+        client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
+        failed = [r for r in capture.records if r.getMessage().startswith("Prompt test run failed")]
+        assert failed
+        assert failed[0].scope == "user"
+        assert failed[0].agent == "prompt-test"
+        assert failed[0].user_key == "u-1"
+        assert len(failed[0].run_id) == 32
+
     def test_a_provider_error_never_echoes_the_credential(
         self, client, login, app, fake_client, monkeypatch
     ):

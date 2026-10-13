@@ -10,7 +10,7 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import TRANSPORT_ERRORS, handle_requests_transport_error
-from testbench_ai_service.log import logger
+from testbench_ai_service.log import log_user_key, log_username, logger
 from testbench_ai_service.models.testbench import GlobalHumanRole
 from testbench_ai_service.transport import (
     DEFAULT_CONNECT_TIMEOUT,
@@ -190,6 +190,19 @@ def current_session(
     session = store.get(sid)
     if session is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not signed in")
+    return session
+
+
+async def bind_log_user(session: Session = Depends(current_session)) -> Session:
+    """Tag every record of this request with the signed-in user (design 4.3).
+
+    Async on purpose: async dependencies run in the request's own task, so the
+    values reach the endpoint -- and, through run_in_threadpool's context copy,
+    sync endpoints too. A sync dependency would set them in a threadpool copy
+    and lose them. No reset: the request task ends with the response.
+    """
+    log_user_key.set(session.user_key)
+    log_username.set(session.username)
     return session
 
 

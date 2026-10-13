@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
@@ -8,7 +9,7 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.llm.factory import LLMFactory
-from testbench_ai_service.log import logger
+from testbench_ai_service.log import log_context, logger
 from testbench_ai_service.models.config import LLMConfig
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
@@ -16,6 +17,7 @@ from testbench_ai_service.webui.agent_context import agent_context_sample
 from testbench_ai_service.webui.atomic import write_atomic
 from testbench_ai_service.webui.auth import (
     authenticate,
+    bind_log_user,
     clear_session_cookies,
     current_session,
     get_session_store,
@@ -253,6 +255,7 @@ def refresh_projects(
     config: AppConfig = Depends(get_app_config),
     session: Session = Depends(require_admin),
     _: None = Depends(require_csrf),
+    _log: Session = Depends(bind_log_user),
 ) -> ProjectsResponse:
     """Re-read the project list from TestBench and replace the cache.
 
@@ -427,6 +430,7 @@ async def apply_config(
     registry: TaskRegistry = Depends(get_task_registry),
     _: Session = Depends(require_admin),
     __: None = Depends(require_csrf),
+    _log: Session = Depends(bind_log_user),
 ) -> ApplyResponse:
     """Validate the operator's edits, write them atomically, then reload.
 
@@ -656,6 +660,7 @@ async def run_prompt_test(
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
     registry: TaskRegistry = Depends(get_task_registry),
+    _log: Session = Depends(bind_log_user),
 ) -> PromptTestResponse:
     """Run the editor's draft against a real model.
 
@@ -709,7 +714,10 @@ async def run_prompt_test(
         scope = "project"
 
     flight: SingleFlight = request.app.state.prompt_test_flight
-    with flight.hold(session.sid):
+    with (
+        log_context(project_key=body.project, agent="prompt-test", run_id=uuid4().hex),
+        flight.hold(session.sid),
+    ):
         async with registry.track("prompt-test"):
             try:
                 outcome = await run_query(client, body.model, to_messages(rendered))
@@ -792,6 +800,7 @@ def save_prompt(
     _session: Session = Depends(require_admin),
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
+    _log: Session = Depends(bind_log_user),
 ) -> PromptSaveResponse:
     """Validate and write the prompt document and its templates."""
     prompts_dir = _require_prompts_dir(config)
@@ -821,6 +830,7 @@ async def fork_prompt(
     session: Session = Depends(require_admin),
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
+    _log: Session = Depends(bind_log_user),
 ) -> PromptForkResponse:
     """Copy a prompt for one project and point that project at the copy.
 

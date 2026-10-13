@@ -1,3 +1,4 @@
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -5,6 +6,8 @@ from fastapi.testclient import TestClient
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.factory import LLMFactory
+from testbench_ai_service.log import LogContextFilter
+from testbench_ai_service.log import logger as service_logger
 from testbench_ai_service.main import create_app
 
 TB_URL = "https://localhost:9443/api/"
@@ -94,3 +97,24 @@ def login(client, tb_connection):
             )
 
     return _login
+
+
+class _Capture(logging.Handler):
+    def __init__(self):
+        super().__init__(logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+        self.addFilter(LogContextFilter())
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+@pytest.fixture
+def capture():
+    handler = _Capture()
+    previous = service_logger.level
+    service_logger.setLevel(logging.DEBUG)
+    service_logger.addHandler(handler)
+    yield handler
+    service_logger.removeHandler(handler)
+    service_logger.setLevel(previous)
