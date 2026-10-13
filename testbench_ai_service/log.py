@@ -178,6 +178,9 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
         }
         service_levels.append(activity.log_level.value)
 
+    def lowest_level() -> int:
+        return min(get_log_level_int(level) for level in service_levels)
+
     return {
         "version": 1,
         "disable_existing_loggers": True,
@@ -197,12 +200,12 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
         "loggers": {
             "testbench_ai_service": {
                 "handlers": with_activity,
-                "level": min(get_log_level_int(level) for level in service_levels),
+                "level": lowest_level(),
                 "propagate": False,
             },
             "uvicorn": {
                 "handlers": with_activity,
-                "level": config.console.log_level.value,
+                "level": lowest_level(),
                 "propagate": False,
             },
             "uvicorn.access": {
@@ -212,7 +215,7 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
             },
             "uvicorn.error": {
                 "handlers": with_activity,
-                "level": config.console.log_level.value,
+                "level": lowest_level(),
                 "propagate": False,
             },
             "uvicorn.asgi": {
