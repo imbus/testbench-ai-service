@@ -10,7 +10,28 @@ from fastapi import Request, Response
 from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from testbench_ai_service.log import logger
+from testbench_ai_service.log import log_in_request, logger
+
+
+class RequestScopeMiddleware:
+    """Mark every record logged while serving an HTTP request (design D4).
+
+    Records that carry no user are then ``request``-scoped and never reach the
+    activity view, whoever is looking.
+
+    Deliberately set without a reset: uvicorn logs an unhandled exception after
+    the app returns, in the same per-request task, and that traceback belongs
+    to the request, not to the service. Each request runs in its own task with
+    its own context copy, so the value cannot leak into another request.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            log_in_request.set(True)
+        await self.app(scope, receive, send)
 
 
 class OutboundRequestLoggingMiddleware:

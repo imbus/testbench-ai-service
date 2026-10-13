@@ -15,7 +15,11 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import http_exception_handler
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
-from testbench_ai_service.middlewares import LoggingMiddleware, OutboundRequestLoggingMiddleware
+from testbench_ai_service.middlewares import (
+    LoggingMiddleware,
+    OutboundRequestLoggingMiddleware,
+    RequestScopeMiddleware,
+)
 from testbench_ai_service.routes import router
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import load_translations
@@ -101,6 +105,9 @@ def init_middlewares(app: FastAPI):
     """Initialization of app middlewares"""
 
     app.add_middleware(LoggingMiddleware)
+    # Added last so it is outermost: LoggingMiddleware's records must already be
+    # request-scoped (design 4.3).
+    app.add_middleware(RequestScopeMiddleware)
     OutboundRequestLoggingMiddleware.install(app.state.config.tb_server_url)
 
 

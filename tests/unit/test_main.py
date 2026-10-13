@@ -12,6 +12,7 @@ from testbench_ai_service.main import (
     init_services,
     lifespan,
 )
+from testbench_ai_service.middlewares import LoggingMiddleware, RequestScopeMiddleware
 
 
 def _make_app_config():
@@ -26,6 +27,11 @@ def _make_app_config():
 
 
 class TestCreateApp:
+    def test_request_scope_middleware_is_outermost(self):
+        app, _ = self._create_app_with_mock_config()
+        classes = [m.cls for m in app.user_middleware]
+        assert classes.index(RequestScopeMiddleware) < classes.index(LoggingMiddleware)
+
     def _create_app_with_mock_config(self):
         config = _make_app_config()
         with (

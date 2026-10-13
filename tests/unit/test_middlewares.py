@@ -1,12 +1,17 @@
 import json
+import logging
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
+from testbench_ai_service.log import LogContextFilter, log_in_request
+from testbench_ai_service.log import logger as service_logger
 from testbench_ai_service.middlewares import (
     LoggingMiddleware,
     OutboundRequestLoggingMiddleware,
+    RequestScopeMiddleware,
     redact_body,
 )
 
@@ -108,3 +113,64 @@ class TestLoggingMiddlewareRedaction:
         TestClient(app).post("/admin/api/session", json={"username": "a", "password": "geheim"})
         logged = " ".join(str(c) for c in mock_logger.debug.call_args_list)
         assert "geheim" not in logged
+
+
+class _Capture(logging.Handler):
+    def __init__(self):
+        super().__init__(logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+        self.addFilter(LogContextFilter())
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+@pytest.fixture
+def capture():
+    handler = _Capture()
+    previous = service_logger.level
+    service_logger.setLevel(logging.DEBUG)
+    service_logger.addHandler(handler)
+    yield handler
+    service_logger.removeHandler(handler)
+    service_logger.setLevel(previous)
+
+
+class TestRequestScopeMiddleware:
+    def test_records_inside_a_request_are_request_scoped(self, capture):
+        app = FastAPI()
+        app.add_middleware(LoggingMiddleware)
+        app.add_middleware(RequestScopeMiddleware)  # added last = outermost
+
+        @app.post("/x")
+        async def x():
+            service_logger.info("inside")
+            return {"ok": True}
+
+        TestClient(app).post("/x", json={"a": 1})
+        assert capture.records
+        assert {r.scope for r in capture.records} == {"request"}
+
+    def test_records_outside_a_request_stay_service(self, capture):
+        service_logger.info("startup")
+        assert capture.records[-1].scope == "service"
+
+    async def test_marker_survives_the_app_returning(self):
+        # Review Focus 1: uvicorn logs an unhandled exception after the app
+        # returns, in the same task. That record must still be request-scoped.
+        async def failing_app(scope, receive, send):
+            raise RuntimeError("boom")
+
+        middleware = RequestScopeMiddleware(failing_app)
+        with pytest.raises(RuntimeError):
+            await middleware({"type": "http"}, None, None)
+        try:
+            assert log_in_request.get() is True
+        finally:
+            log_in_request.set(False)
+
+    async def test_lifespan_is_not_marked(self):
+        async def app(scope, receive, send):
+            assert log_in_request.get() is False
+
+        await RequestScopeMiddleware(app)({"type": "lifespan"}, None, None)
