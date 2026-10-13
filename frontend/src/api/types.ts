@@ -37,17 +37,22 @@ export interface StatusResponse {
   testbench: TestBenchStatus
   api_keys: ApiKeyStatus[]
   agents: AgentSummary
-  log_file: string
   in_flight_tasks: number
   restart_required: string[]
 }
 
-export interface LogLine {
-  raw: string
-  timestamp: string | null
-  level: string | null
-  source: string | null
+export type ActivityScope = 'mine' | 'service' | 'all'
+
+export interface ActivityEntry {
+  timestamp: string
+  level: string
+  source: string
   message: string
+  scope: 'user' | 'service'
+  agent: string | null
+  project_key: string | null
+  run_id: string | null
+  exc: string | null
 }
 
 export interface ConfigResponse {

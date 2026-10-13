@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Status } from './Status'
-import type { LogLine, StatusResponse } from '../api/types'
+import type { ActivityEntry, StatusResponse } from '../api/types'
 
 const STATUS: StatusResponse = {
   service: {
@@ -18,25 +18,43 @@ const STATUS: StatusResponse = {
     { name: 'ANTHROPIC_API_KEY', present: false },
   ],
   agents: { total: 3, enabled: 2, project_overrides: 4, projects: 2 },
-  log_file: 'testbench-ai-service.log',
   in_flight_tasks: 0,
   restart_required: [],
 }
 
-const LOGS: LogLine[] = [
+const ACTIVITY: ActivityEntry[] = [
   {
-    raw: 'x',
-    timestamp: '2026-09-08 10:12:03',
+    timestamp: '2026-10-13T10:12:03.000+00:00',
     level: 'ERROR',
-    source: 'testbench.client',
-    message: 'GET /projects failed',
+    source: 'testbench_ai_service',
+    message: 'Agent failed',
+    scope: 'user',
+    agent: 'test_case_set_reviewer',
+    project_key: 'p-1',
+    run_id: 'r1',
+    exc: 'Traceback (most recent call last):\nValueError: boom',
   },
   {
-    raw: 'y',
-    timestamp: '2026-09-08 10:11:51',
+    timestamp: '2026-10-13T10:11:51.000+00:00',
     level: 'INFO',
-    source: 'auth',
-    message: 'token validated',
+    source: 'testbench_ai_service',
+    message: 'Agent started',
+    scope: 'user',
+    agent: 'test_case_set_reviewer',
+    project_key: 'p-1',
+    run_id: 'r1',
+    exc: null,
+  },
+  {
+    timestamp: '2026-10-13T09:00:00.000+00:00',
+    level: 'INFO',
+    source: 'uvicorn.error',
+    message: 'Application startup complete.',
+    scope: 'service',
+    agent: null,
+    project_key: null,
+    run_id: null,
+    exc: null,
   },
 ]
 
@@ -49,18 +67,18 @@ function renderStatus({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   )
 }
 
+const fetchMock = vi.fn((url: string) =>
+  Promise.resolve(
+    new Response(JSON.stringify(url.includes('/activity') ? ACTIVITY : STATUS), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  ),
+)
+
 beforeEach(() => {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn((url: string) =>
-      Promise.resolve(
-        new Response(JSON.stringify(url.includes('/logs') ? LOGS : STATUS), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      ),
-    ),
-  )
+  fetchMock.mockClear()
+  vi.stubGlobal('fetch', fetchMock)
 })
 
 afterEach(() => vi.restoreAllMocks())
@@ -100,11 +118,44 @@ test('summarises agents and overrides', async () => {
   expect(screen.getByText(/4 Überschreibungen/)).toBeInTheDocument()
 })
 
-test('renders recent log lines newest first', async () => {
+test('renders activity newest first, grouped by run', async () => {
   renderStatus()
-  await waitFor(() => expect(screen.getByText('GET /projects failed')).toBeInTheDocument())
-  const rows = screen.getAllByTestId('log-line')
+  await waitFor(() => expect(screen.getByText('Agent failed')).toBeInTheDocument())
+  const rows = screen.getAllByTestId('activity-line')
   expect(rows[0]).toHaveTextContent('ERROR')
+  expect(screen.getAllByTestId('run-header')).toHaveLength(1)
+  expect(screen.getByText('test_case_set_reviewer · p-1')).toBeInTheDocument()
+})
+
+test('keeps a traceback with its entry', async () => {
+  renderStatus()
+  await waitFor(() => expect(screen.getByText('Agent failed')).toBeInTheDocument())
+  expect(screen.getByText(/ValueError: boom/)).toBeInTheDocument()
+})
+
+test('badges service entries', async () => {
+  renderStatus()
+  await waitFor(() =>
+    expect(screen.getByText('Application startup complete.')).toBeInTheDocument(),
+  )
+  expect(screen.getByTestId('service-badge')).toBeInTheDocument()
+})
+
+test('admins can switch scope', async () => {
+  renderStatus({ isAdmin: true })
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Service' })).toBeInTheDocument())
+  fireEvent.click(screen.getByRole('button', { name: 'Service' }))
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('scope=service'))).toBe(true),
+  )
+})
+
+test('non-admins get no scope switch and no log file path', async () => {
+  renderStatus({ isAdmin: false })
+  await waitFor(() => expect(screen.getByText('Meine Aktivität')).toBeInTheDocument())
+  expect(screen.queryByRole('button', { name: 'Service' })).not.toBeInTheDocument()
+  expect(fetchMock.mock.calls.every(([u]) => !String(u).includes('scope=service'))).toBe(true)
+  expect(screen.queryByText(/\.log$/)).not.toBeInTheDocument()
 })
 
 test('reports an unreachable TestBench and still renders the rest of the screen', async () => {
@@ -114,7 +165,7 @@ test('reports an unreachable TestBench and still renders the rest of the screen'
       Promise.resolve(
         new Response(
           JSON.stringify(
-            url.includes('/logs')
+            url.includes('/activity')
               ? []
               : { ...STATUS, testbench: { ...STATUS.testbench, reachable: false } },
           ),
@@ -155,11 +206,4 @@ test('shows a translated error when the status request fails', async () => {
   )
   // The raw backend detail may still appear as secondary diagnostic text.
   expect(screen.getByRole('alert')).toHaveTextContent('boom')
-})
-
-test('hides the service log and its file path from non-admins', async () => {
-  renderStatus({ isAdmin: false })
-  await waitFor(() => expect(screen.getByText(/127\.0\.0\.1:8010/)).toBeInTheDocument())
-  expect(screen.queryByTestId('log-line')).not.toBeInTheDocument()
-  expect(screen.queryByText('testbench-ai-service.log')).not.toBeInTheDocument()
 })

@@ -1,4 +1,6 @@
-import { useLogs, useStatus } from '../api/queries'
+import { useState } from 'react'
+import { useActivity, useStatus } from '../api/queries'
+import type { ActivityScope } from '../api/types'
 import { useTranslations, type Lang } from '../i18n'
 
 const LEVEL_COLORS: Record<string, string> = {
@@ -45,10 +47,111 @@ function Dot({ ok }: { ok: boolean }) {
   )
 }
 
+const SCOPES: ActivityScope[] = ['mine', 'service', 'all']
+
+function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
+  const t = useTranslations(lang)
+  const [scope, setScope] = useState<ActivityScope>(isAdmin ? 'all' : 'mine')
+  const activity = useActivity({ scope })
+  const entries = activity.data ?? []
+  const scopeLabel: Record<ActivityScope, string> = {
+    mine: t.scopeMine,
+    service: t.scopeService,
+    all: t.scopeAll,
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <h4 style={{ margin: 0 }}>{isAdmin ? t.activity : t.myActivity}</h4>
+        {isAdmin &&
+          SCOPES.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={s === scope ? 'btn btn-secondary' : 'btn btn-ghost'}
+              aria-pressed={s === scope}
+              onClick={() => setScope(s)}
+            >
+              {scopeLabel[s]}
+            </button>
+          ))}
+      </div>
+      <div
+        className="blueprint"
+        style={{
+          background: 'var(--color-surface)',
+          padding: '10px 14px',
+          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontSize: 12,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 3,
+          overflowX: 'auto',
+        }}
+      >
+        <i className="corner tl" />
+        <i className="corner tr" />
+        <i className="corner bl" />
+        <i className="corner br" />
+        {entries.length === 0 && <span className="text-muted">{t.activityEmpty}</span>}
+        {entries.map((entry, i) => {
+          const startsRun = entry.run_id !== null && entry.run_id !== entries[i - 1]?.run_id
+          return (
+            <div key={`${entry.timestamp}-${i}`}>
+              {startsRun && (
+                <div
+                  data-testid="run-header"
+                  className="text-muted"
+                  style={{ marginTop: i ? 8 : 0, fontWeight: 500 }}
+                >
+                  {[entry.agent, entry.project_key].filter(Boolean).join(' · ')}
+                </div>
+              )}
+              <div
+                data-testid="activity-line"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '70px 70px 1fr',
+                  gap: 12,
+                  whiteSpace: 'pre',
+                }}
+              >
+                <span className="text-muted">{entry.timestamp.slice(11, 19)}</span>
+                <span
+                  style={{
+                    color: LEVEL_COLORS[entry.level] ?? 'var(--color-accent-700)',
+                    fontWeight: 500,
+                  }}
+                >
+                  {entry.level}
+                </span>
+                <span>
+                  {entry.scope === 'service' && (
+                    <span data-testid="service-badge" className="text-muted">
+                      [{t.serviceBadge}]{' '}
+                    </span>
+                  )}
+                  {entry.message}
+                </span>
+              </div>
+              {entry.exc && (
+                <details style={{ marginLeft: 152 }}>
+                  <summary className="text-muted">Traceback</summary>
+                  <pre style={{ margin: 0 }}>{entry.exc}</pre>
+                </details>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
   const t = useTranslations(lang)
   const status = useStatus()
-  const logs = useLogs({ enabled: isAdmin })
 
   if (status.isLoading) return <div style={{ padding: 28 }}>…</div>
   if (status.isError || !status.data) {
@@ -69,7 +172,7 @@ export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
     )
   }
 
-  const { service, testbench, api_keys, agents, log_file } = status.data
+  const { service, testbench, api_keys, agents } = status.data
 
   return (
     <div
@@ -151,64 +254,7 @@ export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
         </Card>
       </div>
 
-      {isAdmin && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <h4 style={{ margin: 0 }}>{t.recentLog}</h4>
-            <span
-              className="text-muted"
-              style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
-            >
-              {log_file}
-            </span>
-          </div>
-          <div
-            className="blueprint"
-            style={{
-              background: 'var(--color-surface)',
-              padding: '10px 14px',
-              fontFamily: 'ui-monospace, Menlo, monospace',
-              fontSize: 12,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 3,
-              overflowX: 'auto',
-            }}
-          >
-            <i className="corner tl" />
-            <i className="corner tr" />
-            <i className="corner bl" />
-            <i className="corner br" />
-            {(logs.data ?? []).map((line) => (
-              <div
-                key={line.raw}
-                data-testid="log-line"
-                // The artboard's four fixed tracks: time, level, source, message.
-                // A grid keeps the messages on one left edge, which a flex row
-                // with per-cell minimums only manages until one source is long.
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '70px 70px 240px 1fr',
-                  gap: 12,
-                  whiteSpace: 'pre',
-                }}
-              >
-                <span className="text-muted">{line.timestamp?.slice(11) ?? ''}</span>
-                <span
-                  style={{
-                    color: LEVEL_COLORS[line.level ?? ''] ?? 'var(--color-accent-700)',
-                    fontWeight: 500,
-                  }}
-                >
-                  {line.level ?? ''}
-                </span>
-                <span className="text-muted">{line.source ?? ''}</span>
-                <span>{line.message}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      <ActivityPanel lang={lang} isAdmin={isAdmin} />
     </div>
   )
 }

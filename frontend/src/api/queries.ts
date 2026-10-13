@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from './client'
 import type {
+  ActivityEntry,
+  ActivityScope,
   ConfigResponse,
-  LogLine,
   ModelCatalogue,
   ProjectsResponse,
   PromptDocument,
@@ -20,12 +21,14 @@ export function useStatus({ enabled = true }: { enabled?: boolean } = {}) {
   })
 }
 
-export function useLogs({ limit = 25, enabled = true }: { limit?: number; enabled?: boolean } = {}) {
+export function useActivity({
+  limit = 50,
+  scope = 'all',
+}: { limit?: number; scope?: ActivityScope } = {}) {
   return useQuery({
-    queryKey: ['logs', limit],
-    queryFn: () => apiFetch<LogLine[]>(`/logs?limit=${limit}`),
+    queryKey: ['activity', limit, scope],
+    queryFn: () => apiFetch<ActivityEntry[]>(`/activity?limit=${limit}&scope=${scope}`),
     refetchInterval: 15_000,
-    enabled,
   })
 }
 

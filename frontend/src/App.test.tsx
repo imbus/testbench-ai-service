@@ -153,7 +153,6 @@ const STATUS_OK = {
   testbench: { url: 'https://tb:9443/api/', reachable: true, detail: null },
   api_keys: [],
   agents: { total: 0, enabled: 0, project_overrides: 0, projects: 0 },
-  log_file: 'x',
   in_flight_tasks: 0,
   restart_required: [],
 }

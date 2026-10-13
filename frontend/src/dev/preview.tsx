@@ -35,7 +35,6 @@ const FIXTURES: Record<string, unknown> = {
       { name: 'ANTHROPIC_API_KEY', present: false },
     ],
     agents: { total: 4, enabled: 3, project_overrides: 2, projects: 2 },
-    log_file: 'logs/testbench-ai-service.log',
     in_flight_tasks: 0,
     restart_required: [],
   },
@@ -241,25 +240,46 @@ const FIXTURES: Record<string, unknown> = {
   },
 }
 
-const LOGS = [
-  ['09:14:02', 'INFO', 'uvicorn.error', 'Application startup complete.'],
-  ['09:14:02', 'INFO', 'tbai.config', 'Loaded config.toml'],
-  ['09:31:44', 'WARNING', 'tbai.agents', 'reviewer: prompt variant "strict" not found'],
-  ['10:02:11', 'ERROR', 'tbai.llm', 'Azure deployment gpt-4o-mini returned 429'],
-  ['10:02:12', 'INFO', 'tbai.llm', 'Retrying in 2s'],
-  ['11:20:03', 'INFO', 'tbai.testbench', 'Project list refreshed (2 projects)'],
-].map(([timestamp, level, source, message]) => ({
-  timestamp: `2026-09-10T${timestamp}`,
-  level,
-  source,
-  message,
-  raw: `${timestamp} ${level} ${source} ${message}`,
-}))
+const ACTIVITY = [
+  {
+    timestamp: '2026-09-10T10:02:12.000+00:00',
+    level: 'ERROR',
+    source: 'testbench_ai_service',
+    message: 'Agent failed: Azure deployment gpt-4o-mini returned 429',
+    scope: 'user',
+    agent: 'test_case_set_reviewer',
+    project_key: 'p-1',
+    run_id: 'r1',
+    exc: 'Traceback (most recent call last):\n  File "llm.py", line 42, in call\nRuntimeError: 429 Too Many Requests',
+  },
+  {
+    timestamp: '2026-09-10T10:02:01.000+00:00',
+    level: 'INFO',
+    source: 'testbench_ai_service',
+    message: 'Agent started',
+    scope: 'user',
+    agent: 'test_case_set_reviewer',
+    project_key: 'p-1',
+    run_id: 'r1',
+    exc: null,
+  },
+  {
+    timestamp: '2026-09-10T09:14:02.000+00:00',
+    level: 'INFO',
+    source: 'uvicorn.error',
+    message: 'Application startup complete.',
+    scope: 'service',
+    agent: null,
+    project_key: null,
+    run_id: null,
+    exc: null,
+  },
+]
 
 window.fetch = (async (input: RequestInfo | URL) => {
   const url = String(typeof input === 'string' ? input : (input as Request).url ?? input)
   const path = url.split('?')[0]
-  const body = path.startsWith('/admin/api/logs') ? LOGS : FIXTURES[path]
+  const body = path.startsWith('/admin/api/activity') ? ACTIVITY : FIXTURES[path]
   if (body === undefined || (path === '/admin/api/session' && !signedIn)) {
     return new Response('{"detail":"no"}', { status: 401 })
   }
