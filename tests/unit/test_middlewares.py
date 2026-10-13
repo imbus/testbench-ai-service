@@ -174,3 +174,15 @@ class TestRequestScopeMiddleware:
             assert log_in_request.get() is False
 
         await RequestScopeMiddleware(app)({"type": "lifespan"}, None, None)
+
+    async def test_websocket_is_marked(self):
+        seen = []
+
+        async def app(scope, receive, send):
+            seen.append(log_in_request.get())
+
+        try:
+            await RequestScopeMiddleware(app)({"type": "websocket"}, None, None)
+        finally:
+            log_in_request.set(False)
+        assert seen == [True]

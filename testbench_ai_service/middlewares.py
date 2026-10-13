@@ -14,10 +14,11 @@ from testbench_ai_service.log import log_in_request, logger
 
 
 class RequestScopeMiddleware:
-    """Mark every record logged while serving an HTTP request (design D4).
+    """Mark every record logged while serving an HTTP or websocket request (design D4).
 
     Records that carry no user are then ``request``-scoped and never reach the
-    activity view, whoever is looking.
+    activity view, whoever is looking. Websocket connections are requests too;
+    leaving them unmarked would let their records through as ``service``.
 
     Deliberately set without a reset: uvicorn logs an unhandled exception after
     the app returns, in the same per-request task, and that traceback belongs
@@ -29,7 +30,7 @@ class RequestScopeMiddleware:
         self.app = app
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
+        if scope["type"] in ("http", "websocket"):
             log_in_request.set(True)
         await self.app(scope, receive, send)
 
