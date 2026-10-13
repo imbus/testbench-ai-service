@@ -25,6 +25,10 @@ T = TypeVar("T", bound=BaseModel)
 
 class Agent(ABC):
     AGENT_DATA_CLASS: ClassVar[type[AgentData]]
+    #: Step name to the ``AgentData`` TypedDict the step is rendered with, for agents
+    #: whose prompt variant uses ``steps``. Checked against the templates like
+    #: ``AGENT_DATA_CLASS`` is against ``messages``.
+    STEP_DATA_CLASSES: ClassVar[dict[str, type[AgentData]]] = {}
     REQUIRED_PERMISSIONS: ClassVar[frozenset[PermissionWithCode]] = frozenset()
     ALLOWED_ROLES: ClassVar[frozenset[GlobalHumanRole | ProjectRole] | None] = None
     ARGS_CLASS: ClassVar[type[AgentArgs]] = AgentArgs

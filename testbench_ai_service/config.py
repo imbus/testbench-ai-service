@@ -22,6 +22,7 @@ from testbench_ai_service.transport import (
     DEFAULT_READ_TIMEOUT,
 )
 from testbench_ai_service.utils.prompt_utils import (
+    step_agent_variable_errors,
     template_variables,
     validate_agent_variable,
 )
@@ -371,9 +372,8 @@ class AppConfig(BaseModel):
             except (ImportError, AttributeError) as e:
                 raise ValueError(f"cannot import '{class_name}' from '{module_path}': {e}") from e
 
-            user_variables = template_variables(
-                prompt_file=Path(self.prompts_dir, self.language.value, agent.prompt.file),
-            )
+            prompt_path = Path(self.prompts_dir, self.language.value, agent.prompt.file)
+            user_variables = template_variables(prompt_file=prompt_path)
             agent_data = {}
             for _, obj in inspect.getmembers(module):
                 if inspect.isclass(obj) and hasattr(obj, "AGENT_DATA_CLASS"):
@@ -386,6 +386,14 @@ class AppConfig(BaseModel):
                 )
                 raise ValueError(
                     "Failed to validate template: variables are incompatible with the agent."
+                )
+            agent_class = getattr(module, class_name)
+            step_errors = step_agent_variable_errors(
+                prompt_path, getattr(agent_class, "STEP_DATA_CLASSES", {})
+            )
+            if step_errors:
+                raise ValueError(
+                    f"Failed to validate the steps of '{prompt_path}': {' | '.join(step_errors)}"
                 )
         return self
 

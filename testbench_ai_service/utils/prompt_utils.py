@@ -1,4 +1,6 @@
+from collections.abc import Mapping
 from pathlib import Path
+from typing import get_type_hints
 
 import yaml
 from jinja2 import (
@@ -162,3 +164,35 @@ def validate_agent_variable(
     if agent_variables:
         allowed_variables.update(f"agent.{var}" for var in agent_variables)
     return template_variables.issubset(allowed_variables)
+
+
+def step_agent_variable_errors(
+    prompt_file: Path, step_data_classes: Mapping[str, type]
+) -> list[str]:
+    """Check each step the agent asks for against the data class it renders it with.
+
+    Every variant must define each step, because the agent renders whichever
+    variant the trigger selects.
+
+    Args:
+        prompt_file: The prompt YAML.
+        step_data_classes: Step name to the ``AgentData`` TypedDict of that step.
+
+    Returns:
+        One readable error per problem; empty if the prompt fits the agent.
+    """
+    if not step_data_classes:
+        return []
+    definition = get_prompt_definition(prompt_file)
+    errors: list[str] = []
+    for step, data_class in step_data_classes.items():
+        lacking = [variant.name for variant in definition.variants if step not in variant.steps]
+        if lacking:
+            errors.append(f"Step '{step}' is missing in variant(s): {', '.join(lacking)}")
+            continue
+        used = template_variables(prompt_file, step=step)
+        declared = list(get_type_hints(data_class))
+        if not validate_agent_variable(used, declared):
+            undeclared = sorted(used - {f"agent.{name}" for name in declared})
+            errors.append(f"Step '{step}' uses undeclared agent variables: {undeclared}")
+    return errors

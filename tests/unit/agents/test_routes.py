@@ -1,6 +1,8 @@
 import json as _json
 import tempfile
 import zipfile
+from types import SimpleNamespace
+from typing import TypedDict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -9,6 +11,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from testbench2robotframework.json_reader import TestBenchJsonReader
 
+from testbench_ai_service.agents.routes import validate_template_and_agent_vars
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
@@ -340,3 +343,46 @@ class TestTriggerTestCaseSetReviews:
             r.json.return_value = structure
             return r
         return None
+
+
+class _NoData(TypedDict, total=False):
+    pass
+
+
+class _StepData(TypedDict, total=False):
+    requirement: str
+
+
+class TestValidateStepVars:
+    @pytest.fixture
+    def prompt_file(self, tmp_path):
+        path = tmp_path / "prompt.yaml"
+        path.write_text(
+            'name: "x"\ndefault_model: "m"\ndefault_variant: "A"\nvariants:\n'
+            '  - name: "A"\n    messages: []\n    steps:\n      aspects:\n'
+            '        - role: "user"\n          text: "{{ agent.requirement }}"\n',
+            encoding="utf-8",
+        )
+        return path
+
+    def _context(self, prompt_file):
+        return SimpleNamespace(prompt_config=SimpleNamespace(file=prompt_file, variant=None))
+
+    def test_declared_step_variables_pass(self, prompt_file):
+        agent = SimpleNamespace(AGENT_DATA_CLASS=_NoData, STEP_DATA_CLASSES={"aspects": _StepData})
+
+        validate_template_and_agent_vars(self._context(prompt_file), agent)
+
+    def test_undeclared_step_variables_are_a_422(self, prompt_file):
+        agent = SimpleNamespace(AGENT_DATA_CLASS=_NoData, STEP_DATA_CLASSES={"aspects": _NoData})
+
+        with pytest.raises(HTTPException) as caught:
+            validate_template_and_agent_vars(self._context(prompt_file), agent)
+
+        assert caught.value.status_code == 422
+        assert "agent.requirement" in caught.value.detail
+
+    def test_agents_without_steps_are_unaffected(self, prompt_file):
+        agent = SimpleNamespace(AGENT_DATA_CLASS=_NoData)
+
+        validate_template_and_agent_vars(self._context(prompt_file), agent)

@@ -37,6 +37,7 @@ from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.prompt_utils import (
     get_prompt_definition,
     get_prompt_variant,
+    step_agent_variable_errors,
     template_variables,
     validate_agent_variable,
     validate_template_placeholders,
@@ -266,6 +267,15 @@ def validate_template_and_agent_vars(context, agent):
             f"Template placeholder validation failed for '{prompt_file}'. Details: {error_detail}"
         )
 
+        logger.error(error_msg)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=error_msg)
+
+    step_errors = step_agent_variable_errors(prompt_file, getattr(agent, "STEP_DATA_CLASSES", {}))
+    if step_errors:
+        error_msg = (
+            f"Step variable validation failed for '{prompt_file}'. "
+            f"Details: {' | '.join(step_errors)}"
+        )
         logger.error(error_msg)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=error_msg)
 
