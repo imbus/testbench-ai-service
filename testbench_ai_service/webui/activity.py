@@ -39,7 +39,8 @@ def _lines_newest_first(path: Path) -> Iterator[str]:
 def _visible(
     entry: dict, user_key: str | None, include_own: bool, include_service: bool, min_level: int
 ) -> bool:
-    if _LEVELS.get(entry.get("level", ""), 0) < min_level:
+    level = entry.get("level")
+    if not isinstance(level, str) or _LEVELS.get(level, 0) < min_level:
         return False
     scope = entry.get("scope")
     if scope == "user":

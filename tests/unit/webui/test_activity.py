@@ -106,6 +106,8 @@ def test_missing_file_and_garbage_lines(cfg):
         "not json",
         "[1, 2]",
         json.dumps({"scope": "user", "user_key": "me"}),
+        _entry("list level", "user", "me", level=["INFO"]),
+        _entry("dict level", "user", "me", level={"x": 1}),
         _entry("ok", "user", "me"),
     )
     assert _read(cfg) == ["ok"]
