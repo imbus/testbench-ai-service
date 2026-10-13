@@ -1,12 +1,11 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Login } from './Login'
+import { i18n } from '../i18n'
 
 const props = {
-  lang: 'de' as const,
   theme: 'light' as const,
   onSignIn: vi.fn(),
-  onSetLang: vi.fn(),
   onToggleTheme: vi.fn(),
   error: null,
   busy: false,
@@ -58,11 +57,12 @@ test('offers the language and theme controls before sign-in', async () => {
   // operator who cannot read the German login form has no way past it.
   render(<Login {...props} />)
 
-  await userEvent.click(screen.getByRole('radio', { name: 'EN' }))
-  expect(props.onSetLang).toHaveBeenCalledWith('en')
-
   await userEvent.click(screen.getByRole('button', { name: 'Dunkles Design' }))
   expect(props.onToggleTheme).toHaveBeenCalled()
+
+  await userEvent.click(screen.getByRole('radio', { name: 'EN' }))
+  expect(i18n.language).toBe('en')
+  expect(screen.getByRole('button', { name: 'Sign in with TestBench' })).toBeInTheDocument()
 })
 
 test('disables the button while signing in', () => {

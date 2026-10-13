@@ -4,6 +4,10 @@ import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { TestRunPanel } from './TestRunPanel'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const mutate = vi.fn()
 let runState: Record<string, unknown> = {}
@@ -49,7 +53,6 @@ function renderPanel(props: Partial<ComponentProps<typeof TestRunPanel>> = {}) {
         vars={{}}
         agentContext={{}}
         isAdmin
-        lang="en"
         {...props}
       />
     </MemoryRouter>,

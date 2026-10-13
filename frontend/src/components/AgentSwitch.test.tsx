@@ -9,6 +9,10 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import { AgentSwitch } from './AgentSwitch'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const PATH = 'projects."Release 2.0".agents.reviewer.enabled'
 
@@ -31,7 +35,6 @@ function Harness({
         inherited={inherited}
         label="reviewer for Release 2.0"
         readOnly={readOnly}
-        lang="en"
       />
       <Edits />
     </DraftProvider>

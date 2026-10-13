@@ -3,6 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { PromptMessageDoc } from '../../api/types'
 import { TabsLayout } from './TabsLayout'
+import { i18n } from '../../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const MESSAGES: PromptMessageDoc[] = [
   { role: 'system', source: 'file', file: 'sys.jinja', content: 'x', readable: true },
@@ -14,7 +18,7 @@ function setup(overrides: Partial<Parameters<typeof TabsLayout>[0]> = {}) {
   const props = {
     messages: MESSAGES, selection: { kind: 'message' as const, index: 0 }, flagged: [], readOnly: false,
     centre: <div>CENTRE</div>, variablesDrawer: <div>VARIABLES</div>, preview: <div>PREVIEW</div>, testRun: <div>TESTRUN</div>,
-    status: { lint: clean, usedDeclared: 1, declared: 2, undeclared: 0 }, lang: 'en' as const,
+    status: { lint: clean, usedDeclared: 1, declared: 2, undeclared: 0 },
     variantName: 'Thorough', onOpenMeta: vi.fn(), onOpenVariantSettings: vi.fn(), onPickMessage: vi.fn(), onAddMessage: vi.fn(), onLint: vi.fn(), ...overrides,
   }
   render(<TabsLayout {...props} />)

@@ -102,7 +102,7 @@ it('shows the pending-changes banner when the draft has edits', async () => {
 
   renderApp({ isAdmin: true })
 
-  // App defaults to German (lang state starts as 'de'), so the banner text
+  // The console starts in German (i18n/index.ts), so the banner text
   // is the German translation of "unapplied changes" -- see i18n/de.ts.
   expect(await screen.findByRole('status')).toHaveTextContent('nicht übernommene Änderungen')
 })

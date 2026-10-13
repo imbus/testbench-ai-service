@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { PromptPlanResponse } from '../api/types'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { Modal } from './Modal'
 
 function FileGroup({
@@ -53,7 +53,6 @@ export function SavePromptDialog({
   pending,
   onCancel,
   onConfirm,
-  lang = 'de',
   children,
 }: {
   plan: PromptPlanResponse | null
@@ -61,23 +60,22 @@ export function SavePromptDialog({
   pending: boolean
   onCancel: () => void
   onConfirm: () => void
-  lang?: Lang
   children?: ReactNode
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
 
   return (
-    <Modal label={t.confirmSaveTitle}>
-      <h3 style={{ margin: 0 }}>{t.confirmSaveTitle}</h3>
+    <Modal label={t('confirmSaveTitle')}>
+      <h3 style={{ margin: 0 }}>{t('confirmSaveTitle')}</h3>
 
       {plan && (
         <>
-          <FileGroup heading={t.confirmSaveCreated} files={plan.created} testid="confirm-created" />
-          <FileGroup heading={t.confirmSaveUpdated} files={plan.updated} testid="confirm-updated" />
-          <FileGroup heading={t.confirmSaveDeleted} files={plan.deleted} testid="confirm-deleted" />
+          <FileGroup heading={t('confirmSaveCreated')} files={plan.created} testid="confirm-created" />
+          <FileGroup heading={t('confirmSaveUpdated')} files={plan.updated} testid="confirm-updated" />
+          <FileGroup heading={t('confirmSaveDeleted')} files={plan.deleted} testid="confirm-deleted" />
           {plan.deletions_skipped && (
             <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-              {t.confirmSaveDeletionsSkipped} {plan.deletions_skipped}
+              {t('confirmSaveDeletionsSkipped')} {plan.deletions_skipped}
             </div>
           )}
         </>
@@ -93,7 +91,7 @@ export function SavePromptDialog({
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          {t.cancel}
+          {t('cancel')}
         </button>
         <button
           type="button"
@@ -101,7 +99,7 @@ export function SavePromptDialog({
           onClick={onConfirm}
           disabled={pending || plan === null}
         >
-          {pending ? (plan === null ? t.planning : t.saving) : t.confirm}
+          {pending ? (plan === null ? t('planning') : t('saving')) : t('confirm')}
         </button>
       </div>
     </Modal>

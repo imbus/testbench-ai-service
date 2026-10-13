@@ -74,7 +74,7 @@ function renderSection({
     <MemoryRouter initialEntries={[initialEntries]}>
       <QueryClientProvider client={client}>
         <DraftProvider saved={disk}>
-          <ConfigSection section={section} lang="de" isAdmin={isAdmin} issues={issues} />
+          <ConfigSection section={section} isAdmin={isAdmin} issues={issues} />
         </DraftProvider>
       </QueryClientProvider>
     </MemoryRouter>,

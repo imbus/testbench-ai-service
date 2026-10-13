@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import { PendingBanner } from './PendingBanner'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const fetchMock = vi.fn()
 
@@ -26,7 +30,7 @@ function renderBanner(saved: Record<string, unknown> = { port: 8010, host: '127.
     <QueryClientProvider client={client}>
       <DraftProvider saved={saved}>
         <Seed edits={{ port: 9999 }} />
-        <PendingBanner lang="en" />
+        <PendingBanner />
       </DraftProvider>
     </QueryClientProvider>,
   )

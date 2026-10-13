@@ -2,16 +2,14 @@ import { useState } from 'react'
 import { BrandMark } from '../components/BrandMark'
 import { LangSeg } from '../components/LangSeg'
 import { ThemeButton } from '../components/ThemeButton'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import type { Theme } from '../theme'
 
 interface LoginProps {
-  lang: Lang
   theme: Theme
   busy: boolean
   error: string | null
   onSignIn: (username: string, password: string) => void
-  onSetLang: (lang: Lang) => void
   onToggleTheme: () => void
 }
 
@@ -24,15 +22,13 @@ interface LoginProps {
  * TestBench issues and is not the operator's to choose.
  */
 export function Login({
-  lang,
   theme,
   busy,
   error,
   onSignIn,
-  onSetLang,
   onToggleTheme,
 }: LoginProps) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
 
@@ -61,8 +57,8 @@ export function Login({
           alignItems: 'center',
         }}
       >
-        <LangSeg lang={lang} onSetLang={onSetLang} name="login-lang" />
-        <ThemeButton theme={theme} lang={lang} onToggle={onToggleTheme} />
+        <LangSeg name="login-lang" />
+        <ThemeButton theme={theme} onToggle={onToggleTheme} />
       </div>
 
       <form
@@ -91,10 +87,10 @@ export function Login({
             unauthenticated and does not carry one, and inventing a second
             source for it would let the login screen and the Status card
             disagree about which version is running. */}
-        <BrandMark size="login" subtitle={t.consoleSubtitle} />
+        <BrandMark size="login" subtitle={t('consoleSubtitle')} />
 
         <div className="field">
-          <label htmlFor="login-user">{t.username}</label>
+          <label htmlFor="login-user">{t('username')}</label>
           <input
             id="login-user"
             className="input"
@@ -107,7 +103,7 @@ export function Login({
         </div>
 
         <div className="field">
-          <label htmlFor="login-pass">{t.password}</label>
+          <label htmlFor="login-pass">{t('password')}</label>
           <input
             id="login-pass"
             className="input"
@@ -134,11 +130,11 @@ export function Login({
           <i className="corner tr" />
           <i className="corner bl" />
           <i className="corner br" />
-          {t.signIn}
+          {t('signIn')}
         </button>
 
         <div className="text-muted" style={{ fontSize: 11, lineHeight: 1.4 }}>
-          {t.loginHint}
+          {t('loginHint')}
         </div>
       </form>
     </div>

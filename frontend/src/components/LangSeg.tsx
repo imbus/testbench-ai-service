@@ -1,4 +1,5 @@
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
+import { useLang } from '../i18n'
 
 /**
  * The artboard's DE/EN segmented control, which appears twice: on the login
@@ -6,26 +7,23 @@ import { useTranslations, type Lang } from '../i18n'
  * ever render together.
  */
 export function LangSeg({
-  lang,
-  onSetLang,
   name = 'console-lang',
   compact = false,
 }: {
-  lang: Lang
-  onSetLang: (lang: Lang) => void
   name?: string
   compact?: boolean
 }) {
-  const t = useTranslations(lang)
+  const { t, i18n } = useTranslation()
+  const lang = useLang()
   return (
-    <div className="seg" role="group" aria-label={t.language}>
+    <div className="seg" role="group" aria-label={t('language')}>
       {(['de', 'en'] as const).map((code) => (
         <label key={code} className="seg-opt" style={compact ? { padding: '4px 10px' } : undefined}>
           <input
             type="radio"
             name={name}
             checked={lang === code}
-            onChange={() => onSetLang(code)}
+            onChange={() => void i18n.changeLanguage(code)}
           />
           {code.toUpperCase()}
         </label>

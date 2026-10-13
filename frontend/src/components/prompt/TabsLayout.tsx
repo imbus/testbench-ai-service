@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import type { PromptMessageDoc } from '../../api/types'
-import { useTranslations, type Lang } from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { messageLabel, type Selection } from './selection'
 import type { LintState } from './VarSidebar'
 
@@ -33,7 +33,7 @@ function tabStyle(active: boolean) {
  * The centre and drawer contents are built by `PromptEditor` and passed in,
  * so both layouts share one wiring.
  */
-export function TabsLayout({ messages, selection, flagged, readOnly, centre, variablesDrawer, preview, testRun, status, variantName, lang = 'de', onOpenMeta, onOpenVariantSettings, onPickMessage, onAddMessage, onLint }: {
+export function TabsLayout({ messages, selection, flagged, readOnly, centre, variablesDrawer, preview, testRun, status, variantName, onOpenMeta, onOpenVariantSettings, onPickMessage, onAddMessage, onLint }: {
   messages: PromptMessageDoc[]
   selection: Selection
   flagged: number[]
@@ -44,21 +44,20 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
   testRun: ReactNode
   status: { lint: LintState; usedDeclared: number; declared: number; undeclared: number }
   variantName: string
-  lang?: Lang
   onOpenMeta: () => void
   onOpenVariantSettings: () => void
   onPickMessage: (index: number) => void
   onAddMessage: () => void
   onLint: () => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const [tab, setTab] = useState<DrawerTab>('vars')
   const { lint, usedDeclared, declared, undeclared } = status
 
   const drawerTabs: { id: DrawerTab; label: string }[] = [
-    { id: 'vars', label: t.drawerVariables },
-    { id: 'preview', label: t.previewPane },
-    { id: 'test', label: t.testRun },
+    { id: 'vars', label: t('drawerVariables') },
+    { id: 'preview', label: t('previewPane') },
+    { id: 'test', label: t('testRun') },
   ]
 
   return (
@@ -77,7 +76,7 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
           <button
             type="button"
             aria-pressed={selection.kind === 'variant'}
-            aria-label={`${t.variantSettings}: ${variantName}`}
+            aria-label={`${t('variantSettings')}: ${variantName}`}
             onClick={onOpenVariantSettings}
             style={tabStyle(selection.kind === 'variant')}
           >
@@ -98,14 +97,14 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
               >
                 <span className="text-muted">{index + 1}</span>
                 <span className="tag tag-neutral" style={{ padding: '0 5px', fontSize: 10 }}>{message.role}</span>
-                <span style={{ fontFamily: mono }}>{messageLabel(message, t.emptyMessage)}</span>
+                <span style={{ fontFamily: mono }}>{messageLabel(message, t('emptyMessage'))}</span>
                 {isFlagged && <span aria-hidden style={{ color: '#c0392b' }}>●</span>}
               </button>
             )
           })}
           {!readOnly && (
             <button type="button" className="btn btn-ghost" style={{ fontSize: 12, marginBottom: 2 }} onClick={onAddMessage}>
-              {t.addMessageShort}
+              {t('addMessageShort')}
             </button>
           )}
         </div>
@@ -114,15 +113,15 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
 
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '5px 12px', borderTop: '1px solid var(--color-divider)', background: 'var(--color-surface)', fontSize: 12, flexWrap: 'wrap' }}>
           <button type="button" className="btn btn-ghost" style={{ fontSize: 12, padding: '0 6px' }} disabled={lint.running} onClick={onLint}>
-            {lint.running ? t.linting : t.lint}
+            {lint.running ? t('linting') : t('lint')}
           </button>
-          {lint.checking && !lint.running && <span className="text-muted">{t.lintChecking}</span>}
+          {lint.checking && !lint.running && <span className="text-muted">{t('lintChecking')}</span>}
           {lint.error && <span role="alert" style={{ color: '#a33a2b' }}>{lint.error}</span>}
           {lint.errors.map((error, index) => (
-            <span key={index} style={{ color: '#a33a2b' }}>{`${t.lintLine} ${error.line}: ${error.message}`}</span>
+            <span key={index} style={{ color: '#a33a2b' }}>{`${t('lintLine')} ${error.line}: ${error.message}`}</span>
           ))}
-          {lint.clean && !lint.error && <span style={{ color: '#2e8b5e' }}>✓ {t.lintClean}</span>}
-          <span className="text-muted">{`${usedDeclared}/${declared} ${t.varsUsed} · ${undeclared} ${t.undeclaredCount}`}</span>
+          {lint.clean && !lint.error && <span style={{ color: '#2e8b5e' }}>✓ {t('lintClean')}</span>}
+          <span className="text-muted">{`${usedDeclared}/${declared} ${t('varsUsed')} · ${undeclared} ${t('undeclaredCount')}`}</span>
           <div style={{ flex: 1 }} />
           <span className="text-muted">jinja · UTF-8</span>
         </div>

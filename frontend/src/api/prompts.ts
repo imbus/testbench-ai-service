@@ -101,7 +101,7 @@ function variantOf(block: unknown): string | null {
  *
  * Returns `Scope`s rather than pre-built English labels -- the operator-facing
  * console defaults to German, so a caller must be able to localize "the
- * global agents table" / "project 'X'" through `useTranslations`, the same as
+ * global agents table" / "project 'X'" through `t`, the same as
  * every other piece of console prose. Only the project NAME (a wire token,
  * like an agent key) survives untranslated.
  */

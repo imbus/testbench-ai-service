@@ -11,6 +11,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Lang } from '../i18n'
 import type { PromptMessageDoc, PromptVarDecl, RenderResponse } from '../api/types'
 import { RenderPreview } from './RenderPreview'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 let fetchMock: ReturnType<typeof vi.fn>
 let renderBody: RenderResponse
@@ -66,7 +70,7 @@ function renderPreview(
 
 describe('RenderPreview', () => {
   it('prefills the context pane from the skeleton', () => {
-    renderPreview({ messages: [], vars: {}, skeleton: { role: '' }, isAdmin: true, lang: 'en' })
+    renderPreview({ messages: [], vars: {}, skeleton: { role: '' }, isAdmin: true })
     expect(screen.getByLabelText(/context/i)).toHaveValue(JSON.stringify({ role: '' }, null, 2))
   })
 
@@ -76,18 +80,17 @@ describe('RenderPreview', () => {
       vars: {},
       skeleton: { a: '' },
       isAdmin: true,
-      lang: 'en',
     })
     await userEvent.clear(screen.getByLabelText(/context/i))
     await userEvent.type(screen.getByLabelText(/context/i), '{{"a":"typed"}')
-    rerender({ messages: [], vars: {}, skeleton: { a: '', b: '' }, isAdmin: true, lang: 'en' })
+    rerender({ messages: [], vars: {}, skeleton: { a: '', b: '' }, isAdmin: true })
     expect(screen.getByLabelText(/context/i)).toHaveValue(
       JSON.stringify({ a: 'typed', b: '' }, null, 2),
     )
   })
 
   it('reports invalid JSON without rendering', async () => {
-    renderPreview({ messages: [], vars: {}, skeleton: {}, isAdmin: true, lang: 'en' })
+    renderPreview({ messages: [], vars: {}, skeleton: {}, isAdmin: true })
     await userEvent.clear(screen.getByLabelText(/context/i))
     await userEvent.type(screen.getByLabelText(/context/i), '{{ not json')
     await userEvent.click(screen.getByRole('button', { name: /render/i }))
@@ -104,7 +107,6 @@ describe('RenderPreview', () => {
       vars: {},
       skeleton: {},
       isAdmin: false,
-      lang: 'en',
     })
     expect(screen.queryByRole('button', { name: /render/i })).not.toBeInTheDocument()
     expect(container).toBeEmptyDOMElement()
@@ -117,17 +119,17 @@ describe('RenderPreview', () => {
     const messages: PromptMessageDoc[] = [
       { role: 'user', source: 'inline', file: null, content: '{{ foo }}', readable: true },
     ]
-    renderPreview({ messages, vars: {}, skeleton: {}, isAdmin: true, lang: 'en' })
+    renderPreview({ messages, vars: {}, skeleton: {}, isAdmin: true })
     await userEvent.click(screen.getByRole('button', { name: /render/i }))
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(/Undefined variable: foo/),
     )
   })
 
-  // The component defaults to German (Field.tsx/AgentSwitch.tsx's own `lang = 'de'`
-  // default) -- every other test above pins lang="en" to keep its English-regex
-  // assertions meaningful. This one exercises the German dictionary for real.
-  it('renders German labels by default', () => {
+  // Every other test runs in English to keep its English-regex assertions
+  // meaningful. This one exercises the German dictionary for real.
+  it('renders German labels', async () => {
+    await i18n.changeLanguage('de')
     renderPreview({ messages: [], vars: {}, skeleton: {}, isAdmin: true })
     expect(screen.getByRole('button', { name: 'Rendern' })).toBeInTheDocument()
   })
@@ -162,7 +164,6 @@ describe('RenderPreview', () => {
         },
         skeleton: {},
         isAdmin: true,
-        lang: 'en',
       })
       const tone = screen.getByLabelText('tone')
       expect(tone).toHaveValue('formal')
@@ -182,7 +183,6 @@ describe('RenderPreview', () => {
         },
         skeleton: {},
         isAdmin: true,
-        lang: 'en',
       })
       await userEvent.clear(screen.getByLabelText(/must/))
       await userEvent.clear(screen.getByLabelText('may'))
@@ -197,7 +197,6 @@ describe('RenderPreview', () => {
         decls: { tone: decl({ name: 'tone', default_value: 'formal' }) },
         skeleton: {},
         isAdmin: true,
-        lang: 'en',
       })
       await userEvent.type(screen.getByLabelText('tone'), '!')
       await userEvent.click(screen.getByRole('button', { name: /reset to defaults/i }))

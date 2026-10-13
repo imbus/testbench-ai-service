@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { usePromptTree } from '../api/queries'
 import type { PromptTreeEntry, PromptTreeLanguage, PromptUsage } from '../api/types'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
+import { useLang } from '../i18n'
 
 /** A mono line that clips to its track. File paths have no break points, so
  *  without this they run on under the next column. */
@@ -54,8 +55,8 @@ function usagesOf(row: PromptRow): PromptUsage[] {
  * The prompt tree (design §5.6): one row per agent, one column per language,
  * each cell linking to that language's editor.
  */
-export function Prompts({ lang = 'de' }: { lang?: Lang }) {
-  const t = useTranslations(lang)
+export function Prompts() {
+  const { t } = useTranslation()
   const tree = usePromptTree()
 
   if (tree.isLoading) return <div style={{ padding: 28 }}>…</div>
@@ -63,7 +64,7 @@ export function Prompts({ lang = 'de' }: { lang?: Lang }) {
     const detail = (tree.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
-        <div>{t.promptsError}</div>
+        <div>{t('promptsError')}</div>
         {detail && (
           <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
             {detail}
@@ -92,20 +93,20 @@ export function Prompts({ lang = 'de' }: { lang?: Lang }) {
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t.prompts}</h2>
+        <h2 style={{ margin: 0, fontSize: 30 }}>{t('prompts')}</h2>
         {rows.length > 0 && (
           <div
             className="text-muted"
             style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
           >
-            {t.agents}: {rows.length} · {langs.join(' · ')}
+            {t('agents')}: {rows.length} · {langs.join(' · ')}
           </div>
         )}
       </div>
 
       {rows.length === 0 ? (
         <div className="text-muted" style={{ fontSize: 13 }}>
-          {t.noPromptTree}
+          {t('noPromptTree')}
         </div>
       ) : (
         <div className="blueprint" style={{ overflowX: 'auto' }}>
@@ -132,7 +133,7 @@ export function Prompts({ lang = 'de' }: { lang?: Lang }) {
                 {code}
               </span>
             ))}
-            <span>{t.promptsUsedBy}</span>
+            <span>{t('promptsUsedBy')}</span>
           </div>
           {rows.map((row) => (
             <PromptRowView
@@ -140,7 +141,6 @@ export function Prompts({ lang = 'de' }: { lang?: Lang }) {
               row={row}
               langs={langs}
               gridColumns={gridColumns}
-              lang={lang}
             />
           ))}
         </div>
@@ -153,14 +153,13 @@ function PromptRowView({
   row,
   langs,
   gridColumns,
-  lang,
 }: {
   row: PromptRow
   langs: string[]
   gridColumns: string
-  lang: Lang
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
+  const lang = useLang()
   // The console's own language names the row when that file has a name;
   // otherwise any language that does, and the bare key as a last resort.
   const title =
@@ -194,7 +193,7 @@ function PromptRowView({
         if (!entry) {
           return (
             <div key={code} className="text-muted" style={{ fontSize: 12 }}>
-              — {t.promptsMissing}
+              — {t('promptsMissing')}
             </div>
           )
         }
@@ -248,11 +247,11 @@ function PromptRowView({
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, minWidth: 0 }}>
         {usages.length === 0 ? (
           <span className="text-muted" style={{ fontSize: 12 }}>
-            {t.promptsUnused}
+            {t('promptsUnused')}
           </span>
         ) : (
           usages.map((usage) => {
-            const scope = usage.project ?? t.globalScope
+            const scope = usage.project ?? t('globalScope')
             // A fork is referenced by another agent's config; name that agent
             // so the tag says who actually runs this file.
             const label = usage.agent === row.agent ? scope : `${usage.agent} · ${scope}`

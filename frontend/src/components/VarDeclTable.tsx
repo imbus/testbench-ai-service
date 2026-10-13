@@ -1,10 +1,10 @@
 import { useState } from 'react'
 
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import type { PromptVarDecl, VarValueType } from '../api/types'
 
 // Wire tokens round-tripped through the API, not prose -- kept in English
-// regardless of `lang`, matching how Field.tsx never translates `spec.key`.
+// regardless of the UI language, matching how Field.tsx never translates `spec.key`.
 const VALUE_TYPES: VarValueType[] = ['string', 'text', 'boolean', 'number', 'enum']
 
 /** Comma-separated choices as typed, trimmed and stripped of blanks. */
@@ -170,18 +170,16 @@ function VarRow({
   name,
   decl,
   readOnly,
-  lang,
   onEdit,
   onRemove,
 }: {
   name: string
   decl: PromptVarDecl
   readOnly?: boolean
-  lang: Lang
   onEdit: (decl: PromptVarDecl) => void
   onRemove: () => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
 
   // A path is not a DOM id (mirrors Field.tsx's own note on the same hazard);
   // a variable name is a plain identifier in practice, but this keeps every
@@ -206,24 +204,24 @@ function VarRow({
           {`{{ ${name} }}`}
         </code>
         <span className="var-card-required">
-          <span id={requiredLabelId}>{t.varRequired}</span>
+          <span id={requiredLabelId}>{t('varRequired')}</span>
           <Switch
             labelId={requiredLabelId}
             checked={decl.required}
             disabled={readOnly}
-            caption={decl.required ? t.varRequiredOn : t.varRequiredOff}
+            caption={decl.required ? t('varRequiredOn') : t('varRequiredOff')}
             onToggle={() => onEdit({ ...decl, required: !decl.required })}
           />
         </span>
         {!readOnly && (
           <button type="button" className="btn btn-ghost" onClick={onRemove}>
-            {t.remove}
+            {t('remove')}
           </button>
         )}
       </div>
       <div className="var-card-grid">
         <div className="field var-card-wide">
-          <label htmlFor={descriptionId}>{t.varDescription}</label>
+          <label htmlFor={descriptionId}>{t('varDescription')}</label>
           <input
             className="input"
             id={descriptionId}
@@ -233,7 +231,7 @@ function VarRow({
           />
         </div>
         <div className="field">
-          <label htmlFor={typeId}>{t.varType}</label>
+          <label htmlFor={typeId}>{t('varType')}</label>
           <select
             className="input"
             id={typeId}
@@ -259,11 +257,11 @@ function VarRow({
         </div>
         {decl.value_type === 'enum' && (
           <div className="field">
-            <label htmlFor={choicesId}>{t.varChoices}</label>
+            <label htmlFor={choicesId}>{t('varChoices')}</label>
             <input
               className="input"
               id={choicesId}
-              placeholder={t.varChoicesPlaceholder}
+              placeholder={t('varChoicesPlaceholder')}
               disabled={readOnly}
               aria-invalid={invalidEnum || undefined}
               value={(decl.choices ?? []).join(', ')}
@@ -273,7 +271,7 @@ function VarRow({
         )}
         <div className={decl.value_type === 'text' ? 'field var-card-wide' : 'field'}>
           <label id={defaultLabelId} htmlFor={defaultId}>
-            {t.varDefaultValue}
+            {t('varDefaultValue')}
           </label>
           <DefaultValueControl
             id={defaultId}
@@ -286,7 +284,7 @@ function VarRow({
       </div>
       {invalidEnum && (
         <span role="alert" className="var-card-error">
-          {t.varEnumNeedsChoices}
+          {t('varEnumNeedsChoices')}
         </span>
       )}
     </div>
@@ -296,19 +294,17 @@ function VarRow({
 export function VarDeclTable({
   vars,
   readOnly,
-  lang = 'de',
   onAdd,
   onEdit,
   onRemove,
 }: {
   vars: Record<string, PromptVarDecl>
   readOnly?: boolean
-  lang?: Lang
   onAdd: (key: string) => void
   onEdit: (key: string, decl: PromptVarDecl) => void
   onRemove: (key: string) => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const [pending, setPending] = useState('')
 
   return (
@@ -319,7 +315,6 @@ export function VarDeclTable({
           name={name}
           decl={decl}
           readOnly={readOnly}
-          lang={lang}
           onEdit={(next) => onEdit(name, next)}
           onRemove={() => onRemove(name)}
         />
@@ -337,13 +332,13 @@ export function VarDeclTable({
         >
           <input
             className="input"
-            aria-label={t.varNewName}
-            placeholder={t.varNewName}
+            aria-label={t('varNewName')}
+            placeholder={t('varNewName')}
             value={pending}
             onChange={(event) => setPending(event.target.value)}
           />
           <button type="submit" className="btn btn-secondary" disabled={!pending.trim()}>
-            {t.add}
+            {t('add')}
           </button>
         </form>
       )}

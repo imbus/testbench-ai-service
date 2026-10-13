@@ -5,7 +5,6 @@ import { en } from './en'
 import type { Translations } from './de'
 
 export type Lang = 'de' | 'en'
-export type TranslationKey = keyof Translations
 export type { Translations }
 
 // German first, matching the backend's default service language. The
@@ -30,8 +29,3 @@ export function useLang(): Lang {
 }
 
 export { i18n }
-
-/** The pre-i18next lookup; goes once every caller uses `useTranslation`. */
-export function useTranslations(lang: Lang): Translations {
-  return lang === 'en' ? en : de
-}

@@ -4,11 +4,15 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import type { FieldSpec } from '../screens/fields'
 import { Field } from './Field'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 function Harness({ spec, saved }: { spec: FieldSpec; saved: Record<string, unknown> }) {
   return (
     <DraftProvider saved={saved}>
-      <Field spec={spec} saved={saved[spec.key]} lang="en" />
+      <Field spec={spec} saved={saved[spec.key]} />
       <Edits />
     </DraftProvider>
   )

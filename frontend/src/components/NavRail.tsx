@@ -1,6 +1,7 @@
 import { Fragment } from 'react'
 import { NavLink } from 'react-router-dom'
-import { useTranslations, type Lang, type Translations } from '../i18n'
+import { useTranslation } from 'react-i18next'
+import { type Translations } from '../i18n'
 
 interface NavItem {
   key: string
@@ -81,19 +82,17 @@ export const NAV_ITEMS: NavItem[] = [
 ]
 
 export function NavRail({
-  lang,
   isAdmin,
   /** Count shown on Projects, as the artboard badges it. Hidden at zero. */
   overrideCount = 0,
 }: {
-  lang: Lang
   isAdmin: boolean
   overrideCount?: number
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   return (
     <nav
-      aria-label={t.navLandmark}
+      aria-label={t('navLandmark')}
       style={{
         width: 200,
         flex: 'none',
@@ -153,7 +152,7 @@ export function NavRail({
               >
                 <path d={item.icon} />
               </svg>
-              <span style={{ flex: 1 }}>{t[item.labelKey]}</span>
+              <span style={{ flex: 1 }}>{t(item.labelKey)}</span>
               {restricted && (
                 <svg
                   width="13"

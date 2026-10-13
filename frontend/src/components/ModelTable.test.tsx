@@ -4,6 +4,10 @@ import type { ComponentProps } from 'react'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { joinPath, splitPath } from '../api/paths'
 import { ModelTable } from './ModelTable'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const setValue = vi.fn()
 const unsetSubtree = vi.fn()
@@ -34,7 +38,6 @@ function renderTable(props: Partial<ComponentProps<typeof ModelTable>> = {}) {
     <ModelTable
       entries={{ 'claude-opus-6': { provider: 'anthropic', routing: 'adaptive' } }}
       issues={[]}
-      lang="en"
       {...props}
     />,
   )

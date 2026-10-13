@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { TopBar } from './TopBar'
+import { i18n } from '../i18n'
 import type { SessionInfo } from '../api/types'
 
 const session: SessionInfo = {
@@ -12,10 +13,8 @@ const session: SessionInfo = {
 
 const props = {
   session,
-  lang: 'de' as const,
   theme: 'light' as const,
   onToggleTheme: vi.fn(),
-  onSetLang: vi.fn(),
   onSignOut: vi.fn(),
 }
 
@@ -61,5 +60,6 @@ it('switches the language', async () => {
 
   await userEvent.click(screen.getByRole('radio', { name: 'EN' }))
 
-  expect(props.onSetLang).toHaveBeenCalledWith('en')
+  expect(i18n.language).toBe('en')
+  expect(screen.getByRole('radio', { name: 'EN' })).toBeChecked()
 })

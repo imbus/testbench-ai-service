@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { LintError } from '../../api/types'
-import { useTranslations, type Lang } from '../../i18n'
+import { useTranslation } from 'react-i18next'
 
 /**
  * What the lint block shows. `errors` are the OPEN message's own results;
@@ -137,7 +137,7 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
  * `variant="drawer"` is the Tabs layout's Variables drawer: no column chrome
  * (the drawer supplies its own) and no lint block (the status bar shows lint).
  */
-export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, variant = 'column', lang = 'de', onInsert, onDeclare, onLint }: {
+export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, variant = 'column', onInsert, onDeclare, onLint }: {
   agentVars: string[]
   /** Typed sample of the agent.* namespace; shown as a foldable field tree. */
   agentContext?: Record<string, unknown>
@@ -148,12 +148,11 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
   canDeclare: boolean
   lint: LintState
   variant?: 'column' | 'drawer'
-  lang?: Lang
   onInsert: (name: string) => void
   onDeclare: () => void
   onLint: () => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const list = (names: string[]) =>
     names.map((name) => (
       <VarButton key={name} name={name} used={used.includes(name)} disabled={!canInsert} onInsert={() => onInsert(`{{ ${name} }}`)} />
@@ -185,14 +184,14 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
             />
           ))
         : list(agentVars)}
-      <div className="text-muted" style={{ ...caps, marginTop: 8 }}>vars.* ({t.varsVariantScope})</div>
+      <div className="text-muted" style={{ ...caps, marginTop: 8 }}>vars.* ({t('varsVariantScope')})</div>
       {list(declaredVars)}
       {undeclared.length > 0 && (
         <div style={{ border: '1px solid #c9a227', padding: 6, color: '#7a5a00', background: 'color-mix(in srgb, #c9a227 12%, transparent)' }}>
-          {t.undeclaredVars} <span style={{ fontFamily: mono }}>{undeclared.join(', ')}</span>{' '}
+          {t('undeclaredVars')} <span style={{ fontFamily: mono }}>{undeclared.join(', ')}</span>{' '}
           {canDeclare && (
             <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '0 4px' }} onClick={onDeclare}>
-              {t.declareVars}
+              {t('declareVars')}
             </button>
           )}
         </div>
@@ -201,16 +200,16 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
         <>
           <div style={{ flex: 1 }} />
           <button type="button" className="btn btn-ghost" disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }}>
-            {lint.running ? t.linting : t.lint}
+            {lint.running ? t('linting') : t('lint')}
           </button>
-          {lint.checking && !lint.running && <div className="text-muted">{t.lintChecking}</div>}
+          {lint.checking && !lint.running && <div className="text-muted">{t('lintChecking')}</div>}
           {lint.error && <div role="alert" style={{ color: '#a33a2b' }}>{lint.error}</div>}
           {lint.errors.map((error, index) => (
             <div key={index} style={{ border: '1px solid #c0392b', background: 'color-mix(in srgb, #c0392b 10%, transparent)', padding: '6px 8px', color: '#a33a2b' }}>
-              {`${t.lintLine} ${error.line}: ${error.message}`}
+              {`${t('lintLine')} ${error.line}: ${error.message}`}
             </div>
           ))}
-          {lint.clean && !lint.error && <div style={{ color: '#2e8b5e' }}>✓ {t.lintClean}</div>}
+          {lint.clean && !lint.error && <div style={{ color: '#2e8b5e' }}>✓ {t('lintClean')}</div>}
         </>
       )}
     </aside>

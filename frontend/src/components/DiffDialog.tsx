@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import type { ApiError } from '../api/client'
 import { useApply, usePreview } from '../api/mutations'
 import type { ConfigIssue } from '../api/types'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 import { Modal } from './Modal'
 
@@ -82,18 +82,16 @@ function IssueList({ issues }: { issues: RenderableIssue[] }) {
  * not something to run per character.
  */
 export function DiffDialog({
-  lang,
   onClose,
   onIssues,
 }: {
-  lang: Lang
   onClose: () => void
   /** Field-addressed validation failures, forwarded up to `App` so the config
    * screens can mark the offending inputs. Optional so callers that don't
    * care about issue markers (and existing tests) need not supply it. */
   onIssues?: (issues: ConfigIssue[]) => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const draft = useDraft()
   const preview = usePreview()
   const apply = useApply()
@@ -151,8 +149,8 @@ export function DiffDialog({
   }
 
   return (
-    <Modal label={t.viewDiff} width={900} maxHeight="85vh">
-      <h3 style={{ margin: 0 }}>{t.viewDiff}</h3>
+    <Modal label={t('viewDiff')} width={900} maxHeight="85vh">
+      <h3 style={{ margin: 0 }}>{t('viewDiff')}</h3>
 
       {preview.isPending && <div>…</div>}
 
@@ -164,12 +162,12 @@ export function DiffDialog({
 
       {data && !data.valid && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ color: '#a33a2b' }}>{t.invalidDraft}</div>
+          <div style={{ color: '#a33a2b' }}>{t('invalidDraft')}</div>
           <IssueList issues={data.issues} />
         </div>
       )}
 
-      {data?.valid && data.diffs.length === 0 && <div>{t.noChanges}</div>}
+      {data?.valid && data.diffs.length === 0 && <div>{t('noChanges')}</div>}
 
       {data?.valid &&
         data.diffs.map((entry) => (
@@ -184,7 +182,7 @@ export function DiffDialog({
                   repeating it here as bare text would make every text query
                   for it ambiguous between this line and the diff. The full
                   path is still available on hover via the title attribute. */}
-              {t.writesTo} <code>{entry.path.split(/[/\\]/).pop()}</code> · +{entry.added} −
+              {t('writesTo')} <code>{entry.path.split(/[/\\]/).pop()}</code> · +{entry.added} −
               {entry.removed}
             </div>
             <pre
@@ -207,19 +205,19 @@ export function DiffDialog({
 
       {data && data.restart_required.length > 0 && (
         <div style={{ fontSize: 13 }}>
-          {t.restartWhich} <code>{data.restart_required.join(', ')}</code>
+          {t('restartWhich')} <code>{data.restart_required.join(', ')}</code>
         </div>
       )}
 
       {data && data.in_flight_tasks > 0 && (
         <div style={{ fontSize: 13 }}>
-          {data.in_flight_tasks} {t.inFlight}
+          {data.in_flight_tasks} {t('inFlight')}
         </div>
       )}
 
       {apply.isSuccess && apply.data.reload_detail && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div>{t.applied}</div>
+          <div>{t('applied')}</div>
           <div role="alert" style={{ color: '#a33a2b' }}>
             {apply.data.reload_detail}
           </div>
@@ -229,7 +227,7 @@ export function DiffDialog({
               (it auto-closes, discarding the draft — see onApply above). */}
           {apply.data.backup && (
             <div className="text-muted" style={{ fontSize: 12 }}>
-              {t.backupKept} <code>{apply.data.backup}</code>
+              {t('backupKept')} <code>{apply.data.backup}</code>
             </div>
           )}
         </div>
@@ -244,7 +242,7 @@ export function DiffDialog({
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button type="button" className="btn btn-secondary" onClick={onClose}>
-          {t.close}
+          {t('close')}
         </button>
         {data?.valid && data.diffs.length > 0 && !apply.isSuccess && (
           <button
@@ -253,7 +251,7 @@ export function DiffDialog({
             onClick={onApply}
             disabled={apply.isPending}
           >
-            {apply.isPending ? t.applying : t.apply}
+            {apply.isPending ? t('applying') : t('apply')}
           </button>
         )}
       </div>

@@ -43,6 +43,10 @@ import { MessagePane } from './MessagePane'
 import type { CodeEditorHandle } from '../CodeEditor'
 import type { LintError, MessageRole, MessageSource, PromptMessageDoc } from '../../api/types'
 import type { Lang } from '../../i18n'
+import { i18n } from '../../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 function inline(content: string): PromptMessageDoc {
   return { role: 'user', source: 'inline', file: null, content, readable: true }
@@ -73,7 +77,6 @@ function setup(overrides: Overrides = {}) {
     index: 0,
     count: 1,
     readOnly: false,
-    lang: 'en' as Lang,
     insertable: [] as string[],
     onRemove: vi.fn(),
     onMove: vi.fn(),
@@ -142,7 +145,6 @@ describe('MessagePane', () => {
       path: 'p',
       message,
       readOnly: false,
-      lang: 'en' as Lang,
       insertable: [] as string[],
       editorRef: createRef<CodeEditorHandle>(),
       onRemove: vi.fn(),
@@ -224,7 +226,8 @@ describe('MessagePane', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('bad token')
   })
 
-  it('renders German labels by default', () => {
+  it('renders German labels', async () => {
+    await i18n.changeLanguage('de')
     const editorRef = createRef<CodeEditorHandle>()
     render(
       <MessagePane

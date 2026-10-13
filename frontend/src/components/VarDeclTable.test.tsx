@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { VarDeclTable } from './VarDeclTable'
 import type { PromptVarDecl } from '../api/types'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const decl = (over: Partial<PromptVarDecl> = {}): PromptVarDecl => ({
   name: 'tone', description: null, value_type: 'string',
@@ -12,19 +16,18 @@ const decl = (over: Partial<PromptVarDecl> = {}): PromptVarDecl => ({
 
 describe('VarDeclTable', () => {
   it('lists each declaration by key', () => {
-    render(<VarDeclTable vars={{ tone: decl() }} lang="en" onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
+    render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.getByText('{{ tone }}')).toBeInTheDocument()
   })
 
   it('shows the choices field only for an enum', () => {
     const { rerender } = render(
-      <VarDeclTable vars={{ tone: decl() }} lang="en" onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />,
+      <VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />,
     )
     expect(screen.queryByLabelText(/choices/i)).not.toBeInTheDocument()
     rerender(
       <VarDeclTable
         vars={{ tone: decl({ value_type: 'enum', choices: ['a'] }) }}
-        lang="en"
         onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()}
       />,
     )
@@ -36,7 +39,6 @@ describe('VarDeclTable', () => {
     render(
       <VarDeclTable
         vars={{ tone: decl({ value_type: 'enum', choices: [] }) }}
-        lang="en"
         onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()}
       />,
     )
@@ -45,31 +47,31 @@ describe('VarDeclTable', () => {
 
   it('emits an edit when the type changes', async () => {
     const onEdit = vi.fn()
-    render(<VarDeclTable vars={{ tone: decl() }} lang="en" onAdd={vi.fn()} onEdit={onEdit} onRemove={vi.fn()} />)
+    render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={onEdit} onRemove={vi.fn()} />)
     await userEvent.selectOptions(screen.getByLabelText(/type/i), 'number')
     expect(onEdit).toHaveBeenCalledWith('tone', expect.objectContaining({ value_type: 'number' }))
   })
 
   it('emits a removal', async () => {
     const onRemove = vi.fn()
-    render(<VarDeclTable vars={{ tone: decl() }} lang="en" onAdd={vi.fn()} onEdit={vi.fn()} onRemove={onRemove} />)
+    render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={onRemove} />)
     await userEvent.click(screen.getByRole('button', { name: /remove/i }))
     expect(onRemove).toHaveBeenCalledWith('tone')
   })
 
   it('offers no add or remove control when read-only', () => {
-    render(<VarDeclTable vars={{ tone: decl() }} lang="en" readOnly onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
+    render(<VarDeclTable vars={{ tone: decl() }} readOnly onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument()
   })
 
-  // The component defaults to German (matching Field.tsx/AgentSwitch.tsx's own
-  // `lang = 'de'` default) -- every other test above pins lang="en" to keep
-  // its English-regex assertions meaningful. This test is the one that
+  // Every other test runs in English to keep its English-regex assertions
+  // meaningful. This test is the one that
   // actually exercises the German dictionary, so a key present in en.ts but
   // missing (or untranslated) from de.ts would be caught here rather than
   // only by i18n.test.ts's key-parity check.
-  it('renders German labels by default', () => {
+  it('renders German labels', async () => {
+    await i18n.changeLanguage('de')
     render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
     expect(screen.getByLabelText('Beschreibung')).toBeInTheDocument()
     expect(screen.getByLabelText('Typ')).toBeInTheDocument()

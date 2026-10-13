@@ -1,6 +1,6 @@
 import type { PromptVarDecl, PromptVariantDoc } from '../../api/types'
 import { VarDeclTable } from '../../components/VarDeclTable'
-import { useTranslations, type Lang } from '../../i18n'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The workbench's centre pane for a variant's own settings (design §5.6,
@@ -15,7 +15,6 @@ export function VariantPane({
   variant,
   readOnly,
   canRemove,
-  lang = 'de',
   onRename,
   onModel,
   onRemove,
@@ -28,7 +27,6 @@ export function VariantPane({
   /** False on a document's only variant: the reducer keeps the last one
    * (a prompt needs a variant), so Remove there could only be a no-op. */
   canRemove: boolean
-  lang?: Lang
   onRename: (to: string) => void
   onModel: (model: string | null) => void
   onRemove: () => void
@@ -36,12 +34,12 @@ export function VariantPane({
   onEditVar: (key: string, decl: PromptVarDecl) => void
   onRemoveVar: (key: string) => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
 
   return (
     <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'auto' }}>
       <h4 style={{ margin: 0 }}>
-        {t.variantSettings} · {variant.name}
+        {t('variantSettings')} · {variant.name}
       </h4>
 
       {!readOnly && (
@@ -51,7 +49,7 @@ export function VariantPane({
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label htmlFor="variant-name" style={{ fontSize: 12 }}>
-              {t.variantName}
+              {t('variantName')}
             </label>
             <input
               className="input"
@@ -62,7 +60,7 @@ export function VariantPane({
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label htmlFor="variant-model" style={{ fontSize: 12 }}>
-              {t.variantModel}
+              {t('variantModel')}
             </label>
             <input
               className="input"
@@ -73,7 +71,7 @@ export function VariantPane({
           </div>
           {canRemove && (
             <button type="button" className="btn btn-ghost" onClick={onRemove}>
-              {t.remove}
+              {t('remove')}
             </button>
           )}
         </div>
@@ -82,7 +80,6 @@ export function VariantPane({
       <VarDeclTable
         vars={variant.vars}
         readOnly={readOnly}
-        lang={lang}
         onAdd={onAddVar}
         onEdit={onEditVar}
         onRemove={onRemoveVar}

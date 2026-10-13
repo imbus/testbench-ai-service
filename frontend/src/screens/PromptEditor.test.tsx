@@ -17,7 +17,7 @@ import type {
   PromptPlanResponse,
   PromptSaveResponse,
 } from '../api/types'
-import type { Lang } from '../i18n'
+import { i18n, type Lang } from '../i18n'
 import { PromptEditor } from './PromptEditor'
 
 // CM6 needs DOM APIs jsdom lacks; the wrapper holds no logic (Task 10/13's
@@ -278,11 +278,12 @@ function renderEditor({
   isAdmin = true,
   lang,
 }: { agent?: string; docLang?: string; isAdmin?: boolean; lang?: Lang } = {}) {
+  if (lang) void i18n.changeLanguage(lang)
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
   const router = createMemoryRouter(
-    [{ path: '/admin/prompts/:lang/:agent', element: <PromptEditor lang={lang} isAdmin={isAdmin} /> }],
+    [{ path: '/admin/prompts/:lang/:agent', element: <PromptEditor isAdmin={isAdmin} /> }],
     { initialEntries: [`/admin/prompts/${docLang}/${agent}`] },
   )
   return render(
@@ -300,6 +301,7 @@ function renderEditorWithNav({
   isAdmin = true,
   lang,
 }: { agent?: string; docLang?: string; isAdmin?: boolean; lang?: Lang } = {}) {
+  if (lang) void i18n.changeLanguage(lang)
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   })
@@ -310,7 +312,7 @@ function renderEditorWithNav({
         element: (
           <div>
             <Link to="/elsewhere">Elsewhere</Link>
-            <PromptEditor lang={lang} isAdmin={isAdmin} />
+            <PromptEditor isAdmin={isAdmin} />
           </div>
         ),
       },
@@ -1485,7 +1487,7 @@ describe('the Tabs layout', () => {
   })
 })
 
-// Every test above pins lang="en" to keep its English-text assertions
+// Every test above switches to English to keep its English-text assertions
 // meaningful. This is the one that exercises the real German default.
 it('renders German labels by default', async () => {
   renderEditor({})

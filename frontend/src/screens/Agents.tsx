@@ -10,7 +10,7 @@ import {
 } from '../api/agents'
 import { useConfig, useProjects, usePromptMeta } from '../api/queries'
 import { AgentSwitch } from '../components/AgentSwitch'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 import { valueAt } from './fields'
 
@@ -39,8 +39,8 @@ type View = 'list' | 'matrix'
  * or off globally and where its detail screen is reached from, and a matrix,
  * which is the only place the whole override picture is visible at once.
  */
-export function Agents({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
-  const t = useTranslations(lang)
+export function Agents({ isAdmin }: { isAdmin: boolean }) {
+  const { t } = useTranslation()
   const config = useConfig()
   const [view, setView] = useState<View>('list')
 
@@ -49,7 +49,7 @@ export function Agents({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
     const detail = (config.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
-        <div>{t.configError}</div>
+        <div>{t('configError')}</div>
         {detail && (
           <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
             {detail}
@@ -80,7 +80,7 @@ export function Agents({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 30 }}>{t.agents}</h2>
+          <h2 style={{ margin: 0, fontSize: 30 }}>{t('agents')}</h2>
           <div
             className="text-muted"
             style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
@@ -92,7 +92,7 @@ export function Agents({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
         {/* Two views of one table, so a segmented control rather than tabs:
             the design system paints the checked option through
             `.seg:has(input:checked)`, which needs real radios. */}
-        <div className="seg" role="radiogroup" aria-label={t.agents}>
+        <div className="seg" role="radiogroup" aria-label={t('agents')}>
           {(['list', 'matrix'] as const).map((entry) => (
             <label key={entry} className="seg-opt">
               <input
@@ -101,7 +101,7 @@ export function Agents({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
                 checked={view === entry}
                 onChange={() => setView(entry)}
               />
-              {entry === 'list' ? t.viewList : t.viewMatrix}
+              {entry === 'list' ? t('viewList') : t('viewMatrix')}
             </label>
           ))}
         </div>
@@ -129,11 +129,11 @@ export function Agents({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
             <span />
             <span>Agent</span>
             <span>
-              {t.model} ({t.effective})
+              {t('model')} ({t('effective')})
             </span>
             <span>endpoint_path</span>
             <span>prompt.file · variant</span>
-            <span>{t.agentsOn}</span>
+            <span>{t('agentsOn')}</span>
           </div>
           {keys.map((key) => (
             <AgentRow
@@ -141,13 +141,12 @@ export function Agents({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
               agentKey={key}
               disk={disk}
               running={running}
-              lang={lang}
               isAdmin={isAdmin}
             />
           ))}
         </div>
       ) : (
-        <Matrix keys={keys} disk={disk} running={running} lang={lang} isAdmin={isAdmin} />
+        <Matrix keys={keys} disk={disk} running={running} isAdmin={isAdmin} />
       )}
     </div>
   )
@@ -163,16 +162,14 @@ function AgentRow({
   agentKey,
   disk,
   running,
-  lang,
   isAdmin,
 }: {
   agentKey: string
   disk: Record<string, unknown>
   running: Record<string, unknown>
-  lang: Lang
   isAdmin: boolean
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const draft = useDraft()
   const [expanded, setExpanded] = useState(false)
 
@@ -240,7 +237,7 @@ function AgentRow({
           <button
             type="button"
             aria-expanded={expanded}
-            aria-label={`${t.activeIn} ${active.length} · ${overriders.length} ${t.overrides}`}
+            aria-label={`${t('activeIn')} ${active.length} · ${overriders.length} ${t('overrides')}`}
             onClick={() => setExpanded(!expanded)}
             style={{
               background: 'none',
@@ -300,15 +297,15 @@ function AgentRow({
             role="switch"
             className="switch"
             aria-checked={enabled}
-            aria-label={`${agentKey} ${t.agentsOn}`}
+            aria-label={`${agentKey} ${t('agentsOn')}`}
             disabled={!isAdmin}
             onClick={() => draft.setValue(enabledPath, !enabled)}
           >
             <span className="switch-knob" />
           </button>
           <span className="text-muted" style={{ fontSize: 11 }}>
-            {t.activeIn} <span data-testid="active-count">{active.length}</span> ·{' '}
-            <span data-testid="override-count">{overriders.length}</span> {t.overrides}
+            {t('activeIn')} <span data-testid="active-count">{active.length}</span> ·{' '}
+            <span data-testid="override-count">{overriders.length}</span> {t('overrides')}
           </span>
         </span>
       </div>
@@ -329,7 +326,7 @@ function AgentRow({
             className="text-muted"
             style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' }}
           >
-            {t.perProject}
+            {t('perProject')}
           </div>
           {active.map(({ project, overridden }) => (
             <div
@@ -340,11 +337,11 @@ function AgentRow({
               <span style={{ flex: 1 }}>{project}</span>
               {overridden ? (
                 <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
-                  {t.override}
+                  {t('override')}
                 </span>
               ) : (
                 <span className="text-muted" style={{ fontSize: 10 }}>
-                  {t.inherit}
+                  {t('inherit')}
                 </span>
               )}
             </div>
@@ -359,16 +356,14 @@ function Matrix({
   keys,
   disk,
   running,
-  lang,
   isAdmin,
 }: {
   keys: string[]
   disk: Record<string, unknown>
   running: Record<string, unknown>
-  lang: Lang
   isAdmin: boolean
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const projects = useProjects()
   const draft = useDraft()
   // Deduplicated: TestBench has been known to report a name twice, and two
@@ -382,7 +377,7 @@ function Matrix({
   if (columns.length === 0) {
     return (
       <div data-testid="no-projects" className="text-muted" style={{ fontSize: 13 }}>
-        {t.noProjects}
+        {t('noProjects')}
       </div>
     )
   }
@@ -392,14 +387,14 @@ function Matrix({
     const overrides = agentKeys(running).filter(
       (agentKey) => overridingProjects(running, agentKey).indexOf(project) !== -1,
     ).length
-    return overrides > 0 ? `${overrides} ${t.overrides}` : t.inheritsGlobal
+    return overrides > 0 ? `${overrides} ${t('overrides')}` : t('inheritsGlobal')
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {projects.data?.source === 'unavailable' && (
         <div data-testid="projects-unavailable" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t.projectsUnavailable}
+          {t('projectsUnavailable')}
         </div>
       )}
       <div className="blueprint" style={{ overflow: 'auto' }}>
@@ -430,7 +425,7 @@ function Matrix({
                     borderBottom: '1px solid var(--color-divider)',
                     whiteSpace: 'nowrap',
                   }}
-                  title={inTestBench ? project : `${project} · ${t.notInTestBench}`}
+                  title={inTestBench ? project : `${project} · ${t('notInTestBench')}`}
                 >
                   <div
                     style={{
@@ -500,7 +495,6 @@ function Matrix({
                         inherited={inherited}
                         label={`${agentKey} · ${project}`}
                         readOnly={!isAdmin}
-                        lang={lang}
                       />
                     </td>
                   )

@@ -9,6 +9,10 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { PromptDocument } from '../../api/types'
 import { MetaPane } from './MetaPane'
+import { i18n } from '../../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const DOC: PromptDocument = {
   lang: 'de',
@@ -53,7 +57,7 @@ const DOC: PromptDocument = {
 describe('MetaPane', () => {
   it('edits every header field', async () => {
     const onHeader = vi.fn()
-    render(<MetaPane draft={DOC} readOnly={false} defaultVariantIssue={null} lang="en" onHeader={onHeader} />)
+    render(<MetaPane draft={DOC} readOnly={false} defaultVariantIssue={null} onHeader={onHeader} />)
     await userEvent.type(screen.getByLabelText('Summary'), '!')
     expect(onHeader).toHaveBeenLastCalledWith('summary', 'Explains defects!')
     await userEvent.selectOptions(screen.getByLabelText('Default variant'), 'Quick')
@@ -66,7 +70,6 @@ describe('MetaPane', () => {
         draft={DOC}
         readOnly={false}
         defaultVariantIssue="default_variant 'X' is not a variant"
-        lang="en"
         onHeader={vi.fn()}
       />,
     )
@@ -75,7 +78,7 @@ describe('MetaPane', () => {
   })
 
   it('is read-only for a non-admin', () => {
-    render(<MetaPane draft={DOC} readOnly defaultVariantIssue={null} lang="en" onHeader={vi.fn()} />)
+    render(<MetaPane draft={DOC} readOnly defaultVariantIssue={null} onHeader={vi.fn()} />)
     expect(screen.getByLabelText('Name')).toHaveAttribute('readonly')
     expect(screen.getByLabelText('Default variant')).toBeDisabled()
   })

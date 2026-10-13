@@ -5,6 +5,10 @@ import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PromptTreeResponse } from '../../api/types'
 import { EditorToolbar } from './EditorToolbar'
+import { i18n } from '../../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const TREE: PromptTreeResponse = { languages: [
   { lang: 'de', prompts: [
@@ -27,7 +31,7 @@ afterEach(() => vi.unstubAllGlobals())
 function setup(overrides: Partial<Parameters<typeof EditorToolbar>[0]> = {}) {
   const props = {
     path: 'prompts/de/explainer/prompt.yaml', variants: ['Thorough', 'Quick'], selectedVariant: 'Thorough',
-    layout: 'split' as const, canSave: true, showSave: true, lang: 'en' as const,
+    layout: 'split' as const, canSave: true, showSave: true,
     onVariant: vi.fn(), onLayout: vi.fn(), onSave: vi.fn(), ...overrides,
   }
   function Screen() {

@@ -7,7 +7,7 @@ import { Field } from '../components/Field'
 import { ModelTable } from '../components/ModelTable'
 import { ReadOnlyField } from '../components/ReadOnlyField'
 import { ScopeTabs } from '../components/ScopeTabs'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt, type FieldSpec } from './fields'
 
 type Section = 'service' | 'llm' | 'logging'
@@ -36,17 +36,15 @@ function issueMatchesField(issuePath: string, fieldKey: string): boolean {
 
 export function ConfigSection({
   section,
-  lang,
   isAdmin,
   issues = [],
 }: {
   section: Section
-  lang: Lang
   isAdmin: boolean
   /** Field-addressed validation failures from the last preview or apply. */
   issues?: ConfigIssue[]
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const config = useConfig()
   const projects = useProjects()
   const [params, setParams] = useSearchParams()
@@ -75,7 +73,7 @@ export function ConfigSection({
     const detail = (config.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
-        <div>{t.configError}</div>
+        <div>{t('configError')}</div>
         {detail && (
           <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
             {detail}
@@ -134,7 +132,7 @@ export function ConfigSection({
           one line, so the section reads as the subject of the heading rather
           than as a caption under it. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t[TITLE_KEY[section]]}</h2>
+        <h2 style={{ margin: 0, fontSize: 30 }}>{t(TITLE_KEY[section])}</h2>
         <span
           className="text-muted"
           style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
@@ -155,12 +153,12 @@ export function ConfigSection({
               // stale one left behind would outlive the scope it described.
               setParams(next === null ? {} : { project: next })
             }}
-            globalLabel={t.globalScope}
-            addLabel={t.addProjectOverride}
+            globalLabel={t('globalScope')}
+            addLabel={t('addProjectOverride')}
           />
           {project !== null && (
             <div className="text-muted" style={{ fontSize: 12 }}>
-              {t.llmScopeHint}
+              {t('llmScopeHint')}
             </div>
           )}
         </>
@@ -178,7 +176,7 @@ export function ConfigSection({
                 key={entry.key}
                 role="tab"
                 aria-selected={tab === entry.key}
-                aria-label={`${t[entry.labelKey]}${count > 0 ? ` (${count} ${count === 1 ? 'issue' : 'issues'})` : ''}`}
+                aria-label={`${t(entry.labelKey)}${count > 0 ? ` (${count} ${count === 1 ? 'issue' : 'issues'})` : ''}`}
                 onClick={() => setTab(entry.key)}
                 style={{
                   background: 'none',
@@ -195,7 +193,7 @@ export function ConfigSection({
                   gap: 6,
                 }}
               >
-                {t[entry.labelKey]}
+                {t(entry.labelKey)}
                 {count > 0 && (
                   <span
                     style={{
@@ -254,10 +252,9 @@ export function ConfigSection({
               spec={spec}
               saved={saved}
               inheritedFrom={
-                scope.kind === 'project' ? { value: inherited, label: t.globalScope } : undefined
+                scope.kind === 'project' ? { value: inherited, label: t('globalScope') } : undefined
               }
               issue={issue}
-              lang={lang}
             />
           ) : (
             <ReadOnlyField
@@ -284,17 +281,16 @@ export function ConfigSection({
           }
           issues={issues}
           readOnly={!isAdmin}
-          lang={lang}
         />
       )}
 
       {section === 'llm' && scope.kind === 'project' && credentials.length > 0 && (
         <div style={{ maxWidth: 860 }}>
-          <h3 style={{ fontSize: 16, marginBottom: 8 }}>{t.credentialsHeading}</h3>
+          <h3 style={{ fontSize: 16, marginBottom: 8 }}>{t('credentialsHeading')}</h3>
           {credentials.map((entry) => (
             <div key={entry.provider} className="text-muted" style={{ fontSize: 12 }}>
               <strong>{entry.provider}</strong> —{' '}
-              {entry.key_present ? t.projectKeyPresent : t.projectKeyAbsent}
+              {entry.key_present ? t('projectKeyPresent') : t('projectKeyAbsent')}
             </div>
           ))}
         </div>

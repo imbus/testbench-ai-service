@@ -3,6 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { PromptVariantDoc } from '../../api/types'
 import { PromptTree } from './PromptTree'
+import { i18n } from '../../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const VARIANTS: PromptVariantDoc[] = [
   { name: 'Thorough', description: null, model: 'gpt-5.5', vars: {}, messages: [
@@ -15,7 +19,7 @@ const VARIANTS: PromptVariantDoc[] = [
 function setup(overrides = {}) {
   const props = {
     variants: VARIANTS, selectedVariant: 'Thorough', selection: { kind: 'message' as const, index: 1 },
-    flagged: [], readOnly: false, lang: 'en' as const,
+    flagged: [], readOnly: false,
     onOpenMeta: vi.fn(), onPickVariant: vi.fn(), onOpenVariantSettings: vi.fn(),
     onPickMessage: vi.fn(), onAddVariant: vi.fn(), onAddMessage: vi.fn(), ...overrides,
   }

@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DRAFT_STORAGE_KEY, DraftProvider } from '../state/draft'
 import { DiffDialog } from './DiffDialog'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const fetchMock = vi.fn()
 
@@ -35,7 +39,7 @@ function renderDialog(onClose = vi.fn()) {
   return render(
     <QueryClientProvider client={client}>
       <DraftProvider saved={{ port: 8010 }}>
-        <DiffDialog lang="en" onClose={onClose} />
+        <DiffDialog onClose={onClose} />
       </DraftProvider>
     </QueryClientProvider>,
   )

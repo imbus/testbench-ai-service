@@ -1,6 +1,6 @@
 import { lastSegment } from '../api/paths'
 import { useEffect, useState } from 'react'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import type { FieldSpec } from '../screens/fields'
 import { useDraft } from '../state/draft'
 
@@ -23,7 +23,6 @@ export function Field({
   saved,
   issue,
   inheritedFrom,
-  lang = 'de',
 }: {
   spec: FieldSpec
   /** The value as saved on disk — what an unedited field shows. */
@@ -45,9 +44,8 @@ export function Field({
    * back to inheriting.
    */
   inheritedFrom?: { value: unknown; label: string }
-  lang?: Lang
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const draft = useDraft()
   const draftValue = draft.valueOf(spec.key, saved)
   const changed = draft.isChanged(spec.key)
@@ -304,7 +302,7 @@ export function Field({
               style={{ fontSize: 11, padding: '0 6px', whiteSpace: 'nowrap' }}
               onClick={() => draft.unsetValue(spec.key)}
             >
-              {t.clearOverride}
+              {t('clearOverride')}
             </button>
           )}
           {changed && (
@@ -314,13 +312,13 @@ export function Field({
               style={{ fontSize: 11, padding: '0 6px', whiteSpace: 'nowrap' }}
               onClick={() => draft.revert(spec.key)}
             >
-              {t.revert}
+              {t('revert')}
             </button>
           )}
         </div>
         {inheriting && (
           <span data-testid="inherit-note" className="text-muted" style={{ fontSize: 11 }}>
-            {t.inherit} · {inheritedFrom.label}: {asNote(inheritedFrom.value)}
+            {t('inherit')} · {inheritedFrom.label}: {asNote(inheritedFrom.value)}
           </span>
         )}
         {issue && (

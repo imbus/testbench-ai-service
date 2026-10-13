@@ -16,6 +16,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import type { FieldSpec } from '../screens/fields'
 import { Field } from './Field'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const ENABLED: FieldSpec = {
   key: 'projects.Alpha.agents.reviewer.enabled',
@@ -43,7 +47,7 @@ function Harness({
 }) {
   return (
     <DraftProvider saved={savedConfig}>
-      <Field spec={spec} saved={saved} inheritedFrom={inherited} lang="en" />
+      <Field spec={spec} saved={saved} inheritedFrom={inherited} />
       <Edits />
     </DraftProvider>
   )
@@ -249,7 +253,7 @@ describe('without inheritedFrom', () => {
   it('renders exactly as before — no note, no clear-override action', () => {
     render(
       <DraftProvider saved={{ port: 8010 }}>
-        <Field spec={{ key: 'port', type: 'number', hint: 'Port' }} saved={8010} lang="en" />
+        <Field spec={{ key: 'port', type: 'number', hint: 'Port' }} saved={8010} />
       </DraftProvider>,
     )
     expect(screen.queryByTestId('inherit-note')).not.toBeInTheDocument()
@@ -259,7 +263,7 @@ describe('without inheritedFrom', () => {
   it('still marks the row overridden, so global rows are not styled as inherited', () => {
     render(
       <DraftProvider saved={{ port: 8010 }}>
-        <Field spec={{ key: 'port', type: 'number', hint: 'Port' }} saved={8010} lang="en" />
+        <Field spec={{ key: 'port', type: 'number', hint: 'Port' }} saved={8010} />
       </DraftProvider>,
     )
     expect(screen.getByTestId('field-row')).toHaveAttribute('data-overridden', 'true')
@@ -286,7 +290,7 @@ describe('a project name that is not a bare path segment', () => {
   it('still announces a validation message on that field', () => {
     render(
       <DraftProvider saved={{}}>
-        <Field spec={SPACED} saved={undefined} issue="Input should be a valid boolean" lang="en" />
+        <Field spec={SPACED} saved={undefined} issue="Input should be a valid boolean" />
       </DraftProvider>,
     )
 
@@ -326,7 +330,7 @@ describe('a value that happens to equal the inherited one', () => {
     }
     render(
       <DraftProvider saved={{ agents: { reviewer: { prompt: { variant: 'Quick' } } } }}>
-        <Field spec={spec} saved="Quick" lang="en" />
+        <Field spec={spec} saved="Quick" />
         <Edits />
       </DraftProvider>,
     )

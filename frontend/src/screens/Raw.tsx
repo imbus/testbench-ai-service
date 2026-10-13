@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { usePreview } from '../api/mutations'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 
 /**
@@ -10,8 +10,8 @@ import { useDraft } from '../state/draft'
  * browser: the artboard hand-rolled a `toToml`, and two serializers for one
  * file is two chances to disagree about what is actually on disk.
  */
-export function Raw({ lang }: { lang: Lang }) {
-  const t = useTranslations(lang)
+export function Raw() {
+  const { t } = useTranslation()
   const draft = useDraft()
   const preview = usePreview()
   const [copied, setCopied] = useState(false)
@@ -59,12 +59,12 @@ export function Raw({ lang }: { lang: Lang }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
         <h2 style={{ margin: 0, fontSize: 30 }}>config.toml</h2>
         <span className="text-muted" style={{ fontSize: 12 }}>
-          {t.rawSub}
+          {t('rawSub')}
         </span>
         <div style={{ flex: 1 }} />
         {preview.data && !preview.isError && (
           <button type="button" className="btn btn-secondary" onClick={onCopy}>
-            {copied ? t.copied : t.copy}
+            {copied ? t('copied') : t('copy')}
           </button>
         )}
       </div>

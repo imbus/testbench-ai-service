@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useTestPrompt } from '../api/mutations'
 import { useModels, useProjects } from '../api/queries'
 import type { PromptMessageDoc } from '../api/types'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 
 /** The picker's "Other model…" entry -- not a model id, so it can never collide with one. */
 const CUSTOM = '__custom__'
@@ -34,15 +34,13 @@ export function TestRunPanel({
   vars,
   agentContext,
   isAdmin,
-  lang = 'de',
 }: {
   messages: PromptMessageDoc[]
   vars: Record<string, unknown>
   agentContext: Record<string, unknown>
   isAdmin: boolean
-  lang?: Lang
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const [project, setProject] = useState<string | null>(null)
   const [model, setModel] = useState('')
   const [customPicked, setCustomPicked] = useState(false)
@@ -81,11 +79,11 @@ export function TestRunPanel({
 
   return (
     <section data-testid="test-run-panel" className="testrun">
-      <h3 className="testrun-title">{t.testRun}</h3>
+      <h3 className="testrun-title">{t('testRun')}</h3>
 
       <div className="testrun-fields">
         <div className="field">
-          <label htmlFor="testrun-model">{t.testRunModel}</label>
+          <label htmlFor="testrun-model">{t('testRunModel')}</label>
           {hasCatalogue && (
             <select
               id="testrun-model"
@@ -94,7 +92,7 @@ export function TestRunPanel({
               onChange={(event) => pickModel(event.target.value)}
             >
               <option value="" disabled>
-                {t.testRunModelPlaceholder}
+                {t('testRunModelPlaceholder')}
               </option>
               {providers.map((provider) => (
                 <optgroup
@@ -102,7 +100,7 @@ export function TestRunPanel({
                   label={
                     provider.key_present
                       ? provider.provider
-                      : `${provider.provider} (${t.testRunNoKey})`
+                      : `${provider.provider} (${t('testRunNoKey')})`
                   }
                 >
                   {provider.models.map((entry) => (
@@ -112,7 +110,7 @@ export function TestRunPanel({
                   ))}
                 </optgroup>
               ))}
-              <option value={CUSTOM}>{t.testRunModelCustom}</option>
+              <option value={CUSTOM}>{t('testRunModelCustom')}</option>
             </select>
           )}
           {custom && (
@@ -122,8 +120,8 @@ export function TestRunPanel({
               id={hasCatalogue ? 'testrun-model-input' : 'testrun-model'}
               ref={modelInput}
               className="input testrun-model-id"
-              aria-label={hasCatalogue ? t.testRunModelId : undefined}
-              placeholder={t.testRunModelIdPlaceholder}
+              aria-label={hasCatalogue ? t('testRunModelId') : undefined}
+              placeholder={t('testRunModelIdPlaceholder')}
               value={model}
               spellCheck={false}
               onChange={(event) => setModel(event.target.value)}
@@ -133,24 +131,24 @@ export function TestRunPanel({
             <div className="testrun-chips">
               <span className="testrun-chip">{selectedProvider.provider}</span>
               {selectedEntry.routing === 'fallback' && (
-                <span className="testrun-chip testrun-chip-warn">{t.testRunFallbackHint}</span>
+                <span className="testrun-chip testrun-chip-warn">{t('testRunFallbackHint')}</span>
               )}
               {!selectedProvider.key_present && (
-                <span className="testrun-chip testrun-chip-warn">{t.testRunNoKey}</span>
+                <span className="testrun-chip testrun-chip-warn">{t('testRunNoKey')}</span>
               )}
             </div>
           )}
         </div>
 
         <div className="field">
-          <label htmlFor="testrun-project">{t.testRunProject}</label>
+          <label htmlFor="testrun-project">{t('testRunProject')}</label>
           <select
             id="testrun-project"
             className="input"
             value={project ?? ''}
             onChange={(event) => setProject(event.target.value || null)}
           >
-            <option value="">{t.testRunProjectGlobal}</option>
+            <option value="">{t('testRunProjectGlobal')}</option>
             {(projects.data?.projects ?? []).map((entry) => (
               <option key={entry.name} value={entry.name}>
                 {entry.name}
@@ -162,10 +160,10 @@ export function TestRunPanel({
 
       <div className="testrun-actions">
         <button type="button" className="btn btn-primary" disabled={!canRun} onClick={handleRun}>
-          {t.testRunGo}
+          {t('testRunGo')}
         </button>
         {/* A sibling status note, not a swap of the button's own label --
-            the button's accessible name must stay `t.testRunGo` so it is
+            the button's accessible name must stay `t('testRunGo')` so it is
             still reachable by that name while a run is in flight. */}
         {/* aria-live: the button's own label never changes (see above), so
             without this a screen-reader user gets no announcement at all that
@@ -173,12 +171,12 @@ export function TestRunPanel({
         {test.isPending && (
           <span className="testrun-status" aria-live="polite">
             <span className="testrun-spinner" aria-hidden="true" />
-            {t.testRunPending}
+            {t('testRunPending')}
           </span>
         )}
         {!isAdmin && (
           <span className="testrun-status" aria-live="polite">
-            {t.testRunAdminOnly}
+            {t('testRunAdminOnly')}
           </span>
         )}
       </div>
@@ -193,19 +191,19 @@ export function TestRunPanel({
         <div className="testrun-result">
           <div className="testrun-chips">
             <span className="testrun-chip">
-              <span className="testrun-chip-label">{t.testRunLatency}</span>
+              <span className="testrun-chip-label">{t('testRunLatency')}</span>
               {test.data.latency_ms} ms
             </span>
-            <span className="testrun-chip" title={t.testRunRoute}>
-              <span className="testrun-chip-label">{t.testRunRoute}</span>
+            <span className="testrun-chip" title={t('testRunRoute')}>
+              <span className="testrun-chip-label">{t('testRunRoute')}</span>
               <code>
                 {test.data.resolved.provider} / {test.data.resolved.model}
               </code>
             </span>
             <span className="testrun-chip">
               {test.data.resolved.credential_scope === 'project'
-                ? t.testRunScopeProject
-                : t.testRunScopeGlobal}
+                ? t('testRunScopeProject')
+                : t('testRunScopeGlobal')}
             </span>
           </div>
           <pre className="testrun-output">{test.data.text}</pre>
@@ -213,7 +211,7 @@ export function TestRunPanel({
       )}
 
       <div className="testrun-hint">
-        <Link to="/admin/llm">{t.testRunAddHint}</Link>
+        <Link to="/admin/llm">{t('testRunAddHint')}</Link>
       </div>
     </section>
   )

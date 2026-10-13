@@ -62,7 +62,7 @@ function renderStatus({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <Status lang="de" isAdmin={isAdmin} />
+      <Status isAdmin={isAdmin} />
     </QueryClientProvider>,
   )
 }

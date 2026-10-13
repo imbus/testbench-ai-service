@@ -1,10 +1,10 @@
 import type { Ref } from 'react'
 import type { LintError, MessageRole, MessageSource, PromptMessageDoc } from '../../api/types'
-import { useTranslations, type Lang } from '../../i18n'
+import { useTranslation } from 'react-i18next'
 import { CodeEditor, type CodeEditorHandle } from '../CodeEditor'
 
 // A wire token round-tripped through the API, not prose -- kept in English
-// regardless of `lang`, matching how Field.tsx never translates `spec.key`.
+// regardless of the UI language, matching how Field.tsx never translates `spec.key`.
 const ROLES: MessageRole[] = ['system', 'user', 'assistant']
 
 /**
@@ -37,7 +37,6 @@ export function MessagePane({
   index,
   count,
   readOnly,
-  lang = 'de',
   diagnostics,
   insertable,
   editorRef,
@@ -53,7 +52,6 @@ export function MessagePane({
   index: number
   count: number
   readOnly: boolean
-  lang?: Lang
   diagnostics?: LintError[]
   insertable: string[]
   editorRef: Ref<CodeEditorHandle>
@@ -64,7 +62,7 @@ export function MessagePane({
   onSource: (source: MessageSource) => void
   onFile: (file: string) => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const roleId = `message-${index}-role`
   const sourceId = `message-${index}-source`
   const fileId = `message-${index}-file`
@@ -89,19 +87,19 @@ export function MessagePane({
           <div style={{ flex: 1 }} />
           {!readOnly && index > 0 && (
             <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onMove(index - 1)}>
-              {t.moveUp}
+              {t('moveUp')}
             </button>
           )}
           {!readOnly && index < count - 1 && (
             <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onMove(index + 1)}>
-              {t.moveDown}
+              {t('moveDown')}
             </button>
           )}
           {/* Hidden on a variant's only message: the reducer refuses to remove
               it (PromptVariant requires one), so the button would do nothing. */}
           {!readOnly && count > 1 && (
             <button type="button" className="btn btn-ghost" style={{ fontSize: 12, color: '#a33a2b' }} onClick={onRemove}>
-              {t.deleteMessage}
+              {t('deleteMessage')}
             </button>
           )}
         </div>
@@ -115,7 +113,7 @@ export function MessagePane({
                 small muted visible label stands in for what would otherwise
                 be sr-only. */}
             <label htmlFor={roleId} className="text-muted" style={{ fontSize: 11 }}>
-              {t.messageRole}
+              {t('messageRole')}
             </label>
             <select
               className="input"
@@ -138,7 +136,7 @@ export function MessagePane({
           {!readOnly && (
             <div style={pair}>
               <label htmlFor={sourceId} style={{ fontSize: 11 }}>
-                {t.messageSourceLabel}
+                {t('messageSourceLabel')}
               </label>
               <select
                 className="input"
@@ -159,15 +157,15 @@ export function MessagePane({
                 onChange={(event) => onSource(event.target.value as MessageSource)}
                 style={small}
               >
-                <option value="inline">{t.messageSourceInline}</option>
-                <option value="file">{t.messageSourceFile}</option>
+                <option value="inline">{t('messageSourceInline')}</option>
+                <option value="file">{t('messageSourceFile')}</option>
               </select>
             </div>
           )}
           {message.source === 'file' && !readOnly && (
             <div style={pair}>
               <label htmlFor={fileId} style={{ fontSize: 11 }}>
-                {t.messageFileLabel}
+                {t('messageFileLabel')}
               </label>
               <input
                 className="input"
@@ -186,7 +184,7 @@ export function MessagePane({
           {editable && (
             <div style={pair}>
               <label htmlFor={insertId} className="text-muted" style={{ fontSize: 11 }}>
-                {t.insertVar}
+                {t('insertVar')}
               </label>
               <select
                 className="input"
@@ -200,7 +198,7 @@ export function MessagePane({
                   handle?.insert(`{{ ${name} }}`)
                 }}
               >
-                <option value="">{t.insertVar}</option>
+                <option value="">{t('insertVar')}</option>
                 {insertable.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -213,7 +211,7 @@ export function MessagePane({
       </div>
       {!message.readable && message.file && (
         <span id={unreadableId} role="alert" style={{ fontSize: 11, color: '#a33a2b', padding: '4px 12px' }}>
-          {t.messageUnreadable} <code>{message.file}</code>
+          {t('messageUnreadable')} <code>{message.file}</code>
         </span>
       )}
       <div style={{ flex: 1, minHeight: 0 }}>

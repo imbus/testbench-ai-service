@@ -12,7 +12,7 @@ import { useRefreshProjects } from '../api/mutations'
 import { useConfig, useProjects } from '../api/queries'
 import type { ConfigIssue } from '../api/types'
 import { AgentSwitch } from '../components/AgentSwitch'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 import { LANGUAGES } from './agentFields'
 import { valueAt } from './fields'
@@ -30,15 +30,13 @@ function issueFor(issues: ConfigIssue[], key: string): string | undefined {
  * exactly the case an operator has to be able to see and clean up.
  */
 export function Projects({
-  lang,
   isAdmin,
   issues = [],
 }: {
-  lang: Lang
   isAdmin: boolean
   issues?: ConfigIssue[]
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const config = useConfig()
   const projects = useProjects()
   const refresh = useRefreshProjects()
@@ -50,7 +48,7 @@ export function Projects({
     const detail = (config.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
-        <div>{t.configError}</div>
+        <div>{t('configError')}</div>
         {detail && (
           <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
             {detail}
@@ -81,7 +79,7 @@ export function Projects({
     >
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 30 }}>{t.projects}</h2>
+          <h2 style={{ margin: 0, fontSize: 30 }}>{t('projects')}</h2>
           <div
             className="text-muted"
             style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
@@ -91,7 +89,7 @@ export function Projects({
         </div>
         {projects.data?.fetched_at && (
           <span data-testid="projects-fetched-at" className="text-muted" style={{ fontSize: 11 }}>
-            {t.fetchedAt} {new Date(projects.data.fetched_at).toLocaleString()}
+            {t('fetchedAt')} {new Date(projects.data.fetched_at).toLocaleString()}
           </span>
         )}
         {/* Admin only: the refresh spends the stored TestBench credential on an
@@ -104,14 +102,14 @@ export function Projects({
             disabled={refresh.isPending}
             onClick={() => refresh.mutate()}
           >
-            {refresh.isPending ? t.refreshing : t.refresh}
+            {refresh.isPending ? t('refreshing') : t('refresh')}
           </button>
         )}
       </div>
 
       {unavailable && (
         <div data-testid="projects-unavailable" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t.projectsUnavailable} {projects.data?.error}
+          {t('projectsUnavailable')} {projects.data?.error}
         </div>
       )}
 
@@ -121,7 +119,7 @@ export function Projects({
           dropped connection never reaches it at all. */}
       {refresh.isError && (
         <div data-testid="refresh-failed" role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t.refreshFailed} {(refresh.error as Error)?.message}
+          {t('refreshFailed')} {(refresh.error as Error)?.message}
         </div>
       )}
 
@@ -139,7 +137,7 @@ export function Projects({
             fontSize: 12,
           }}
         >
-          <label htmlFor="add-project">{t.projectName}</label>
+          <label htmlFor="add-project">{t('projectName')}</label>
           <input
             className="input"
             id="add-project"
@@ -158,15 +156,15 @@ export function Projects({
               setPending('')
             }}
           >
-            {t.add}
+            {t('add')}
           </button>
-          <span className="text-muted">{t.projectNameExact}</span>
+          <span className="text-muted">{t('projectNameExact')}</span>
         </div>
       )}
 
       {names.length === 0 ? (
         <div className="text-muted" style={{ fontSize: 13 }}>
-          {t.noProjects}
+          {t('noProjects')}
         </div>
       ) : (
         <div
@@ -189,7 +187,6 @@ export function Projects({
               running={running}
               issues={issues}
               isAdmin={isAdmin}
-              lang={lang}
             />
           ))}
         </div>
@@ -206,7 +203,6 @@ function ProjectCard({
   running,
   issues,
   isAdmin,
-  lang,
 }: {
   name: string
   inTestBench: boolean
@@ -215,9 +211,8 @@ function ProjectCard({
   running: Record<string, unknown>
   issues: ConfigIssue[]
   isAdmin: boolean
-  lang: Lang
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const draft = useDraft()
 
   const block = valueAt(running, projectPath(name))
@@ -269,14 +264,14 @@ function ProjectCard({
         </h3>
         <div style={{ flex: 1 }} />
         {!inTestBench && (
-          <span style={{ fontSize: 11, color: '#a33a2b' }}>⚠ {t.notInTestBench}</span>
+          <span style={{ fontSize: 11, color: '#a33a2b' }}>⚠ {t('notInTestBench')}</span>
         )}
         {overrideCount > 0 ? (
           <span className="tag tag-accent">
-            {overrideCount} {t.overrides}
+            {overrideCount} {t('overrides')}
           </span>
         ) : (
-          <span className="tag tag-neutral">{t.inheritsGlobal}</span>
+          <span className="tag tag-neutral">{t('inheritsGlobal')}</span>
         )}
       </div>
 
@@ -311,7 +306,7 @@ function ProjectCard({
                 checked={language === undefined || language === null}
                 onChange={() => draft.unsetValue(languagePath)}
               />
-              {t.inherit} ({String(globalLanguage ?? '')})
+              {t('inherit')} ({String(globalLanguage ?? '')})
             </label>
             {LANGUAGES.map((option) => (
               <label key={option} className="seg-opt" style={{ padding: '3px 10px', fontSize: 12 }}>
@@ -337,7 +332,7 @@ function ProjectCard({
             style={{ fontSize: 11, padding: '0 6px' }}
             onClick={() => draft.revert(languagePath)}
           >
-            {t.revert}
+            {t('revert')}
           </button>
         )}
       </div>
@@ -350,7 +345,7 @@ function ProjectCard({
       {/* No gap between rows: the hover band must meet the next divider. */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div className="text-muted" style={{ fontSize: 11, marginBottom: 6 }}>
-          {t.agents}
+          {t('agents')}
         </div>
         {keys.map((agentKey) => {
           const path = projectAgentPath(name, agentKey, 'enabled')
@@ -386,7 +381,6 @@ function ProjectCard({
                 }
                 label={`${agentKey} · ${name}`}
                 readOnly={!isAdmin}
-                lang={lang}
               >
                 <span
                   style={{
@@ -414,7 +408,7 @@ function ProjectCard({
                 )}
                 {hasOverride && (
                   <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
-                    {t.override}
+                    {t('override')}
                   </span>
                 )}
               </AgentSwitch>
@@ -443,8 +437,8 @@ function ProjectCard({
                 unsaved-changes guard and drops the operator's queued edits.
                 encodeURIComponent, so a project called `Release 2.0` addresses
                 itself on the other side rather than some other project. */}
-            <Link to={`/admin/llm?project=${encodeURIComponent(name)}`}>{t.editLlmConfig}</Link>
-            <div className="text-muted" style={{ fontSize: 11 }}>{t.removedWithProject}</div>
+            <Link to={`/admin/llm?project=${encodeURIComponent(name)}`}>{t('editLlmConfig')}</Link>
+            <div className="text-muted" style={{ fontSize: 11 }}>{t('removedWithProject')}</div>
           </div>
           <pre
             style={{
@@ -471,7 +465,7 @@ function ProjectCard({
             style={{ fontSize: 12 }}
             onClick={() => draft.unsetSubtree(projectPath(name))}
           >
-            {t.removeAllOverrides}
+            {t('removeAllOverrides')}
           </button>
         )}
       </div>

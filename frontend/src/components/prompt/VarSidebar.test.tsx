@@ -2,6 +2,10 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { VarSidebar, type LintState } from './VarSidebar'
+import { i18n } from '../../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const idle: LintState = { running: false, clean: false, error: null, errors: [] }
 
@@ -14,7 +18,6 @@ function setup(overrides: Partial<Parameters<typeof VarSidebar>[0]> = {}) {
     canInsert: true,
     canDeclare: true,
     lint: idle,
-    lang: 'en' as const,
     onInsert: vi.fn(),
     onDeclare: vi.fn(),
     onLint: vi.fn(),

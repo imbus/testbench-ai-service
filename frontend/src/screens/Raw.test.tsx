@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider } from '../state/draft'
 import { Raw } from './Raw'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const fetchMock = vi.fn()
 const TOML = '[testbench-ai-service]\nport = 9999\n'
@@ -13,7 +17,7 @@ function renderRaw() {
   return render(
     <QueryClientProvider client={client}>
       <DraftProvider saved={{ port: 8010 }}>
-        <Raw lang="en" />
+        <Raw />
       </DraftProvider>
     </QueryClientProvider>,
   )
@@ -108,7 +112,7 @@ describe('Raw', () => {
     render(
       <QueryClientProvider client={client}>
         <DraftProvider saved={{ port: 8010 }}>
-          <Raw lang="en" />
+          <Raw />
         </DraftProvider>
       </QueryClientProvider>,
     )

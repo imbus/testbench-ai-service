@@ -1,4 +1,4 @@
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import type { Theme } from '../theme'
 
 /**
@@ -8,23 +8,21 @@ import type { Theme } from '../theme'
  */
 export function ThemeButton({
   theme,
-  lang,
   onToggle,
   size = 36,
 }: {
   theme: Theme
-  lang: Lang
   onToggle: () => void
   size?: number
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   return (
     <button
       type="button"
       className="btn btn-secondary btn-icon"
       style={{ width: size, height: size }}
       onClick={onToggle}
-      aria-label={theme === 'light' ? t.darkTheme : t.lightTheme}
+      aria-label={theme === 'light' ? t('darkTheme') : t('lightTheme')}
     >
       <svg
         width="16"

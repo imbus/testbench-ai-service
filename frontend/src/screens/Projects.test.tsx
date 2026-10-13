@@ -10,6 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import type { ConfigResponse, ProjectsResponse } from '../api/types'
 import { Projects } from './Projects'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const DISK = {
   language: 'de',
@@ -82,7 +86,7 @@ function renderProjects({ isAdmin = true }: { isAdmin?: boolean } = {}) {
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <DraftProvider saved={DISK}>
-          <Projects lang="en" isAdmin={isAdmin} issues={[]} />
+          <Projects isAdmin={isAdmin} issues={[]} />
           <Edits />
         </DraftProvider>
       </MemoryRouter>
@@ -408,7 +412,7 @@ describe('against a running config as pydantic dumps it', () => {
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <DraftProvider saved={DISK}>
-            <Projects lang="en" isAdmin issues={[]} />
+            <Projects isAdmin issues={[]} />
             <Edits />
           </DraftProvider>
         </MemoryRouter>
@@ -482,7 +486,7 @@ describe('the llm_config panel links into the LLM screen', () => {
       <QueryClientProvider client={client}>
         <MemoryRouter>
           <DraftProvider saved={SPACED}>
-            <Projects lang="en" isAdmin issues={[]} />
+            <Projects isAdmin issues={[]} />
           </DraftProvider>
         </MemoryRouter>
       </QueryClientProvider>,

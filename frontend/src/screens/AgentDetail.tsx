@@ -17,7 +17,8 @@ import { Field } from '../components/Field'
 import { Modal } from '../components/Modal'
 import { ReadOnlyField } from '../components/ReadOnlyField'
 import { ScopeTabs } from '../components/ScopeTabs'
-import { useTranslations, type Lang } from '../i18n'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 import {
   AGENT_FIELDS,
@@ -42,15 +43,13 @@ function issueFor(issues: ConfigIssue[], key: string): string | undefined {
  * never asked for.
  */
 export function AgentDetail({
-  lang,
   isAdmin,
   issues = [],
 }: {
-  lang: Lang
   isAdmin: boolean
   issues?: ConfigIssue[]
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const { agentKey = '' } = useParams()
   const config = useConfig()
   const projects = useProjects()
@@ -100,7 +99,7 @@ export function AgentDetail({
     const detail = (config.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
-        <div>{t.configError}</div>
+        <div>{t('configError')}</div>
         {detail && (
           <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
             {detail}
@@ -113,7 +112,7 @@ export function AgentDetail({
   if (Object.keys(globalAgent).length === 0) {
     return (
       <div data-testid="unknown-agent" role="alert" style={{ padding: 28 }}>
-        {t.unknownAgent}
+        {t('unknownAgent')}
       </div>
     )
   }
@@ -160,7 +159,7 @@ export function AgentDetail({
   const inherited = (setting: string) =>
     scope.kind === 'global'
       ? undefined
-      : { value: valueAt(globalAgent as Record<string, unknown>, setting), label: t.globalScope }
+      : { value: valueAt(globalAgent as Record<string, unknown>, setting), label: t('globalScope') }
 
   return (
     <div
@@ -188,13 +187,13 @@ export function AgentDetail({
         selected={project}
         addable={addable}
         onSelect={setProject}
-        globalLabel={t.globalScope}
-        addLabel={t.addProjectOverride}
+        globalLabel={t('globalScope')}
+        addLabel={t('addProjectOverride')}
       />
 
       {meta.isError && (
         <div data-testid="meta-unavailable" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t.promptMetaUnavailable}
+          {t('promptMetaUnavailable')}
         </div>
       )}
 
@@ -216,7 +215,6 @@ export function AgentDetail({
                 saved={valueAt(disk, spec.key)}
                 issue={issueFor(issues, spec.key)}
                 inheritedFrom={inherited(setting)}
-                lang={lang}
               />
             ) : (
               <ReadOnlyField
@@ -235,7 +233,7 @@ export function AgentDetail({
         <i className="corner bl" />
         <i className="corner br" />
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
-          <h3 style={{ margin: 0, fontSize: 16 }}>{t.promptVars}</h3>
+          <h3 style={{ margin: 0, fontSize: 16 }}>{t('promptVars')}</h3>
           <span
             className="text-muted"
             style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
@@ -245,12 +243,12 @@ export function AgentDetail({
         </div>
         {varsReplaced && (
           <div data-testid="vars-replaced" className="text-muted" style={{ fontSize: 12 }}>
-            {t.varsReplaceGlobal}
+            {t('varsReplaceGlobal')}
           </div>
         )}
         {Object.keys(declared).length === 0 && undeclared.length === 0 ? (
           <div className="text-muted" style={{ fontSize: 12 }}>
-            {t.noPromptVars}
+            {t('noPromptVars')}
           </div>
         ) : (
           <>
@@ -265,7 +263,6 @@ export function AgentDetail({
                 inheritable={inheritable}
                 issues={issues}
                 isAdmin={isAdmin}
-                lang={lang}
               />
             ))}
             {undeclared.map((name) => (
@@ -275,7 +272,7 @@ export function AgentDetail({
                     key: promptVarPath(scope, agentKey, name),
                     type: 'text',
                     label: name,
-                    hint: t.notDeclaredByVariant,
+                    hint: t('notDeclaredByVariant'),
                   }}
                   value={
                     (scopedAgent.prompt?.vars as Record<string, unknown> | undefined)?.[name]
@@ -292,7 +289,7 @@ export function AgentDetail({
         <i className="corner tr" />
         <i className="corner bl" />
         <i className="corner br" />
-        <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{t.notEditableHere}</h3>
+        <h3 style={{ margin: '0 0 6px', fontSize: 16 }}>{t('notEditableHere')}</h3>
         {AGENT_READONLY_FIELDS(agentKey).map((spec) => (
           <ReadOnlyField key={spec.key} spec={spec} value={valueAt(running, spec.key)} />
         ))}
@@ -307,7 +304,7 @@ export function AgentDetail({
               style={{ fontSize: 12 }}
               onClick={() => draft.unsetSubtree(projectAgentPath(scope.project, agentKey))}
             >
-              {t.removeAllOverrides}
+              {t('removeAllOverrides')}
             </button>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -321,11 +318,11 @@ export function AgentDetail({
               disabled={draft.changeCount > 0}
               onClick={() => setForkOpen(true)}
             >
-              {t.forkPrompt}
+              {t('forkPrompt')}
             </button>
             {draft.changeCount > 0 && (
               <span className="text-muted" style={{ fontSize: 11 }}>
-                {t.forkBlockedByDraft}
+                {t('forkBlockedByDraft')}
               </span>
             )}
           </div>
@@ -380,7 +377,6 @@ function VarField({
   inheritable,
   issues,
   isAdmin,
-  lang,
 }: {
   scope: Scope
   agentKey: string
@@ -391,16 +387,15 @@ function VarField({
   inheritable: Record<string, unknown>
   issues: ConfigIssue[]
   isAdmin: boolean
-  lang: Lang
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const spec = promptVarField(scope, agentKey, varName, definition)
   const saved = valueAt(disk, spec.key)
 
   const fromGlobal = inheritable[varName]
   const inheritedValue = scope.kind === 'project' ? (fromGlobal ?? varDefault(definition)) : varDefault(definition)
   const label =
-    scope.kind === 'project' && fromGlobal !== undefined ? t.globalScope : t.promptDefault
+    scope.kind === 'project' && fromGlobal !== undefined ? t('globalScope') : t('promptDefault')
 
   if (!isAdmin) return <ReadOnlyField spec={spec} value={saved ?? inheritedValue} />
 
@@ -410,7 +405,6 @@ function VarField({
       saved={saved}
       issue={issueFor(issues, spec.key)}
       inheritedFrom={{ value: inheritedValue, label }}
-      lang={lang}
     />
   )
 }
@@ -435,7 +429,7 @@ function ForkPromptDialog({
   onCancel,
   onConfirm,
 }: {
-  t: ReturnType<typeof useTranslations>
+  t: TFunction
   project: string
   directory: string
   onDirectoryChange: (value: string) => void
@@ -445,14 +439,14 @@ function ForkPromptDialog({
   onConfirm: () => void
 }) {
   return (
-    <Modal label={t.forkPromptTitle}>
-      <h3 style={{ margin: 0 }}>{t.forkPromptTitle}</h3>
-      <p style={{ margin: 0, fontSize: 13 }}>{t.forkPromptBody}</p>
+    <Modal label={t('forkPromptTitle')}>
+      <h3 style={{ margin: 0 }}>{t('forkPromptTitle')}</h3>
+      <p style={{ margin: 0, fontSize: 13 }}>{t('forkPromptBody')}</p>
       <div className="text-muted" style={{ fontSize: 12 }}>
         {project}
       </div>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-        {t.forkDirectoryLabel}
+        {t('forkDirectoryLabel')}
         <input
           className="input"
           type="text"
@@ -469,10 +463,10 @@ function ForkPromptDialog({
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          {t.cancel}
+          {t('cancel')}
         </button>
         <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={pending}>
-          {pending ? t.forking : t.confirm}
+          {pending ? t('forking') : t('confirm')}
         </button>
       </div>
     </Modal>

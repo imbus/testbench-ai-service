@@ -1,5 +1,5 @@
 import type { PromptDocument } from '../../api/types'
-import { useTranslations, type Lang } from '../../i18n'
+import { useTranslation } from 'react-i18next'
 
 /**
  * The workbench's centre pane for the prompt.yaml header fields (design
@@ -56,19 +56,17 @@ export function MetaPane({
   draft,
   readOnly,
   defaultVariantIssue,
-  lang = 'de',
   onHeader,
 }: {
   draft: PromptDocument
   readOnly: boolean
   defaultVariantIssue: string | null
-  lang?: Lang
   onHeader: (
     field: 'name' | 'summary' | 'description' | 'default_model' | 'default_variant',
     value: string,
   ) => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
 
   return (
     <div
@@ -84,14 +82,14 @@ export function MetaPane({
       }}
     >
       <Header
-        label={t.promptName}
+        label={t('promptName')}
         id="prompt-name"
         value={draft.name}
         readOnly={readOnly}
         onChange={(value) => onHeader('name', value)}
       />
       <Header
-        label={t.promptSummary}
+        label={t('promptSummary')}
         id="prompt-summary"
         value={draft.summary ?? ''}
         readOnly={readOnly}
@@ -101,7 +99,7 @@ export function MetaPane({
           name/summary pair above and default_model/default_variant below. */}
       <div style={{ gridColumn: '1 / -1' }}>
         <Header
-          label={t.promptDescription}
+          label={t('promptDescription')}
           id="prompt-description"
           value={draft.description ?? ''}
           readOnly={readOnly}
@@ -110,7 +108,7 @@ export function MetaPane({
         />
       </div>
       <Header
-        label={t.defaultModel}
+        label={t('defaultModel')}
         id="prompt-default-model"
         value={draft.default_model}
         readOnly={readOnly}
@@ -118,7 +116,7 @@ export function MetaPane({
       />
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <label htmlFor="prompt-default-variant" style={{ fontSize: 12 }}>
-          {t.defaultVariant}
+          {t('defaultVariant')}
         </label>
         <select
           className="input"

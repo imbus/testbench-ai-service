@@ -1,21 +1,19 @@
 import { useState } from 'react'
 import type { ConfigIssue } from '../api/types'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 import { DiffDialog } from './DiffDialog'
 
 /** The artboard's top strip: how many changes are queued, and what to do with them. */
 export function PendingBanner({
-  lang,
   onIssues,
 }: {
-  lang: Lang
   /** Forwarded to the diff dialog so a preview or apply rejection's
    * field-addressed issues can reach the config screens. Optional so callers
    * that don't track issues (and existing tests) need not supply it. */
   onIssues?: (issues: ConfigIssue[]) => void
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const draft = useDraft()
   const [showDiff, setShowDiff] = useState(false)
 
@@ -47,7 +45,7 @@ export function PendingBanner({
             whiteSpace: 'nowrap',
           }}
         >
-          <b>{draft.changeCount}</b> {t.unapplied} ·{' '}
+          <b>{draft.changeCount}</b> {t('unapplied')} ·{' '}
           <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}>
             {Object.keys(draft.edits).join(', ')}
           </span>
@@ -59,7 +57,7 @@ export function PendingBanner({
           style={{ padding: '4px 10px', fontSize: 13 }}
           onClick={() => setShowDiff(true)}
         >
-          {t.viewDiff}
+          {t('viewDiff')}
         </button>
         <button
           type="button"
@@ -71,7 +69,7 @@ export function PendingBanner({
             onIssues?.([])
           }}
         >
-          {t.discard}
+          {t('discard')}
         </button>
         {/* The artboard's primary verb, and it does what the artboard's does:
             opens the diff. Applying still happens in one place, behind the
@@ -82,11 +80,11 @@ export function PendingBanner({
           style={{ padding: '4px 12px', fontSize: 13 }}
           onClick={() => setShowDiff(true)}
         >
-          {t.apply}
+          {t('apply')}
         </button>
       </div>
       {showDiff && (
-        <DiffDialog lang={lang} onClose={() => setShowDiff(false)} onIssues={onIssues} />
+        <DiffDialog onClose={() => setShowDiff(false)} onIssues={onIssues} />
       )}
     </>
   )

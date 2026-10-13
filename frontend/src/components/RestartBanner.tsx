@@ -1,4 +1,4 @@
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 
 /**
  * "Restart needed", and what for.
@@ -7,8 +7,8 @@ import { useTranslations, type Lang } from '../i18n'
  * supervisor (Windows service, systemd) and would kill a bare terminal process
  * outright, so the console tells the operator rather than doing it (spec 7).
  */
-export function RestartBanner({ lang, fields }: { lang: Lang; fields: string[] }) {
-  const t = useTranslations(lang)
+export function RestartBanner({ fields }: { fields: string[] }) {
+  const { t } = useTranslation()
   if (fields.length === 0) return null
 
   return (
@@ -37,7 +37,7 @@ export function RestartBanner({ lang, fields }: { lang: Lang; fields: string[] }
         <path d="M21 3v6h-6" />
       </svg>
       <span>
-        {t.restartNeeded} {t.restartWhich}{' '}
+        {t('restartNeeded')} {t('restartWhich')}{' '}
         <code style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{fields.join(', ')}</code>
       </span>
     </div>

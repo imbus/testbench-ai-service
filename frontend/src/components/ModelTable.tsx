@@ -3,14 +3,14 @@ import { useState } from 'react'
 import { joinPath, splitPath } from '../api/paths'
 import type { ConfigIssue, ExtraModelEntry, RoutingFamily } from '../api/types'
 import { useDraft, type Edits } from '../state/draft'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Which request shapes each provider's client can produce. Mirrors
  * `ALLOWED_ROUTING` in models/config.py — the server refuses a bad pairing as
  * a ConfigIssue, and filtering here keeps the operator from queuing one.
  *
- * Wire tokens, not prose: kept in English regardless of `lang`, the same way
+ * Wire tokens, not prose: kept in English regardless of the UI language, the same way
  * Field.tsx never translates `spec.key`.
  */
 const ALLOWED_ROUTING: Record<string, RoutingFamily[]> = {
@@ -113,15 +113,13 @@ export function ModelTable({
   entries,
   issues,
   readOnly = false,
-  lang = 'de',
 }: {
   /** Operator-added entries only — `llm_config.extra_models` as saved/drafted. Built-ins never appear here. */
   entries: Record<string, ExtraModelEntry>
   issues: ConfigIssue[]
   readOnly?: boolean
-  lang?: Lang
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const draft = useDraft()
 
   const [newName, setNewName] = useState('')
@@ -169,14 +167,14 @@ export function ModelTable({
 
   return (
     <div style={{ marginTop: 24 }}>
-      <h3 style={{ margin: '0 0 4px' }}>{t.models}</h3>
+      <h3 style={{ margin: '0 0 4px' }}>{t('models')}</h3>
       <p className="text-muted" style={{ fontSize: 12, margin: '0 0 12px' }}>
-        {t.modelsHint}
+        {t('modelsHint')}
       </p>
 
       {modelNames.length === 0 ? (
         <p className="text-muted" style={{ fontSize: 13 }}>
-          {t.modelsEmpty}
+          {t('modelsEmpty')}
         </p>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
@@ -195,9 +193,9 @@ export function ModelTable({
               borderBottom: '1px solid var(--color-divider)',
             }}
           >
-            <span>{t.modelName}</span>
-            <span>{t.modelProvider}</span>
-            <span>{t.modelRouting}</span>
+            <span>{t('modelName')}</span>
+            <span>{t('modelProvider')}</span>
+            <span>{t('modelRouting')}</span>
             <span />
           </div>
           {modelNames.map((model) => {
@@ -224,7 +222,7 @@ export function ModelTable({
                   disabled={readOnly}
                   onClick={() => onRemove(model)}
                 >
-                  {t.modelRemove}
+                  {t('modelRemove')}
                 </button>
                 {issue && (
                   <span
@@ -250,7 +248,7 @@ export function ModelTable({
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label htmlFor="model-new-name" style={{ fontSize: 11 }}>
-            {t.modelNewName}
+            {t('modelNewName')}
           </label>
           <input
             id="model-new-name"
@@ -263,7 +261,7 @@ export function ModelTable({
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label htmlFor="model-new-provider" style={{ fontSize: 11 }}>
-            {t.modelNewProvider}
+            {t('modelNewProvider')}
           </label>
           <select
             id="model-new-provider"
@@ -281,7 +279,7 @@ export function ModelTable({
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label htmlFor="model-new-routing" style={{ fontSize: 11 }}>
-            {t.modelNewRouting}
+            {t('modelNewRouting')}
           </label>
           <select
             id="model-new-routing"
@@ -298,7 +296,7 @@ export function ModelTable({
           </select>
         </div>
         <button type="button" className="btn" disabled={readOnly} onClick={onAdd}>
-          {t.modelAdd}
+          {t('modelAdd')}
         </button>
       </div>
     </div>

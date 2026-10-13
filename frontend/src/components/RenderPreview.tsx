@@ -3,7 +3,7 @@ import { DefaultValueControl } from './VarDeclTable'
 import { useRenderPrompt } from '../api/mutations'
 import { mergeContext } from '../api/prompts'
 import type { PromptMessageDoc, PromptVarDecl } from '../api/types'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 
 /** `null` on anything that is not a JSON object -- an array or a scalar is
  * not a context, and treating it as one would crash `mergeContext`. */
@@ -63,7 +63,6 @@ export function RenderPreview({
   decls = {},
   skeleton,
   isAdmin,
-  lang = 'de',
 }: {
   messages: PromptMessageDoc[]
   vars: Record<string, unknown>
@@ -71,9 +70,8 @@ export function RenderPreview({
   decls?: Record<string, PromptVarDecl>
   skeleton: Record<string, unknown>
   isAdmin: boolean
-  lang?: Lang
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const render = useRenderPrompt()
   const [contextText, setContextText] = useState(() => JSON.stringify(skeleton, null, 2))
   const [parseError, setParseError] = useState(false)
@@ -120,7 +118,7 @@ export function RenderPreview({
         <legend
           style={{ fontSize: 12, padding: 0, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}
         >
-          <span>{t.renderVars}</span>
+          <span>{t('renderVars')}</span>
           {Object.keys(varEdits).length > 0 && (
             <button
               type="button"
@@ -128,13 +126,13 @@ export function RenderPreview({
               style={{ marginLeft: 'auto', fontSize: 11 }}
               onClick={() => setVarEdits({})}
             >
-              {t.renderVarsReset}
+              {t('renderVarsReset')}
             </button>
           )}
         </legend>
         {declEntries.length === 0 && (
           <span className="text-muted" style={{ fontSize: 12 }}>
-            {t.renderVarsEmpty}
+            {t('renderVarsEmpty')}
           </span>
         )}
         {declEntries.map(([key, decl]) => {
@@ -159,7 +157,7 @@ export function RenderPreview({
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <label htmlFor="render-context" style={{ fontSize: 12 }}>
-          {t.renderContext}
+          {t('renderContext')}
         </label>
         {/* The wire field name the mutation actually sends -- supplementary,
             not the accessible label: an ordinary UI word ("context") has an
@@ -193,13 +191,13 @@ export function RenderPreview({
           disabled={render.isPending}
           onClick={handleRender}
         >
-          {render.isPending ? t.rendering : t.render}
+          {render.isPending ? t('rendering') : t('render')}
         </button>
       </div>
 
       {parseError && (
         <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t.renderInvalidJson}
+          {t('renderInvalidJson')}
         </div>
       )}
 

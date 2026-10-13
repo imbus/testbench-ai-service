@@ -5,7 +5,7 @@ import { NavRail } from './NavRail'
 const renderNav = (isAdmin: boolean) =>
   render(
     <MemoryRouter initialEntries={['/admin/status']}>
-      <NavRail lang="de" isAdmin={isAdmin} />
+      <NavRail isAdmin={isAdmin} />
     </MemoryRouter>,
   )
 
@@ -85,7 +85,7 @@ it('keeps agents and projects readable for a non-admin', () => {
 it('badges Projects with the number of overrides in force', () => {
   render(
     <MemoryRouter initialEntries={['/admin/status']}>
-      <NavRail lang="de" isAdmin overrideCount={3} />
+      <NavRail isAdmin overrideCount={3} />
     </MemoryRouter>,
   )
 

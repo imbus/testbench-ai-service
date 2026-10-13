@@ -8,6 +8,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PromptTreeResponse } from '../api/types'
 import { Prompts } from './Prompts'
+import { i18n } from '../i18n'
 
 const TREE: PromptTreeResponse = {
   languages: [
@@ -80,17 +81,18 @@ function ok(body: unknown) {
 }
 
 function renderPrompts() {
+  void i18n.changeLanguage('en')
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <Prompts lang="en" />
+        <Prompts />
       </MemoryRouter>
     </QueryClientProvider>,
   )
 }
 
-/** No `lang` prop -- exercises the console's actual German default. */
+/** No language switch -- exercises the console's actual German default. */
 function renderPromptsDefault() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -182,8 +184,7 @@ describe('Prompts', () => {
     await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
   })
 
-  // The screen defaults to German (matching every other screen's own
-  // `lang = 'de'` default) -- every test above pins lang="en" to keep its
+  // The console starts in German -- every test above switches to English to keep its
   // English-text assertions meaningful. This is the one that actually
   // exercises the German dictionary for a key THIS screen reads.
   it('renders the German empty state by default', async () => {

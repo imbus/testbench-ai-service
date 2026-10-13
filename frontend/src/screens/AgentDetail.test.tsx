@@ -10,6 +10,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import type { ConfigResponse, ProjectsResponse, PromptForkResponse, PromptMeta } from '../api/types'
 import { AgentDetail } from './AgentDetail'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 // `useNavigate` is mocked rather than asserted through a real route match: the
 // fork dialog's whole point is that it navigates using the SERVER's response
@@ -182,7 +186,7 @@ function renderDetail({
           <Routes>
             <Route
               path="/admin/agents/:agentKey"
-              element={<AgentDetail lang="en" isAdmin={isAdmin} issues={[]} />}
+              element={<AgentDetail isAdmin={isAdmin} issues={[]} />}
             />
           </Routes>
           <Edits />
@@ -521,7 +525,7 @@ describe('prompt variables in a project that declares its own', () => {
             <Routes>
               <Route
                 path="/admin/agents/:agentKey"
-                element={<AgentDetail lang="en" isAdmin issues={[]} />}
+                element={<AgentDetail isAdmin issues={[]} />}
               />
             </Routes>
             <Edits />

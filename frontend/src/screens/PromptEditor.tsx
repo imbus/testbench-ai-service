@@ -23,7 +23,8 @@ import { RenderPreview } from '../components/RenderPreview'
 import { SavePromptDialog } from '../components/SavePromptDialog'
 import { TestRunPanel } from '../components/TestRunPanel'
 import { VarDeclTable } from '../components/VarDeclTable'
-import { useTranslations, type Lang, type Translations } from '../i18n'
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { MIN_PANE_HEIGHT, useEditorLayout, usePaneHeight } from '../state/editorLayout'
 import { isDirty, promptDraftReducer } from '../state/promptDraft'
 
@@ -158,8 +159,8 @@ function fieldFromSaveError(message: string): SaveFieldError | null {
 
 /** Localizes one `agentsUsingVariant` scope. Only the project name (a wire
  * token, like an agent key) stays untranslated. */
-function referenceLabel(t: Translations, scope: Scope): string {
-  return scope.kind === 'global' ? t.orphanGlobalTable : `${t.orphanProjectPrefix} '${scope.project}'`
+function referenceLabel(t: TFunction, scope: Scope): string {
+  return scope.kind === 'global' ? t('orphanGlobalTable') : `${t('orphanProjectPrefix')} '${scope.project}'`
 }
 
 /** The variant the centre pane works on. Never `variants[0]` unguarded: an
@@ -177,11 +178,11 @@ function withoutIndex(set: ReadonlySet<number>, index: number): ReadonlySet<numb
   return next
 }
 
-export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: boolean }) {
-  const t = useTranslations(lang)
+export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
+  const { t } = useTranslation()
   // The route's own `:lang` names the PROMPT FILE's language (which
-  // `prompts_dir/<lang>/` a save reads and writes) -- unrelated to the `lang`
-  // prop above, which is the console's own display language.
+  // `prompts_dir/<lang>/` a save reads and writes) -- unrelated to the
+  // console's own display language, which i18next holds.
   const { lang: docLang = '', agent: agentKey = '' } = useParams()
 
   const document = usePromptDocument(docLang || undefined, agentKey || undefined)
@@ -340,11 +341,11 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     if (!dirty) return
     const handler = (event: BeforeUnloadEvent) => {
       event.preventDefault()
-      event.returnValue = t.unsavedChangesWarning
+      event.returnValue = t('unsavedChangesWarning')
     }
     window.addEventListener('beforeunload', handler)
     return () => window.removeEventListener('beforeunload', handler)
-  }, [dirty, t.unsavedChangesWarning])
+  }, [dirty, t('unsavedChangesWarning')])
 
   // Blocks an IN-APP navigation (a `<Link>`/`NavLink` click elsewhere in the
   // console) the same way the effect above blocks a tab close or refresh.
@@ -382,7 +383,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     const detail = (document.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
-        <div>{t.promptDocError}</div>
+        <div>{t('promptDocError')}</div>
         {detail && (
           <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
             {detail}
@@ -531,7 +532,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       // arrive cover an unknown subset of the messages, and a diagnostics map
       // missing entries reads exactly like "these messages are clean".
       setDiagnosticsMap({})
-      setLintError((error as Error)?.message || t.lintFailed)
+      setLintError((error as Error)?.message || t('lintFailed'))
     } finally {
       setLinting(false)
     }
@@ -552,7 +553,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
   }
 
   const addVariant = () => {
-    const name = uniqueVariantName(t.newVariantDefault, draft.variants.map((v) => v.name))
+    const name = uniqueVariantName(t('newVariantDefault'), draft.variants.map((v) => v.name))
     dispatch({ type: 'addVariant', name })
     openVariantSettings(name)
   }
@@ -631,7 +632,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
     canInsert: isAdmin && !!currentMessage?.readable,
     canDeclare: isAdmin,
     lint: lintState,
-    lang,
     onInsert: insert,
     onDeclare: declareUndeclared,
     onLint: () => void runLint(),
@@ -653,7 +653,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
               ? (saveErrorMessage ?? planErrorMessage)
               : null
           }
-          lang={lang}
           onHeader={setHeader}
         />
       )}
@@ -661,14 +660,13 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
           {messages.length === 0 && (
             <div className="text-muted" style={{ padding: '20px 24px 0', fontSize: 13 }}>
-              {t.noMessages}
+              {t('noMessages')}
             </div>
           )}
           <VariantPane
             variant={selectedVariantObj}
             readOnly={!isAdmin}
             canRemove={draft.variants.length > 1}
-            lang={lang}
             onRename={(to) => {
               dispatch({ type: 'renameVariant', from: selectedVariantObj.name, to })
               // The selection is resolved BY NAME, so it has to follow the
@@ -706,7 +704,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
           index={current.index}
           count={messages.length}
           readOnly={!isAdmin}
-          lang={lang}
           diagnostics={diagnostics[current.index]}
           insertable={[...agentVars, ...declaredVars]}
           onRemove={() => removeMessage(current.index)}
@@ -738,7 +735,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       decls={vars}
       skeleton={agentContext}
       isAdmin={isAdmin}
-      lang={lang}
     />
   )
 
@@ -748,7 +744,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       vars={sampleVars(vars)}
       agentContext={agentContext}
       isAdmin={isAdmin}
-      lang={lang}
     />
   )
 
@@ -761,7 +756,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         flagged={flagged}
         invalidVariants={saveFieldError?.kind === 'emptyVariants' ? saveFieldError.names : []}
         readOnly={!isAdmin}
-        lang={lang}
         onOpenMeta={() => setSelection({ kind: 'meta' })}
         onPickVariant={pickVariant}
         onOpenVariantSettings={openVariantSettings}
@@ -780,7 +774,7 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
           height={paneHeight}
           min={MIN_PANE_HEIGHT}
           max={() => (splitColumnRef.current?.clientHeight ?? 0) - 160}
-          label={t.resizePreviewPane}
+          label={t('resizePreviewPane')}
           onResize={setPaneHeight}
         />
         <div
@@ -823,7 +817,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
             <VarDeclTable
               vars={vars}
               readOnly={!isAdmin}
-              lang={lang}
               onAdd={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
               onEdit={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
               onRemove={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}
@@ -840,7 +833,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         undeclared: undeclared.length,
       }}
       variantName={variantName}
-      lang={lang}
       onOpenMeta={() => setSelection({ kind: 'meta' })}
       onOpenVariantSettings={() => openVariantSettings(variantName)}
       onPickMessage={(index) => setSelection({ kind: 'message', index })}
@@ -871,7 +863,6 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
         showSave={isAdmin}
         canSave={dirty && emptyEnumVariants.length === 0 && invalidJinja.length === 0}
         onSave={openConfirm}
-        lang={lang}
       />
 
       {/* A background refetch failure (e.g. the tree/document invalidation
@@ -880,17 +871,17 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
           ever loaded. The draft stays exactly as it was. */}
       {document.isError && (
         <div role="alert" style={alertStyle}>
-          {t.promptDocError}
+          {t('promptDocError')}
         </div>
       )}
       {isAdmin && invalidJinja.length > 0 && (
         // `status`, not `alert`: the error itself is already the alert (the
         // editor's marker, the sidebar's line) -- this says what it blocks.
         <div role="status" data-testid="save-blocked-jinja" style={alertStyle}>
-          {t.saveBlockedJinja}{' '}
+          {t('saveBlockedJinja')}{' '}
           {invalidJinja
             .map(({ index, message, error }) =>
-              `${index + 1} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t.lintLine} ${error.line}: ${error.message}`,
+              `${index + 1} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine')} ${error.line}: ${error.message}`,
             )
             .join(' · ')}
         </div>
@@ -910,13 +901,12 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
           pending={save.isPending || plan.isPending}
           onCancel={closeConfirm}
           onConfirm={confirmSave}
-          lang={lang}
         >
           {orphanWarnings.length > 0 && (
             <div role="alert" style={{ fontSize: 12, color: '#a33a2b', display: 'flex', flexDirection: 'column', gap: 4 }}>
               {orphanWarnings.map((entry) => (
                 <div key={entry.name} data-testid={`orphan-${entry.name}`}>
-                  {t.confirmSaveOrphanWarning} {entry.name} —{' '}
+                  {t('confirmSaveOrphanWarning')} {entry.name} —{' '}
                   {entry.referencedBy.map((scope) => referenceLabel(t, scope)).join(', ')}
                 </div>
               ))}
@@ -926,15 +916,15 @@ export function PromptEditor({ lang = 'de', isAdmin }: { lang?: Lang; isAdmin: b
       )}
 
       {blocker.state === 'blocked' && (
-        <Modal label={t.unsavedNavTitle} width={480}>
-          <h3 style={{ margin: 0 }}>{t.unsavedNavTitle}</h3>
-          <div style={{ fontSize: 13 }}>{t.unsavedNavBody}</div>
+        <Modal label={t('unsavedNavTitle')} width={480}>
+          <h3 style={{ margin: 0 }}>{t('unsavedNavTitle')}</h3>
+          <div style={{ fontSize: 13 }}>{t('unsavedNavBody')}</div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button type="button" className="btn btn-secondary" onClick={() => blocker.reset?.()}>
-              {t.cancel}
+              {t('cancel')}
             </button>
             <button type="button" className="btn btn-primary" onClick={() => blocker.proceed?.()}>
-              {t.leaveAnyway}
+              {t('leaveAnyway')}
             </button>
           </div>
         </Modal>

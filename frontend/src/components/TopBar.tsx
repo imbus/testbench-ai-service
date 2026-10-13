@@ -1,31 +1,27 @@
 import { BrandMark } from './BrandMark'
 import { LangSeg } from './LangSeg'
 import { ThemeButton } from './ThemeButton'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import type { Theme } from '../theme'
 import type { SessionInfo } from '../api/types'
 
 interface TopBarProps {
   session: SessionInfo
-  lang: Lang
   theme: Theme
   /** Where the service itself answers, as `host:port`. Absent until /status lands. */
   serviceLabel?: string
   onToggleTheme: () => void
-  onSetLang: (lang: Lang) => void
   onSignOut: () => void
 }
 
 export function TopBar({
   session,
-  lang,
   theme,
   serviceLabel,
   onToggleTheme,
-  onSetLang,
   onSignOut,
 }: TopBarProps) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   return (
     <header
       style={{
@@ -58,8 +54,8 @@ export function TopBar({
         </span>
       )}
       <div style={{ flex: 1 }} />
-      <LangSeg lang={lang} onSetLang={onSetLang} compact />
-      <ThemeButton theme={theme} lang={lang} onToggle={onToggleTheme} size={32} />
+      <LangSeg compact />
+      <ThemeButton theme={theme} onToggle={onToggleTheme} size={32} />
       <div
         style={{
           display: 'flex',
@@ -88,11 +84,11 @@ export function TopBar({
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
           <span style={{ fontSize: 13 }}>{session.username}</span>
           <span className="text-muted" style={{ fontSize: 11 }}>
-            {session.is_admin ? t.admin : t.testManager}
+            {session.is_admin ? t('admin') : t('testManager')}
           </span>
         </div>
         <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={onSignOut}>
-          {t.logout}
+          {t('logout')}
         </button>
       </div>
     </header>

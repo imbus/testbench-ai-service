@@ -9,6 +9,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import type { ConfigResponse, ProjectsResponse, PromptMeta } from '../api/types'
 import { Agents } from './Agents'
+import { i18n } from '../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const DISK = {
   agents: {
@@ -98,7 +102,7 @@ function renderAgents({ isAdmin = true }: { isAdmin?: boolean } = {}) {
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <DraftProvider saved={DISK}>
-          <Agents lang="en" isAdmin={isAdmin} />
+          <Agents isAdmin={isAdmin} />
           <Edits />
         </DraftProvider>
       </MemoryRouter>

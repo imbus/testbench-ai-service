@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 
 /**
@@ -18,7 +18,6 @@ export function AgentSwitch({
   inherited,
   label,
   readOnly = false,
-  lang = 'de',
   children,
 }: {
   /** Edit path this switch writes to — already tokenizer-quoted by the caller. */
@@ -30,11 +29,10 @@ export function AgentSwitch({
   /** Names the switch for assistive tech. */
   label: string
   readOnly?: boolean
-  lang?: Lang
   /** Row content between the switch and its state caption (the agent's name). */
   children?: ReactNode
 }) {
-  const t = useTranslations(lang)
+  const { t } = useTranslation()
   const draft = useDraft()
   const changed = draft.isChanged(path)
   const value = draft.valueOf(path, saved)
@@ -42,8 +40,8 @@ export function AgentSwitch({
   // A queued `null` is a removal, i.e. "inherit again" -- not a value.
   const overridden = value !== null && value !== undefined
   const effective = overridden ? value === true : inherited
-  const stateWord = effective ? t.stateOn : t.stateOff
-  const caption = overridden ? stateWord : `${t.inherit} (${stateWord})`
+  const stateWord = effective ? t('stateOn') : t('stateOff')
+  const caption = overridden ? stateWord : `${t('inherit')} (${stateWord})`
 
   return (
     <span
@@ -89,7 +87,7 @@ export function AgentSwitch({
           style={{ fontSize: 11, padding: '0 6px', whiteSpace: 'nowrap' }}
           onClick={() => draft.unsetValue(path)}
         >
-          {t.clearOverride}
+          {t('clearOverride')}
         </button>
       )}
     </span>

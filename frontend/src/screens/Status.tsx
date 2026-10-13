@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useActivity, useStatus } from '../api/queries'
 import type { ActivityScope } from '../api/types'
-import { useTranslations, type Lang } from '../i18n'
+import { useTranslation } from 'react-i18next'
+import { type Lang, useLang } from '../i18n'
 
 const LEVEL_COLORS: Record<string, string> = {
   ERROR: '#c0392b',
@@ -75,21 +76,22 @@ function Dot({ ok }: { ok: boolean }) {
 
 const SCOPES: ActivityScope[] = ['mine', 'service', 'all']
 
-function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
-  const t = useTranslations(lang)
+function ActivityPanel({ isAdmin }: { isAdmin: boolean }) {
+  const { t } = useTranslation()
+  const lang = useLang()
   const [scope, setScope] = useState<ActivityScope>(isAdmin ? 'all' : 'mine')
   const activity = useActivity({ scope })
   const entries = activity.data ?? []
   const scopeLabel: Record<ActivityScope, string> = {
-    mine: t.scopeMine,
-    service: t.scopeService,
-    all: t.scopeAll,
+    mine: t('scopeMine'),
+    service: t('scopeService'),
+    all: t('scopeAll'),
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <h4 style={{ margin: 0 }}>{isAdmin ? t.activity : t.myActivity}</h4>
+        <h4 style={{ margin: 0 }}>{isAdmin ? t('activity') : t('myActivity')}</h4>
         {isAdmin &&
           SCOPES.map((s) => (
             <button
@@ -120,7 +122,7 @@ function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
         <i className="corner tr" />
         <i className="corner bl" />
         <i className="corner br" />
-        {entries.length === 0 && <span className="text-muted">{t.activityEmpty}</span>}
+        {entries.length === 0 && <span className="text-muted">{t('activityEmpty')}</span>}
         {entries.map((entry, i) => {
           const startsRun = entry.run_id !== null && entry.run_id !== entries[i - 1]?.run_id
           return (
@@ -157,7 +159,7 @@ function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
                 <span>
                   {entry.scope === 'service' && (
                     <span data-testid="service-badge" className="text-muted">
-                      [{t.serviceBadge}]{' '}
+                      [{t('serviceBadge')}]{' '}
                     </span>
                   )}
                   {entry.message}
@@ -165,7 +167,7 @@ function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
               </div>
               {entry.exc && (
                 <details style={{ marginLeft: TIME_COLUMN + COLUMN_GAP + LEVEL_COLUMN }}>
-                  <summary className="text-muted">{t.traceback}</summary>
+                  <summary className="text-muted">{t('traceback')}</summary>
                   <pre style={{ margin: 0 }}>{entry.exc}</pre>
                 </details>
               )}
@@ -177,8 +179,8 @@ function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
   )
 }
 
-export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
-  const t = useTranslations(lang)
+export function Status({ isAdmin }: { isAdmin: boolean }) {
+  const { t } = useTranslation()
   const status = useStatus()
 
   if (status.isLoading) return <div style={{ padding: 28 }}>…</div>
@@ -190,7 +192,7 @@ export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
     const detail = (status.error as Error)?.message
     return (
       <div role="alert" style={{ padding: 28 }}>
-        <div>{t.statusError}</div>
+        <div>{t('statusError')}</div>
         {detail && (
           <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
             {detail}
@@ -213,9 +215,9 @@ export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t.status}</h2>
+        <h2 style={{ margin: 0, fontSize: 30 }}>{t('status')}</h2>
         <span className="text-muted" style={{ fontSize: 13 }}>
-          {t.statusSub}
+          {t('statusSub')}
         </span>
       </div>
 
@@ -226,10 +228,10 @@ export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
           gap: 20,
         }}
       >
-        <Card kicker={t.service}>
+        <Card kicker={t('service')}>
           <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Dot ok />
-            {t.running}
+            {t('running')}
           </div>
           <div className="card-meta">
             {service.host}:{service.port} · v{service.version} ·{' '}
@@ -244,14 +246,14 @@ export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
             style={{ display: 'flex', alignItems: 'center', gap: 8 }}
           >
             <Dot ok={testbench.reachable} />
-            {testbench.reachable ? t.connected : t.notConnected}
+            {testbench.reachable ? t('connected') : t('notConnected')}
           </div>
           <div className="card-meta" style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>
             {testbench.url}
           </div>
         </Card>
 
-        <Card kicker={t.apiKeys}>
+        <Card kicker={t('apiKeys')}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {api_keys.map((key) => (
               <div
@@ -266,23 +268,23 @@ export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
               >
                 <Dot ok={key.present} />
                 <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{key.name}</span>
-                <span className="text-muted">{key.present ? t.keySet : t.keyMissing}</span>
+                <span className="text-muted">{key.present ? t('keySet') : t('keyMissing')}</span>
               </div>
             ))}
           </div>
         </Card>
 
-        <Card kicker={t.agents}>
+        <Card kicker={t('agents')}>
           <div className="card-title">
-            {agents.total} {t.agents}
+            {agents.total} {t('agents')}
           </div>
           <div className="card-meta">
-            {agents.enabled} {t.agentsOn} · {agents.project_overrides} {t.overrides}
+            {agents.enabled} {t('agentsOn')} · {agents.project_overrides} {t('overrides')}
           </div>
         </Card>
       </div>
 
-      <ActivityPanel lang={lang} isAdmin={isAdmin} />
+      <ActivityPanel isAdmin={isAdmin} />
     </div>
   )
 }

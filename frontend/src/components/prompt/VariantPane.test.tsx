@@ -9,6 +9,10 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { PromptDocument } from '../../api/types'
 import { VariantPane } from './VariantPane'
+import { i18n } from '../../i18n'
+
+// The assertions match the English copy.
+beforeEach(() => i18n.changeLanguage('en'))
 
 const DOC: PromptDocument = {
   lang: 'de',
@@ -62,7 +66,7 @@ describe('VariantPane', () => {
       onEditVar: vi.fn(),
       onRemoveVar: vi.fn(),
     }
-    render(<VariantPane variant={V} readOnly={false} canRemove lang="en" {...props} />)
+    render(<VariantPane variant={V} readOnly={false} canRemove {...props} />)
     await userEvent.type(screen.getByLabelText('Variant name'), 'X')
     expect(props.onRename).toHaveBeenLastCalledWith('ThoroughX')
     await userEvent.type(screen.getByLabelText('Variant model'), 'g')
@@ -81,7 +85,6 @@ describe('VariantPane', () => {
         variant={{ ...V, model: 'm' }}
         readOnly={false}
         canRemove
-        lang="en"
         onRename={vi.fn()}
         onModel={onModel}
         onRemove={vi.fn()}
@@ -102,7 +105,6 @@ describe('VariantPane', () => {
         variant={V}
         readOnly={false}
         canRemove={false}
-        lang="en"
         onRename={vi.fn()}
         onModel={vi.fn()}
         onRemove={vi.fn()}
@@ -121,7 +123,6 @@ describe('VariantPane', () => {
         variant={V}
         readOnly
         canRemove
-        lang="en"
         onRename={vi.fn()}
         onModel={vi.fn()}
         onRemove={vi.fn()}
