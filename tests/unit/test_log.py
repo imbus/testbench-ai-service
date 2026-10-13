@@ -175,6 +175,40 @@ class TestJsonLineFormatter:
         assert "\n" not in out
         assert "ValueError: boom" in json.loads(out)["exc"]
 
+    def test_credentials_are_masked_in_message_and_traceback(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-secret-value-123")
+        monkeypatch.setenv("ACME_OPENAI_API_KEY", "sk-project-secret-456")
+        try:
+            raise RuntimeError("401 bad keys sk-secret-value-123 sk-project-secret-456")
+        except RuntimeError:
+            record = _record(
+                "failed with sk-secret-value-123 and sk-project-secret-456",
+                logging.ERROR,
+                sys.exc_info(),
+            )
+        LogContextFilter().filter(record)
+        out = JsonLineFormatter().format(record)
+        assert "sk-secret-value-123" not in out
+        assert "sk-project-secret-456" not in out
+        entry = json.loads(out)
+        assert entry["message"] == "failed with *** and ***"
+        assert "401 bad keys *** ***" in entry["exc"]
+
+    def test_a_value_containing_another_is_masked_whole(self, monkeypatch):
+        monkeypatch.setenv("SHORT_TOKEN", "abcdefgh")
+        monkeypatch.setenv("LONG_SECRET", "abcdefgh-and-more")
+        record = _record("value abcdefgh-and-more")
+        LogContextFilter().filter(record)
+        assert json.loads(JsonLineFormatter().format(record))["message"] == "value ***"
+
+    def test_short_and_non_credential_values_are_not_masked(self, monkeypatch):
+        monkeypatch.setenv("X_TOKEN", "abc")
+        monkeypatch.setenv("SOME_PATH", "/opt/some/long/path")
+        record = _record("abc at /opt/some/long/path")
+        LogContextFilter().filter(record)
+        message = json.loads(JsonLineFormatter().format(record))["message"]
+        assert message == "abc at /opt/some/long/path"
+
 
 class TestGetLogLevelInt:
     """get_log_level_int converts string level names to logging integer constants."""

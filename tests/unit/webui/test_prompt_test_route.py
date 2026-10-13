@@ -1,9 +1,14 @@
 import asyncio
+import json
+import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+
+from testbench_ai_service.log import build_activity_handler
+from testbench_ai_service.log import logger as service_logger
 
 MESSAGE = {"role": "user", "source": "inline", "file": None, "content": "Hallo {{ vars.name }}"}
 
@@ -249,6 +254,30 @@ class TestFailures:
         assert response.status_code == 502
         assert "sk-secret-value" not in response.text
         assert "***" in response.text
+
+    def test_a_provider_error_never_reaches_the_activity_log_with_the_credential(
+        self, client, login, app, fake_client, monkeypatch, tmp_path
+    ):
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret-value")
+        fake_client.query_llm = AsyncMock(side_effect=RuntimeError("401 bad key sk-secret-value"))
+        path = tmp_path / "activity.jsonl"
+        handler = build_activity_handler(str(path), 1024 * 1024, 1)
+        previous = service_logger.level
+        service_logger.setLevel(logging.DEBUG)
+        service_logger.addHandler(handler)
+        try:
+            login(roles=["Administrator"])
+            client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
+        finally:
+            service_logger.removeHandler(handler)
+            service_logger.setLevel(previous)
+            handler.close()
+        text = path.read_text(encoding="utf-8")
+        entries = [json.loads(line) for line in text.splitlines()]
+        failed = [e for e in entries if e["message"].startswith("Prompt test run failed")]
+        assert failed
+        assert "sk-secret-value" not in text
+        assert "***" in failed[0]["message"]
 
     def test_a_missing_credential_is_a_400_naming_the_variable(
         self, client, login, app, fake_client

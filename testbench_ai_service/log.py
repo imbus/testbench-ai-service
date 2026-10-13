@@ -2,6 +2,7 @@ import json
 import logging
 import logging.config
 import logging.handlers
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -80,8 +81,34 @@ class ActivityRecordFilter(logging.Filter):
         return getattr(record, "scope", "request") in ("user", "service")
 
 
+_CREDENTIAL_NAME_MARKERS = ("API_KEY", "SECRET", "TOKEN", "PASSWORD")
+_MIN_CREDENTIAL_LENGTH = 8
+
+
+def _scrub_credentials(text: str) -> str:
+    """Replace every credential value from the environment in *text* with ``***``.
+
+    Read at call time so reloaded ``.env`` files and project-specific keys
+    (``<PROJECT>_OPENAI_API_KEY``) are covered. Longer values go first, so a
+    value containing another one is masked whole.
+    """
+    values = {
+        value
+        for name, value in os.environ.items()
+        if len(value) >= _MIN_CREDENTIAL_LENGTH
+        and any(marker in name.upper() for marker in _CREDENTIAL_NAME_MARKERS)
+    }
+    for value in sorted(values, key=len, reverse=True):
+        text = text.replace(value, "***")
+    return text
+
+
 class JsonLineFormatter(logging.Formatter):
-    """One JSON object per record and line; a traceback stays inside its record."""
+    """One JSON object per record and line; a traceback stays inside its record.
+
+    Credential values are masked in message and traceback: activity entries are
+    shown to users in the console, unlike the text file and the console output.
+    """
 
     def format(self, record: logging.LogRecord) -> str:
         entry: dict[str, str | None] = {
@@ -90,15 +117,15 @@ class JsonLineFormatter(logging.Formatter):
             ),
             "level": record.levelname,
             "source": record.name,
-            "message": record.getMessage(),
+            "message": _scrub_credentials(record.getMessage()),
             "scope": getattr(record, "scope", "request"),
         }
         for name in _RECORD_FIELDS:
             entry[name] = getattr(record, name, None)
         if record.exc_info:
-            entry["exc"] = self.formatException(record.exc_info)
+            entry["exc"] = _scrub_credentials(self.formatException(record.exc_info))
         elif record.exc_text:
-            entry["exc"] = record.exc_text
+            entry["exc"] = _scrub_credentials(record.exc_text)
         return json.dumps(entry, ensure_ascii=False)
 
 
