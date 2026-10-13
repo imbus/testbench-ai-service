@@ -756,7 +756,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
       )}
       {current?.kind === 'variant' && selectedVariantObj && (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
-          {messages.length === 0 && (
+          {messages.length === 0 && Object.keys(selectedVariantObj.steps ?? {}).length === 0 && (
             <div className="text-muted" style={{ padding: '20px 24px 0', fontSize: 13 }}>
               {t('noMessages')}
             </div>

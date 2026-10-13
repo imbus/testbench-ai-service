@@ -206,6 +206,8 @@ export type PromptVariantDoc = {
   model: string | null
   vars: Record<string, PromptVarDecl>
   messages: PromptMessageDoc[]
+  /** Named message lists of a multi-step agent. Read-only in the console. */
+  steps?: Record<string, PromptMessageDoc[]>
 }
 
 export type PromptDocument = {

@@ -7,7 +7,7 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import type { PromptDocument } from '../../api/types'
+import type { PromptDocument, PromptVariantDoc } from '../../api/types'
 import { VariantPane } from './VariantPane'
 import { i18n } from '../../i18n'
 
@@ -133,5 +133,53 @@ describe('VariantPane', () => {
     )
     expect(screen.queryByLabelText('Variant name')).not.toBeInTheDocument()
     expect(screen.getAllByTestId('var-row')).toHaveLength(1)
+  })
+})
+
+describe('VariantPane steps', () => {
+  const stepVariant: PromptVariantDoc = {
+    name: 'Coverage check',
+    description: null,
+    model: null,
+    vars: {},
+    messages: [],
+    steps: {
+      aspects: [
+        { role: 'system', source: 'file', file: 'aspects_system.jinja', content: 'x', readable: true },
+        { role: 'user', source: 'inline', file: null, content: 'y', readable: true },
+      ],
+    },
+  }
+
+  const renderPane = (variant: PromptVariantDoc) =>
+    render(
+      <VariantPane
+        variant={variant}
+        readOnly={false}
+        canRemove={false}
+        lang="en"
+        onRename={vi.fn()}
+        onModel={vi.fn()}
+        onRemove={vi.fn()}
+        onAddVar={vi.fn()}
+        onEditVar={vi.fn()}
+        onRemoveVar={vi.fn()}
+      />,
+    )
+
+  it('lists each step with its message sources, read-only', () => {
+    renderPane(stepVariant)
+
+    const steps = screen.getByTestId('variant-steps')
+    expect(within(steps).getByText('aspects')).toBeInTheDocument()
+    expect(within(steps).getByText(/system · aspects_system\.jinja/)).toBeInTheDocument()
+    expect(within(steps).getByText(/user · inline/)).toBeInTheDocument()
+    expect(within(steps).queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('shows no steps section for a plain variant', () => {
+    renderPane(DOC.variants[0])
+
+    expect(screen.queryByTestId('variant-steps')).not.toBeInTheDocument()
   })
 })
