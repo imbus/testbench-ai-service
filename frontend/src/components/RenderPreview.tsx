@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { DefaultValueControl } from './VarDeclTable'
+import { MarkdownView } from './MarkdownView'
 import { useRenderPrompt } from '../api/mutations'
 import { mergeContext } from '../api/prompts'
 import type { PromptMessageDoc, PromptVarDecl } from '../api/types'
@@ -222,9 +223,7 @@ export function RenderPreview({
               >
                 {message.role}
               </div>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 12 }}>
-                {message.content}
-              </pre>
+              {message.content && <MarkdownView text={message.content} />}
               {message.error && (
                 <div role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
                   {message.error}

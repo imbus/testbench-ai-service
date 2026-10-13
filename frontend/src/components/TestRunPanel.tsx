@@ -4,6 +4,7 @@ import { useTestPrompt } from '../api/mutations'
 import { useModels, useProjects } from '../api/queries'
 import type { PromptMessageDoc } from '../api/types'
 import { useTranslation } from 'react-i18next'
+import { MarkdownView } from './MarkdownView'
 
 /** The picker's "Other model…" entry -- not a model id, so it can never collide with one. */
 const CUSTOM = '__custom__'
@@ -206,7 +207,9 @@ export function TestRunPanel({
                 : t('testRunScopeGlobal')}
             </span>
           </div>
-          <pre className="testrun-output">{test.data.text}</pre>
+          <div className="testrun-output">
+            <MarkdownView text={test.data.text} />
+          </div>
         </div>
       )}
 

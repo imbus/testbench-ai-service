@@ -57,8 +57,11 @@ monaco.languages.setLanguageConfiguration(LANGUAGE, {
   wordPattern: /[A-Za-z_]\w*/,
 })
 
-// A Monarch port of the legacy CodeMirror jinja2 mode: plain text outside
-// tags, an expression grammar inside `{{ }}` / `{% %}`, comments in `{# #}`.
+// Prompts are Markdown with Jinja in it, so the grammar is both: Markdown
+// for the text, and the Jinja tags (a port of the legacy CodeMirror jinja2
+// mode) wherever they appear -- including inside headings, emphasis and code
+// blocks, since Jinja renders before anyone reads the Markdown. Markdown
+// spans therefore stop at a `{`, letting the tag take over.
 monaco.languages.setMonarchTokensProvider(LANGUAGE, {
   keywords: [
     'if', 'elif', 'else', 'endif', 'for', 'endfor', 'in', 'not', 'and', 'or', 'is',
@@ -69,11 +72,29 @@ monaco.languages.setMonarchTokensProvider(LANGUAGE, {
   roots: ['agent', 'vars'],
   tokenizer: {
     root: [
+      { include: '@jinja' },
+      [/^\s*```.*$/, 'markup.codeblock', '@codeblock'],
+      [/^#{1,6}\s[^{]*/, 'markup.heading'],
+      [/^\s*(---|\*\*\*|___)\s*$/, 'markup.hr'],
+      [/^\s*>/, 'markup.quote'],
+      [/^\s*([-*+]|\d+\.)\s/, 'markup.list'],
+      [/\*\*[^*{]+\*\*|__[^_{]+__/, 'markup.bold'],
+      [/\*[^*\s{][^*{]*\*/, 'markup.italic'],
+      [/`[^`{]+`/, 'markup.code'],
+      [/\[[^\]{]*\]\([^){]*\)/, 'markup.link'],
+      [/[^{*`[_]+/, ''],
+      [/./, ''],
+    ],
+    jinja: [
       [/\{#/, 'comment', '@comment'],
       [/\{\{-?/, 'delimiter.bracket', '@tag.}}'],
       [/\{%-?/, 'delimiter.bracket', '@tag.%}'],
-      [/[^{]+/, ''],
-      [/\{/, ''],
+    ],
+    codeblock: [
+      [/^\s*```\s*$/, 'markup.codeblock', '@pop'],
+      { include: '@jinja' },
+      [/[^{]+/, 'markup.codeblock'],
+      [/\{/, 'markup.codeblock'],
     ],
     comment: [
       [/#\}/, 'comment', '@pop'],
@@ -137,6 +158,15 @@ export function applyEditorTheme(): void {
       { token: 'variable.predefined', foreground: dark ? '9fe0c2' : '597ea3' },
       { token: 'variable.property', foreground: dark ? '9fe0c2' : '597ea3' },
       { token: 'string', foreground: dark ? 'd9b07a' : '7a5a2a' },
+      { token: 'markup.heading', foreground: dark ? 'e7e9ec' : '1d2d3d', fontStyle: 'bold' },
+      { token: 'markup.bold', fontStyle: 'bold' },
+      { token: 'markup.italic', fontStyle: 'italic' },
+      { token: 'markup.code', foreground: dark ? 'd9b07a' : '7a5a2a' },
+      { token: 'markup.codeblock', foreground: dark ? 'd9b07a' : '7a5a2a' },
+      { token: 'markup.link', foreground: dark ? '94bce3' : '416180', fontStyle: 'underline' },
+      { token: 'markup.list', foreground: dark ? '6fd3a8' : '597ea3', fontStyle: 'bold' },
+      { token: 'markup.quote', foreground: dark ? '8b949e' : '6a737d' },
+      { token: 'markup.hr', foreground: dark ? '8b949e' : '6a737d' },
     ],
     colors,
   })
