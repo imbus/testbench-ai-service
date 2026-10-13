@@ -416,6 +416,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const used = currentMessage ? usedTemplateVars(currentMessage.content) : []
   const agentVars = Object.keys(agentContext).map((k) => `agent.${k}`)
   const declaredVars = Object.keys(vars).map((k) => `vars.${k}`)
+  // Read through a ref by CodeEditor, so a fresh object per render costs nothing.
+  const completion = { agent: agentContext, vars }
   const undeclared = undeclaredVars(used, Object.keys(vars))
   const flagged = Object.keys(diagnostics).map(Number)
 
@@ -706,6 +708,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           readOnly={!isAdmin}
           diagnostics={diagnostics[current.index]}
           insertable={[...agentVars, ...declaredVars]}
+          completion={completion}
           onRemove={() => removeMessage(current.index)}
           onMove={(to) => moveMessage(current.index, to)}
           onRole={(role) =>

@@ -2,6 +2,7 @@ import type { Ref } from 'react'
 import type { LintError, MessageRole, MessageSource, PromptMessageDoc } from '../../api/types'
 import { useTranslation } from 'react-i18next'
 import { CodeEditor, type CodeEditorHandle } from '../CodeEditor'
+import type { CompletionContext } from './templateCompletion'
 
 // A wire token round-tripped through the API, not prose -- kept in English
 // regardless of the UI language, matching how Field.tsx never translates `spec.key`.
@@ -10,15 +11,15 @@ const ROLES: MessageRole[] = ['system', 'user', 'assistant']
 /**
  * A stable accessible name for a message's editor.
  *
- * CodeEditor rebuilds its whole CM6 view whenever its `ariaLabel` prop
- * changes -- discarding undo history, cursor position and scroll (Task 10's
- * controller ruling). An index-derived label (`Message ${i + 1}`) would
- * therefore change for every message that shifts position on a move,
- * silently wiping out undo mid-edit for messages the operator never touched.
+ * An index-derived label (`Message ${i + 1}`) would change for every
+ * message that shifts position on a move, so a screen reader would announce
+ * a different name for the same message. (CodeEditor applies a new label in
+ * place; the CodeMirror editor it replaced rebuilt its view, losing undo
+ * history -- Task 10's controller ruling.)
  *
  * `role` plus `file` (when file-backed) is stable across a reorder because
  * neither changes when a message's position does. Two messages colliding on
- * this label is acceptable -- losing undo history on every move is not.
+ * this label is acceptable.
  */
 function editorLabel(message: PromptMessageDoc): string {
   return message.file ? `${message.role} (${message.file})` : message.role
@@ -39,6 +40,7 @@ export function MessagePane({
   readOnly,
   diagnostics,
   insertable,
+  completion,
   editorRef,
   onRemove,
   onMove,
@@ -54,6 +56,7 @@ export function MessagePane({
   readOnly: boolean
   diagnostics?: LintError[]
   insertable: string[]
+  completion?: CompletionContext
   editorRef: Ref<CodeEditorHandle>
   onRemove: () => void
   onMove: (to: number) => void
@@ -223,6 +226,7 @@ export function MessagePane({
           diagnostics={diagnostics}
           readOnly={readOnly}
           ariaLabel={editorLabel(message)}
+          completion={completion}
         />
       </div>
     </div>
