@@ -1,5 +1,20 @@
 import { de } from './de'
 import { en } from './en'
+import { i18n } from '.'
+
+const placeholders = (text: string) => [...text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m[1]).sort()
+
+test('both languages use the same placeholders per key', () => {
+  for (const key of Object.keys(de) as (keyof typeof de)[]) {
+    expect(placeholders(en[key]), `placeholders of ${key}`).toEqual(placeholders(de[key]))
+  }
+})
+
+test('i18next starts in German and switches to English', async () => {
+  expect(i18n.t('service')).toBe('Dienst')
+  await i18n.changeLanguage('en')
+  expect(i18n.t('service')).toBe('Service')
+})
 
 test('both languages define exactly the same keys', () => {
   expect(Object.keys(de).sort()).toEqual(Object.keys(en).sort())

@@ -1,4 +1,11 @@
 import '@testing-library/jest-dom/vitest'
+import { i18n } from './src/i18n'
+
+// The UI language is global i18next state; a test that switches it must not
+// leak English into the next one.
+beforeEach(async () => {
+  await i18n.changeLanguage('de')
+})
 
 // jsdom's `AbortController`/`AbortSignal` do not satisfy Node's built-in
 // `Request`'s webidl brand check on `signal` -- a known jsdom/undici
