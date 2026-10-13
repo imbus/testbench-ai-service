@@ -217,3 +217,36 @@ def test_the_config_value_resolves_through_both_resolvers_under_another_language
         Path(plan.config_value), prompts_dir=tree, language="en"
     )
     assert resolved_runtime == plan.target_dir / "prompt.yaml"
+
+
+STEPS_SOURCE = """\
+name: "Coverage"
+default_variant: "A"
+default_model: "m"
+variants:
+  - name: "A"
+    messages: []
+    steps:
+      aspects:
+        - role: "system"
+          file: "aspects_system.jinja"
+      gaps:
+        - role: "user"
+          text: "inline stays inline"
+"""
+
+
+def test_a_fork_copies_the_step_templates(tmp_path):
+    agent = tmp_path / "de" / "coverage"
+    agent.mkdir(parents=True)
+    (agent / "prompt.yaml").write_text(STEPS_SOURCE, encoding="utf-8")
+    (agent / "aspects_system.jinja").write_text("split it", encoding="utf-8")
+
+    plan = build_fork(tmp_path, agent / "prompt.yaml", "de", "coverage", None, "Proj")
+
+    assert plan.files[plan.target_dir / "aspects_system.jinja"] == b"split it"
+    document = yaml.safe_load(plan.files[plan.target_dir / "prompt.yaml"])
+    steps = document["variants"][0]["steps"]
+    assert steps["aspects"] == [{"role": "system", "file": "aspects_system.jinja"}]
+    assert steps["gaps"] == [{"role": "user", "text": "inline stays inline"}]
+    assert document["variants"][0]["messages"] == []

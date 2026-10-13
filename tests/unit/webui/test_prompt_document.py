@@ -85,3 +85,22 @@ def test_a_template_escaping_prompts_dir_is_readable_false(prompt):
 def test_the_context_skeleton_covers_both_message_kinds(prompt):
     doc = read_prompt_document(prompt / "de/explainer/prompt.yaml", prompt, "de", "explainer")
     assert doc.agent_context_skeleton == {"role": "", "title": ""}
+
+
+def test_the_document_lists_step_templates_read_only(tmp_path):
+    agent = tmp_path / "de" / "coverage"
+    agent.mkdir(parents=True)
+    (agent / "prompt.yaml").write_text(
+        'name: "x"\ndefault_variant: "A"\ndefault_model: "m"\nvariants:\n'
+        '  - name: "A"\n    messages: []\n    steps:\n      aspects:\n'
+        '        - role: "system"\n          file: "aspects_system.jinja"\n',
+        encoding="utf-8",
+    )
+    (agent / "aspects_system.jinja").write_text("split it", encoding="utf-8")
+
+    document = read_prompt_document(agent / "prompt.yaml", tmp_path, "de", "coverage")
+
+    (step_message,) = document.variants[0].steps["aspects"]
+    assert step_message.file == "aspects_system.jinja"
+    assert step_message.content == "split it"
+    assert document.variants[0].messages == []

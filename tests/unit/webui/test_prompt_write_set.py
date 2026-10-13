@@ -295,3 +295,64 @@ def test_valid_jinja_and_plain_braces_are_saved(prompt):
         prompt,
     )
     assert prompt / "de/explainer/prompt.yaml" in plan.writes
+
+
+STEPS_ON_DISK = """\
+name: "x"
+default_variant: "A"
+default_model: "m"
+variants:
+  - name: "A"
+    messages: []
+    steps:
+      aspects:
+        - role: "system"
+          file: "aspects_system.jinja"
+"""
+
+
+@pytest.fixture
+def steps_prompt(tmp_path):
+    agent = tmp_path / "de" / "coverage"
+    agent.mkdir(parents=True)
+    (agent / "prompt.yaml").write_text(STEPS_ON_DISK, encoding="utf-8")
+    (agent / "aspects_system.jinja").write_text("split it", encoding="utf-8")
+    return tmp_path
+
+
+def _steps_request(variant_name="A"):
+    return PromptSaveRequest(
+        name="Coverage renamed",
+        default_model="m",
+        default_variant=variant_name,
+        variants=[PromptVariantDoc(name=variant_name, messages=[])],
+    )
+
+
+def test_a_save_keeps_the_steps_from_disk(steps_prompt):
+    path = steps_prompt / "de/coverage/prompt.yaml"
+
+    plan = build_write_set(_steps_request(), path, steps_prompt)
+
+    parsed = yaml.safe_load(plan.writes[path])
+    assert parsed["name"] == "Coverage renamed"
+    assert parsed["variants"][0]["steps"] == {
+        "aspects": [{"role": "system", "file": "aspects_system.jinja"}]
+    }
+
+
+def test_a_save_does_not_delete_step_templates(steps_prompt):
+    path = steps_prompt / "de/coverage/prompt.yaml"
+
+    plan = build_write_set(_steps_request(), path, steps_prompt)
+
+    assert steps_prompt / "de/coverage/aspects_system.jinja" not in plan.deletes
+
+
+def test_renaming_a_step_variant_is_refused_instead_of_dropping_its_steps(steps_prompt):
+    path = steps_prompt / "de/coverage/prompt.yaml"
+
+    with pytest.raises(HTTPException) as caught:
+        build_write_set(_steps_request("B"), path, steps_prompt)
+
+    assert caught.value.status_code == 422

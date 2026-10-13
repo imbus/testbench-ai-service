@@ -364,6 +364,59 @@ def _previous_template_refs(prompt_path: Path, prompts_dir: Path) -> set[Path]:
     return refs
 
 
+def _steps_on_disk(prompt_path: Path) -> dict[str, dict[str, Any]]:
+    """Each variant's raw ``steps`` mapping as the file on disk has it, by variant name.
+
+    The console cannot edit steps yet, so a save carries them over from disk
+    rather than trusting whatever the browser sends back.
+    """
+    try:
+        document = yaml.safe_load(Path(prompt_path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return {}
+    if not isinstance(document, dict) or not isinstance(document.get("variants"), list):
+        return {}
+    return {
+        variant["name"]: variant["steps"]
+        for variant in document["variants"]
+        if isinstance(variant, dict)
+        and isinstance(variant.get("name"), str)
+        and isinstance(variant.get("steps"), dict)
+        and variant["steps"]
+    }
+
+
+def _variant_entry(
+    variant: PromptVariantDoc, messages: list[dict[str, Any]], steps: dict[str, Any] | None
+) -> dict[str, Any]:
+    """The YAML mapping for one saved variant; *steps* is carried over from disk."""
+    entry: dict[str, Any] = {
+        "name": variant.name,
+        "description": variant.description,
+        "model": variant.model,
+        "vars": {key: prune_none(decl.model_dump()) for key, decl in variant.vars.items()},
+        "messages": messages,
+    }
+    if steps:
+        entry["steps"] = steps
+    return entry
+
+
+def _step_template_targets(
+    disk_steps: dict[str, dict[str, Any]], prompt_path: Path, prompts_dir: Path
+) -> set[Path]:
+    """Templates the on-disk steps reference. A save never edits steps, so never deletes these."""
+    from testbench_ai_service.webui.template_refs import message_refs  # noqa: PLC0415
+
+    targets: set[Path] = set()
+    for ref in message_refs({"variants": [{"steps": steps} for steps in disk_steps.values()]}):
+        try:
+            targets.add(resolve_template_file(Path(prompts_dir), Path(prompt_path), ref))
+        except HTTPException:
+            continue
+    return targets
+
+
 def _plan_deletions(
     prompt_path: Path, prompts_dir: Path, previous_refs: set[Path], surviving: set[Path]
 ) -> tuple[list[Path], str | None]:
@@ -455,6 +508,10 @@ def read_prompt_document(
                 model=variant.model,
                 vars=variant.vars,
                 messages=messages,
+                steps={
+                    step: [_message_doc(m, prompt_path, base) for m in templates]
+                    for step, templates in variant.steps.items()
+                },
             )
         )
 
@@ -755,6 +812,7 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
     """
     base = Path(prompts_dir)
     previous_refs = _previous_template_refs(prompt_path, base)
+    disk_steps = _steps_on_disk(prompt_path)
     created: set[Path] = set()
     #: Every file-backed body, before the unchanged ones are filtered out.
     #: Kept separate from the final write set so the "one file, one body"
@@ -817,15 +875,8 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
             else:
                 messages.append({"role": message.role, "text": message.content})
 
-        document["variants"].append(
-            {
-                "name": variant.name,
-                "description": variant.description,
-                "model": variant.model,
-                "vars": {key: prune_none(decl.model_dump()) for key, decl in variant.vars.items()},
-                "messages": messages,
-            }
-        )
+        entry = _variant_entry(variant, messages, disk_steps.get(variant.name))
+        document["variants"].append(entry)
 
     _validate_document(document)
     _refuse_invalid_jinja(request)
@@ -840,7 +891,10 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
         plan.writes[Path(prompt_path)] = yaml_text
 
     plan.deletes, plan.deletions_skipped = _plan_deletions(
-        Path(prompt_path), base, previous_refs, set(bodies)
+        Path(prompt_path),
+        base,
+        previous_refs,
+        set(bodies) | _step_template_targets(disk_steps, prompt_path, base),
     )
     return plan
 
@@ -892,7 +946,7 @@ def _validate_document(document: dict[str, Any]) -> None:
             ),
         )
 
-    empty = sorted(v.name for v in definition.variants if not v.messages)
+    empty = sorted(v.name for v in definition.variants if not v.messages and not v.steps)
     if empty:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -31,6 +31,7 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel
 
 from testbench_ai_service.log import logger
+from testbench_ai_service.models.prompt import MessageTemplate
 from testbench_ai_service.webui.prompt_io import document_to_yaml, prune_none, schema_header
 from testbench_ai_service.webui.prompts import _load_definition, resolve_template_file
 from testbench_ai_service.webui.security import require_single_segment, resolve_within
@@ -141,48 +142,20 @@ def build_fork(
         "variants": [],
     }
 
-    for variant in definition.variants:
-        messages: list[dict[str, Any]] = []
-        for message in variant.messages:
-            if message.file is None:
-                messages.append({"role": message.role, "text": message.text})
-                continue
-            source = resolve_template_file(base, Path(prompt_path), message.file)
-            basename = source.name
-            previous = copied.get(basename)
-            if previous is not None and previous != source:
-                # previous.name == source.name == basename by construction -- that
-                # is why they collided -- so the full paths, not the basenames,
-                # are what tells the operator which two files to rename.
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=(
-                        f"{previous} and {source} would both be copied to "
-                        f"{basename!r}. Rename one of them before forking."
-                    ),
-                )
-            try:
-                # Bytes, not text: an undecodable or CRLF template copies exactly.
-                # Only a missing or unopenable file refuses the fork -- decodability
-                # is a different question, and not this one.
-                files[target_dir / basename] = source.read_bytes()
-            except OSError as e:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"The template {message.file!r} could not be read: {e}",
-                ) from e
-            copied[basename] = source
-            messages.append({"role": message.role, "file": basename})
+    def copy(templates: list[MessageTemplate]) -> list[dict[str, Any]]:
+        return _copy_templates(templates, base, Path(prompt_path), target_dir, copied, files)
 
-        document["variants"].append(
-            {
-                "name": variant.name,
-                "description": variant.description,
-                "model": variant.model,
-                "vars": {key: prune_none(decl.model_dump()) for key, decl in variant.vars.items()},
-                "messages": messages,
-            }
-        )
+    for variant in definition.variants:
+        forked: dict[str, Any] = {
+            "name": variant.name,
+            "description": variant.description,
+            "model": variant.model,
+            "vars": {key: prune_none(decl.model_dump()) for key, decl in variant.vars.items()},
+            "messages": copy(variant.messages),
+        }
+        if variant.steps:
+            forked["steps"] = {step: copy(templates) for step, templates in variant.steps.items()}
+        document["variants"].append(forked)
 
     target_prompt = target_dir / "prompt.yaml"
     files[target_prompt] = document_to_yaml(document, header=schema_header(target_prompt, base))
@@ -194,6 +167,49 @@ def build_fork(
         files=files,
         config_value=f"{lang}/{target_dir.name}/prompt.yaml",
     )
+
+
+def _copy_templates(
+    templates: list[MessageTemplate],
+    base: Path,
+    prompt_path: Path,
+    target_dir: Path,
+    copied: dict[str, Path],
+    files: dict[Path, bytes],
+) -> list[dict[str, Any]]:
+    """Fork one message list: file templates are queued in *files*, inline text kept."""
+    messages: list[dict[str, Any]] = []
+    for message in templates:
+        if message.file is None:
+            messages.append({"role": message.role, "text": message.text})
+            continue
+        source = resolve_template_file(base, Path(prompt_path), message.file)
+        basename = source.name
+        previous = copied.get(basename)
+        if previous is not None and previous != source:
+            # previous.name == source.name == basename by construction -- that
+            # is why they collided -- so the full paths, not the basenames,
+            # are what tells the operator which two files to rename.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"{previous} and {source} would both be copied to "
+                    f"{basename!r}. Rename one of them before forking."
+                ),
+            )
+        try:
+            # Bytes, not text: an undecodable or CRLF template copies exactly.
+            # Only a missing or unopenable file refuses the fork -- decodability
+            # is a different question, and not this one.
+            files[target_dir / basename] = source.read_bytes()
+        except OSError as e:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"The template {message.file!r} could not be read: {e}",
+            ) from e
+        copied[basename] = source
+        messages.append({"role": message.role, "file": basename})
+    return messages
 
 
 def rollback_fork(created: Sequence[Path], target_dir: Path) -> None:

@@ -40,8 +40,20 @@ class TemplateScan(BaseModel):
     blocked_by: str | None = None
 
 
+def _message_lists(variant: dict) -> list[list]:
+    """The variant's ``messages`` and every list under its ``steps``, shape unchecked."""
+    lists: list[list] = []
+    messages = variant.get("messages")
+    if isinstance(messages, list):
+        lists.append(messages)
+    steps = variant.get("steps")
+    if isinstance(steps, dict):
+        lists.extend(templates for templates in steps.values() if isinstance(templates, list))
+    return lists
+
+
 def message_refs(document: Any) -> list[str]:
-    """Every ``file:`` value in *document*, without validating its shape."""
+    """Every ``file:`` value in *document*, steps included, without validating its shape."""
     refs: list[str] = []
     if not isinstance(document, dict):
         return refs
@@ -51,15 +63,13 @@ def message_refs(document: Any) -> list[str]:
     for variant in variants:
         if not isinstance(variant, dict):
             continue
-        messages = variant.get("messages")
-        if not isinstance(messages, list):
-            continue
-        for message in messages:
-            if not isinstance(message, dict):
-                continue
-            ref = message.get("file")
-            if isinstance(ref, str) and ref.strip():
-                refs.append(ref)
+        for messages in _message_lists(variant):
+            for message in messages:
+                if not isinstance(message, dict):
+                    continue
+                ref = message.get("file")
+                if isinstance(ref, str) and ref.strip():
+                    refs.append(ref)
     return refs
 
 

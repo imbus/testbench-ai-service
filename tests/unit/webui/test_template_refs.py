@@ -1,6 +1,6 @@
 import pytest
 
-from testbench_ai_service.webui.template_refs import scan_template_references
+from testbench_ai_service.webui.template_refs import message_refs, scan_template_references
 
 PROMPT = """\
 name: "X"
@@ -161,3 +161,23 @@ def test_a_prompt_nested_deeper_than_lang_agent_is_still_scanned(tree):
 
     scan = scan_template_references(tree)
     assert scan.references[nested_template] == ["de/alpha/sub/prompt.yaml"]
+
+
+def test_step_templates_count_as_references():
+    document = {
+        "variants": [
+            {
+                "messages": [],
+                "steps": {
+                    "aspects": [{"role": "system", "file": "aspects_system.jinja"}],
+                    "gaps": [{"role": "user", "text": "inline"}, {"file": "gaps_user.jinja"}],
+                },
+            }
+        ]
+    }
+
+    assert message_refs(document) == ["aspects_system.jinja", "gaps_user.jinja"]
+
+
+def test_malformed_steps_are_ignored():
+    assert message_refs({"variants": [{"messages": [], "steps": ["not", "a", "map"]}]}) == []

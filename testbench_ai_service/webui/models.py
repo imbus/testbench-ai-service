@@ -331,6 +331,9 @@ class PromptVariantDoc(BaseModel):
     model: str | None = None
     vars: dict[str, PromptVariableDefinition] = {}
     messages: list[PromptMessageDoc] = []
+    #: Read-only in the console: shown, never written from a save request. A save
+    #: carries the steps over from the file on disk, by variant name.
+    steps: dict[str, list[PromptMessageDoc]] = {}
 
 
 class PromptDocumentResponse(BaseModel):
