@@ -27,6 +27,7 @@ from testbench_ai_service.webui.paths import join_path
 
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 _LOG_FILE_SECTION = f"[{CONFIG_PREFIX}.logging.file]"
+_ACTIVITY_SECTION = f"[{CONFIG_PREFIX}.logging.activity]"
 
 
 def _quote_key(segment: str) -> str:
@@ -126,26 +127,30 @@ def _log_file_problem(file_name: str) -> str | None:
     return _missing_leaf_problem(path.parent)
 
 
-def _log_file_writability_issue(config: AppConfig) -> ConfigIssue | None:
-    """Check, with no side effect, whether the configured log file can be written.
+def _log_file_writability_issues(config: AppConfig) -> list[ConfigIssue]:
+    """Check, with no side effect, whether the configured log files can be written.
 
     ``setup_logging`` builds a ``RotatingFileHandler`` from
-    ``config.logging.file.file_name`` at both startup (``cli.py``) and hot
-    reload, and raises ``ValueError`` there if the path is unusable -- by
-    which point ``POST /admin/api/config/apply`` has already written the file
-    to disk. Checking it here, before anything is written, is what keeps spec
-    6.3's promise that the console cannot produce a ``config.toml`` the
-    service could not boot with. See :func:`_log_file_problem` and its
-    helpers for the actual checks.
+    ``config.logging.file.file_name`` -- and, while the activity sink is
+    enabled, from ``config.logging.activity.file_name`` -- at both startup
+    (``cli.py``) and hot reload, and raises ``ValueError`` there if a path is
+    unusable -- by which point ``POST /admin/api/config/apply`` has already
+    written the file to disk. Checking them here, before anything is written,
+    is what keeps spec 6.3's promise that the console cannot produce a
+    ``config.toml`` the service could not boot with. See
+    :func:`_log_file_problem` and its helpers for the actual checks.
     """
-    message = _log_file_problem(config.logging.file.file_name)
-    if message is None:
-        return None
-    return ConfigIssue(
-        path="logging.file.file_name",
-        message=message,
-        toml_section=_LOG_FILE_SECTION,
-    )
+    candidates = [("logging.file.file_name", config.logging.file.file_name, _LOG_FILE_SECTION)]
+    if config.logging.activity.enabled:
+        candidates.append(
+            ("logging.activity.file_name", config.logging.activity.file_name, _ACTIVITY_SECTION)
+        )
+    issues = []
+    for path, file_name, section in candidates:
+        message = _log_file_problem(file_name)
+        if message is not None:
+            issues.append(ConfigIssue(path=path, message=message, toml_section=section))
+    return issues
 
 
 def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[ConfigIssue]]:
@@ -158,7 +163,7 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
     try:
         config = AppConfig(**data)
         # AppConfig itself does not validate the log path -- see
-        # _log_file_writability_issue's docstring for why that check belongs
+        # _log_file_writability_issues' docstring for why that check belongs
         # here, in the console's validator, rather than tightening the model
         # every CLI user also goes through. It runs inside this same guard,
         # not after it: it touches the filesystem exactly like the model
@@ -168,7 +173,7 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
         # after a write has already committed, is exactly what FIX C
         # (apply_config's post-write re-read) was built to stop happening a
         # second way.
-        log_issue = _log_file_writability_issue(config)
+        log_issues = _log_file_writability_issues(config)
     except ValidationError as e:
         issues = [
             ConfigIssue(
@@ -195,8 +200,8 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
         logger.exception("Unexpected failure validating a console config draft")
         return None, [ConfigIssue(path="", message=str(e), toml_section=f"[{CONFIG_PREFIX}]")]
 
-    if log_issue is not None:
-        logger.info("Rejected a console config draft with 1 issue(s)")
-        return None, [log_issue]
+    if log_issues:
+        logger.info("Rejected a console config draft with %d issue(s)", len(log_issues))
+        return None, log_issues
 
     return config, []

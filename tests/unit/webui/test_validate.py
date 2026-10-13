@@ -368,3 +368,69 @@ def test_an_array_index_stays_a_bare_segment_in_the_issue_path():
 
     assert issues
     assert issues[0].path == "trusted_proxies.1"
+
+
+def _with_activity(**activity) -> dict:
+    return {"tb_server_url": TB_URL, "logging": {"activity": activity}}
+
+
+def test_an_activity_log_path_in_a_writable_directory_is_accepted(tmp_path):
+    config, issues = validate_config_dict(
+        _with_activity(file_name=str(tmp_path / "activity.jsonl"))
+    )
+
+    assert issues == []
+    assert config is not None
+
+
+def test_an_activity_log_path_whose_directory_is_missing_is_addressed_to_its_field(tmp_path):
+    """The activity sink is a RotatingFileHandler too: same boot failure, same check."""
+    bad_path = tmp_path / "does-not-exist" / "activity.jsonl"
+
+    _, issues = validate_config_dict(_with_activity(file_name=str(bad_path)))
+
+    assert [issue.path for issue in issues] == ["logging.activity.file_name"]
+    assert issues[0].toml_section == "[testbench-ai-service.logging.activity]"
+
+
+def test_an_empty_activity_log_file_name_is_rejected():
+    _, issues = validate_config_dict(_with_activity(file_name="   "))
+
+    assert [issue.path for issue in issues] == ["logging.activity.file_name"]
+
+
+def test_an_existing_directory_as_activity_log_file_name_is_rejected(tmp_path):
+    existing_dir = tmp_path / "logs"
+    existing_dir.mkdir()
+
+    _, issues = validate_config_dict(_with_activity(file_name=str(existing_dir)))
+
+    assert [issue.path for issue in issues] == ["logging.activity.file_name"]
+
+
+def test_a_bad_activity_log_path_is_ignored_while_the_sink_is_disabled(tmp_path):
+    """No handler is built for a disabled sink, so the path cannot break the boot."""
+    bad_path = tmp_path / "does-not-exist" / "activity.jsonl"
+
+    config, issues = validate_config_dict(_with_activity(enabled=False, file_name=str(bad_path)))
+
+    assert issues == []
+    assert config is not None
+
+
+def test_both_bad_log_paths_are_reported(tmp_path):
+    missing = tmp_path / "does-not-exist"
+    _, issues = validate_config_dict(
+        {
+            "tb_server_url": TB_URL,
+            "logging": {
+                "file": {"file_name": str(missing / "svc.log")},
+                "activity": {"file_name": str(missing / "activity.jsonl")},
+            },
+        }
+    )
+
+    assert [issue.path for issue in issues] == [
+        "logging.file.file_name",
+        "logging.activity.file_name",
+    ]

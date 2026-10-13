@@ -461,11 +461,12 @@ async def apply_config(
     one would be a lie. The response names what needs a restart; the console
     raises its banner. Nothing here ever restarts the service (spec 7).
 
-    ``validate_config_dict`` also refuses a ``logging.file.file_name`` the
-    process could not open (see
-    :func:`~testbench_ai_service.webui.validate._log_file_writability_issue`)
+    ``validate_config_dict`` also refuses a ``logging.file.file_name`` (and,
+    while enabled, a ``logging.activity.file_name``) the process could not
+    open (see
+    :func:`~testbench_ai_service.webui.validate._log_file_writability_issues`)
     -- without it, an operator could write a config the process cannot even
-    boot with, since ``setup_logging`` builds the file handler at startup.
+    boot with, since ``setup_logging`` builds the file handlers at startup.
     That check runs before any write, same as every other validation issue.
 
     Once the write has committed, nothing that follows may turn it back into
