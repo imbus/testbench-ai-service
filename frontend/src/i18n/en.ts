@@ -29,6 +29,7 @@ export const en = {
   scopeAll: 'All',
   serviceBadge: 'service',
   activityEmpty: 'No entries yet.',
+  traceback: 'Traceback',
   general: 'General',
   tbConn: 'TestBench connection',
   tls: 'HTTPS / TLS',

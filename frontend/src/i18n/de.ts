@@ -29,6 +29,7 @@ export const de = {
   scopeAll: 'Alle',
   serviceBadge: 'Service',
   activityEmpty: 'Noch keine Einträge.',
+  traceback: 'Traceback',
   general: 'Allgemein',
   tbConn: 'TestBench-Verbindung',
   tls: 'HTTPS / TLS',

@@ -165,7 +165,7 @@ function ActivityPanel({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
               </div>
               {entry.exc && (
                 <details style={{ marginLeft: TIME_COLUMN + COLUMN_GAP + LEVEL_COLUMN }}>
-                  <summary className="text-muted">Traceback</summary>
+                  <summary className="text-muted">{t.traceback}</summary>
                   <pre style={{ margin: 0 }}>{entry.exc}</pre>
                 </details>
               )}
