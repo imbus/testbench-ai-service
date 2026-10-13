@@ -125,7 +125,6 @@ class StatusResponse(BaseModel):
     testbench: TestBenchStatus
     api_keys: list[ApiKeyStatus]
     agents: AgentSummary
-    log_file: str
     in_flight_tasks: int = 0
     restart_required: list[str] = []
 
@@ -141,14 +140,23 @@ class ConfigResponse(BaseModel):
     config_path: str
 
 
-class LogLine(BaseModel):
-    """One parsed log record. Unparseable lines keep only ``raw``."""
+class ActivityEntry(BaseModel):
+    """One activity record as the console shows it.
 
-    raw: str
-    timestamp: str | None = None
-    level: str | None = None
-    source: str | None = None
+    Carries no user identity: a user only ever sees their own entries and
+    service entries (design D6), so naming the user would add nothing but a
+    leak if that rule were ever broken.
+    """
+
+    timestamp: str
+    level: str
+    source: str
     message: str
+    scope: Literal["user", "service"]
+    agent: str | None = None
+    project_key: str | None = None
+    run_id: str | None = None
+    exc: str | None = None
 
 
 class ConfigIssue(BaseModel):

@@ -64,11 +64,6 @@ def test_agent_summary_counts_enabled_and_overrides(client, login):
     assert body["agents"]["project_overrides"] == 0
 
 
-def test_log_file_name_is_reported(client, login):
-    login()
-    assert _status(client).json()["log_file"] == "testbench-ai-service.log"
-
-
 def test_agent_summary_counts_real_project_overrides(make_app):
     """Every other test exercises ``agent_summary`` with zero overrides, so the
     non-zero branch of ``project_overrides`` is otherwise unverified -- and the

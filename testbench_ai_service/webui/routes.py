@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -9,10 +9,12 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.llm.factory import LLMFactory
-from testbench_ai_service.log import log_context, logger
+from testbench_ai_service.log import get_log_level_int, log_context, logger
 from testbench_ai_service.models.config import LLMConfig
+from testbench_ai_service.models.logging import LogLevel
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
+from testbench_ai_service.webui.activity import MAX_LIMIT, read_activity
 from testbench_ai_service.webui.agent_context import agent_context_sample
 from testbench_ai_service.webui.atomic import write_atomic
 from testbench_ai_service.webui.auth import (
@@ -37,15 +39,14 @@ from testbench_ai_service.webui.document import apply_edits, load_document, rend
 from testbench_ai_service.webui.edits import merge_edits, validate_edit_paths
 from testbench_ai_service.webui.fork import build_fork, rollback_fork
 from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
-from testbench_ai_service.webui.logs import MAX_LIMIT, read_log
 from testbench_ai_service.webui.models import (
+    ActivityEntry,
     ApplyResponse,
     ConfigEditsRequest,
     ConfigResponse,
     LintRequest,
     LintResponse,
     LoginRequest,
-    LogLine,
     MetaResponse,
     ModelCatalogueResponse,
     PreviewResponse,
@@ -386,17 +387,31 @@ def read_prompt_metadata(
     )
 
 
-@router.get("/logs", response_model=list[LogLine])
-async def read_logs(
+@router.get("/activity", response_model=list[ActivityEntry])
+def read_activity_log(
     limit: int = Query(default=50, ge=1, le=MAX_LIMIT),
-    _: Session = Depends(require_admin),
+    level: LogLevel = Query(default=LogLevel.INFO),
+    scope: Literal["mine", "service", "all"] = Query(default="all"),
+    session: Session = Depends(current_session),
     config: AppConfig = Depends(get_app_config),
-) -> list[LogLine]:
-    """Tail the service log for the console's Status screen.
+) -> list[ActivityEntry]:
+    """The signed-in user's own activity, plus service entries for admins.
 
-    Admin-only: the file holds every user's requests (design D1).
+    Never another user's entries, for admins neither, and no parameter asks
+    for them (design D6). A non-admin's ``scope`` is narrowed to ``mine``.
+
+    A sync ``def``: it reads up to four files, so it belongs in the threadpool.
     """
-    return read_log(Path(config.logging.file.file_name), limit)
+    if not session.is_admin:
+        scope = "mine"
+    return read_activity(
+        config.logging.activity,
+        user_key=session.user_key,
+        include_own=scope in ("mine", "all"),
+        include_service=scope in ("service", "all"),
+        min_level=get_log_level_int(level.value),
+        limit=limit,
+    )
 
 
 @router.post("/config/preview", response_model=PreviewResponse)

@@ -99,7 +99,6 @@ def build_status(
         testbench=probe_testbench(config),
         api_keys=api_key_statuses(config),
         agents=agent_summary(config),
-        log_file=config.logging.file.file_name,
         in_flight_tasks=in_flight_tasks,
         restart_required=restart_required or [],
     )
