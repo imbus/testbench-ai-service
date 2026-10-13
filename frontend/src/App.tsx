@@ -116,7 +116,7 @@ export function App() {
             <Routes>
               <Route path="/admin" element={<Navigate to="/admin/status" replace />} />
               <Route path="/" element={<Navigate to="/admin/status" replace />} />
-              <Route path="/admin/status" element={<Status lang={lang} />} />
+              <Route path="/admin/status" element={<Status lang={lang} isAdmin={session.is_admin} />} />
               <Route
                 path="/admin/service"
                 element={

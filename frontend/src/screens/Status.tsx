@@ -45,10 +45,10 @@ function Dot({ ok }: { ok: boolean }) {
   )
 }
 
-export function Status({ lang }: { lang: Lang }) {
+export function Status({ lang, isAdmin }: { lang: Lang; isAdmin: boolean }) {
   const t = useTranslations(lang)
   const status = useStatus()
-  const logs = useLogs()
+  const logs = useLogs({ enabled: isAdmin })
 
   if (status.isLoading) return <div style={{ padding: 28 }}>…</div>
   if (status.isError || !status.data) {
@@ -151,62 +151,64 @@ export function Status({ lang }: { lang: Lang }) {
         </Card>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <h4 style={{ margin: 0 }}>{t.recentLog}</h4>
-          <span
-            className="text-muted"
-            style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
-          >
-            {log_file}
-          </span>
-        </div>
-        <div
-          className="blueprint"
-          style={{
-            background: 'var(--color-surface)',
-            padding: '10px 14px',
-            fontFamily: 'ui-monospace, Menlo, monospace',
-            fontSize: 12,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 3,
-            overflowX: 'auto',
-          }}
-        >
-          <i className="corner tl" />
-          <i className="corner tr" />
-          <i className="corner bl" />
-          <i className="corner br" />
-          {(logs.data ?? []).map((line) => (
-            <div
-              key={line.raw}
-              data-testid="log-line"
-              // The artboard's four fixed tracks: time, level, source, message.
-              // A grid keeps the messages on one left edge, which a flex row
-              // with per-cell minimums only manages until one source is long.
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '70px 70px 240px 1fr',
-                gap: 12,
-                whiteSpace: 'pre',
-              }}
+      {isAdmin && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h4 style={{ margin: 0 }}>{t.recentLog}</h4>
+            <span
+              className="text-muted"
+              style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
             >
-              <span className="text-muted">{line.timestamp?.slice(11) ?? ''}</span>
-              <span
+              {log_file}
+            </span>
+          </div>
+          <div
+            className="blueprint"
+            style={{
+              background: 'var(--color-surface)',
+              padding: '10px 14px',
+              fontFamily: 'ui-monospace, Menlo, monospace',
+              fontSize: 12,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 3,
+              overflowX: 'auto',
+            }}
+          >
+            <i className="corner tl" />
+            <i className="corner tr" />
+            <i className="corner bl" />
+            <i className="corner br" />
+            {(logs.data ?? []).map((line) => (
+              <div
+                key={line.raw}
+                data-testid="log-line"
+                // The artboard's four fixed tracks: time, level, source, message.
+                // A grid keeps the messages on one left edge, which a flex row
+                // with per-cell minimums only manages until one source is long.
                 style={{
-                  color: LEVEL_COLORS[line.level ?? ''] ?? 'var(--color-accent-700)',
-                  fontWeight: 500,
+                  display: 'grid',
+                  gridTemplateColumns: '70px 70px 240px 1fr',
+                  gap: 12,
+                  whiteSpace: 'pre',
                 }}
               >
-                {line.level ?? ''}
-              </span>
-              <span className="text-muted">{line.source ?? ''}</span>
-              <span>{line.message}</span>
-            </div>
-          ))}
+                <span className="text-muted">{line.timestamp?.slice(11) ?? ''}</span>
+                <span
+                  style={{
+                    color: LEVEL_COLORS[line.level ?? ''] ?? 'var(--color-accent-700)',
+                    fontWeight: 500,
+                  }}
+                >
+                  {line.level ?? ''}
+                </span>
+                <span className="text-muted">{line.source ?? ''}</span>
+                <span>{line.message}</span>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

@@ -385,13 +385,12 @@ def read_prompt_metadata(
 @router.get("/logs", response_model=list[LogLine])
 async def read_logs(
     limit: int = Query(default=50, ge=1, le=MAX_LIMIT),
-    _: Session = Depends(current_session),
+    _: Session = Depends(require_admin),
     config: AppConfig = Depends(get_app_config),
 ) -> list[LogLine]:
     """Tail the service log for the console's Status screen.
 
-    Requires a session but not the admin role -- reading the log is open to
-    everyone signed in; only ``preview``/``apply`` require the admin role.
+    Admin-only: the file holds every user's requests (design D1).
     """
     return read_log(Path(config.logging.file.file_name), limit)
 

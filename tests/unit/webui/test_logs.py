@@ -111,3 +111,8 @@ def test_endpoint_returns_newest_first(client, login, tmp_path, monkeypatch):
 def test_limit_is_bounded(client, login):
     login()
     assert client.get("/admin/api/logs?limit=100000").status_code == 422
+
+
+def test_endpoint_is_admin_only(client, login):
+    login(roles=["Project User"])
+    assert client.get("/admin/api/logs").status_code == 403

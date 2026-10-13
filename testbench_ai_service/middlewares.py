@@ -1,3 +1,4 @@
+import json
 import time
 from collections.abc import Awaitable, Callable
 from functools import wraps
@@ -71,6 +72,37 @@ class OutboundRequestLoggingMiddleware:
         return response
 
 
+_REDACTED = "<redacted>"
+#: Bodies of these paths carry credentials as a whole and are never logged.
+_NEVER_LOG_BODY = frozenset({"/admin/api/session"})
+#: A JSON key containing any of these (case-insensitive) has its value masked.
+_SENSITIVE_KEY_PARTS = ("password", "token", "api_key", "secret")
+
+
+def _mask(value):
+    if isinstance(value, dict):
+        return {
+            key: _REDACTED
+            if any(part in str(key).lower() for part in _SENSITIVE_KEY_PARTS)
+            else _mask(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask(item) for item in value]
+    return value
+
+
+def redact_body(path: str, text: str) -> str:
+    """Make a request or response body safe to log."""
+    if path in _NEVER_LOG_BODY:
+        return _REDACTED
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text
+    return json.dumps(_mask(data), ensure_ascii=False)
+
+
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[..., Awaitable[Response]]
@@ -84,8 +116,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         if request.method in ("POST", "PUT", "PATCH"):
             body_bytes = await request.body()
             body_text = body_bytes.decode("utf-8", errors="replace") if body_bytes else ""
-            # TODO: sanitize body_text to remove sensitive info
-            logger.debug(f"Request Body: {body_text}")
+            logger.debug(f"Request Body: {redact_body(request.url.path, body_text)}")
 
         # Process request and get response
         response = await call_next(request)
@@ -105,8 +136,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 # For non-streaming responses fallback - may not apply often
                 response_body = getattr(response, "body", b"").decode("utf-8", errors="replace")
 
-            # TODO: sanitize response_body to remove sensitive info
-            logger.debug(f"Response Body: {response_body}")
+            logger.debug(f"Response Body: {redact_body(request.url.path, response_body)}")
 
         process_time = time.time() - start_time
         logger.debug(f"Processed in {process_time:.3f} seconds")

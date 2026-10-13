@@ -20,11 +20,12 @@ export function useStatus({ enabled = true }: { enabled?: boolean } = {}) {
   })
 }
 
-export function useLogs(limit = 25) {
+export function useLogs({ limit = 25, enabled = true }: { limit?: number; enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['logs', limit],
     queryFn: () => apiFetch<LogLine[]>(`/logs?limit=${limit}`),
     refetchInterval: 15_000,
+    enabled,
   })
 }
 

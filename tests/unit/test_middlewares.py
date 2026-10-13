@@ -1,9 +1,14 @@
+import json
 from unittest.mock import MagicMock, patch
 
 from fastapi import FastAPI
 from starlette.testclient import TestClient
 
-from testbench_ai_service.middlewares import LoggingMiddleware, OutboundRequestLoggingMiddleware
+from testbench_ai_service.middlewares import (
+    LoggingMiddleware,
+    OutboundRequestLoggingMiddleware,
+    redact_body,
+)
 
 
 def _make_app():
@@ -70,3 +75,36 @@ class TestOutboundRequestLoggingMiddleware:
         log_messages = [call.args[0] for call in mock_logger.debug.call_args_list]
         assert any("Testbench request:" in message for message in log_messages)
         assert any("Testbench response:" in message for message in log_messages)
+
+
+class TestRedactBody:
+    def test_login_body_is_never_logged(self):
+        body = json.dumps({"username": "a", "password": "geheim"})
+        assert redact_body("/admin/api/session", body) == "<redacted>"
+
+    def test_sensitive_keys_are_masked_recursively(self):
+        body = json.dumps(
+            {"edits": {"llm": {"OPENAI_API_KEY": "sk-1", "model": "x"}}, "items": [{"token": "t"}]}
+        )
+        out = json.loads(redact_body("/admin/api/config/apply", body))
+        assert out["edits"]["llm"]["OPENAI_API_KEY"] == "<redacted>"
+        assert out["edits"]["llm"]["model"] == "x"
+        assert out["items"][0]["token"] == "<redacted>"
+
+    def test_non_json_body_is_returned_unchanged(self):
+        assert redact_body("/x", "plain text") == "plain text"
+
+
+class TestLoggingMiddlewareRedaction:
+    @patch("testbench_ai_service.middlewares.logger")
+    def test_login_password_never_reaches_the_log(self, mock_logger):
+        app = FastAPI()
+        app.add_middleware(LoggingMiddleware)
+
+        @app.post("/admin/api/session")
+        async def login():
+            return {"ok": True}
+
+        TestClient(app).post("/admin/api/session", json={"username": "a", "password": "geheim"})
+        logged = " ".join(str(c) for c in mock_logger.debug.call_args_list)
+        assert "geheim" not in logged

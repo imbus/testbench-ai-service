@@ -40,11 +40,11 @@ const LOGS: LogLine[] = [
   },
 ]
 
-function renderStatus() {
+function renderStatus({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
-      <Status lang="de" />
+      <Status lang="de" isAdmin={isAdmin} />
     </QueryClientProvider>,
   )
 }
@@ -155,4 +155,11 @@ test('shows a translated error when the status request fails', async () => {
   )
   // The raw backend detail may still appear as secondary diagnostic text.
   expect(screen.getByRole('alert')).toHaveTextContent('boom')
+})
+
+test('hides the service log and its file path from non-admins', async () => {
+  renderStatus({ isAdmin: false })
+  await waitFor(() => expect(screen.getByText(/127\.0\.0\.1:8010/)).toBeInTheDocument())
+  expect(screen.queryByTestId('log-line')).not.toBeInTheDocument()
+  expect(screen.queryByText('testbench-ai-service.log')).not.toBeInTheDocument()
 })
