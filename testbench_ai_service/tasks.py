@@ -1,10 +1,11 @@
 import time
+from uuid import uuid4
 
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.llm.factory import LLMFactory
-from testbench_ai_service.log import logger
+from testbench_ai_service.log import log_context, logger
 from testbench_ai_service.models.agent import ExecutionContext
 from testbench_ai_service.utils.build_prompt_utils import get_prompt_model
 
@@ -27,7 +28,28 @@ async def run_agent(
         conn:      TestBench connection.
         llm_factory: Factory used to obtain the LLM client for this project.
         item_ids:  Validated item IDs returned by ``precheck()``.
+
+    Every record logged during the run carries the triggering user, the
+    project, the agent and a fresh run id, which is what lets the console show
+    a user their own runs and nobody else's (design 4.3).
     """
+    with log_context(
+        user_key=context.user_key,
+        project_key=context.project_key,
+        agent=agent_key,
+        run_id=uuid4().hex,
+    ):
+        await _run_agent(agent_key, agent, context, conn, llm_factory, item_ids)
+
+
+async def _run_agent(
+    agent_key: str,
+    agent: Agent,
+    context: ExecutionContext,
+    conn: TBConnection,
+    llm_factory: LLMFactory,
+    item_ids: list[str],
+):
     start_time = time.time()
     logger.info(
         "Agent started | agent='%s' | project='%s'",

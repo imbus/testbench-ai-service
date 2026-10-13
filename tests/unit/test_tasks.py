@@ -1,8 +1,10 @@
+import asyncio
 import dataclasses
 import datetime
 import logging
 import tempfile
 import zipfile
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,6 +13,8 @@ from testbench2robotframework.json_reader import TestBenchJsonReader
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
 from testbench_ai_service.config import DEFAULT_AGENTS, AppConfig
 from testbench_ai_service.llm.base import LLMClient
+from testbench_ai_service.log import LogContextFilter
+from testbench_ai_service.log import logger as service_logger
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.testbench import (
@@ -324,3 +328,86 @@ class TestRunAgentReviewTask:
             if tcs_str == s:
                 return self.review_responses[uid]
         return None
+
+
+class _Capture(logging.Handler):
+    def __init__(self):
+        super().__init__(logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+        self.addFilter(LogContextFilter())
+
+    def emit(self, record):
+        self.records.append(record)
+
+
+class _LoggingAgent:
+    def __init__(self, label: str):
+        self.label = label
+
+    async def run(self, context, conn, llm_client, item_ids):
+        service_logger.info("agent %s step 1", self.label)
+        await asyncio.sleep(0)  # let the other run interleave
+        await asyncio.to_thread(service_logger.info, "agent %s in thread", self.label)
+        service_logger.info("agent %s step 2", self.label)
+
+
+def _ctx(user_key: str):
+    return SimpleNamespace(
+        user_key=user_key,
+        project_key=f"p-{user_key}",
+        project_name="P",
+        llm_config=None,
+        prompt_config=None,
+    )
+
+
+class TestRunAgentLogContext:
+    @pytest.fixture
+    def capture(self):
+        handler = _Capture()
+        previous = service_logger.level
+        service_logger.setLevel(logging.DEBUG)
+        service_logger.addHandler(handler)
+        yield handler
+        service_logger.removeHandler(handler)
+        service_logger.setLevel(previous)
+
+    async def _run(self, user_key):
+        factory = MagicMock()
+        with patch("testbench_ai_service.tasks.get_prompt_model", return_value=None):
+            await run_agent(
+                agent_key="reviewer",
+                agent=_LoggingAgent(user_key),
+                context=_ctx(user_key),
+                conn=MagicMock(),
+                llm_factory=factory,
+                item_ids=[],
+            )
+
+    async def test_every_record_of_the_run_is_tagged(self, capture):
+        await self._run("u-1")
+        run_records = [r for r in capture.records if r.scope == "user"]
+        assert len(run_records) == len(capture.records)
+        assert {r.user_key for r in run_records} == {"u-1"}
+        assert {r.agent for r in run_records} == {"reviewer"}
+        assert {r.project_key for r in run_records} == {"p-u-1"}
+        run_ids = {r.run_id for r in run_records}
+        assert len(run_ids) == 1
+        assert len(run_ids.pop()) == 32
+        assert any("in thread" in r.getMessage() for r in run_records)
+
+    async def test_context_is_gone_after_the_run(self, capture):
+        await self._run("u-1")
+        service_logger.info("afterwards")
+        assert capture.records[-1].scope == "service"
+
+    async def test_concurrent_runs_of_different_users_do_not_mix(self, capture):
+        # Review Focus 2.
+        await asyncio.gather(self._run("u-1"), self._run("u-2"))
+        for record in capture.records:
+            message = record.getMessage()
+            if "agent u-1" in message:
+                assert record.user_key == "u-1"
+            if "agent u-2" in message:
+                assert record.user_key == "u-2"
+        assert {r.user_key for r in capture.records} == {"u-1", "u-2"}
