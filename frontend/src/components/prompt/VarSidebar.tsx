@@ -206,7 +206,7 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
           {lint.error && <div role="alert" style={{ color: '#a33a2b' }}>{lint.error}</div>}
           {lint.errors.map((error, index) => (
             <div key={index} style={{ border: '1px solid #c0392b', background: 'color-mix(in srgb, #c0392b 10%, transparent)', padding: '6px 8px', color: '#a33a2b' }}>
-              {`${t('lintLine')} ${error.line}: ${error.message}`}
+              {t('lintLine', { line: error.line, message: error.message })}
             </div>
           ))}
           {lint.clean && !lint.error && <div style={{ color: '#2e8b5e' }}>✓ {t('lintClean')}</div>}

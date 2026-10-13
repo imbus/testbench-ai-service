@@ -160,7 +160,7 @@ function fieldFromSaveError(message: string): SaveFieldError | null {
 /** Localizes one `agentsUsingVariant` scope. Only the project name (a wire
  * token, like an agent key) stays untranslated. */
 function referenceLabel(t: TFunction, scope: Scope): string {
-  return scope.kind === 'global' ? t('orphanGlobalTable') : `${t('orphanProjectPrefix')} '${scope.project}'`
+  return scope.kind === 'global' ? t('orphanGlobalTable') : t('orphanProject', { project: scope.project })
 }
 
 /** The variant the centre pane works on. Never `variants[0]` unguarded: an
@@ -881,7 +881,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           {t('saveBlockedJinja')}{' '}
           {invalidJinja
             .map(({ index, message, error }) =>
-              `${index + 1} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine')} ${error.line}: ${error.message}`,
+              `${index + 1} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine', { line: error.line, message: error.message })}`,
             )
             .join(' · ')}
         </div>

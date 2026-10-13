@@ -35,3 +35,9 @@ test('the traceback label keeps the technical term in both languages', () => {
   expect(de.traceback).toBe('Traceback')
   expect(en.traceback).toBe('Traceback')
 })
+
+test('counts pick the singular or plural form', () => {
+  expect(i18n.t('inFlight', { count: 1 })).toBe('1 Agent-Lauf ist noch aktiv.')
+  expect(i18n.t('inFlight', { count: 3 })).toBe('3 Agent-Läufe sind noch aktiv.')
+  expect(i18n.t('overrideCount', { count: 1, lng: 'en' })).toBe('1 override')
+})

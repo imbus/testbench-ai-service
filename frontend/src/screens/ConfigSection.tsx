@@ -176,7 +176,7 @@ export function ConfigSection({
                 key={entry.key}
                 role="tab"
                 aria-selected={tab === entry.key}
-                aria-label={`${t(entry.labelKey)}${count > 0 ? ` (${count} ${count === 1 ? 'issue' : 'issues'})` : ''}`}
+                aria-label={`${t(entry.labelKey)}${count > 0 ? ` (${t('issueCount', { count })})` : ''}`}
                 onClick={() => setTab(entry.key)}
                 style={{
                   background: 'none',

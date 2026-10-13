@@ -118,10 +118,10 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
           {lint.checking && !lint.running && <span className="text-muted">{t('lintChecking')}</span>}
           {lint.error && <span role="alert" style={{ color: '#a33a2b' }}>{lint.error}</span>}
           {lint.errors.map((error, index) => (
-            <span key={index} style={{ color: '#a33a2b' }}>{`${t('lintLine')} ${error.line}: ${error.message}`}</span>
+            <span key={index} style={{ color: '#a33a2b' }}>{t('lintLine', { line: error.line, message: error.message })}</span>
           ))}
           {lint.clean && !lint.error && <span style={{ color: '#2e8b5e' }}>✓ {t('lintClean')}</span>}
-          <span className="text-muted">{`${usedDeclared}/${declared} ${t('varsUsed')} · ${undeclared} ${t('undeclaredCount')}`}</span>
+          <span className="text-muted">{t('varsStatus', { used: usedDeclared, declared, undeclared })}</span>
           <div style={{ flex: 1 }} />
           <span className="text-muted">jinja · UTF-8</span>
         </div>

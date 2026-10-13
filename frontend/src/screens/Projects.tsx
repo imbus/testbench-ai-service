@@ -268,7 +268,7 @@ function ProjectCard({
         )}
         {overrideCount > 0 ? (
           <span className="tag tag-accent">
-            {overrideCount} {t('overrides')}
+            {t('overrideCount', { count: overrideCount })}
           </span>
         ) : (
           <span className="tag tag-neutral">{t('inheritsGlobal')}</span>

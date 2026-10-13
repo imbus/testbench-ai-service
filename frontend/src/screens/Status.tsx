@@ -276,10 +276,10 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
 
         <Card kicker={t('agents')}>
           <div className="card-title">
-            {agents.total} {t('agents')}
+            {t('agentCount', { count: agents.total })}
           </div>
           <div className="card-meta">
-            {agents.enabled} {t('agentsOn')} · {agents.project_overrides} {t('overrides')}
+            {agents.enabled} {t('agentsOn')} · {t('overrideCount', { count: agents.project_overrides })}
           </div>
         </Card>
       </div>

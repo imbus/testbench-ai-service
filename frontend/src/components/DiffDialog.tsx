@@ -211,7 +211,7 @@ export function DiffDialog({
 
       {data && data.in_flight_tasks > 0 && (
         <div style={{ fontSize: 13 }}>
-          {data.in_flight_tasks} {t('inFlight')}
+          {t('inFlight', { count: data.in_flight_tasks })}
         </div>
       )}
 

@@ -199,7 +199,7 @@ describe('list view', () => {
 
     await userEvent.click(
       within(screen.getByTestId('agent-row-explainer')).getByRole('button', {
-        name: /overrides/i,
+        name: /1 override$/i,
       }),
     )
 

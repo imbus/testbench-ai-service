@@ -273,7 +273,7 @@ test('marks a Service tab when its fields carry issues', async () => {
   // Wait for the fields to load
   await screen.findByLabelText('host')
   // The tls tab should be marked with an issue count
-  const tlsTab = screen.getByRole('tab', { name: /HTTPS.*1.*issue/i })
+  const tlsTab = screen.getByRole('tab', { name: /HTTPS.*1 Problem/i })
   expect(tlsTab).toBeInTheDocument()
   // The general tab (currently selected) should not be marked
   const generalTab = screen.getByRole('tab', { name: 'Allgemein' })
@@ -295,11 +295,11 @@ test('marks multiple tabs when they have issues', async () => {
   // Wait for the fields to load
   await screen.findByLabelText('host')
   // general tab has port (1 issue)
-  expect(screen.getByRole('tab', { name: /Allgemein.*1.*issue/i })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: /Allgemein.*1 Problem/i })).toBeInTheDocument()
   // tls tab has ssl_cert (1 issue)
-  expect(screen.getByRole('tab', { name: /HTTPS.*1.*issue/i })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: /HTTPS.*1 Problem/i })).toBeInTheDocument()
   // proxy tab has trusted_proxies (1 issue)
-  expect(screen.getByRole('tab', { name: /Reverse Proxy.*1.*issue/i })).toBeInTheDocument()
+  expect(screen.getByRole('tab', { name: /Reverse Proxy.*1 Problem/i })).toBeInTheDocument()
 })
 
 test('does not mark tabs when there are no issues', async () => {
@@ -332,7 +332,7 @@ test('marks tabs with issues on non-selected array elements', async () => {
 
   // Wait for the fields to load
   await screen.findByLabelText('host')
-  const proxyTab = screen.getByRole('tab', { name: /Reverse Proxy.*1.*issue/i })
+  const proxyTab = screen.getByRole('tab', { name: /Reverse Proxy.*1 Problem/i })
   expect(proxyTab).toBeInTheDocument()
 })
 

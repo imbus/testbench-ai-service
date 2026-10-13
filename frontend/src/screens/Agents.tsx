@@ -237,7 +237,7 @@ function AgentRow({
           <button
             type="button"
             aria-expanded={expanded}
-            aria-label={`${t('activeIn')} ${active.length} · ${overriders.length} ${t('overrides')}`}
+            aria-label={`${t('activeIn')} ${active.length} · ${t('overrideCount', { count: overriders.length })}`}
             onClick={() => setExpanded(!expanded)}
             style={{
               background: 'none',
@@ -387,7 +387,7 @@ function Matrix({
     const overrides = agentKeys(running).filter(
       (agentKey) => overridingProjects(running, agentKey).indexOf(project) !== -1,
     ).length
-    return overrides > 0 ? `${overrides} ${t('overrides')}` : t('inheritsGlobal')
+    return overrides > 0 ? t('overrideCount', { count: overrides }) : t('inheritsGlobal')
   }
 
   return (
