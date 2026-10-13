@@ -137,13 +137,15 @@ export function applyEditorTheme(): void {
   const surface = cssColor('--color-surface')
   const text = cssColor('--color-text')
   const accent = cssColor('--color-accent')
+  // Text-safe accent (darker orange on light); Monarch wants hex without `#`.
+  const accentFg = (cssColor('--color-accent-fg') ?? accent ?? (dark ? '#6fd3a8' : '#416180')).slice(1)
   set('editor.background', bg)
   set('editor.foreground', text)
   set('editorGutter.background', surface)
   set('editorLineNumber.foreground', text && `${text}66`)
   set('editorLineNumber.activeForeground', text)
   set('editorCursor.foreground', accent)
-  set('focusBorder', accent)
+  set('focusBorder', accentFg && `#${accentFg}`)
   set('editorSuggestWidget.background', surface)
   set('editorSuggestWidget.selectedBackground', accent && `${accent}33`)
   set('editorHoverWidget.background', surface)
@@ -153,10 +155,10 @@ export function applyEditorTheme(): void {
     inherit: true,
     rules: [
       { token: 'comment', foreground: dark ? '8b949e' : '6a737d', fontStyle: 'italic' },
-      { token: 'delimiter.bracket', foreground: dark ? '6fd3a8' : '416180' },
-      { token: 'keyword', foreground: dark ? '6fd3a8' : '416180', fontStyle: 'bold' },
-      { token: 'variable.predefined', foreground: dark ? '9fe0c2' : '597ea3' },
-      { token: 'variable.property', foreground: dark ? '9fe0c2' : '597ea3' },
+      { token: 'delimiter.bracket', foreground: accentFg },
+      { token: 'keyword', foreground: accentFg, fontStyle: 'bold' },
+      { token: 'variable.predefined', foreground: dark ? '94bce3' : '416180' },
+      { token: 'variable.property', foreground: dark ? '94bce3' : '416180' },
       { token: 'string', foreground: dark ? 'd9b07a' : '7a5a2a' },
       { token: 'markup.heading', foreground: dark ? 'e7e9ec' : '1d2d3d', fontStyle: 'bold' },
       { token: 'markup.bold', fontStyle: 'bold' },
@@ -164,7 +166,7 @@ export function applyEditorTheme(): void {
       { token: 'markup.code', foreground: dark ? 'd9b07a' : '7a5a2a' },
       { token: 'markup.codeblock', foreground: dark ? 'd9b07a' : '7a5a2a' },
       { token: 'markup.link', foreground: dark ? '94bce3' : '416180', fontStyle: 'underline' },
-      { token: 'markup.list', foreground: dark ? '6fd3a8' : '597ea3', fontStyle: 'bold' },
+      { token: 'markup.list', foreground: accentFg, fontStyle: 'bold' },
       { token: 'markup.quote', foreground: dark ? '8b949e' : '6a737d' },
       { token: 'markup.hr', foreground: dark ? '8b949e' : '6a737d' },
     ],

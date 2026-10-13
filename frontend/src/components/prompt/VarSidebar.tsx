@@ -28,7 +28,7 @@ function VarButton({ name, label, type, used, disabled, onInsert }: { name: stri
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label ?? name}</span>
       <span style={{ display: 'flex', gap: 4, flex: 'none' }}>
         {type && <span className="text-muted">{type}</span>}
-        {used && <span aria-hidden style={{ color: 'var(--color-accent)' }}>●</span>}
+        {used && <span aria-hidden style={{ color: 'var(--color-accent-fg)' }}>●</span>}
       </span>
     </button>
   )

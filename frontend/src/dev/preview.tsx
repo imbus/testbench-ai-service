@@ -9,6 +9,7 @@ import { SessionProvider } from '../state/session'
 import '../styles/fonts.css'
 import '../styles/industry.css'
 import '../styles/brand.css'
+import '../styles/brand-orange.css'
 
 const signedIn = !new URLSearchParams(location.search).has('login')
 

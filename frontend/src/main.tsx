@@ -8,6 +8,7 @@ import './i18n'
 import './styles/fonts.css'
 import './styles/industry.css'
 import './styles/brand.css'
+import './styles/brand-orange.css'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
