@@ -1,14 +1,20 @@
+import json
 import logging
+import sys
 from io import StringIO
 from unittest.mock import patch
 
 import pytest
 
 from testbench_ai_service.log import (
+    ActivityRecordFilter,
     ColoredFormatter,
+    JsonLineFormatter,
+    LogContextFilter,
     RequestIdFilter,
     get_log_config_dict,
     get_log_level_int,
+    log_context,
     setup_logging,
 )
 from testbench_ai_service.models.logging import (
@@ -83,6 +89,91 @@ class TestRequestIdFilter:
         assert record.request_id == "request-123"
 
 
+def _record(msg="m", level=logging.INFO, exc_info=None):
+    return logging.LogRecord("testbench_ai_service.x", level, __file__, 1, msg, None, exc_info)
+
+
+class TestLogContextFilter:
+    def test_outside_any_context_is_service(self):
+        record = _record()
+        assert LogContextFilter().filter(record) is True
+        assert record.scope == "service"
+        assert record.user_key is None
+        assert record.request_id == "-"
+
+    def test_inside_a_request_is_request(self):
+        with log_context(in_request=True):
+            record = _record()
+            LogContextFilter().filter(record)
+        assert record.scope == "request"
+
+    def test_user_wins_over_request(self):
+        with log_context(in_request=True), log_context(user_key="u-1", run_id="r-1"):
+            record = _record()
+            LogContextFilter().filter(record)
+        assert record.scope == "user"
+        assert record.user_key == "u-1"
+        assert record.run_id == "r-1"
+
+    def test_values_are_restored_on_exit_also_nested(self):
+        with log_context(user_key="outer"):
+            with log_context(user_key="inner"):
+                pass
+            record = _record()
+            LogContextFilter().filter(record)
+        assert record.user_key == "outer"
+        after = _record()
+        LogContextFilter().filter(after)
+        assert after.user_key is None
+
+    def test_unknown_key_is_rejected(self):
+        with pytest.raises(TypeError), log_context(nope="x"):
+            pass
+
+
+class TestActivityRecordFilter:
+    @pytest.mark.parametrize(
+        ("scope", "passes"),
+        [("user", True), ("service", True), ("request", False)],
+    )
+    def test_scopes(self, scope, passes):
+        record = _record()
+        record.scope = scope
+        assert ActivityRecordFilter().filter(record) is passes
+
+    def test_record_without_scope_is_dropped(self):
+        assert ActivityRecordFilter().filter(_record()) is False
+
+
+class TestJsonLineFormatter:
+    def test_one_line_with_all_fields(self):
+        with log_context(user_key="u-1", agent="reviewer", project_key="p-1", run_id="r-1"):
+            record = _record("hello %s")
+            record.args = ("world",)
+            LogContextFilter().filter(record)
+        out = JsonLineFormatter().format(record)
+        assert "\n" not in out
+        entry = json.loads(out)
+        assert entry["message"] == "hello world"
+        assert entry["level"] == "INFO"
+        assert entry["source"] == "testbench_ai_service.x"
+        assert entry["scope"] == "user"
+        assert entry["user_key"] == "u-1"
+        assert entry["agent"] == "reviewer"
+        assert entry["ts"].endswith("+00:00")
+        assert "exc" not in entry
+
+    def test_traceback_stays_in_the_same_entry(self):
+        try:
+            raise ValueError("boom")
+        except ValueError:
+            record = _record("failed", logging.ERROR, sys.exc_info())
+        LogContextFilter().filter(record)
+        out = JsonLineFormatter().format(record)
+        assert "\n" not in out
+        assert "ValueError: boom" in json.loads(out)["exc"]
+
+
 class TestGetLogLevelInt:
     """get_log_level_int converts string level names to logging integer constants."""
 
@@ -136,7 +227,7 @@ class TestGetLogConfigDict:
 
     def test_file_handler_is_configured_correctly(self):
         file_handler = self.result["handlers"]["file"]
-        assert file_handler["filters"] == ["request_id"]
+        assert file_handler["filters"] == ["log_context"]
         assert file_handler["filename"] == self.config.file.file_name
         assert file_handler["encoding"] == "utf_8"
         assert file_handler["maxBytes"] == 1 * 1024 * 1024

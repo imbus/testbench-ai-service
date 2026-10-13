@@ -1,16 +1,104 @@
+import json
 import logging
 import logging.config
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import datetime, timezone
 
 from testbench_ai_service.models.logging import LoggingConfig, LogLevel
 
+log_user_key: ContextVar[str | None] = ContextVar("log_user_key", default=None)
+log_username: ContextVar[str | None] = ContextVar("log_username", default=None)
+log_project_key: ContextVar[str | None] = ContextVar("log_project_key", default=None)
+log_run_id: ContextVar[str | None] = ContextVar("log_run_id", default=None)
+log_agent: ContextVar[str | None] = ContextVar("log_agent", default=None)
+log_in_request: ContextVar[bool] = ContextVar("log_in_request", default=False)
 
-class RequestIdFilter(logging.Filter):
-    """Provide a placeholder when a log record is outside an HTTP request."""
+_CONTEXT_VARS: dict[str, ContextVar] = {
+    "user_key": log_user_key,
+    "username": log_username,
+    "project_key": log_project_key,
+    "run_id": log_run_id,
+    "agent": log_agent,
+    "in_request": log_in_request,
+}
+
+_RECORD_FIELDS = ("user_key", "username", "project_key", "run_id", "agent")
+
+
+@contextmanager
+def log_context(**values: str | bool | None) -> Iterator[None]:
+    """Mark every record logged inside the block; restores the outer values on exit."""
+    unknown = set(values) - _CONTEXT_VARS.keys()
+    if unknown:
+        raise TypeError(f"Unknown log context field(s): {sorted(unknown)}")
+    tokens = [
+        (_CONTEXT_VARS[name], _CONTEXT_VARS[name].set(value)) for name, value in values.items()
+    ]
+    try:
+        yield
+    finally:
+        for var, token in reversed(tokens):
+            var.reset(token)
+
+
+class LogContextFilter(logging.Filter):
+    """Copy the log context onto the record and classify its scope (design D4).
+
+    ``user`` -- logged on behalf of a user; ``request`` -- inside an HTTP request
+    but tied to no user; ``service`` -- neither.
+    """
 
     def filter(self, record: logging.LogRecord) -> bool:
         if not hasattr(record, "request_id"):
             record.request_id = "-"
+        for name in _RECORD_FIELDS:
+            setattr(record, name, _CONTEXT_VARS[name].get())
+        if record.user_key is not None:
+            record.scope = "user"
+        elif log_in_request.get():
+            record.scope = "request"
+        else:
+            record.scope = "service"
         return True
+
+
+# Kept so existing imports keep working; the filter now does more than request ids.
+RequestIdFilter = LogContextFilter
+
+
+class ActivityRecordFilter(logging.Filter):
+    """Only user and service records reach the activity sink (design D4/D5).
+
+    A record without a scope -- LogContextFilter did not run -- counts as
+    ``request`` and is dropped: fail closed.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return getattr(record, "scope", "request") in ("user", "service")
+
+
+class JsonLineFormatter(logging.Formatter):
+    """One JSON object per record and line; a traceback stays inside its record."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry: dict[str, str | None] = {
+            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(
+                timespec="milliseconds"
+            ),
+            "level": record.levelname,
+            "source": record.name,
+            "message": record.getMessage(),
+            "scope": getattr(record, "scope", "request"),
+        }
+        for name in _RECORD_FIELDS:
+            entry[name] = getattr(record, name, None)
+        if record.exc_info:
+            entry["exc"] = self.formatException(record.exc_info)
+        elif record.exc_text:
+            entry["exc"] = record.exc_text
+        return json.dumps(entry, ensure_ascii=False)
 
 
 class ColoredFormatter(logging.Formatter):
@@ -45,8 +133,8 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
         "version": 1,
         "disable_existing_loggers": True,
         "filters": {
-            "request_id": {
-                "()": "testbench_ai_service.log.RequestIdFilter",
+            "log_context": {
+                "()": "testbench_ai_service.log.LogContextFilter",
             }
         },
         "formatters": {
@@ -61,14 +149,14 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
                 "class": "logging.StreamHandler",
                 "level": config.console.log_level.value,
                 "formatter": "console",
-                "filters": ["request_id"],
+                "filters": ["log_context"],
                 "stream": "ext://sys.stdout",
             },
             "file": {
                 "class": "logging.handlers.RotatingFileHandler",
                 "level": config.file.log_level.value,
                 "formatter": "file",
-                "filters": ["request_id"],
+                "filters": ["log_context"],
                 "filename": config.file.file_name,
                 "mode": "a",
                 "maxBytes": 1 * 1024 * 1024,
