@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 from testbench_ai_service.utils.traceability import review_writer
 from testbench_ai_service.utils.traceability.models import LinkedSet
 from testbench_ai_service.utils.traceability.review_writer import (
@@ -112,17 +114,19 @@ def _conn(patch_error=None):
     return conn
 
 
-def _stub_testbench(monkeypatch, locker_key=None, comment="<p>old note</p>"):
+def _stub_testbench(monkeypatch, locker_key=None, comment="<p>old note</p>", root="default"):
     locker = SimpleNamespace(key=locker_key) if locker_key else None
+    if root == "default":
+        root = SimpleNamespace(spec=SimpleNamespace(locker=locker))
     monkeypatch.setattr(
-        review_writer,
-        "post_project_tov_structure",
-        lambda *args: SimpleNamespace(root=SimpleNamespace(spec=SimpleNamespace(locker=locker))),
+        review_writer, "post_project_tov_structure", lambda *args: SimpleNamespace(root=root)
     )
     monkeypatch.setattr(
         review_writer,
         "get_test_case_set_details",
-        lambda *args: SimpleNamespace(spec=SimpleNamespace(reviewComment=comment)),
+        lambda *args: SimpleNamespace(
+            spec=SimpleNamespace(key="fresh-spec", reviewComment=comment)
+        ),
     )
 
 
@@ -140,7 +144,7 @@ async def test_an_unlocked_set_gets_the_block_prepended(monkeypatch):
 
     url = conn.session.patch.call_args.args[0]
     body = conn.session.patch.call_args.kwargs["json"]
-    assert url == "https://tb/api/2/projects/7/specifications/spec-1"
+    assert url == "https://tb/api/2/projects/7/specifications/fresh-spec"
     assert set(body) == {"reviewComment"}
     assert (
         body["reviewComment"]["html"] == f"<html><body>{_block()}<br/><p>old note</p></body></html>"
@@ -169,3 +173,21 @@ async def test_a_failed_patch_is_reported_not_raised(monkeypatch):
     _stub_testbench(monkeypatch)
 
     assert await _write(_conn(patch_error=RuntimeError("409"))) == WriteOutcome.FAILED
+
+
+async def test_the_patch_goes_to_the_spec_key_of_the_fresh_read(monkeypatch):
+    _stub_testbench(monkeypatch)
+    conn = _conn()
+
+    await _write(conn)
+
+    assert conn.session.patch.call_args.args[0].endswith("/specifications/fresh-spec")
+
+
+@pytest.mark.parametrize("root", [None, SimpleNamespace(spec=None)])
+async def test_an_unknown_lock_state_is_not_written(monkeypatch, root):
+    _stub_testbench(monkeypatch, root=root)
+    conn = _conn()
+
+    assert await _write(conn) == WriteOutcome.FAILED
+    conn.session.patch.assert_not_called()

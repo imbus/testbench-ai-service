@@ -104,7 +104,15 @@ async def write_review_block(
         tree = await asyncio.to_thread(
             post_project_tov_structure, conn, project_key, tov_key, linked_set.unique_id
         )
-        locker = getattr(getattr(tree.root, "spec", None), "locker", None)
+        spec = getattr(tree.root, "spec", None)
+        if spec is None:
+            logger.warning(
+                "The lock state of test case set '%s' is unknown; its review comment is not "
+                "written",
+                linked_set.path,
+            )
+            return WriteOutcome.FAILED
+        locker = getattr(spec, "locker", None)
         if locker is not None and locker.key != user_key:
             logger.warning(
                 "Test case set '%s' is locked by another user; its review comment is not written",
@@ -115,7 +123,7 @@ async def write_review_block(
             get_test_case_set_details, conn, project_key, linked_set.key
         )
         html = add_html_body_tags(replace_block(details.spec.reviewComment, pattern, block))
-        await _patch_review_comment(conn, project_key, linked_set.spec_key, html)
+        await _patch_review_comment(conn, project_key, details.spec.key, html)
     except Exception as error:
         logger.error(
             "Writing the review comment of test case set '%s' failed: %r", linked_set.path, error

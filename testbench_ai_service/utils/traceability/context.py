@@ -124,6 +124,7 @@ async def load_requirement_context(
     root_key: str | None,
     root_uid: str | None,
     set_keys: list[str],
+    catalog: Mapping[str, TestCaseSet] | None = None,
 ) -> RequirementContext:
     """Load the triggered requirement with its RM description and the given linked sets.
 
@@ -135,6 +136,7 @@ async def load_requirement_context(
         root_key: Requirement key from the trigger, if any.
         root_uid: Requirement ID from the trigger, if any.
         set_keys: Keys of the linked sets to load, as the precheck found them.
+        catalog: Test case set catalog the precheck already loaded; loaded here if absent.
 
     Raises:
         RequirementNotFoundError: The TOV has no such requirement.
@@ -148,9 +150,10 @@ async def load_requirement_context(
     (extended,) = await fetch_requirement_details(conn, rm_args, tov_key, [assignment])
     requirement = Requirement.from_details(assignment, extended)
 
-    catalog = await asyncio.to_thread(
-        get_test_case_set_catalog, conn, project_key, tov_key, None, None, None
-    )
+    if catalog is None:
+        catalog = await asyncio.to_thread(
+            get_test_case_set_catalog, conn, project_key, tov_key, None, None, None
+        )
     wanted = set(set_keys)
     linked_sets = sorted(
         (_linked_set(tcs, assignment.key) for tcs in catalog.values() if tcs.details.key in wanted),

@@ -41,7 +41,10 @@ def _result(**overrides):
             AspectCoverage(
                 aspect=_aspect("A2", "Lock after 3 failures"),
                 status="missing",
-                suggested_test=SuggestedTest(title="Lock after third failure", description="d"),
+                gap_reason="No test fails three times.",
+                suggested_test=SuggestedTest(
+                    title="Lock after third failure", description="Fail 3x, expect lock <b>"
+                ),
             ),
         ],
         "sets_without_evidence": [SetWithoutEvidence(set_key="s2", reason="no_matching_aspect")],
@@ -57,8 +60,31 @@ def test_a_contributing_set_lists_its_proofs_and_the_open_aspects():
         "Proves for REQ-42: A1 (full).\n"
         "Not covered for REQ-42:\n"
         "- A2 Lock after 3 failures (missing)\n"
-        "  Suggested test: Lock after third failure"
+        "  Gap: No test fails three times.\n"
+        "  Suggested test: Lock after third failure\n"
+        "  Test sketch: Fail 3x, expect lock <b>"
     )
+
+
+def test_a_set_that_could_not_be_evaluated_is_not_told_to_check_its_link():
+    result = _result(
+        sets_without_evidence=[SetWithoutEvidence(set_key="s2", reason="interpretation_failed")]
+    )
+
+    english = block_body(result, "s2", LanguageOption.ENGLISH).splitlines()[0]
+    german = block_body(result, "s2", LanguageOption.GERMAN).splitlines()[0]
+
+    assert english == "Could not be evaluated for REQ-42 in this run. Run the check again."
+    assert "link" not in english.lower()
+    assert "Link" not in german
+    assert "erneut" in german
+
+
+def test_gap_and_sketch_survive_escaping_and_the_block_pattern():
+    block = render_set_block(_result(), "s1", LanguageOption.ENGLISH, "2026-10-12 14:03")
+
+    assert "Test sketch: Fail 3x, expect lock &lt;b&gt;" in block
+    assert block_pattern(headings(), "REQ-42").fullmatch(block)
 
 
 def test_a_set_without_evidence_is_told_to_check_its_link():
@@ -100,6 +126,6 @@ def test_the_report_names_status_evidence_gaps_and_sets():
     assert report.splitlines()[0] == "Coverage of REQ-42: 2 aspects: 1 covered, 0 weak, 1 missing"
     assert "A1 [negative] covered: Login succeeds" in report
     assert "    /Auth/Login / TC-2: full" in report
-    assert "    suggested test: Lock after third failure - d" in report
+    assert "    suggested test: Lock after third failure - Fail 3x, expect lock <b>" in report
     assert "Set without evidence: s2 (no_matching_aspect)" in report
     assert "Review comments not written: /Auth/Login" in report

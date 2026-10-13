@@ -25,7 +25,7 @@ For JWT tokens the following API token permissions are required: `ReadOwnUserDet
 3. **Interpretation**: for each linked set the model reads the test cases (keyword calls with arguments, `[check]` calls marked) against the aspects and names `full` or `partial` evidence. Large sets are read in batches of `max_test_cases_per_call`.
 4. **Matrix** (code, not model): an aspect is `covered` by `full` evidence from a set whose specification status counts; `weak` if there is only `partial` evidence or the proving set is not released yet; `missing` otherwise.
 5. **Gaps**: one more model call explains each weak or missing aspect and sketches a test that would close it.
-6. **Write-back**: every linked set gets a block **AI Coverage &lt;requirement&gt;** on top of its review comment. A rerun replaces only this block; blocks of other requirements and of the reviewer agent stay. Sets locked by another user are skipped. The full result is written to the service log.
+6. **Write-back**: every linked set gets a block **AI Coverage &lt;requirement&gt;** on top of its review comment. A rerun replaces only this block; blocks of other requirements and of the reviewer agent stay. Each open aspect lists the reason for the gap and a sketch of the missing test. Sets locked by another user are skipped. Two runs for different requirements at the same time on the same set can lose one block; a rerun restores it. The full result is written to the service log.
 
 Without an RM service the requirement description is unknown; the aspects then rest on the title alone and the blocks say so.
 
@@ -33,7 +33,7 @@ Without an RM service the requirement description is unknown; the aspects then r
 
 | Variable | Values | Default |
 | --- | --- | --- |
-| `write_review_comments` | `true`, `false` — `false` writes only the log | `true` |
+| `write_review_comments` | `true`, `false` — `false` writes only the log. Overrides the `write_review_comments` config argument when the client sends it | `true` |
 | `coverage_view` | `release`: only sets in review or released count; `work`: unfinished sets count too | `release` |
 
 ## Configuration
@@ -48,9 +48,9 @@ class_path = "testbench_ai_service.agents.coverage_checker.agent.CoverageChecker
 file = "coverage_checker/prompt.yaml"
 
 [testbench-ai-service.agents.coverage_checker.args]
-rm_service_url = "${RM_SERVICE_URL}"
-rm_username = "${RM_USERNAME}"
-rm_password = "${RM_PASSWORD}"
+# rm_service_url = "https://rm.example.com/api/"   # unset: aspects from the requirement title only
+# rm_username = "rm-user"
+# rm_password = "rm-password"
 max_aspects = 12
 counting_spec_status = ["InReview", "Released"]
 work_spec_status = ["Planned", "InProgress", "InReview", "Released"]

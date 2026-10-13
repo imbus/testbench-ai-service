@@ -153,3 +153,12 @@ async def test_invalid_prompt_vars_are_refused(testbench):
 
     assert result.passed is False
     assert result.warnings[0].startswith("Invalid prompt variables:")
+
+
+async def test_a_passed_precheck_keeps_the_catalog_for_the_run(testbench):
+    agent = CoverageChecker(RM)
+
+    result = await agent.precheck(_context(), None)
+
+    assert result.passed is True
+    assert agent._catalog is testbench.catalog

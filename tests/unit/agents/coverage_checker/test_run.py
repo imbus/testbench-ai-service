@@ -123,7 +123,8 @@ def world(monkeypatch):
         locked=set(),
     )
 
-    async def _load(*args):
+    async def _load(*args, **kwargs):
+        state.load_kwargs = kwargs
         return state.loaded
 
     async def _ai(self, llm_client, llm_config, prompt_config, schema, agent_data=None, step=None):
@@ -254,3 +255,42 @@ async def test_run_logs_the_report(world, monkeypatch):
     message = logger.info.call_args.args[0] % logger.info.call_args.args[1:]
     assert "Coverage of REQ-42: 2 aspects: 1 covered, 0 weak, 1 missing" in message
     assert '"requirement_key": "REQ-42"' in message
+
+
+async def test_no_loadable_sets_stops_before_any_model_call(world):
+    world.loaded = _loaded()
+
+    assert await _check() is None
+    assert world.steps == []
+    assert world.writes == {}
+
+
+async def test_a_failing_block_rendering_only_fails_that_set(world, monkeypatch):
+    original = agent_module.render_set_block
+
+    def _render(result, set_key, *args):
+        if set_key == "s2":
+            raise RuntimeError("boom")
+        return original(result, set_key, *args)
+
+    monkeypatch.setattr(agent_module, "render_set_block", _render)
+
+    result = await _check()
+
+    assert set(world.writes) == {"s1", "s3"}
+    assert result.skipped_comments == ["s2"]
+
+
+async def test_run_reuses_the_catalog_the_precheck_loaded(world):
+    agent = CoverageChecker()
+    agent._catalog = {"cat": "alog"}
+
+    await agent.check_coverage(_context(), None, None, ["s1"])
+
+    assert world.load_kwargs["catalog"] == {"cat": "alog"}
+
+
+async def test_run_without_precheck_loads_the_catalog_itself(world):
+    await CoverageChecker().check_coverage(_context(), None, None, ["s1"])
+
+    assert world.load_kwargs["catalog"] is None

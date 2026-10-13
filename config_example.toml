@@ -95,11 +95,12 @@ file = "defect_explainer/prompt.yaml"
 # file = "coverage_checker/prompt.yaml"
 
 # [testbench-ai-service.agents.coverage_checker.args]
-# rm_service_url = "${RM_SERVICE_URL}"   # unset: aspects from the requirement title only
-# rm_username = "${RM_USERNAME}"
-# rm_password = "${RM_PASSWORD}"
+# rm_service_url = "https://rm.example.com/api/"   # unset: aspects from the requirement title only
+# rm_username = "rm-user"
+# rm_password = "rm-password"
 # max_aspects = 12
 # counting_spec_status = ["InReview", "Released"]
+# work_spec_status = ["Planned", "InProgress", "InReview", "Released"]
 # write_review_comments = true
 # max_parallel_sets = 4
 # max_test_cases_per_call = 20

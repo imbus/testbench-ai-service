@@ -107,6 +107,10 @@ class CoverageChecker(Agent):
     )
     ALLOWED_ROLES = frozenset({ProjectRole.TestManager, ProjectRole.TestDesigner})
 
+    # The route runs precheck and run on one instance per trigger, so the catalog the
+    # precheck loaded (a full-TOV JSON report) can be reused by the run.
+    _catalog: dict[str, TestCaseSet] | None = None
+
     async def precheck(self, context: ExecutionContext, conn: TBConnection) -> PrecheckResult:
         """Refuse anything but a requirement of a TOV with linked test cases.
 
@@ -123,6 +127,7 @@ class CoverageChecker(Agent):
         if isinstance(loaded, PrecheckResult):
             return loaded
         assignments, catalog = loaded
+        self._catalog = catalog
 
         assignment = find_requirement(assignments, context.root_key, context.root_uid)
         if assignment is None:
@@ -233,6 +238,7 @@ class CoverageChecker(Agent):
                 context.root_key,
                 context.root_uid,
                 item_ids,
+                catalog=self._catalog,
             )
         except Exception as error:
             logger.error(
@@ -240,6 +246,15 @@ class CoverageChecker(Agent):
                 context.root_key or context.root_uid,
                 context.tov_key,
                 error,
+            )
+            return None
+
+        if not loaded.linked_sets:
+            logger.warning(
+                "None of the linked test case sets %s could be loaded for requirement '%s'; "
+                "nothing to check or write",
+                item_ids,
+                loaded.requirement_ref,
             )
             return None
 
@@ -337,7 +352,15 @@ class CoverageChecker(Agent):
         timestamp = current_time()
 
         async def write(linked_set: LinkedSet) -> tuple[str, WriteOutcome]:
-            block = render_set_block(result, linked_set.key, context.language, timestamp)
+            try:
+                block = render_set_block(result, linked_set.key, context.language, timestamp)
+            except Exception as error:
+                logger.error(
+                    "Rendering the review block of test case set '%s' failed: %r",
+                    linked_set.path,
+                    error,
+                )
+                return linked_set.key, WriteOutcome.FAILED
             async with semaphore:
                 outcome = await write_review_block(
                     conn,

@@ -1,6 +1,6 @@
 """Texts the coverage checker writes: the review block of each set and the log report."""
 
-from testbench_ai_service.agents.coverage_checker.model import CoverageResult
+from testbench_ai_service.agents.coverage_checker.model import AspectCoverage, CoverageResult
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.traceability.review_writer import render_block
@@ -17,20 +17,47 @@ def _text(key: str, language: LanguageOption, **values) -> str:
     return get_translation(f"coverage_checker.{key}", language, **values)
 
 
+def _open_aspect_lines(coverage: AspectCoverage, language: LanguageOption) -> list[str]:
+    """The aspect, why it is open, and the sketch of the test that would close it."""
+    status = _text(f"status.{coverage.status}", language)
+    item = _text(
+        "block.open_item",
+        language,
+        id=coverage.aspect.id,
+        statement=coverage.aspect.statement,
+        status=status,
+    )
+    lines = [f"- {item}"]
+    if coverage.gap_reason:
+        lines.append("  " + _text("block.gap", language, reason=coverage.gap_reason))
+    suggested = coverage.suggested_test
+    if suggested is not None:
+        lines.append("  " + _text("block.suggestion", language, title=suggested.title))
+        if suggested.description:
+            sketch = _text("block.suggestion_sketch", language, description=suggested.description)
+            lines.append(f"  {sketch}")
+    return lines
+
+
 def block_body(result: CoverageResult, set_key: str, language: LanguageOption) -> str:
     """The plain-text body of one set's block.
 
     A set proving something lists its own evidence per aspect (the stronger, if
-    several test cases prove it); one proving nothing is told to check its link.
-    Every block lists the requirement's open aspects, since the requirement itself
+    several test cases prove it); one proving nothing is told to check its link (or, if it could not be evaluated,
+    to rerun the check).
+    Every block lists the requirement's open aspects with the gap reason and the
+    sketch of the missing test, since the requirement itself
     cannot be written to.
     """
     ref = result.requirement_key
     without = {entry.set_key: entry.reason for entry in result.sets_without_evidence}
     lines: list[str] = []
     if set_key in without:
-        reason = _text(f"reason.{without[set_key]}", language)
-        lines.append(_text("block.proves_nothing", language, requirement=ref, reason=reason))
+        if without[set_key] == "interpretation_failed":
+            lines.append(_text("block.evaluation_failed", language, requirement=ref))
+        else:
+            reason = _text(f"reason.{without[set_key]}", language)
+            lines.append(_text("block.proves_nothing", language, requirement=ref, reason=reason))
     else:
         own: dict[str, str] = {}
         for coverage in result.aspects:
@@ -44,20 +71,7 @@ def block_body(result: CoverageResult, set_key: str, language: LanguageOption) -
     if open_aspects:
         lines.append(_text("block.open", language, requirement=ref))
         for coverage in open_aspects:
-            status = _text(f"status.{coverage.status}", language)
-            item = _text(
-                "block.open_item",
-                language,
-                id=coverage.aspect.id,
-                statement=coverage.aspect.statement,
-                status=status,
-            )
-            lines.append(f"- {item}")
-            if coverage.suggested_test is not None:
-                suggestion = _text(
-                    "block.suggestion", language, title=coverage.suggested_test.title
-                )
-                lines.append(f"  {suggestion}")
+            lines.extend(_open_aspect_lines(coverage, language))
     else:
         lines.append(
             _text("block.all_covered", language, count=len(result.aspects), requirement=ref)
