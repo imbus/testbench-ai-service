@@ -1,4 +1,8 @@
 import { useState } from 'react'
+import { Button } from 'primereact/button'
+import { InputText } from 'primereact/inputtext'
+import { Message } from 'primereact/message'
+import { Password } from 'primereact/password'
 import { BrandMark } from '../components/BrandMark'
 import { LangSeg } from '../components/LangSeg'
 import { ThemeButton } from '../components/ThemeButton'
@@ -57,7 +61,7 @@ export function Login({
           alignItems: 'center',
         }}
       >
-        <LangSeg name="login-lang" />
+        <LangSeg />
         <ThemeButton theme={theme} onToggle={onToggleTheme} />
       </div>
 
@@ -91,12 +95,12 @@ export function Login({
 
         <div className="field">
           <label htmlFor="login-user">{t('username')}</label>
-          <input
+          <InputText
             id="login-user"
-            className="input"
             autoComplete="username"
             autoFocus
             placeholder="a.mueller"
+            style={{ width: '100%' }}
             value={username}
             onChange={(event) => setUsername(event.target.value)}
           />
@@ -104,34 +108,34 @@ export function Login({
 
         <div className="field">
           <label htmlFor="login-pass">{t('password')}</label>
-          <input
-            id="login-pass"
-            className="input"
-            type="password"
+          {/* No strength meter: this is a sign-in, not a password choice. */}
+          <Password
+            inputId="login-pass"
+            feedback={false}
             autoComplete="current-password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
+            style={{ display: 'flex' }}
+            inputStyle={{ width: '100%' }}
           />
         </div>
 
         {error && (
-          <div role="alert" style={{ color: '#c0392b', fontSize: 13 }}>
-            {error}
-          </div>
+          <Message severity="error" style={{ justifyContent: 'flex-start' }} text={error} />
         )}
 
-        <button
-          className="btn btn-primary blueprint"
+        <Button
+          className="blueprint"
           type="submit"
           disabled={busy}
-          style={{ height: 40, fontSize: 15 }}
+          label={t('signIn')}
+          style={{ height: 40, fontSize: 15, justifyContent: 'center' }}
         >
           <i className="corner tl" />
           <i className="corner tr" />
           <i className="corner bl" />
           <i className="corner br" />
-          {t('signIn')}
-        </button>
+        </Button>
 
         <div className="text-muted" style={{ fontSize: 11, lineHeight: 1.4 }}>
           {t('loginHint')}

@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useBlocker, useParams } from 'react-router-dom'
+import { Button } from 'primereact/button'
+import { Message } from 'primereact/message'
 import type { Scope } from '../api/agents'
 import { ApiError } from '../api/client'
 import { useLintTemplate, usePlanPrompt, useSavePrompt } from '../api/mutations'
@@ -382,13 +384,21 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   if (!document.data) {
     const detail = (document.error as Error)?.message
     return (
-      <div role="alert" style={{ padding: 28 }}>
-        <div>{t('promptDocError')}</div>
-        {detail && (
-          <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            {detail}
-          </div>
-        )}
+      <div style={{ padding: 28 }}>
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start' }}
+          text={
+            <>
+              <div>{t('promptDocError')}</div>
+              {detail && (
+                <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  {detail}
+                </div>
+              )}
+            </>
+          }
+        />
       </div>
     )
   }
@@ -606,7 +616,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     dispatch({ type: 'setHeader', field, value })
   }
 
-  const alertStyle = { fontSize: 12, color: '#a33a2b', padding: '6px 16px' }
+  const alertStyle = { fontSize: 12, margin: '6px 16px', justifyContent: 'flex-start' }
 
   // The lint result for the open message -- the Split sidebar's lint block
   // and the Tabs status bar both show exactly this. "Clean" needs the open
@@ -873,26 +883,30 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           load-failure guard above, which only fires when no document has
           ever loaded. The draft stays exactly as it was. */}
       {document.isError && (
-        <div role="alert" style={alertStyle}>
-          {t('promptDocError')}
-        </div>
+        <Message severity="error" style={alertStyle} text={t('promptDocError')} />
       )}
       {isAdmin && invalidJinja.length > 0 && (
         // `status`, not `alert`: the error itself is already the alert (the
         // editor's marker, the sidebar's line) -- this says what it blocks.
-        <div role="status" data-testid="save-blocked-jinja" style={alertStyle}>
-          {t('saveBlockedJinja')}{' '}
-          {invalidJinja
-            .map(({ index, message, error }) =>
-              `${index + 1} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine', { line: error.line, message: error.message })}`,
-            )
-            .join(' · ')}
-        </div>
+        <Message
+          severity="error"
+          role="status"
+          data-testid="save-blocked-jinja"
+          style={alertStyle}
+          text={
+            <>
+              {t('saveBlockedJinja')}{' '}
+              {invalidJinja
+                .map(({ index, message, error }) =>
+                  `${index + 1} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine', { line: error.line, message: error.message })}`,
+                )
+                .join(' · ')}
+            </>
+          }
+        />
       )}
       {saveFieldError?.kind === 'emptyVariants' && saveErrorMessage && (
-        <div role="alert" style={alertStyle}>
-          {saveErrorMessage}
-        </div>
+        <Message severity="error" style={alertStyle} text={saveErrorMessage} />
       )}
 
       {layout === 'tabs' ? tabs : split}
@@ -906,14 +920,20 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           onConfirm={confirmSave}
         >
           {orphanWarnings.length > 0 && (
-            <div role="alert" style={{ fontSize: 12, color: '#a33a2b', display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {orphanWarnings.map((entry) => (
-                <div key={entry.name} data-testid={`orphan-${entry.name}`}>
-                  {t('confirmSaveOrphanWarning')} {entry.name} —{' '}
-                  {entry.referencedBy.map((scope) => referenceLabel(t, scope)).join(', ')}
+            <Message
+              severity="error"
+              style={{ fontSize: 12, justifyContent: 'flex-start' }}
+              content={
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {orphanWarnings.map((entry) => (
+                    <div key={entry.name} data-testid={`orphan-${entry.name}`}>
+                      {t('confirmSaveOrphanWarning')} {entry.name} —{' '}
+                      {entry.referencedBy.map((scope) => referenceLabel(t, scope)).join(', ')}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              }
+            />
           )}
         </SavePromptDialog>
       )}
@@ -923,12 +943,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           <h3 style={{ margin: 0 }}>{t('unsavedNavTitle')}</h3>
           <div style={{ fontSize: 13 }}>{t('unsavedNavBody')}</div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-            <button type="button" className="btn btn-secondary" onClick={() => blocker.reset?.()}>
-              {t('cancel')}
-            </button>
-            <button type="button" className="btn btn-primary" onClick={() => blocker.proceed?.()}>
-              {t('leaveAnyway')}
-            </button>
+            <Button type="button" outlined label={t('cancel')} onClick={() => blocker.reset?.()} />
+            <Button type="button" label={t('leaveAnyway')} onClick={() => blocker.proceed?.()} />
           </div>
         </Modal>
       )}

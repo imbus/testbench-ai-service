@@ -1,3 +1,5 @@
+import { Avatar } from 'primereact/avatar'
+import { Button } from 'primereact/button'
 import { BrandMark } from './BrandMark'
 import { LangSeg } from './LangSeg'
 import { ThemeButton } from './ThemeButton'
@@ -65,31 +67,25 @@ export function TopBar({
           paddingLeft: 14,
         }}
       >
-        <div
+        <Avatar
           aria-hidden="true"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: '50%',
-            border: '1px solid var(--color-accent)',
-            display: 'grid',
-            placeItems: 'center',
-            fontSize: 12,
-            color: 'var(--color-accent-700)',
-            flex: 'none',
-          }}
-        >
-          {session.username.slice(0, 1).toUpperCase()}
-        </div>
+          shape="circle"
+          label={session.username.slice(0, 1).toUpperCase()}
+          style={{ width: 28, height: 28, fontSize: 12, flex: 'none' }}
+        />
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
           <span style={{ fontSize: 13 }}>{session.username}</span>
           <span className="text-muted" style={{ fontSize: 11 }}>
             {session.is_admin ? t('admin') : t('testManager')}
           </span>
         </div>
-        <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={onSignOut}>
-          {t('logout')}
-        </button>
+        <Button
+          type="button"
+          text
+          label={t('logout')}
+          style={{ fontSize: 12 }}
+          onClick={onSignOut}
+        />
       </div>
     </header>
   )

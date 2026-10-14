@@ -6,10 +6,12 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from '../App'
 import { SessionProvider } from '../state/session'
+import 'primereact/resources/themes/lara-light-amber/theme.css'
 import '../styles/fonts.css'
 import '../styles/industry.css'
 import '../styles/brand.css'
 import '../styles/brand-orange.css'
+import '../styles/prime-bridge.css'
 
 const signedIn = !new URLSearchParams(location.search).has('login')
 
@@ -54,6 +56,12 @@ const FIXTURES: Record<string, unknown> = {
     disk: {
       host: '127.0.0.1',
       port: 8010,
+      llm_config: {
+        extra_models: {
+          'gpt-5.5': { provider: 'openai', routing: 'reasoning' },
+          'claude-local-proxy': { provider: 'custom', routing: 'fallback' },
+        },
+      },
       agents: {
         test_case_set_reviewer: {
           prompt: { variant: 'Gründlich', vars: { tone: 'sachlich und sehr ausführlich formuliert' } },

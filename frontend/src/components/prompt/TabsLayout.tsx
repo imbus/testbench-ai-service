@@ -1,4 +1,8 @@
 import { useState, type ReactNode } from 'react'
+import { Button } from 'primereact/button'
+import { Message } from 'primereact/message'
+import { TabPanel, TabView } from 'primereact/tabview'
+import { Tag } from 'primereact/tag'
 import type { PromptMessageDoc } from '../../api/types'
 import { useTranslation } from 'react-i18next'
 import { messageLabel, type Selection } from './selection'
@@ -7,23 +11,7 @@ import type { LintState } from './VarSidebar'
 export type DrawerTab = 'vars' | 'preview' | 'test'
 
 const mono = 'ui-monospace, Menlo, monospace'
-
-function tabStyle(active: boolean) {
-  return {
-    border: '1px solid var(--color-divider)',
-    borderBottom: active ? '1px solid var(--color-bg)' : '1px solid var(--color-divider)',
-    marginBottom: active ? -1 : 0,
-    background: active ? 'var(--color-bg)' : 'var(--color-surface)',
-    color: 'inherit',
-    font: 'inherit',
-    fontSize: 12,
-    padding: '6px 12px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: 6,
-  }
-}
+const DRAWER_TABS: DrawerTab[] = ['vars', 'preview', 'test']
 
 /**
  * The Tabs layout: a tab strip (prompt.yaml + one tab per message of the
@@ -54,69 +42,73 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
   const [tab, setTab] = useState<DrawerTab>('vars')
   const { lint, usedDeclared, declared, undeclared } = status
 
-  const drawerTabs: { id: DrawerTab; label: string }[] = [
-    { id: 'vars', label: t('drawerVariables') },
-    { id: 'preview', label: t('previewPane') },
-    { id: 'test', label: t('testRun') },
-  ]
+  const drawerLabels: Record<DrawerTab, string> = {
+    vars: t('drawerVariables'),
+    preview: t('previewPane'),
+    test: t('testRun'),
+  }
+  // Tab 0 is prompt.yaml, tab 1 the variant's settings, then one per message.
+  const activeIndex = selection.kind === 'meta' ? 0 : selection.kind === 'variant' ? 1 : selection.index + 2
+  const pick = (index: number) => {
+    if (index === 0) onOpenMeta()
+    else if (index === 1) onOpenVariantSettings()
+    else onPickMessage(index - 2)
+  }
 
   return (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        {/* Plain toggle buttons (aria-pressed), not role="tab": there is no
-            roving focus or tabpanel wiring behind them, and a tablist
-            without those is a worse announcement than honest buttons. */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, padding: '8px 16px 0', borderBottom: '1px solid var(--color-divider)', flexWrap: 'wrap' }}>
-          <button type="button" aria-pressed={selection.kind === 'meta'} onClick={onOpenMeta} style={{ ...tabStyle(selection.kind === 'meta'), fontFamily: mono }}>
-            prompt.yaml
-          </button>
-          {/* The selected variant's settings (rename, model, remove,
-              declarations) -- Tabs has no tree to reach them from. Named like
-              PromptTree's gear button. */}
-          <button
-            type="button"
-            aria-pressed={selection.kind === 'variant'}
-            aria-label={`${t('variantSettings')}: ${variantName}`}
-            onClick={onOpenVariantSettings}
-            style={tabStyle(selection.kind === 'variant')}
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, padding: '8px 16px 0', borderBottom: '1px solid var(--color-divider)' }}>
+          {/* Header-only: the centre pane renders below, outside the tab
+              view, so every panel is empty and the selection is fully
+              controlled by `selection`. */}
+          <TabView
+            activeIndex={activeIndex}
+            onTabChange={(event) => pick(event.index)}
+            style={{ flex: '1 1 auto', minWidth: 0 }}
           >
-            <span aria-hidden>⚙</span>
-            <span>{variantName}</span>
-          </button>
-          {messages.map((message, index) => {
-            const current = selection.kind === 'message' && selection.index === index
-            const isFlagged = flagged.includes(index)
-            return (
-              <button
-                key={index}
-                type="button"
-                aria-pressed={current}
-                aria-invalid={isFlagged || undefined}
-                onClick={() => onPickMessage(index)}
-                style={tabStyle(current)}
-              >
-                <span className="text-muted">{index + 1}</span>
-                <span className="tag tag-neutral" style={{ padding: '0 5px', fontSize: 10 }}>{message.role}</span>
-                <span style={{ fontFamily: mono }}>{messageLabel(message, t('emptyMessage'))}</span>
-                {isFlagged && <span aria-hidden style={{ color: '#c0392b' }}>●</span>}
-              </button>
-            )
-          })}
+            <TabPanel header={<span style={{ fontFamily: mono }}>prompt.yaml</span>} />
+            {/* The selected variant's settings (rename, model, remove,
+                declarations) -- Tabs has no tree to reach them from. Named like
+                PromptTree's gear button. */}
+            <TabPanel
+              header={
+                <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span aria-hidden>⚙</span>
+                  <span>{variantName}</span>
+                </span>
+              }
+              pt={{ headerAction: { 'aria-label': `${t('variantSettings')}: ${variantName}` } }}
+            />
+            {messages.map((message, index) => {
+              const isFlagged = flagged.includes(index)
+              return (
+                <TabPanel
+                  key={index}
+                  header={
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span className="text-muted">{index + 1}</span>
+                      <Tag severity="secondary" value={message.role} style={{ padding: '0 5px', fontSize: 10 }} />
+                      <span style={{ fontFamily: mono }}>{messageLabel(message, t('emptyMessage'))}</span>
+                      {isFlagged && <span aria-hidden style={{ color: '#c0392b' }}>●</span>}
+                    </span>
+                  }
+                  pt={{ headerAction: { 'aria-invalid': isFlagged || undefined } }}
+                />
+              )
+            })}
+          </TabView>
           {!readOnly && (
-            <button type="button" className="btn btn-ghost" style={{ fontSize: 12, marginBottom: 2 }} onClick={onAddMessage}>
-              {t('addMessageShort')}
-            </button>
+            <Button type="button" text label={t('addMessageShort')} style={{ fontSize: 12, marginBottom: 6, flex: 'none' }} onClick={onAddMessage} />
           )}
         </div>
 
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>{centre}</div>
 
         <div style={{ display: 'flex', gap: 16, alignItems: 'center', padding: '5px 12px', borderTop: '1px solid var(--color-divider)', background: 'var(--color-surface)', fontSize: 12, flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-ghost" style={{ fontSize: 12, padding: '0 6px' }} disabled={lint.running} onClick={onLint}>
-            {lint.running ? t('linting') : t('lint')}
-          </button>
+          <Button type="button" text label={lint.running ? t('linting') : t('lint')} style={{ fontSize: 12, padding: '0 6px' }} disabled={lint.running} onClick={onLint} />
           {lint.checking && !lint.running && <span className="text-muted">{t('lintChecking')}</span>}
-          {lint.error && <span role="alert" style={{ color: '#a33a2b' }}>{lint.error}</span>}
+          {lint.error && <Message severity="error" text={lint.error} style={{ padding: '2px 8px', fontSize: 12 }} />}
           {lint.errors.map((error, index) => (
             <span key={index} style={{ color: '#a33a2b' }}>{t('lintLine', { line: error.line, message: error.message })}</span>
           ))}
@@ -128,22 +120,22 @@ export function TabsLayout({ messages, selection, flagged, readOnly, centre, var
       </div>
 
       <aside style={{ width: 340, flex: 'none', borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--color-divider)', fontSize: 12 }}>
-          {drawerTabs.map(({ id, label }) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={tab === id}
-              onClick={() => setTab(id)}
-              style={{ flex: 1, padding: '9px 0', border: 0, borderBottom: `2px solid ${tab === id ? 'var(--color-accent)' : 'transparent'}`, background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', opacity: tab === id ? 1 : 0.7 }}
-            >
-              {label}
-            </button>
+        {/* Only the active panel is mounted (Prime's default), so a drawer
+            never runs a hidden Preview or Test run. */}
+        <TabView
+          activeIndex={DRAWER_TABS.indexOf(tab)}
+          onTabChange={(event) => setTab(DRAWER_TABS[event.index])}
+          style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, fontSize: 12 }}
+          pt={{
+            panelContainer: { style: { padding: 12, overflow: 'auto', flex: 1 } },
+          }}
+        >
+          {DRAWER_TABS.map((id) => (
+            <TabPanel key={id} header={drawerLabels[id]} headerStyle={{ flex: 1 }}>
+              {id === 'vars' ? variablesDrawer : id === 'preview' ? preview : testRun}
+            </TabPanel>
           ))}
-        </div>
-        <div style={{ padding: 12, overflow: 'auto', flex: 1 }}>
-          {tab === 'vars' ? variablesDrawer : tab === 'preview' ? preview : testRun}
-        </div>
+        </TabView>
       </aside>
     </div>
   )

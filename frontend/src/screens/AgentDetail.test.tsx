@@ -11,6 +11,7 @@ import { DraftProvider, useDraft } from '../state/draft'
 import type { ConfigResponse, ProjectsResponse, PromptForkResponse, PromptMeta } from '../api/types'
 import { AgentDetail } from './AgentDetail'
 import { i18n } from '../i18n'
+import { chooseOption, openDropdown } from '../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -207,6 +208,11 @@ async function ready() {
  * to a newly picked project without writing anything yet" above) and,
  * optionally, one queued edit so `draft.changeCount` is nonzero.
  */
+/** ScopeTabs' "add a project override" Dropdown, named by its `ariaLabel`. */
+function addOverridePicker(): HTMLElement {
+  return screen.getByLabelText('Add a project override')
+}
+
 async function renderAgentDetail({
   agentKey = 'reviewer',
   isAdmin = true,
@@ -221,7 +227,7 @@ async function renderAgentDetail({
   renderDetail({ agentKey, isAdmin })
   await ready()
   if (project) {
-    await userEvent.selectOptions(screen.getByLabelText('Add a project override'), project)
+    await chooseOption(userEvent.setup(), addOverridePicker(), project)
   }
   if (dirty) {
     await userEvent.click(screen.getByRole('switch', { name: 'enabled' }))
@@ -256,9 +262,11 @@ describe('the scope switcher', () => {
   it('offers the projects with no override yet in the add-override picker', async () => {
     renderDetail()
     await ready()
-    const picker = screen.getByLabelText('Add a project override')
-    expect(within(picker).getByRole('option', { name: 'Untouched' })).toBeInTheDocument()
-    expect(within(picker).queryByRole('option', { name: 'Alpha' })).not.toBeInTheDocument()
+    const picker = await openDropdown(userEvent.setup(), addOverridePicker())
+    expect(within(picker).getByRole('option', { name: 'Untouched', hidden: true })).toBeInTheDocument()
+    expect(
+      within(picker).queryByRole('option', { name: 'Alpha', hidden: true }),
+    ).not.toBeInTheDocument()
   })
 
   it('switches to a project scope when its tab is chosen', async () => {
@@ -274,7 +282,7 @@ describe('the scope switcher', () => {
     // asked for.
     renderDetail()
     await ready()
-    await userEvent.selectOptions(screen.getByLabelText('Add a project override'), 'Untouched')
+    await chooseOption(userEvent.setup(), addOverridePicker(), 'Untouched')
     expect(screen.getByRole('tab', { name: 'Untouched' })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -316,9 +324,9 @@ describe('the form in global scope', () => {
   it('offers the prompt variants as a select', async () => {
     renderDetail()
     await ready()
-    const select = screen.getByLabelText('variant')
-    expect(within(select).getByRole('option', { name: 'Thorough' })).toBeInTheDocument()
-    expect(within(select).getByRole('option', { name: 'Quick' })).toBeInTheDocument()
+    const options = await openDropdown(userEvent.setup(), 'variant')
+    expect(within(options).getByRole('option', { name: 'Thorough', hidden: true })).toBeInTheDocument()
+    expect(within(options).getByRole('option', { name: 'Quick', hidden: true })).toBeInTheDocument()
   })
 
   it('renders endpoint_path and class_path read-only, with the restart note', async () => {
@@ -347,7 +355,8 @@ describe('prompt variables', () => {
     const vars = screen.getByTestId('agent-vars')
     // number, enum, boolean, text, string
     expect(within(vars).getByLabelText('Maximum findings')).toHaveAttribute('type', 'number')
-    expect(within(vars).getByLabelText('Tone').tagName).toBe('SELECT')
+    // A Dropdown: the label reaches Prime's focus input inside the widget.
+    expect(within(vars).getByLabelText('Tone').closest('.p-dropdown')).not.toBeNull()
     expect(within(vars).getByRole('switch', { name: 'Verbose' })).toBeInTheDocument()
     expect(within(vars).getByLabelText('Preamble').tagName).toBe('TEXTAREA')
     expect(within(vars).getByLabelText('Label')).toHaveAttribute('type', 'text')
@@ -362,9 +371,10 @@ describe('prompt variables', () => {
   it('offers an enum variable only its declared choices', async () => {
     renderDetail()
     await ready()
-    const tone = screen.getByLabelText('Tone')
-    expect(within(tone).getByRole('option', { name: 'formal' })).toBeInTheDocument()
-    expect(within(tone).getByRole('option', { name: 'casual' })).toBeInTheDocument()
+    const tone = await openDropdown(userEvent.setup(), 'Tone')
+    expect(within(tone).getByRole('option', { name: 'formal', hidden: true })).toBeInTheDocument()
+    expect(within(tone).getByRole('option', { name: 'casual', hidden: true })).toBeInTheDocument()
+    expect(within(tone).getAllByRole('option', { hidden: true })).toHaveLength(2)
   })
 
   it('writes a variable to the prompt vars path', async () => {
@@ -379,7 +389,7 @@ describe('prompt variables', () => {
     // offer the operator variables the prompt will ignore.
     renderDetail()
     await ready()
-    await userEvent.selectOptions(screen.getByLabelText('variant'), 'Quick')
+    await chooseOption(userEvent.setup(), 'variant', 'Quick')
     expect(screen.queryByLabelText('Maximum findings')).not.toBeInTheDocument()
   })
 
@@ -388,7 +398,7 @@ describe('prompt variables', () => {
     // leave a value in the file that the operator cannot see or remove.
     renderDetail()
     await ready()
-    await userEvent.selectOptions(screen.getByLabelText('variant'), 'Quick')
+    await chooseOption(userEvent.setup(), 'variant', 'Quick')
 
     const undeclared = screen.getByTestId('undeclared-tone')
     expect(undeclared).toBeInTheDocument()

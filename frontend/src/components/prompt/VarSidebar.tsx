@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { Button } from 'primereact/button'
+import { Message } from 'primereact/message'
 import type { LintError } from '../../api/types'
 import { useTranslation } from 'react-i18next'
 
@@ -17,20 +19,21 @@ const mono = 'ui-monospace, Menlo, monospace'
 
 function VarButton({ name, label, type, used, disabled, onInsert }: { name: string; label?: string; type?: string; used: boolean; disabled: boolean; onInsert: () => void }) {
   return (
-    <button
+    <Button
       type="button"
+      text
       data-used={used}
       disabled={disabled}
       onClick={onInsert}
       title={name}
-      style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', color: 'inherit', fontFamily: mono, fontSize: 12, padding: '2px 0', cursor: disabled ? 'default' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6 }}
+      style={{ flex: 1, minWidth: 0, textAlign: 'left', color: 'inherit', fontFamily: mono, fontSize: 12, fontWeight: 400, padding: '2px 0', minHeight: 0, display: 'flex', justifyContent: 'space-between', gap: 6 }}
     >
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label ?? name}</span>
       <span style={{ display: 'flex', gap: 4, flex: 'none' }}>
         {type && <span className="text-muted">{type}</span>}
         {used && <span aria-hidden style={{ color: 'var(--color-accent-fg)' }}>●</span>}
       </span>
-    </button>
+    </Button>
   )
 }
 
@@ -89,15 +92,15 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
     <div data-testid="agent-field" data-path={path}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         {children.length > 0 ? (
-          <button
+          <Button
             type="button"
+            text
+            label={open ? '▾' : '▸'}
             aria-expanded={open}
             aria-label={`${open ? '▾' : '▸'} ${path}`}
             onClick={() => setOpen(!open)}
-            style={{ border: 0, background: 'transparent', color: 'inherit', padding: 0, width: 12, cursor: 'pointer', fontSize: 10, flex: 'none' }}
-          >
-            {open ? '▾' : '▸'}
-          </button>
+            style={{ color: 'inherit', padding: 0, width: 12, minHeight: 0, fontSize: 10, flex: 'none' }}
+          />
         ) : (
           <span style={{ width: 12, flex: 'none' }} />
         )}
@@ -187,29 +190,34 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
       <div className="text-muted" style={{ ...caps, marginTop: 8 }}>vars.* ({t('varsVariantScope')})</div>
       {list(declaredVars)}
       {undeclared.length > 0 && (
-        <div style={{ border: '1px solid #c9a227', padding: 6, color: '#7a5a00', background: 'color-mix(in srgb, #c9a227 12%, transparent)' }}>
-          {t('undeclaredVars')} <span style={{ fontFamily: mono }}>{undeclared.join(', ')}</span>{' '}
-          {canDeclare && (
-            <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '0 4px' }} onClick={onDeclare}>
-              {t('declareVars')}
-            </button>
-          )}
-        </div>
+        // `status`, not Prime's default `alert`: a notice about the draft,
+        // not an error the operator has to stop for.
+        <Message
+          severity="warn"
+          role="status"
+          style={{ padding: 6, fontSize: 12, justifyContent: 'flex-start' }}
+          content={
+            <div>
+              {t('undeclaredVars')} <span style={{ fontFamily: mono }}>{undeclared.join(', ')}</span>{' '}
+              {canDeclare && (
+                <Button type="button" text label={t('declareVars')} style={{ fontSize: 11, padding: '0 4px' }} onClick={onDeclare} />
+              )}
+            </div>
+          }
+        />
       )}
       {column && (
         <>
           <div style={{ flex: 1 }} />
-          <button type="button" className="btn btn-ghost" disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }}>
-            {lint.running ? t('linting') : t('lint')}
-          </button>
+          <Button type="button" text label={lint.running ? t('linting') : t('lint')} disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }} />
           {lint.checking && !lint.running && <div className="text-muted">{t('lintChecking')}</div>}
-          {lint.error && <div role="alert" style={{ color: '#a33a2b' }}>{lint.error}</div>}
+          {lint.error && <Message severity="error" text={lint.error} style={{ fontSize: 12, justifyContent: 'flex-start' }} />}
+          {/* `status`, not Prime's default `alert`: the editor's own marker
+              is already the alert for each of these lines. */}
           {lint.errors.map((error, index) => (
-            <div key={index} style={{ border: '1px solid #c0392b', background: 'color-mix(in srgb, #c0392b 10%, transparent)', padding: '6px 8px', color: '#a33a2b' }}>
-              {t('lintLine', { line: error.line, message: error.message })}
-            </div>
+            <Message key={index} severity="error" role="status" text={t('lintLine', { line: error.line, message: error.message })} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />
           ))}
-          {lint.clean && !lint.error && <div style={{ color: '#2e8b5e' }}>✓ {t('lintClean')}</div>}
+          {lint.clean && !lint.error && <Message severity="success" role="status" text={t('lintClean')} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />}
         </>
       )}
     </aside>

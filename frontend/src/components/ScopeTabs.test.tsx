@@ -1,6 +1,7 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ScopeTabs } from './ScopeTabs'
+import { chooseOption, openDropdown } from '../test/prime'
 
 function renderTabs(overrides: Partial<Parameters<typeof ScopeTabs>[0]> = {}) {
   const onSelect = vi.fn()
@@ -45,20 +46,28 @@ test('choosing a project tab reports its name', async () => {
   expect(onSelect).toHaveBeenCalledWith('Alpha')
 })
 
-test('the add select offers only projects without a tab', () => {
+test('the add select offers only projects without a tab', async () => {
   renderTabs()
-  const select = screen.getByRole('combobox', { name: 'add project' })
-  expect(select).toHaveTextContent('Beta')
-  expect(select).not.toHaveTextContent('Alpha')
+  const list = await openDropdown(
+    userEvent.setup(),
+    screen.getByLabelText('add project'),
+  )
+  expect(list).toHaveTextContent('Beta')
+  expect(list).not.toHaveTextContent('Alpha')
+  expect(within(list).getAllByRole('option', { hidden: true })).toHaveLength(1)
 })
 
 test('picking from the add select selects that project', async () => {
   const { onSelect } = renderTabs()
-  await userEvent.selectOptions(screen.getByRole('combobox', { name: 'add project' }), 'Beta')
+  await chooseOption(
+    userEvent.setup(),
+    screen.getByLabelText('add project'),
+    'Beta',
+  )
   expect(onSelect).toHaveBeenCalledWith('Beta')
 })
 
 test('the add select is absent when every known project already has a tab', () => {
   renderTabs({ addable: [] })
-  expect(screen.queryByRole('combobox', { name: 'add project' })).not.toBeInTheDocument()
+  expect(screen.queryByLabelText('add project')).not.toBeInTheDocument()
 })

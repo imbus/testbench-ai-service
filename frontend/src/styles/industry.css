@@ -292,20 +292,6 @@ textarea.input { min-height: 90px; resize: vertical; }
 
 /* — switch — sliding on/off control for role="switch" buttons. */
 .switch-row { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; }
-.switch {
-  position: relative; flex: none; width: 36px; height: 20px; padding: 0;
-  border-radius: 10px; border: 1px solid var(--color-divider);
-  background: var(--color-surface); cursor: pointer;
-  transition: background .15s, border-color .15s;
-}
-.switch:hover:not(:disabled) { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
-.switch[aria-checked='true'] { background: var(--color-accent); border-color: var(--color-accent); }
-.switch:disabled { opacity: 0.45; cursor: not-allowed; }
-.switch-knob {
-  position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 7px;
-  background: var(--color-text); transition: left .15s, background .15s;
-}
-.switch[aria-checked='true'] .switch-knob { left: 18px; background: #fff; }
 .switch-caption { font-size: 13px; color: color-mix(in srgb, var(--color-text) 70%, transparent); }
 
 /* — prompt variable declarations (VarDeclTable) — */
@@ -333,10 +319,7 @@ textarea.input { min-height: 90px; resize: vertical; }
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
 }
 .var-card-wide { grid-column: 1 / -1; }
-.var-card-error { font-size: 12px; color: #a33a2b; }
-[data-theme=dark] .var-card-error { color: #e0806f; }
 .var-add { display: flex; gap: var(--space-2); align-items: center; }
-.var-add .input { flex: 1; min-width: 0; }
 
 /* — prompt test run (TestRunPanel) — */
 .testrun { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
@@ -353,20 +336,8 @@ textarea.input { min-height: 90px; resize: vertical; }
 .testrun-fields .field > label { margin-bottom: 0; }
 .testrun-model-id { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
 .testrun-chips { display: flex; flex-wrap: wrap; gap: var(--space-2); }
-.testrun-chip {
-  display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
-  padding: 2px 8px; font-size: 11px; line-height: 1.5;
-  border: 1px solid var(--color-divider);
-  background: color-mix(in srgb, var(--color-text) 5%, transparent);
-  color: color-mix(in srgb, var(--color-text) 80%, transparent);
-}
-.testrun-chip code { font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+.testrun-chips code { font-family: ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
 .testrun-chip-label { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
-.testrun-chip-warn {
-  border-color: color-mix(in srgb, var(--tb-orange) 55%, transparent);
-  background: color-mix(in srgb, var(--tb-orange) 12%, transparent);
-  color: var(--color-text);
-}
 .testrun-actions { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
 .testrun-status {
   display: inline-flex; align-items: center; gap: var(--space-2); font-size: 12px;
@@ -399,10 +370,6 @@ textarea.input { min-height: 90px; resize: vertical; }
    pane. Without it their containing block is outside the pane, so they
    stretch the page and focusing one scrolls the whole console. */
 .markdown-view-modes { position: relative; display: inline-flex; align-self: flex-start; border: 1px solid var(--color-divider); border-radius: 6px; overflow: hidden; font-size: 11px; }
-.markdown-view-modes label { padding: 2px 8px; cursor: pointer; }
-.markdown-view-modes label.is-active { background: var(--color-surface); color: var(--color-accent-fg); }
-.markdown-view-modes label:focus-within { outline: 2px solid var(--color-accent-fg); outline-offset: -2px; }
-.markdown-view-modes input { position: absolute; inset: 0; opacity: 0; width: 1px; height: 1px; margin: 0; }
 .markdown-plain {
   margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
   font-family: ui-monospace, Menlo, monospace; font-size: 12px; line-height: 1.55;

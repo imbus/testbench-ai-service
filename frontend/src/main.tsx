@@ -2,13 +2,18 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { PrimeReactProvider } from 'primereact/api'
 import { App } from './App'
 import { SessionProvider } from './state/session'
 import './i18n'
+// PrimeReact pilot: the stock Lara theme first, so everything below --
+// including prime-bridge.css, which re-points it at our tokens -- wins.
+import 'primereact/resources/themes/lara-light-amber/theme.css'
 import './styles/fonts.css'
 import './styles/industry.css'
 import './styles/brand.css'
 import './styles/brand-orange.css'
+import './styles/prime-bridge.css'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
@@ -33,8 +38,10 @@ const router = createBrowserRouter([
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
+    <PrimeReactProvider>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </PrimeReactProvider>
   </StrictMode>,
 )

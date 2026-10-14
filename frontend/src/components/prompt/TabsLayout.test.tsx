@@ -28,39 +28,39 @@ function setup(overrides: Partial<Parameters<typeof TabsLayout>[0]> = {}) {
 describe('TabsLayout', () => {
   it('renders prompt.yaml plus one tab per message, and picks them', async () => {
     const props = setup()
-    expect(screen.getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-pressed', 'true')
-    await userEvent.click(screen.getByRole('button', { name: /Explain it/ }))
+    expect(screen.getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('aria-selected', 'true')
+    await userEvent.click(screen.getByRole('tab', { name: /Explain it/ }))
     expect(props.onPickMessage).toHaveBeenCalledWith(1)
-    await userEvent.click(screen.getByRole('button', { name: 'prompt.yaml' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'prompt.yaml' }))
     expect(props.onOpenMeta).toHaveBeenCalled()
     expect(screen.getByText('CENTRE')).toBeInTheDocument()
   })
 
   it('opens the variant settings from its own tab', async () => {
     const props = setup()
-    const tab = screen.getByRole('button', { name: 'Variant settings: Thorough' })
-    expect(tab).toHaveAttribute('aria-pressed', 'false')
+    const tab = screen.getByRole('tab', { name: 'Variant settings: Thorough' })
+    expect(tab).toHaveAttribute('aria-selected', 'false')
     await userEvent.click(tab)
     expect(props.onOpenVariantSettings).toHaveBeenCalled()
   })
 
   it('presses the variant settings tab for a variant selection', () => {
     setup({ selection: { kind: 'variant' } })
-    expect(screen.getByRole('button', { name: 'Variant settings: Thorough' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('tab', { name: 'Variant settings: Thorough' })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('marks a flagged message tab', () => {
     setup({ flagged: [0] })
-    expect(screen.getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true')
   })
 
   it('switches the drawer between Variables, Preview and Test run', async () => {
     setup()
     expect(screen.getByText('VARIABLES')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Preview' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Preview' }))
     expect(screen.getByText('PREVIEW')).toBeInTheDocument()
     expect(screen.queryByText('VARIABLES')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Test run' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Test run' }))
     expect(screen.getByText('TESTRUN')).toBeInTheDocument()
   })
 

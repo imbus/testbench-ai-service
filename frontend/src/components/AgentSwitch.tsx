@@ -1,6 +1,15 @@
 import type { ReactNode } from 'react'
+import { Button } from 'primereact/button'
+import { InputSwitch } from 'primereact/inputswitch'
 import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
+
+/**
+ * Prime marks the switch's wrapper up as a second, nameless
+ * `role="checkbox"` around the real `role="switch"` input; one control
+ * should announce once.
+ */
+const SWITCH_ROOT = { role: undefined, 'aria-checked': undefined }
 
 /**
  * An on/off switch for one agent in one project, plus a way back to inherit.
@@ -43,6 +52,15 @@ export function AgentSwitch({
   const stateWord = effective ? t('stateOn') : t('stateOff')
   const caption = overridden ? stateWord : `${t('inherit')} (${stateWord})`
 
+  // The name, the state and the draft markers go on Prime's inner
+  // `role="switch"` input -- the element assistive tech and the tests reach.
+  // Built outside the `pt` literal, so the `data-*` keys pass the type check.
+  const switchInput = {
+    'aria-label': `${label}: ${caption}`,
+    'data-state': overridden ? (effective ? 'on' : 'off') : 'inherit',
+    'data-changed': String(changed),
+  }
+
   return (
     <span
       className="switch-row"
@@ -54,20 +72,13 @@ export function AgentSwitch({
         flexWrap: 'wrap',
       }}
     >
-      <button
-        type="button"
-        role="switch"
-        className="switch"
-        aria-checked={effective}
-        aria-label={`${label}: ${caption}`}
+      <InputSwitch
+        checked={effective}
         title={`${label}: ${caption}`}
-        data-state={overridden ? (effective ? 'on' : 'off') : 'inherit'}
-        data-changed={String(changed)}
         disabled={readOnly}
-        onClick={() => draft.setValue(path, !effective)}
-      >
-        <span className="switch-knob" />
-      </button>
+        onChange={() => draft.setValue(path, !effective)}
+        pt={{ root: SWITCH_ROOT, input: switchInput }}
+      />
       {children}
       <span
         className="switch-caption"
@@ -81,14 +92,14 @@ export function AgentSwitch({
         {caption}
       </span>
       {overridden && !readOnly && (
-        <button
+        <Button
           type="button"
-          className="btn btn-ghost"
+          text
+          size="small"
+          label={t('clearOverride')}
           style={{ fontSize: 11, padding: '0 6px', whiteSpace: 'nowrap' }}
           onClick={() => draft.unsetValue(path)}
-        >
-          {t('clearOverride')}
-        </button>
+        />
       )}
     </span>
   )

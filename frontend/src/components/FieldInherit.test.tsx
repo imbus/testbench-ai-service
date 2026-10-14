@@ -17,6 +17,7 @@ import { DraftProvider, useDraft } from '../state/draft'
 import type { FieldSpec } from '../screens/fields'
 import { Field } from './Field'
 import { i18n } from '../i18n'
+import { chooseOption } from '../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -335,7 +336,7 @@ describe('a value that happens to equal the inherited one', () => {
       </DraftProvider>,
     )
 
-    await user.selectOptions(screen.getByRole('combobox'), '')
+    await chooseOption(user, 'variant', '—')
 
     expect(JSON.parse(screen.getByTestId('edits').textContent!)).toEqual({
       'agents.reviewer.prompt.variant': null,

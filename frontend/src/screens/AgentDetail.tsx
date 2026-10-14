@@ -1,5 +1,8 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Button } from 'primereact/button'
+import { InputText } from 'primereact/inputtext'
+import { Message } from 'primereact/message'
 import {
   configuredProjects,
   effectiveAgent,
@@ -111,8 +114,8 @@ export function AgentDetail({
 
   if (Object.keys(globalAgent).length === 0) {
     return (
-      <div data-testid="unknown-agent" role="alert" style={{ padding: 28 }}>
-        {t('unknownAgent')}
+      <div style={{ padding: 28 }}>
+        <Message data-testid="unknown-agent" severity="error" text={t('unknownAgent')} />
       </div>
     )
   }
@@ -192,9 +195,12 @@ export function AgentDetail({
       />
 
       {meta.isError && (
-        <div data-testid="meta-unavailable" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t('promptMetaUnavailable')}
-        </div>
+        <Message
+          data-testid="meta-unavailable"
+          severity="warn"
+          text={t('promptMetaUnavailable')}
+          style={{ alignSelf: 'flex-start', fontSize: 12 }}
+        />
       )}
 
       <div className="blueprint" data-testid="agent-settings" style={{ padding: '4px 14px' }}>
@@ -298,28 +304,26 @@ export function AgentDetail({
       {scope.kind === 'project' && isAdmin && (
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
           <div>
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
+              text
+              size="small"
+              label={t('removeAllOverrides')}
               onClick={() => draft.unsetSubtree(projectAgentPath(scope.project, agentKey))}
-            >
-              {t('removeAllOverrides')}
-            </button>
+            />
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 12 }}
+              text
+              size="small"
+              label={t('forkPrompt')}
               // config.toml has one writer at a time. The fork writes it directly,
               // so a browser holding unapplied edits would make the pending count
               // disagree with the file the moment the fork lands.
               disabled={draft.changeCount > 0}
               onClick={() => setForkOpen(true)}
-            >
-              {t('forkPrompt')}
-            </button>
+            />
             {draft.changeCount > 0 && (
               <span className="text-muted" style={{ fontSize: 11 }}>
                 {t('forkBlockedByDraft')}
@@ -447,27 +451,24 @@ function ForkPromptDialog({
       </div>
       <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
         {t('forkDirectoryLabel')}
-        <input
-          className="input"
+        <InputText
           type="text"
           value={directory}
           onChange={(event) => onDirectoryChange(event.target.value)}
         />
       </label>
 
-      {error && (
-        <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {error}
-        </div>
-      )}
+      {/* `Message` carries role="alert". */}
+      {error && <Message severity="error" text={error} style={{ justifyContent: 'flex-start' }} />}
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          {t('cancel')}
-        </button>
-        <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={pending}>
-          {pending ? t('forking') : t('confirm')}
-        </button>
+        <Button type="button" outlined label={t('cancel')} onClick={onCancel} />
+        <Button
+          type="button"
+          label={pending ? t('forking') : t('confirm')}
+          onClick={onConfirm}
+          disabled={pending}
+        />
       </div>
     </Modal>
   )

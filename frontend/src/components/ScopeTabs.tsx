@@ -1,3 +1,6 @@
+import { Dropdown } from 'primereact/dropdown'
+import { TabPanel, TabView } from 'primereact/tabview'
+
 /**
  * The Global / per-project scope switcher.
  *
@@ -27,71 +30,38 @@ export function ScopeTabs({
   globalLabel: string
   addLabel: string
 }) {
+  // Index 0 is Global; a project's tab sits one past its place in `projects`.
+  const scopes: (string | null)[] = [null, ...projects]
+  const activeIndex = Math.max(0, scopes.indexOf(selected))
+
   return (
-    <div
-      role="tablist"
-      style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}
-    >
-      <ScopeTab label={globalLabel} selected={selected === null} onSelect={() => onSelect(null)} />
-      {projects.map((name) => (
-        <ScopeTab
-          key={name}
-          label={name}
-          selected={selected === name}
-          onSelect={() => onSelect(name)}
-        />
-      ))}
+    <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+      {/* Header-only: the scope's fields render below, outside the tab view,
+          so every panel is empty and the selection is fully controlled. */}
+      <TabView
+        activeIndex={activeIndex}
+        onTabChange={(event) => onSelect(scopes[event.index] ?? null)}
+        style={{ flex: '1 1 auto', minWidth: 0 }}
+      >
+        <TabPanel header={globalLabel} />
+        {projects.map((name) => (
+          <TabPanel key={name} header={name} />
+        ))}
+      </TabView>
       {addable.length > 0 && (
-        <select
-          className="input"
+        <Dropdown
           aria-label={addLabel}
-          value=""
-          style={{ fontSize: 13, width: 'auto' }}
+          // Always empty: picking a project navigates to its tab, and the
+          // placeholder is what invites the next pick.
+          value={null}
+          placeholder={`+ ${addLabel}`}
+          options={addable.map((name) => ({ label: name, value: name }))}
           onChange={(event) => {
-            if (event.target.value) onSelect(event.target.value)
+            if (event.value) onSelect(event.value)
           }}
-        >
-          <option value="">+ {addLabel}</option>
-          {addable.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
+          style={{ fontSize: 13 }}
+        />
       )}
     </div>
-  )
-}
-
-function ScopeTab({
-  label,
-  selected,
-  onSelect,
-}: {
-  label: string
-  selected: boolean
-  onSelect: () => void
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      className="tb-chip"
-      aria-selected={selected}
-      onClick={onSelect}
-      style={{
-        // A chip, as the artboard draws the scope switcher -- but still a tab,
-        // because that is what selecting a scope is.
-        border: '1px solid var(--color-divider)',
-        padding: '4px 12px',
-        font: 'inherit',
-        fontSize: 13,
-        background: selected ? 'var(--color-accent)' : 'transparent',
-        color: selected ? 'var(--color-bg)' : 'inherit',
-        cursor: 'pointer',
-      }}
-    >
-      {label}
-    </button>
   )
 }

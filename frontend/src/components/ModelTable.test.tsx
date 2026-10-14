@@ -5,6 +5,7 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import { joinPath, splitPath } from '../api/paths'
 import { ModelTable } from './ModelTable'
 import { i18n } from '../i18n'
+import { chooseOption as choose, openDropdown as openOptions } from '../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -59,8 +60,8 @@ test('adding a model writes both draft edits', async () => {
   const user = userEvent.setup()
 
   await user.type(screen.getByLabelText(/new model/i), 'gpt-6')
-  await user.selectOptions(screen.getByLabelText(/new provider/i), 'openai')
-  await user.selectOptions(screen.getByLabelText(/new routing/i), 'reasoning')
+  await choose(user, /new provider/i, 'OpenAI')
+  await choose(user, /new routing/i, 'reasoning')
   await user.click(screen.getByRole('button', { name: /add/i }))
 
   expect(setValue).toHaveBeenCalledWith('llm_config.extra_models.gpt-6.provider', 'openai')
@@ -80,22 +81,22 @@ test('routing choices are filtered to what the provider accepts', async () => {
   renderTable()
   const user = userEvent.setup()
 
-  await user.selectOptions(screen.getByLabelText(/new provider/i), 'anthropic')
+  await choose(user, /new provider/i, 'Anthropic')
 
-  const routing = screen.getByLabelText(/new routing/i)
-  expect(within(routing).queryByRole('option', { name: 'chat' })).not.toBeInTheDocument()
-  expect(within(routing).getByRole('option', { name: 'adaptive' })).toBeInTheDocument()
+  const routing = await openOptions(user, /new routing/i)
+  expect(within(routing).queryByRole('option', { name: 'chat', hidden: true })).not.toBeInTheDocument()
+  expect(within(routing).getByRole('option', { name: 'adaptive', hidden: true })).toBeInTheDocument()
 })
 
 test('a custom-provider entry can only be fallback', async () => {
   renderTable()
   const user = userEvent.setup()
 
-  await user.selectOptions(screen.getByLabelText(/new provider/i), 'custom')
+  await choose(user, /new provider/i, 'Custom')
 
-  const routing = screen.getByLabelText(/new routing/i)
-  expect(within(routing).getByRole('option', { name: 'fallback' })).toBeInTheDocument()
-  expect(within(routing).queryByRole('option', { name: 'adaptive' })).not.toBeInTheDocument()
+  const routing = await openOptions(user, /new routing/i)
+  expect(within(routing).getByRole('option', { name: 'fallback', hidden: true })).toBeInTheDocument()
+  expect(within(routing).queryByRole('option', { name: 'adaptive', hidden: true })).not.toBeInTheDocument()
 })
 
 test('renders a config issue against the offending row', () => {
@@ -140,8 +141,8 @@ test('a dotted model name produces one key, not a nested table', async () => {
   const user = userEvent.setup()
 
   await user.type(screen.getByLabelText(/new model/i), 'gpt-5.5')
-  await user.selectOptions(screen.getByLabelText(/new provider/i), 'openai')
-  await user.selectOptions(screen.getByLabelText(/new routing/i), 'chat')
+  await choose(user, /new provider/i, 'OpenAI')
+  await choose(user, /new routing/i, 'chat')
   await user.click(screen.getByRole('button', { name: /add/i }))
 
   const expected = joinPath(['llm_config', 'extra_models', 'gpt-5.5', 'provider'])
@@ -182,9 +183,9 @@ test('a queued addition is listed immediately', () => {
   }
   renderTable({ entries: {} })
 
-  // Scoped to the row: 'openai' and 'reasoning' are also option labels in the
+  // Scoped to the row: 'reasoning' is also the routing dropdown's value in the
   // add row below, so a bare getByText would not prove the row exists.
-  const row = screen.getByText('gpt-5.5').closest('div')
+  const row = screen.getByText('gpt-5.5').closest('tr')
   expect(row).toHaveTextContent('openai')
   expect(row).toHaveTextContent('reasoning')
   expect(screen.queryByText(/no additional models/i)).not.toBeInTheDocument()

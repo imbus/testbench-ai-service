@@ -38,7 +38,7 @@ describe('MarkdownView', () => {
   it('switches to the exact plain text the model receives', async () => {
     const text = '# Review\n\n**one**'
     render(<MarkdownView text={text} />)
-    await userEvent.click(screen.getByRole('radio', { name: 'Plain text' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Plain text' }))
     expect(screen.queryByRole('heading')).toBeNull()
     expect(screen.getByTestId('markdown-plain')).toHaveTextContent(/^# Review\s+\*\*one\*\*$/)
     expect(screen.getByTestId('markdown-plain').textContent).toBe(text)
@@ -46,7 +46,7 @@ describe('MarkdownView', () => {
 
   it('starts in the requested mode', () => {
     render(<MarkdownView text="**x**" defaultMode="plain" />)
-    expect(screen.getByRole('radio', { name: 'Plain text' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Plain text' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByTestId('markdown-plain')).toHaveTextContent('**x**')
   })
 })

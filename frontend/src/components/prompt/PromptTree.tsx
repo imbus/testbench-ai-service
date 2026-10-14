@@ -1,3 +1,5 @@
+import { Button } from 'primereact/button'
+import { Tag } from 'primereact/tag'
 import type { PromptVariantDoc } from '../../api/types'
 import { useTranslation } from 'react-i18next'
 import { messageLabel, type Selection } from './selection'
@@ -5,7 +7,14 @@ import { messageLabel, type Selection } from './selection'
 const mono = 'ui-monospace, Menlo, monospace'
 const rowButton = { border: 0, background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', textAlign: 'left' as const }
 
-/** The Split layout's left column: prompt.yaml, then variants with the selected one expanded. */
+/**
+ * The Split layout's left column: prompt.yaml, then variants with the selected one expanded.
+ *
+ * The rows stay plain buttons rather than a PrimeReact `Tree`: a variant row
+ * carries its own settings button beside the expander, the open row is
+ * marked with `aria-current` (not tree selection), and a `Tree` would also
+ * fold the meta row and the file list into nodes that are not part of it.
+ */
 export function PromptTree({ variants, selectedVariant, selection, flagged, invalidVariants = [], readOnly, onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onAddVariant, onAddMessage }: {
   variants: PromptVariantDoc[]
   selectedVariant: string
@@ -45,7 +54,7 @@ export function PromptTree({ variants, selectedVariant, selection, flagged, inva
         <span>{t('variants')}</span>
         <div style={{ flex: 1 }} />
         {!readOnly && (
-          <button type="button" className="btn btn-ghost" aria-label={t('newVariantDefault')} title={t('newVariantDefault')} style={{ padding: '0 4px', fontSize: 12 }} onClick={onAddVariant}>+</button>
+          <Button type="button" text label="+" aria-label={t('newVariantDefault')} title={t('newVariantDefault')} style={{ padding: '0 4px', fontSize: 12 }} onClick={onAddVariant} />
         )}
       </div>
 
@@ -60,7 +69,7 @@ export function PromptTree({ variants, selectedVariant, selection, flagged, inva
                 {variant.name}
               </button>
               {variant.model && <span className="text-muted" style={{ fontFamily: mono, fontSize: 11 }}>{variant.model}</span>}
-              <button type="button" className="btn btn-ghost" aria-label={`${t('variantSettings')}: ${variant.name}`} title={t('variantSettings')} onClick={() => onOpenVariantSettings(variant.name)} style={{ padding: '0 4px', fontSize: 12 }}>⚙</button>
+              <Button type="button" text label="⚙" aria-label={`${t('variantSettings')}: ${variant.name}`} title={t('variantSettings')} onClick={() => onOpenVariantSettings(variant.name)} style={{ padding: '0 4px', fontSize: 12 }} />
             </div>
             {open && variant.messages.map((message, index) => {
               const current = selection.kind === 'message' && selection.index === index
@@ -73,14 +82,14 @@ export function PromptTree({ variants, selectedVariant, selection, flagged, inva
                   onClick={() => onPickMessage(index)}
                   style={{ ...rowButton, fontSize: 12, padding: '5px 14px 5px 34px', display: 'flex', gap: 6, alignItems: 'center', background: current ? 'var(--color-surface)' : 'transparent' }}
                 >
-                  <span className="tag tag-neutral" style={{ padding: '0 5px', fontSize: 10 }}>{message.role}</span>
+                  <Tag severity="secondary" value={message.role} style={{ padding: '0 5px', fontSize: 10 }} />
                   <span style={{ fontFamily: mono, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{messageLabel(message, t('emptyMessage'))}</span>
                   {flagged.includes(index) && <span aria-hidden style={{ color: '#c0392b' }}>●</span>}
                 </button>
               )
             })}
             {open && !readOnly && (
-              <button type="button" className="text-muted" onClick={onAddMessage} style={{ ...rowButton, fontSize: 12, padding: '4px 14px 6px 34px' }}>{t('addMessageShort')}</button>
+              <Button type="button" text className="text-muted" label={t('addMessageShort')} onClick={onAddMessage} style={{ fontSize: 12, padding: '4px 14px 6px 34px', justifyContent: 'flex-start' }} />
             )}
           </div>
         )

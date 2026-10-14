@@ -1,4 +1,8 @@
 import type { Ref } from 'react'
+import { Button } from 'primereact/button'
+import { Dropdown } from 'primereact/dropdown'
+import { InputText } from 'primereact/inputtext'
+import { Message } from 'primereact/message'
 import type { LintError, MessageRole, MessageSource, PromptMessageDoc } from '../../api/types'
 import { useTranslation } from 'react-i18next'
 import { CodeEditor, type CodeEditorHandle } from '../CodeEditor'
@@ -26,7 +30,7 @@ function editorLabel(message: PromptMessageDoc): string {
 }
 
 const mono = 'ui-monospace, Menlo, monospace'
-const small = { minHeight: 26, padding: '1px 6px', fontSize: 12, width: 'auto' }
+const small = { minHeight: 26, fontSize: 12 }
 // A label must never separate from its control when the row wraps (Task 10's
 // controller ruling) -- each pair is its own no-wrap inline group.
 const pair = { display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' } as const
@@ -89,21 +93,15 @@ export function MessagePane({
           </span>
           <div style={{ flex: 1 }} />
           {!readOnly && index > 0 && (
-            <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onMove(index - 1)}>
-              {t('moveUp')}
-            </button>
+            <Button type="button" text label={t('moveUp')} style={{ fontSize: 12 }} onClick={() => onMove(index - 1)} />
           )}
           {!readOnly && index < count - 1 && (
-            <button type="button" className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onMove(index + 1)}>
-              {t('moveDown')}
-            </button>
+            <Button type="button" text label={t('moveDown')} style={{ fontSize: 12 }} onClick={() => onMove(index + 1)} />
           )}
           {/* Hidden on a variant's only message: the reducer refuses to remove
               it (PromptVariant requires one), so the button would do nothing. */}
           {!readOnly && count > 1 && (
-            <button type="button" className="btn btn-ghost" style={{ fontSize: 12, color: '#a33a2b' }} onClick={onRemove}>
-              {t('deleteMessage')}
-            </button>
+            <Button type="button" text severity="danger" label={t('deleteMessage')} style={{ fontSize: 12, color: '#a33a2b' }} onClick={onRemove} />
           )}
         </div>
         {/* Row 2: how the message is edited -- role, source, file name, then
@@ -118,32 +116,25 @@ export function MessagePane({
             <label htmlFor={roleId} className="text-muted" style={{ fontSize: 11 }}>
               {t('messageRole')}
             </label>
-            <select
-              className="input"
-              id={roleId}
+            <Dropdown
+              inputId={roleId}
               disabled={readOnly}
               value={message.role}
-              onChange={(event) => onRole(event.target.value as MessageRole)}
+              // The `role:` prefix is the prompt.yaml field name, a wire
+              // token -- deliberately untranslated, like the role values
+              // themselves.
+              options={ROLES.map((role) => ({ label: `role: ${role}`, value: role }))}
+              onChange={(event) => onRole(event.value as MessageRole)}
               style={small}
-            >
-              {/* The `role:` prefix is the prompt.yaml field name, a wire
-                  token -- deliberately untranslated, like the role values
-                  themselves. */}
-              {ROLES.map((role) => (
-                <option key={role} value={role}>
-                  role: {role}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           {!readOnly && (
             <div style={pair}>
               <label htmlFor={sourceId} style={{ fontSize: 11 }}>
                 {t('messageSourceLabel')}
               </label>
-              <select
-                className="input"
-                id={sourceId}
+              <Dropdown
+                inputId={sourceId}
                 value={message.source}
                 // I3: the server refuses to save a "readable: false" file-backed
                 // message with a 409 (the loader's placeholder is an empty
@@ -157,12 +148,13 @@ export function MessagePane({
                 // is readable again.
                 disabled={!message.readable}
                 aria-describedby={!message.readable ? unreadableId : undefined}
-                onChange={(event) => onSource(event.target.value as MessageSource)}
+                options={[
+                  { label: t('messageSourceInline'), value: 'inline' },
+                  { label: t('messageSourceFile'), value: 'file' },
+                ]}
+                onChange={(event) => onSource(event.value as MessageSource)}
                 style={small}
-              >
-                <option value="inline">{t('messageSourceInline')}</option>
-                <option value="file">{t('messageSourceFile')}</option>
-              </select>
+              />
             </div>
           )}
           {message.source === 'file' && !readOnly && (
@@ -170,12 +162,11 @@ export function MessagePane({
               <label htmlFor={fileId} style={{ fontSize: 11 }}>
                 {t('messageFileLabel')}
               </label>
-              <input
-                className="input"
+              <InputText
                 id={fileId}
                 value={message.file ?? ''}
                 onChange={(event) => onFile(event.target.value)}
-                style={{ ...small, width: '26ch', minWidth: '26ch', fontFamily: mono }}
+                style={{ ...small, padding: '1px 6px', width: '26ch', minWidth: '26ch', fontFamily: mono }}
               />
             </div>
           )}
@@ -189,33 +180,36 @@ export function MessagePane({
               <label htmlFor={insertId} className="text-muted" style={{ fontSize: 11 }}>
                 {t('insertVar')}
               </label>
-              <select
-                className="input"
-                id={insertId}
-                value=""
+              {/* Always empty: picking a variable inserts it, and the
+                  placeholder is what invites the next pick. */}
+              <Dropdown
+                inputId={insertId}
+                value={null}
+                placeholder={t('insertVar')}
+                options={insertable.map((name) => ({ label: name, value: name }))}
                 style={small}
                 onChange={(event) => {
-                  const name = event.target.value
+                  const name = event.value as string | null
                   if (!name) return
                   const handle = typeof editorRef === 'object' && editorRef ? editorRef.current : null
                   handle?.insert(`{{ ${name} }}`)
                 }}
-              >
-                <option value="">{t('insertVar')}</option>
-                {insertable.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           )}
         </div>
       </div>
       {!message.readable && message.file && (
-        <span id={unreadableId} role="alert" style={{ fontSize: 11, color: '#a33a2b', padding: '4px 12px' }}>
-          {t('messageUnreadable')} <code>{message.file}</code>
-        </span>
+        <Message
+          id={unreadableId}
+          severity="error"
+          style={{ fontSize: 11, margin: '4px 12px', justifyContent: 'flex-start' }}
+          text={
+            <>
+              {t('messageUnreadable')} <code>{message.file}</code>
+            </>
+          }
+        />
       )}
       <div style={{ flex: 1, minHeight: 0 }}>
         <CodeEditor

@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { VarDeclTable } from './VarDeclTable'
 import type { PromptVarDecl } from '../api/types'
 import { i18n } from '../i18n'
+import { chooseOption } from '../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -48,7 +49,7 @@ describe('VarDeclTable', () => {
   it('emits an edit when the type changes', async () => {
     const onEdit = vi.fn()
     render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={onEdit} onRemove={vi.fn()} />)
-    await userEvent.selectOptions(screen.getByLabelText(/type/i), 'number')
+    await chooseOption(userEvent.setup(), /type/i, 'number')
     expect(onEdit).toHaveBeenCalledWith('tone', expect.objectContaining({ value_type: 'number' }))
   })
 

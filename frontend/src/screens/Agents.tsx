@@ -1,5 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Button } from 'primereact/button'
+import { Column } from 'primereact/column'
+import { DataTable } from 'primereact/datatable'
+import { InputSwitch } from 'primereact/inputswitch'
+import { Message } from 'primereact/message'
+import { Tag } from 'primereact/tag'
 import {
   agentKeys,
   agentPath,
@@ -10,16 +16,19 @@ import {
 } from '../api/agents'
 import { useConfig, useProjects, usePromptMeta } from '../api/queries'
 import { AgentSwitch } from '../components/AgentSwitch'
+import { IconToggle, ListIcon, MatrixIcon } from '../components/IconToggle'
 import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 import { valueAt } from './fields'
 
-/** The list's column track. The header strip and every row share it, or
- *  the columns stop lining up the moment one of them is edited. */
-const GRID_COLUMNS =
-  '32px minmax(0, 1.4fr) minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 1.4fr) 190px'
+/**
+ * Prime marks the switch's wrapper up as a second, nameless
+ * `role="checkbox"` around the real `role="switch"` input; one control
+ * should announce once. The same fix `AgentSwitch` applies.
+ */
+const SWITCH_ROOT = { role: undefined, 'aria-checked': undefined }
 
-/** A mono cell that clips to its track. Paths and endpoints have no break
+/** A mono cell that clips to its column. Paths and endpoints have no break
  *  points, so without this they run on under the next column. */
 const MONO_CELL = {
   fontSize: 12,
@@ -89,62 +98,20 @@ export function Agents({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </div>
         <div style={{ flex: 1 }} />
-        {/* Two views of one table, so a segmented control rather than tabs:
-            the design system paints the checked option through
-            `.seg:has(input:checked)`, which needs real radios. */}
-        <div className="seg" role="radiogroup" aria-label={t('agents')}>
-          {(['list', 'matrix'] as const).map((entry) => (
-            <label key={entry} className="seg-opt">
-              <input
-                type="radio"
-                name="agents-view"
-                checked={view === entry}
-                onChange={() => setView(entry)}
-              />
-              {entry === 'list' ? t('viewList') : t('viewMatrix')}
-            </label>
-          ))}
-        </div>
+        {/* Two views of one table, so a segmented control rather than tabs. */}
+        <IconToggle
+          ariaLabel={t('agents')}
+          value={view}
+          options={[
+            { label: t('viewList'), value: 'list', icon: ListIcon },
+            { label: t('viewMatrix'), value: 'matrix', icon: MatrixIcon },
+          ]}
+          onChange={setView}
+        />
       </div>
 
       {view === 'list' ? (
-        <div className="blueprint" style={{ overflowX: 'auto' }}>
-          <i className="corner tl" />
-          <i className="corner tr" />
-          <i className="corner bl" />
-          <i className="corner br" />
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: GRID_COLUMNS,
-              gap: 12,
-              padding: '8px 14px',
-              borderBottom: '1px solid var(--color-divider)',
-              fontSize: 11,
-              letterSpacing: '.08em',
-              textTransform: 'uppercase',
-              color: 'color-mix(in srgb, var(--color-text) 60%, transparent)',
-            }}
-          >
-            <span />
-            <span>Agent</span>
-            <span>
-              {t('model')} ({t('effective')})
-            </span>
-            <span>endpoint_path</span>
-            <span>prompt.file · variant</span>
-            <span>{t('agentsOn')}</span>
-          </div>
-          {keys.map((key) => (
-            <AgentRow
-              key={key}
-              agentKey={key}
-              disk={disk}
-              running={running}
-              isAdmin={isAdmin}
-            />
-          ))}
-        </div>
+        <AgentList keys={keys} disk={disk} running={running} isAdmin={isAdmin} />
       ) : (
         <Matrix keys={keys} disk={disk} running={running} isAdmin={isAdmin} />
       )}
@@ -153,201 +120,279 @@ export function Agents({ isAdmin }: { isAdmin: boolean }) {
 }
 
 /**
- * One agent in the list view.
- *
- * A component of its own because it reads prompt metadata, and a hook cannot be
- * called in a loop inside the parent.
+ * The agents as a table: one row per agent, expandable to the projects it is
+ * active in.
  */
-function AgentRow({
-  agentKey,
+function AgentList({
+  keys,
   disk,
   running,
   isAdmin,
 }: {
-  agentKey: string
+  keys: string[]
   disk: Record<string, unknown>
   running: Record<string, unknown>
   isAdmin: boolean
 }) {
   const { t } = useTranslation()
   const draft = useDraft()
-  const [expanded, setExpanded] = useState(false)
-
-  const agent = effectiveAgent(running, agentKey, null)
-  const language = String(valueAt(running, 'language') ?? 'de')
-  const promptFile = agent.prompt?.file
-  // Metadata is read for the agent's *name* only here. A 404 (a prompt file
-  // that moved) leaves the row showing its key, which is still the operator's
-  // way in to fix the path.
-  const meta = usePromptMeta(language, agentKey, typeof promptFile === 'string' ? promptFile : undefined)
-
   const projects = useProjects()
-  const overriders = overridingProjects(running, agentKey)
-  const enabledPath = agentPath(agentKey, 'enabled')
-  const savedEnabled = valueAt(disk, enabledPath)
-  const enabled = draft.valueOf(enabledPath, savedEnabled ?? agent.enabled) === true
+  // Keyed by agent, the shape Prime's `expandedRows` takes with a `dataKey`.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   // Every project the agent answers in, not just the ones that say so: an
   // inheriting project runs the agent as surely as an overriding one, and a
   // list of overrides alone reads as "active only here". The same union of
-  // TestBench and config the matrix draws its columns from, resolved through
-  // the draft so a pending switch is reflected before it is applied.
+  // TestBench and config the matrix draws its columns from.
   const known = [
     ...new Set([
       ...(projects.data?.projects ?? []).map((entry) => entry.name),
       ...configuredProjects(running),
     ]),
   ]
-  const perProject = known.map((project) => {
-    const path = projectAgentPath(project, agentKey, 'enabled')
-    const own = draft.valueOf(path, valueAt(disk, path))
-    const overridden = typeof own === 'boolean'
-    return { project, overridden, active: overridden ? own : enabled }
-  })
-  const active = perProject.filter((entry) => entry.active)
+  const language = String(valueAt(running, 'language') ?? 'de')
 
-  const promptLabel = [agent.prompt?.file, agent.prompt?.variant]
-    .filter((part): part is string => typeof part === 'string' && part !== '')
-    .join(' · ')
+  const rows = keys.map((agentKey) => {
+    const agent = effectiveAgent(running, agentKey, null)
+    const enabledPath = agentPath(agentKey, 'enabled')
+    const savedEnabled = valueAt(disk, enabledPath)
+    const enabled = draft.valueOf(enabledPath, savedEnabled ?? agent.enabled) === true
+    // Resolved through the draft, so a pending switch is reflected before it
+    // is applied.
+    const perProject = known.map((project) => {
+      const path = projectAgentPath(project, agentKey, 'enabled')
+      const own = draft.valueOf(path, valueAt(disk, path))
+      const overridden = typeof own === 'boolean'
+      return { project, overridden, active: overridden ? own : enabled }
+    })
+    const promptFile = agent.prompt?.file
+    return {
+      agentKey,
+      enabledPath,
+      enabled,
+      promptFile: typeof promptFile === 'string' ? promptFile : undefined,
+      endpoint: typeof agent.endpoint_path === 'string' ? agent.endpoint_path : undefined,
+      promptLabel: [agent.prompt?.file, agent.prompt?.variant]
+        .filter((part): part is string => typeof part === 'string' && part !== '')
+        .join(' · '),
+      active: perProject.filter((entry) => entry.active),
+      overriders: overridingProjects(running, agentKey),
+    }
+  })
+  type Row = (typeof rows)[number]
+
+  const toggle = (agentKey: string) =>
+    setExpanded((current) => {
+      const next = { ...current }
+      if (next[agentKey]) delete next[agentKey]
+      else next[agentKey] = true
+      return next
+    })
 
   return (
-    <div data-testid={`agent-row-${agentKey}`}>
-      <div
-        className="tb-row"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: GRID_COLUMNS,
-          gap: 12,
-          alignItems: 'center',
-          padding: '8px 14px',
-          borderBottom: '1px solid var(--color-divider)',
-          // A disabled agent dims as a whole row: the switch alone is a small
-          // mark to read across six columns.
-          opacity: enabled ? 1 : 0.6,
-        }}
-      >
-        {/* Only an expander when there is something to expand. A control
-            that announces itself as collapsible and then opens an empty
-            panel is noise. */}
-        {active.length === 0 ? (
-          <span aria-hidden="true" className="text-muted" style={{ fontSize: 12 }}>
-            ·
-          </span>
-        ) : (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-label={`${t('activeIn')} ${active.length} · ${t('overrideCount', { count: overriders.length })}`}
-            onClick={() => setExpanded(!expanded)}
-            style={{
-              background: 'none',
-              border: 0,
-              font: 'inherit',
-              fontSize: 12,
-              color: 'inherit',
-              cursor: 'pointer',
-              padding: 0,
-              textAlign: 'left',
-            }}
-          >
-            {expanded ? '▾' : '▸'}
-          </button>
+    <DataTable
+      value={rows}
+      dataKey="agentKey"
+      size="small"
+      // Cells read the draft and the expansion state through their closures;
+      // Prime's cell memo would keep showing the previous values.
+      cellMemo={false}
+      expandedRows={expanded}
+      rowExpansionTemplate={(row: Row) => (
+        <ProjectList agentKey={row.agentKey} active={row.active} />
+      )}
+      pt={{
+        bodyRow: (options) => {
+          // Prime passes the row's index in `context` at runtime; its typings
+          // only declare `scrollable` there.
+          const index = (options?.context as { index?: number } | undefined)?.index
+          const row = index === undefined ? undefined : rows[index]
+          // Built outside the return, so the `data-*` key passes the type check.
+          const props = {
+            'data-testid': `agent-row-${row?.agentKey}`,
+            // A disabled agent dims as a whole row: the switch alone is a
+            // small mark to read across six columns.
+            style: { opacity: row?.enabled === false ? 0.6 : 1 },
+          }
+          return props
+        },
+      }}
+    >
+      <Column
+        style={{ width: 32 }}
+        body={(row: Row) =>
+          // Only an expander when there is something to expand. A control
+          // that announces itself as collapsible and then opens an empty
+          // panel is noise.
+          row.active.length === 0 ? (
+            <span aria-hidden="true" className="text-muted" style={{ fontSize: 12 }}>
+              ·
+            </span>
+          ) : (
+            <Button
+              type="button"
+              text
+              rounded
+              size="small"
+              aria-expanded={expanded[row.agentKey] === true}
+              aria-label={`${t('activeIn')} ${row.active.length} · ${t('overrideCount', { count: row.overriders.length })}`}
+              icon={<span style={{ fontSize: 12 }}>{expanded[row.agentKey] ? '▾' : '▸'}</span>}
+              onClick={() => toggle(row.agentKey)}
+            />
+          )
+        }
+      />
+      <Column
+        header="Agent"
+        body={(row: Row) => (
+          <AgentTitle agentKey={row.agentKey} language={language} promptFile={row.promptFile} />
         )}
-
-        {/* One link over both lines, as the artboard draws it: the title and
-            the key are the same target, and a reader searching for either
-            finds the row. The key alone when the prompt file is unreadable --
-            repeating it as its own subtitle says nothing twice. */}
-        <Link
-          to={`/admin/agents/${encodeURIComponent(agentKey)}`}
-          style={{ color: 'inherit', minWidth: 0, textDecoration: 'none' }}
-        >
-          <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 16 }}>
-            {meta.data?.name ?? agentKey}
+      />
+      <Column
+        header={`${t('model')} (${t('effective')})`}
+        body={(row: Row) => (
+          <AgentModel agentKey={row.agentKey} language={language} promptFile={row.promptFile} />
+        )}
+      />
+      <Column
+        header="endpoint_path"
+        style={{ maxWidth: 220 }}
+        body={(row: Row) => (
+          <div className="text-muted" style={MONO_CELL} title={row.endpoint}>
+            {row.endpoint ?? '—'}
           </div>
-          {meta.data?.name && (
-            <div
-              className="text-muted"
-              style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
-            >
-              {agentKey}
-            </div>
-          )}
-        </Link>
-
-        <span className="text-muted" style={MONO_CELL} title={meta.data?.default_model}>
-          {meta.data?.default_model ?? '—'}
-        </span>
-
-        <span
-          className="text-muted"
-          style={MONO_CELL}
-          title={typeof agent.endpoint_path === 'string' ? agent.endpoint_path : undefined}
-        >
-          {String(agent.endpoint_path ?? '—')}
-        </span>
-
-        <span className="text-muted" style={MONO_CELL} title={promptLabel || undefined}>
-          {promptLabel || '—'}
-        </span>
-
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <button
-            type="button"
-            role="switch"
-            className="switch"
-            aria-checked={enabled}
-            aria-label={`${agentKey} ${t('agentsOn')}`}
-            disabled={!isAdmin}
-            onClick={() => draft.setValue(enabledPath, !enabled)}
-          >
-            <span className="switch-knob" />
-          </button>
-          <span className="text-muted" style={{ fontSize: 11 }}>
-            {t('activeIn')} <span data-testid="active-count">{active.length}</span> ·{' '}
-            <span data-testid="override-count">{overriders.length}</span> {t('overrides')}
+        )}
+      />
+      <Column
+        header="prompt.file · variant"
+        style={{ maxWidth: 280 }}
+        body={(row: Row) => (
+          <div className="text-muted" style={MONO_CELL} title={row.promptLabel || undefined}>
+            {row.promptLabel || '—'}
+          </div>
+        )}
+      />
+      <Column
+        header={t('agentsOn')}
+        style={{ width: 190 }}
+        body={(row: Row) => (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <InputSwitch
+              checked={row.enabled}
+              disabled={!isAdmin}
+              onChange={() => draft.setValue(row.enabledPath, !row.enabled)}
+              pt={{
+                root: SWITCH_ROOT,
+                input: { 'aria-label': `${row.agentKey} ${t('agentsOn')}` },
+              }}
+            />
+            <span className="text-muted" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
+              {t('activeIn')} <span data-testid="active-count">{row.active.length}</span> ·{' '}
+              <span data-testid="override-count">{row.overriders.length}</span> {t('overrides')}
+            </span>
           </span>
-        </span>
-      </div>
+        )}
+      />
+    </DataTable>
+  )
+}
 
-      {expanded && (
+/**
+ * The agent's name over its key, linked to its detail screen.
+ *
+ * A component of its own because it reads prompt metadata, and a hook cannot be
+ * called inside a column's body template. Metadata is read for the *name*
+ * only: a 404 (a prompt file that moved) leaves the row showing its key, which
+ * is still the operator's way in to fix the path.
+ */
+function AgentTitle({
+  agentKey,
+  language,
+  promptFile,
+}: {
+  agentKey: string
+  language: string
+  promptFile: string | undefined
+}) {
+  const meta = usePromptMeta(language, agentKey, promptFile)
+  // One link over both lines, as the artboard draws it: the title and the key
+  // are the same target, and a reader searching for either finds the row. The
+  // key alone when the prompt file is unreadable -- repeating it as its own
+  // subtitle says nothing twice.
+  return (
+    <Link
+      to={`/admin/agents/${encodeURIComponent(agentKey)}`}
+      style={{ color: 'inherit', minWidth: 0, textDecoration: 'none' }}
+    >
+      <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 16 }}>
+        {meta.data?.name ?? agentKey}
+      </div>
+      {meta.data?.name && (
         <div
-          data-testid={`agent-overrides-${agentKey}`}
-          style={{
-            padding: '8px 14px 12px 58px',
-            background: 'var(--color-surface)',
-            borderBottom: '1px solid var(--color-divider)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-          }}
+          className="text-muted"
+          style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
         >
-          <div
-            className="text-muted"
-            style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' }}
-          >
-            {t('perProject')}
-          </div>
-          {active.map(({ project, overridden }) => (
-            <div
-              key={project}
-              data-testid={`agent-project-${project}`}
-              style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}
-            >
-              <span style={{ flex: 1 }}>{project}</span>
-              {overridden ? (
-                <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
-                  {t('override')}
-                </span>
-              ) : (
-                <span className="text-muted" style={{ fontSize: 10 }}>
-                  {t('inherit')}
-                </span>
-              )}
-            </div>
-          ))}
+          {agentKey}
         </div>
       )}
+    </Link>
+  )
+}
+
+/** The prompt's default model, from the same cached query `AgentTitle` reads. */
+function AgentModel({
+  agentKey,
+  language,
+  promptFile,
+}: {
+  agentKey: string
+  language: string
+  promptFile: string | undefined
+}) {
+  const meta = usePromptMeta(language, agentKey, promptFile)
+  return (
+    <div className="text-muted" style={MONO_CELL} title={meta.data?.default_model}>
+      {meta.data?.default_model ?? '—'}
+    </div>
+  )
+}
+
+/** The expanded row: every project the agent is active in, and why. */
+function ProjectList({
+  agentKey,
+  active,
+}: {
+  agentKey: string
+  active: { project: string; overridden: boolean }[]
+}) {
+  const { t } = useTranslation()
+  return (
+    <div
+      data-testid={`agent-overrides-${agentKey}`}
+      style={{ padding: '4px 0 4px 44px', display: 'flex', flexDirection: 'column', gap: 6 }}
+    >
+      <div
+        className="text-muted"
+        style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' }}
+      >
+        {t('perProject')}
+      </div>
+      {active.map(({ project, overridden }) => (
+        <div
+          key={project}
+          data-testid={`agent-project-${project}`}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}
+        >
+          <span style={{ flex: 1 }}>{project}</span>
+          {overridden ? (
+            <Tag value={t('override')} style={{ padding: '1px 6px', fontSize: 10 }} />
+          ) : (
+            <span className="text-muted" style={{ fontSize: 10 }}>
+              {t('inherit')}
+            </span>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -390,47 +435,73 @@ function Matrix({
     return overrides > 0 ? t('overrideCount', { count: overrides }) : t('inheritsGlobal')
   }
 
+  // Draft-aware, like the list view's own switch: an agent switched off
+  // globally in this same unapplied draft must not show every inheriting
+  // project as still running it -- the accessible label of each cell states
+  // the resolved value, and it would be lying.
+  const rows = keys.map((agentKey) => ({
+    agentKey,
+    inherited:
+      draft.valueOf(
+        agentPath(agentKey, 'enabled'),
+        effectiveAgent(running, agentKey, null).enabled,
+      ) === true,
+  }))
+  type Row = (typeof rows)[number]
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {projects.data?.source === 'unavailable' && (
-        <div data-testid="projects-unavailable" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t('projectsUnavailable')}
-        </div>
+        <Message
+          data-testid="projects-unavailable"
+          severity="warn"
+          text={t('projectsUnavailable')}
+          style={{ alignSelf: 'flex-start', fontSize: 12 }}
+        />
       )}
-      <div className="blueprint" style={{ overflow: 'auto' }}>
-        <i className="corner tl" />
-        <i className="corner tr" />
-        <i className="corner bl" />
-        <i className="corner br" />
-        <table role="table" style={{ borderCollapse: 'collapse', fontSize: 13, width: '100%' }}>
-        <thead>
-          <tr>
-            <th style={{ textAlign: 'left', padding: '8px 14px', minWidth: 220 }} />
-            {columns.map((project) => {
-              const inTestBench = fromTestBench.includes(project)
-              return (
-                <th
-                  key={project}
-                  role="columnheader"
-                  scope="col"
-                  data-testid={`column-${project}`}
-                  data-in-testbench={String(inTestBench)}
-                  style={{
-                    padding: '8px 12px',
-                    minWidth: 150,
-                    textAlign: 'left',
-                    verticalAlign: 'bottom',
-                    fontWeight: 400,
-                    borderLeft: '1px solid var(--color-divider)',
-                    borderBottom: '1px solid var(--color-divider)',
-                    whiteSpace: 'nowrap',
-                  }}
-                  title={inTestBench ? project : `${project} · ${t('notInTestBench')}`}
-                >
+      <DataTable
+        value={rows}
+        dataKey="agentKey"
+        size="small"
+        showGridlines
+        scrollable
+        // The switches read the draft through their closures; Prime's cell
+        // memo would keep showing the previous values.
+        cellMemo={false}
+        style={{ fontSize: 13 }}
+      >
+        <Column
+          field="agentKey"
+          style={{ minWidth: 220, whiteSpace: 'nowrap' }}
+          // The agent's cell names the row, as a `<th scope="row">` would.
+          pt={{ bodyCell: { role: 'rowheader' } }}
+          body={(row: Row) => (
+            <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{row.agentKey}</span>
+          )}
+        />
+        {columns.map((project) => {
+          const inTestBench = fromTestBench.includes(project)
+          // Built outside the `pt` literal, so the `data-*` keys pass the
+          // type check.
+          const headerCell = {
+            'data-testid': `column-${project}`,
+            'data-in-testbench': String(inTestBench),
+            title: inTestBench ? project : `${project} · ${t('notInTestBench')}`,
+          }
+          return (
+            <Column
+              key={project}
+              style={{ minWidth: 150, verticalAlign: 'bottom', whiteSpace: 'nowrap' }}
+              // The tint fills the whole cell, so the padding moves inside it.
+              bodyStyle={{ padding: 0 }}
+              pt={{ headerCell }}
+              header={
+                <div>
                   <div
                     style={{
                       fontFamily: 'var(--font-heading)',
                       fontSize: 15,
+                      fontWeight: 400,
                       color: inTestBench ? 'inherit' : '#a33a2b',
                     }}
                   >
@@ -440,71 +511,36 @@ function Matrix({
                   <div className="text-muted" style={{ fontSize: 11, fontWeight: 400 }}>
                     {columnSub(project)}
                   </div>
-                </th>
-              )
-            })}
-          </tr>
-        </thead>
-        <tbody>
-          {keys.map((agentKey) => {
-            // Draft-aware, like the list view's own switch: an agent switched
-            // off globally in this same unapplied draft must not show every
-            // inheriting project as still running it -- the accessible label
-            // of each cell states the resolved value, and it would be lying.
-            const globalPath = agentPath(agentKey, 'enabled')
-            const inherited =
-              draft.valueOf(globalPath, effectiveAgent(running, agentKey, null).enabled) === true
-            return (
-              <tr key={agentKey}>
-                <th
-                  role="rowheader"
-                  scope="row"
-                  className="tb-row"
-                  style={{
-                    textAlign: 'left',
-                    padding: '6px 14px',
-                    fontWeight: 400,
-                    fontFamily: 'ui-monospace, Menlo, monospace',
-                    whiteSpace: 'nowrap',
-                    borderBottom: '1px solid var(--color-divider)',
-                  }}
-                >
-                  {agentKey}
-                </th>
-                {columns.map((project) => {
-                  const path = projectAgentPath(project, agentKey, 'enabled')
-                  // The cell that carries an opinion is tinted, so the shape
-                  // of the overrides is readable across the whole grid before
-                  // any single cell is read.
-                  const overridden =
-                    draft.valueOf(path, valueAt(disk, path)) !== undefined &&
-                    draft.valueOf(path, valueAt(disk, path)) !== null
-                  return (
-                    <td
-                      key={project}
-                      style={{
-                        padding: '4px 12px',
-                        borderLeft: '1px solid var(--color-divider)',
-                        borderBottom: '1px solid var(--color-divider)',
-                        background: overridden ? 'var(--color-accent-100)' : 'transparent',
-                      }}
-                    >
-                      <AgentSwitch
-                        path={path}
-                        saved={valueAt(disk, path)}
-                        inherited={inherited}
-                        label={`${agentKey} · ${project}`}
-                        readOnly={!isAdmin}
-                      />
-                    </td>
-                  )
-                })}
-              </tr>
-            )
-          })}
-        </tbody>
-        </table>
-      </div>
+                </div>
+              }
+              body={(row: Row) => {
+                const path = projectAgentPath(project, row.agentKey, 'enabled')
+                // The cell that carries an opinion is tinted, so the shape of
+                // the overrides is readable across the whole grid before any
+                // single cell is read.
+                const own = draft.valueOf(path, valueAt(disk, path))
+                const overridden = own !== undefined && own !== null
+                return (
+                  <div
+                    style={{
+                      padding: '4px 12px',
+                      background: overridden ? 'var(--color-accent-100)' : 'transparent',
+                    }}
+                  >
+                    <AgentSwitch
+                      path={path}
+                      saved={valueAt(disk, path)}
+                      inherited={row.inherited}
+                      label={`${row.agentKey} · ${project}`}
+                      readOnly={!isAdmin}
+                    />
+                  </div>
+                )
+              }}
+            />
+          )
+        })}
+      </DataTable>
     </div>
   )
 }

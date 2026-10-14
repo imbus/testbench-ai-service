@@ -1,3 +1,7 @@
+import { Dropdown } from 'primereact/dropdown'
+import { InputText } from 'primereact/inputtext'
+import { InputTextarea } from 'primereact/inputtextarea'
+import { Message } from 'primereact/message'
 import type { PromptDocument } from '../../api/types'
 import { useTranslation } from 'react-i18next'
 
@@ -30,8 +34,7 @@ function Header({
         {label}
       </label>
       {multiline ? (
-        <textarea
-          className="input"
+        <InputTextarea
           id={id}
           readOnly={readOnly}
           value={value}
@@ -39,8 +42,7 @@ function Header({
           onChange={(event) => onChange(event.target.value)}
         />
       ) : (
-        <input
-          className="input"
+        <InputText
           id={id}
           type="text"
           readOnly={readOnly}
@@ -118,26 +120,24 @@ export function MetaPane({
         <label htmlFor="prompt-default-variant" style={{ fontSize: 12 }}>
           {t('defaultVariant')}
         </label>
-        <select
-          className="input"
-          id="prompt-default-variant"
+        <Dropdown
+          inputId="prompt-default-variant"
           disabled={readOnly}
+          invalid={!!defaultVariantIssue}
           aria-invalid={defaultVariantIssue ? true : undefined}
           aria-describedby={defaultVariantIssue ? 'default-variant-issue' : undefined}
           value={draft.default_variant}
-          onChange={(event) => onHeader('default_variant', event.target.value)}
+          options={draft.variants.map((v) => ({ label: v.name, value: v.name }))}
+          onChange={(event) => onHeader('default_variant', event.value as string)}
           style={{ maxWidth: 260 }}
-        >
-          {draft.variants.map((v) => (
-            <option key={v.name} value={v.name}>
-              {v.name}
-            </option>
-          ))}
-        </select>
+        />
         {defaultVariantIssue && (
-          <span id="default-variant-issue" role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
-            {defaultVariantIssue}
-          </span>
+          <Message
+            id="default-variant-issue"
+            severity="error"
+            text={defaultVariantIssue}
+            style={{ fontSize: 11, alignSelf: 'flex-start' }}
+          />
         )}
       </div>
     </div>

@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button } from 'primereact/button'
+import { Message } from 'primereact/message'
 import { usePreview } from '../api/mutations'
 import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
@@ -63,16 +65,21 @@ export function Raw() {
         </span>
         <div style={{ flex: 1 }} />
         {preview.data && !preview.isError && (
-          <button type="button" className="btn btn-secondary" onClick={onCopy}>
-            {copied ? t('copied') : t('copy')}
-          </button>
+          <Button
+            type="button"
+            outlined
+            label={copied ? t('copied') : t('copy')}
+            onClick={onCopy}
+          />
         )}
       </div>
 
       {preview.isError && (
-        <div role="alert" style={{ color: '#a33a2b' }}>
-          {(preview.error as Error).message}
-        </div>
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start' }}
+          text={(preview.error as Error).message}
+        />
       )}
 
       {preview.data && !preview.isError && (

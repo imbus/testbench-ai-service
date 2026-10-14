@@ -1,4 +1,5 @@
-import { useId, useState } from 'react'
+import { useState } from 'react'
+import { SelectButton } from 'primereact/selectbutton'
 import { useTranslation } from 'react-i18next'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -26,24 +27,25 @@ const COMPONENTS: Components = {
 export function MarkdownView({ text, defaultMode = 'markdown' }: { text: string; defaultMode?: MarkdownMode }) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<MarkdownMode>(defaultMode)
-  const name = useId()
 
   return (
     <div className="markdown-view">
-      <div role="radiogroup" aria-label={t('markdownViewMode')} className="markdown-view-modes">
-        {(['markdown', 'plain'] as const).map((value) => (
-          <label key={value} className={mode === value ? 'is-active' : undefined}>
-            <input
-              type="radio"
-              name={name}
-              value={value}
-              checked={mode === value}
-              onChange={() => setMode(value)}
-            />
-            {value === 'markdown' ? t('markdownViewRendered') : t('markdownViewPlain')}
-          </label>
-        ))}
-      </div>
+      {/* A pair of toggle buttons, the current mode the pressed one;
+          `allowEmpty` off so a click on it cannot leave neither view. */}
+      <SelectButton
+        aria-label={t('markdownViewMode')}
+        className="markdown-view-modes"
+        value={mode}
+        allowEmpty={false}
+        options={[
+          { label: t('markdownViewRendered'), value: 'markdown' },
+          { label: t('markdownViewPlain'), value: 'plain' },
+        ]}
+        onChange={(event) => {
+          if (event.value) setMode(event.value as MarkdownMode)
+        }}
+        pt={{ button: { style: { padding: '2px 8px', fontSize: 11 } } }}
+      />
       {mode === 'markdown' ? (
         <div className="markdown-body" data-testid="markdown-rendered">
           <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>{text}</Markdown>

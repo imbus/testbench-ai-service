@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { Message } from 'primereact/message'
 import { NavRail } from './components/NavRail'
 import { PendingBanner } from './components/PendingBanner'
 import { RestartBanner } from './components/RestartBanner'
@@ -92,16 +93,15 @@ export function App() {
         {session.is_admin && <PendingBanner onIssues={setIssues} />}
         <RestartBanner fields={restartFields} />
         {!session.is_admin && (
-          <div
-            style={{
-              padding: '8px var(--space-4)',
-              fontSize: 13,
-              background: 'var(--color-surface)',
-              borderBottom: '1px solid var(--color-divider)',
-            }}
-          >
-            {t('readOnly')}
-          </div>
+          // The same full-width `Message` strip as RestartBanner, and for the
+          // same reason a `status` rather than Message's own `alert`.
+          <Message
+            severity="info"
+            role="status"
+            className="banner"
+            style={{ borderColor: 'var(--color-divider)', padding: '8px var(--space-4)' }}
+            text={t('readOnly')}
+          />
         )}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
           <NavRail

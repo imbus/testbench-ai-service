@@ -44,6 +44,7 @@ import type { CodeEditorHandle } from '../CodeEditor'
 import type { LintError, MessageRole, MessageSource, PromptMessageDoc } from '../../api/types'
 import type { Lang } from '../../i18n'
 import { i18n } from '../../i18n'
+import { chooseOption, dropdownValue } from '../../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -104,7 +105,7 @@ describe('MessagePane', () => {
 
   it('emits a role change', async () => {
     const { onRole } = setup()
-    await userEvent.selectOptions(screen.getByLabelText(/role/i), 'assistant')
+    await chooseOption(userEvent.setup(), /role/i, 'role: assistant')
     expect(onRole).toHaveBeenCalledWith('assistant')
   })
 
@@ -180,7 +181,7 @@ describe('MessagePane', () => {
 
   it('offers the source toggle and reports a switch', async () => {
     const { onSource } = setup({ message: inline('x') })
-    await userEvent.selectOptions(screen.getByLabelText('Source'), 'file')
+    await chooseOption(userEvent.setup(), 'Source', 'Separate file')
     expect(onSource).toHaveBeenCalledWith('file')
   })
 
@@ -254,9 +255,13 @@ describe('MessagePane', () => {
   it('inserts the chosen variable through the editor handle, then resets the picker', async () => {
     const onContent = vi.fn()
     setup({ onContent, message: inline('Hi '), insertable: ['agent.defect'] })
-    await userEvent.selectOptions(screen.getByLabelText('Insert variable…'), 'agent.defect')
+    // Prime also names the dropdown's trigger after the placeholder, which
+    // here is the label's own text: the input is the labelled control.
+    const picker = () => screen.getByLabelText('Insert variable…', { selector: 'input' })
+    await chooseOption(userEvent.setup(), picker(), 'agent.defect')
     expect(onContent).toHaveBeenCalledWith('Hi {{ agent.defect }}')
-    expect(screen.getByLabelText('Insert variable…')).toHaveValue('')
+    // Back to the placeholder: nothing stays picked.
+    expect(dropdownValue(picker())).toBe('Insert variable…')
   })
 
   it('offers no variable picker when read-only', () => {

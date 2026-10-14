@@ -1,5 +1,11 @@
 import { lastSegment } from '../api/paths'
 import { useEffect, useState } from 'react'
+import { Button } from 'primereact/button'
+import { Dropdown } from 'primereact/dropdown'
+import { InputSwitch } from 'primereact/inputswitch'
+import { InputText } from 'primereact/inputtext'
+import { InputTextarea } from 'primereact/inputtextarea'
+import { Message } from 'primereact/message'
 import { useTranslation } from 'react-i18next'
 import type { FieldSpec } from '../screens/fields'
 import { useDraft } from '../state/draft'
@@ -108,76 +114,59 @@ export function Field({
     draft.setValue(spec.key, parse(raw))
   }
 
+  // Every control reports the issue the same way: Prime's `invalid` for the
+  // red border, `aria-invalid`/`aria-describedby` for assistive tech.
+  const invalidProps = {
+    invalid: issue ? true : undefined,
+    'aria-invalid': issue ? true : undefined,
+    'aria-describedby': issue ? issueId : undefined,
+  }
+
   const control = () => {
     switch (spec.type) {
       case 'bool':
         return (
-          <button
-            type="button"
-            role="switch"
-            id={domId}
-            aria-checked={value === true}
+          // Prime puts `role="switch"` on the native checkbox inside, which
+          // `inputId` makes the label's target; the aria props land there too.
+          <InputSwitch
+            inputId={domId}
+            checked={value === true}
             aria-labelledby={`${domId}-label`}
-            aria-invalid={issue ? true : undefined}
-            aria-describedby={issue ? issueId : undefined}
-            onClick={() => draft.setValue(spec.key, value !== true)}
-            style={{
-              width: 36,
-              height: 20,
-              borderRadius: 10,
-              border: '1px solid var(--color-divider)',
-              background: value === true ? 'var(--color-accent)' : 'var(--color-surface)',
-              position: 'relative',
-              cursor: 'pointer',
-              padding: 0,
-            }}
-          >
-            <span
-              style={{
-                position: 'absolute',
-                top: 2,
-                left: value === true ? 18 : 2,
-                width: 14,
-                height: 14,
-                borderRadius: 7,
-                background: value === true ? '#fff' : 'var(--color-text)',
-                transition: 'left .15s',
-              }}
-            />
-          </button>
+            {...invalidProps}
+            onChange={() => draft.setValue(spec.key, value !== true)}
+          />
         )
       case 'select':
         return (
-          <select
-            className="input"
-            id={domId}
-            aria-invalid={issue ? true : undefined}
-            aria-describedby={issue ? issueId : undefined}
+          <Dropdown
+            inputId={domId}
+            {...invalidProps}
             value={asText(value)}
-            onChange={(event) =>
+            // Named explicitly: without `optionValue` Prime treats the blank
+            // option's empty value as "no value" and hands back the whole
+            // option object instead.
+            optionLabel="label"
+            optionValue="value"
+            options={[
               // The blank option is the way back to no value at all, which is
               // what makes the prompt's own default_variant apply again.
-              event.target.value === ''
+              ...(spec.allowEmpty ? [{ label: '—', value: '' }] : []),
+              ...(spec.options ?? []).map((option) => ({ label: option, value: option })),
+            ]}
+            onChange={(event) =>
+              event.value === ''
                 ? draft.unsetValue(spec.key)
-                : draft.setValue(spec.key, event.target.value)
+                : draft.setValue(spec.key, event.value)
             }
-          >
-            {spec.allowEmpty && <option value="">—</option>}
-            {(spec.options ?? []).map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
+            style={{ width: '100%' }}
+          />
         )
       case 'number':
         return (
-          <input
-            className="input"
+          <InputText
             id={domId}
             type="number"
-            aria-invalid={issue ? true : undefined}
-            aria-describedby={issue ? issueId : undefined}
+            {...invalidProps}
             placeholder={placeholder}
             value={inputText}
             onChange={(event) =>
@@ -189,29 +178,26 @@ export function Field({
                 return Number.isNaN(parsed) ? text : parsed
               })
             }
+            style={{ width: '100%' }}
           />
         )
       case 'textarea':
         return (
-          <textarea
-            className="input"
+          <InputTextarea
             id={domId}
             rows={4}
-            aria-invalid={issue ? true : undefined}
-            aria-describedby={issue ? issueId : undefined}
+            {...invalidProps}
             placeholder={placeholder}
             value={inputText}
             onChange={(event) => commit(event.target.value, (text) => text)}
-            style={{ resize: 'vertical', fontFamily: 'inherit' }}
+            style={{ width: '100%', fontFamily: 'inherit' }}
           />
         )
       case 'list':
         return (
-          <input
-            className="input"
+          <InputText
             id={domId}
-            aria-invalid={issue ? true : undefined}
-            aria-describedby={issue ? issueId : undefined}
+            {...invalidProps}
             placeholder={placeholder}
             value={text ?? inputText}
             onChange={(event) => {
@@ -224,19 +210,19 @@ export function Field({
                   .filter((entry) => entry !== ''),
               )
             }}
+            style={{ width: '100%' }}
           />
         )
       default:
         return (
-          <input
-            className="input"
+          <InputText
             id={domId}
             type="text"
-            aria-invalid={issue ? true : undefined}
-            aria-describedby={issue ? issueId : undefined}
+            {...invalidProps}
             placeholder={placeholder}
             value={inputText}
             onChange={(event) => commit(event.target.value, (text) => text)}
+            style={{ width: '100%' }}
           />
         )
     }
@@ -296,24 +282,24 @@ export function Field({
               already "inheriting", and offering it again would write the same
               null twice. */}
           {inheritedFrom !== undefined && overridden && (
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 11, padding: '0 6px', whiteSpace: 'nowrap' }}
+              text
+              size="small"
+              label={t('clearOverride')}
+              style={{ whiteSpace: 'nowrap', flex: 'none' }}
               onClick={() => draft.unsetValue(spec.key)}
-            >
-              {t('clearOverride')}
-            </button>
+            />
           )}
           {changed && (
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost"
-              style={{ fontSize: 11, padding: '0 6px', whiteSpace: 'nowrap' }}
+              text
+              size="small"
+              label={t('revert')}
+              style={{ whiteSpace: 'nowrap', flex: 'none' }}
               onClick={() => draft.revert(spec.key)}
-            >
-              {t('revert')}
-            </button>
+            />
           )}
         </div>
         {inheriting && (
@@ -322,9 +308,9 @@ export function Field({
           </span>
         )}
         {issue && (
-          <span id={issueId} role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
-            {issue}
-          </span>
+          // `Message` carries role="alert"; the id is what `aria-describedby`
+          // on the control points at.
+          <Message id={issueId} severity="error" text={issue} style={{ alignSelf: 'flex-start' }} />
         )}
       </div>
     </div>

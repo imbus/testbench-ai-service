@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { createMemoryRouter, RouterProvider, useParams } from 'react-router-dom'
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PromptTreeResponse } from '../../api/types'
 import { EditorToolbar } from './EditorToolbar'
 import { i18n } from '../../i18n'
+import { chooseOption, dropdownValue, openDropdown } from '../../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -57,17 +58,20 @@ function setup(overrides: Partial<Parameters<typeof EditorToolbar>[0]> = {}) {
 describe('EditorToolbar', () => {
   it('offers only prompts that parse, with the current one selected', async () => {
     setup()
-    const agent = await screen.findByLabelText('Agent')
-    await within(agent).findByRole('option', { name: 'Explainer' })
-    expect(within(agent).queryByRole('option', { name: 'broken' })).not.toBeInTheDocument()
-    expect(agent).toHaveValue('explainer')
+    // The tree loads after the first render; the label tracks it.
+    await waitFor(() => expect(dropdownValue('Agent')).toBe('Explainer'))
+    const agents = await openDropdown(userEvent.setup(), 'Agent')
+    expect(within(agents).getByRole('option', { name: 'Explainer', hidden: true })).toBeInTheDocument()
+    expect(within(agents).queryByRole('option', { name: 'broken', hidden: true })).not.toBeInTheDocument()
   })
 
   it("switching language falls back to that language's first prompt", async () => {
     setup()
-    const language = await screen.findByLabelText('Language')
-    await within(language).findByRole('option', { name: 'en' })
-    await userEvent.selectOptions(language, 'en')
+    const user = userEvent.setup()
+    const languages = await openDropdown(user, 'Language')
+    await within(languages).findByRole('option', { name: 'en', hidden: true })
+    await user.keyboard('{Escape}')
+    await chooseOption(user, 'Language', 'en')
     expect(await screen.findByTestId('params')).toHaveTextContent('en/reviewer')
   })
 
@@ -80,7 +84,7 @@ describe('EditorToolbar', () => {
 
   it('switches layout', async () => {
     const props = setup()
-    await userEvent.click(screen.getByLabelText('Tabs'))
+    await userEvent.click(screen.getByRole('button', { name: 'Tabs' }))
     expect(props.onLayout).toHaveBeenCalledWith('tabs')
   })
 

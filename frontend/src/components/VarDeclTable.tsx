@@ -1,5 +1,10 @@
 import { useState } from 'react'
-
+import { Button } from 'primereact/button'
+import { Dropdown } from 'primereact/dropdown'
+import { InputSwitch } from 'primereact/inputswitch'
+import { InputText } from 'primereact/inputtext'
+import { InputTextarea } from 'primereact/inputtextarea'
+import { Message } from 'primereact/message'
 import { useTranslation } from 'react-i18next'
 import type { PromptVarDecl, VarValueType } from '../api/types'
 
@@ -58,13 +63,12 @@ export function DefaultValueControl({
 
   if (decl.value_type === 'number') {
     return (
-      <input
-        className="input"
+      <InputText
         id={id}
         type="number"
         aria-labelledby={labelId}
         disabled={readOnly}
-        value={typeof value === 'number' ? value : ''}
+        value={typeof value === 'number' ? String(value) : ''}
         onChange={(event) => {
           const raw = event.target.value
           if (raw.trim() === '') {
@@ -74,19 +78,20 @@ export function DefaultValueControl({
           const parsed = Number(raw)
           onChange(Number.isNaN(parsed) ? raw : parsed)
         }}
+        style={{ width: '100%' }}
       />
     )
   }
 
   if (decl.value_type === 'text') {
     return (
-      <textarea
-        className="input"
+      <InputTextarea
         id={id}
         aria-labelledby={labelId}
         disabled={readOnly}
         value={typeof value === 'string' ? value : ''}
         onChange={(event) => onChange(event.target.value || null)}
+        style={{ width: '100%', fontFamily: 'inherit' }}
       />
     )
   }
@@ -94,41 +99,43 @@ export function DefaultValueControl({
   if (decl.value_type === 'enum') {
     const choices = decl.choices ?? []
     return (
-      <select
-        className="input"
-        id={id}
+      <Dropdown
+        inputId={id}
         aria-labelledby={labelId}
         disabled={readOnly}
         value={typeof value === 'string' ? value : ''}
-        onChange={(event) => onChange(event.target.value || null)}
-      >
-        <option value="">—</option>
-        {choices.map((choice) => (
-          <option key={choice} value={choice}>
-            {choice}
-          </option>
-        ))}
-      </select>
+        // Named explicitly, as in Field.tsx: without `optionValue` Prime
+        // treats the blank option's empty value as "no value" and hands back
+        // the whole option object instead.
+        optionLabel="label"
+        optionValue="value"
+        options={[
+          { label: '—', value: '' },
+          ...choices.map((choice) => ({ label: choice, value: choice })),
+        ]}
+        onChange={(event) => onChange(event.value || null)}
+        style={{ width: '100%' }}
+      />
     )
   }
 
   return (
-    <input
-      className="input"
+    <InputText
       id={id}
       type="text"
       aria-labelledby={labelId}
       disabled={readOnly}
       value={typeof value === 'string' ? value : ''}
       onChange={(event) => onChange(event.target.value || null)}
+      style={{ width: '100%' }}
     />
   )
 }
 
 /**
- * A sliding on/off switch. Shares its look with Field.tsx's bool control via
- * the `.switch` class; the caption sits beside the track so the state reads
- * in words as well as position.
+ * An on/off switch, the same `InputSwitch` as Field.tsx's bool control; the
+ * caption sits beside the track so the state reads in words as well as
+ * position.
  */
 function Switch({
   id,
@@ -147,18 +154,15 @@ function Switch({
 }) {
   return (
     <span className="switch-row">
-      <button
-        type="button"
-        role="switch"
-        id={id}
-        aria-checked={checked}
+      {/* Prime puts `role="switch"` on the native checkbox inside, which
+          `inputId` makes the label's target; the aria props land there too. */}
+      <InputSwitch
+        inputId={id}
+        checked={checked}
         aria-labelledby={labelId}
         disabled={disabled}
-        className="switch"
-        onClick={onToggle}
-      >
-        <span className="switch-knob" />
-      </button>
+        onChange={onToggle}
+      />
       <span className="switch-caption" aria-hidden="true">
         {caption}
       </span>
@@ -214,31 +218,29 @@ function VarRow({
           />
         </span>
         {!readOnly && (
-          <button type="button" className="btn btn-ghost" onClick={onRemove}>
-            {t('remove')}
-          </button>
+          <Button type="button" text label={t('remove')} onClick={onRemove} />
         )}
       </div>
       <div className="var-card-grid">
         <div className="field var-card-wide">
           <label htmlFor={descriptionId}>{t('varDescription')}</label>
-          <input
-            className="input"
+          <InputText
             id={descriptionId}
             disabled={readOnly}
             value={decl.description ?? ''}
             onChange={(event) => onEdit({ ...decl, description: event.target.value || null })}
+            style={{ width: '100%' }}
           />
         </div>
         <div className="field">
           <label htmlFor={typeId}>{t('varType')}</label>
-          <select
-            className="input"
-            id={typeId}
+          <Dropdown
+            inputId={typeId}
             disabled={readOnly}
             value={decl.value_type}
+            options={VALUE_TYPES.map((type) => ({ label: type, value: type }))}
             onChange={(event) => {
-              const value_type = event.target.value as VarValueType
+              const value_type = event.value as VarValueType
               onEdit({
                 ...decl,
                 value_type,
@@ -247,25 +249,21 @@ function VarRow({
                 choices: value_type === 'enum' ? (decl.choices ?? []) : null,
               })
             }}
-          >
-            {VALUE_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type}
-              </option>
-            ))}
-          </select>
+            style={{ width: '100%' }}
+          />
         </div>
         {decl.value_type === 'enum' && (
           <div className="field">
             <label htmlFor={choicesId}>{t('varChoices')}</label>
-            <input
-              className="input"
+            <InputText
               id={choicesId}
               placeholder={t('varChoicesPlaceholder')}
               disabled={readOnly}
+              invalid={invalidEnum || undefined}
               aria-invalid={invalidEnum || undefined}
               value={(decl.choices ?? []).join(', ')}
               onChange={(event) => onEdit({ ...decl, choices: parseChoices(event.target.value) })}
+              style={{ width: '100%' }}
             />
           </div>
         )}
@@ -283,9 +281,12 @@ function VarRow({
         </div>
       </div>
       {invalidEnum && (
-        <span role="alert" className="var-card-error">
-          {t('varEnumNeedsChoices')}
-        </span>
+        // `Message` carries role="alert".
+        <Message
+          severity="error"
+          text={t('varEnumNeedsChoices')}
+          style={{ alignSelf: 'flex-start' }}
+        />
       )}
     </div>
   )
@@ -330,16 +331,14 @@ export function VarDeclTable({
             setPending('')
           }}
         >
-          <input
-            className="input"
+          <InputText
             aria-label={t('varNewName')}
             placeholder={t('varNewName')}
             value={pending}
             onChange={(event) => setPending(event.target.value)}
+            style={{ flex: 1, minWidth: 0 }}
           />
-          <button type="submit" className="btn btn-secondary" disabled={!pending.trim()}>
-            {t('add')}
-          </button>
+          <Button type="submit" outlined label={t('add')} disabled={!pending.trim()} />
         </form>
       )}
     </div>

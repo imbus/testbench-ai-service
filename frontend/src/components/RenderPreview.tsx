@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { Button } from 'primereact/button'
+import { InputTextarea } from 'primereact/inputtextarea'
+import { Message } from 'primereact/message'
 import { DefaultValueControl } from './VarDeclTable'
 import { MarkdownView } from './MarkdownView'
 import { useRenderPrompt } from '../api/mutations'
@@ -121,14 +124,13 @@ export function RenderPreview({
         >
           <span>{t('renderVars')}</span>
           {Object.keys(varEdits).length > 0 && (
-            <button
+            <Button
               type="button"
-              className="btn btn-ghost"
+              text
+              label={t('renderVarsReset')}
               style={{ marginLeft: 'auto', fontSize: 11 }}
               onClick={() => setVarEdits({})}
-            >
-              {t('renderVarsReset')}
-            </button>
+            />
           )}
         </legend>
         {declEntries.length === 0 && (
@@ -170,9 +172,8 @@ export function RenderPreview({
         >
           agent_context
         </span>
-        <textarea
+        <InputTextarea
           id="render-context"
-          className="input"
           rows={8}
           style={{
             width: '100%',
@@ -186,26 +187,25 @@ export function RenderPreview({
       </div>
 
       <div>
-        <button
+        <Button
           type="button"
-          className="btn btn-ghost"
+          text
+          label={render.isPending ? t('rendering') : t('render')}
           disabled={render.isPending}
           onClick={handleRender}
-        >
-          {render.isPending ? t('rendering') : t('render')}
-        </button>
+        />
       </div>
 
       {parseError && (
-        <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {t('renderInvalidJson')}
-        </div>
+        <Message severity="error" text={t('renderInvalidJson')} style={{ fontSize: 12, justifyContent: 'flex-start' }} />
       )}
 
       {render.isError && (
-        <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {(render.error as Error)?.message}
-        </div>
+        <Message
+          severity="error"
+          text={(render.error as Error)?.message}
+          style={{ fontSize: 12, justifyContent: 'flex-start' }}
+        />
       )}
 
       {render.data && (
@@ -225,9 +225,11 @@ export function RenderPreview({
               </div>
               {message.content && <MarkdownView text={message.content} />}
               {message.error && (
-                <div role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
-                  {message.error}
-                </div>
+                <Message
+                  severity="error"
+                  text={message.error}
+                  style={{ fontSize: 11, justifyContent: 'flex-start' }}
+                />
               )}
             </div>
           ))}

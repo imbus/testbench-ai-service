@@ -19,6 +19,7 @@ import type {
 } from '../api/types'
 import { i18n, type Lang } from '../i18n'
 import { PromptEditor } from './PromptEditor'
+import { chooseOption, dropdownValue, openDropdown } from '../test/prime'
 
 // CM6 needs DOM APIs jsdom lacks; the wrapper holds no logic (Task 10/13's
 // ruling), so replacing it with a textarea costs no coverage. Mocked at the
@@ -333,6 +334,12 @@ const openVariantSettings = (name: string) =>
 const openMessage = (label: RegExp) =>
   userEvent.click(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: label }))
 
+/** Pick an agent in the toolbar, once the prompt tree has loaded its options. */
+async function pickAgent(name: string) {
+  const list = await openDropdown(userEvent.setup(), 'Agent')
+  await userEvent.click(await within(list).findByRole('option', { name, hidden: true }))
+}
+
 /** The tree's message buttons for the selected variant (each starts with its role tag). */
 function treeMessages() {
   return within(screen.getByTestId('prompt-tree')).queryAllByRole('button', {
@@ -378,7 +385,7 @@ describe('loading a document', () => {
     expect(screen.getByLabelText('Summary')).toHaveValue('Explains defects')
     expect(header().getByLabelText('Description')).toHaveValue('The full description')
     expect(screen.getByLabelText('Default model')).toHaveValue('gpt-5.5')
-    expect(screen.getByLabelText('Default variant')).toHaveValue('Thorough')
+    expect(dropdownValue('Default variant')).toBe('Thorough')
 
     expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Quick' })).toBeInTheDocument()
@@ -639,7 +646,7 @@ describe('saving', () => {
       expect(screen.getByLabelText('Default variant')).toHaveAttribute('aria-invalid', 'true'),
     )
 
-    await userEvent.selectOptions(screen.getByLabelText('Default variant'), 'Quick')
+    await chooseOption(userEvent.setup(), 'Default variant', 'Quick')
     expect(screen.getByLabelText('Default variant')).not.toHaveAttribute('aria-invalid')
   })
 
@@ -788,7 +795,7 @@ describe('variant controls', () => {
     // Added under a unique default name and opened in its settings pane, so
     // the operator renames it there.
     expect(screen.getByLabelText('Variant name')).toHaveValue('New variant')
-    expect(screen.getByLabelText('Variants')).toHaveValue('New variant')
+    expect(dropdownValue('Variants')).toBe('New variant')
   })
 
   it('removes the selected variant', async () => {
@@ -815,17 +822,17 @@ describe('variant controls', () => {
         : { ok: true, errors: [] }
     renderEditor({ lang: 'en' })
     await ready()
-    await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Variant settings: Thorough' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Tabs' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Variant settings: Thorough' }))
     await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true'),
+      expect(screen.getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true'),
     )
 
     await userEvent.click(within(screen.getByTestId('variant-actions')).getByRole('button', { name: /^remove$/i }))
-    expect(screen.getByRole('button', { name: /Quick/, pressed: false })).not.toHaveAttribute('aria-invalid')
+    expect(screen.getByRole('tab', { name: /Quick/, selected: false })).not.toHaveAttribute('aria-invalid')
 
-    await userEvent.click(screen.getByRole('radio', { name: 'Split' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Split' }))
     expect(treeMessages()).toHaveLength(1)
     expect(treeMessages()[0]).not.toHaveAttribute('aria-invalid')
   })
@@ -869,7 +876,7 @@ describe('variant controls', () => {
     // left 'Quick' named ''.
     expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
     await openMeta()
-    expect(screen.getByLabelText('Default variant')).toHaveValue('Thorough')
+    expect(dropdownValue('Default variant')).toBe('Thorough')
   })
 
   it('sets the selected variant model', async () => {
@@ -1139,13 +1146,13 @@ describe('linting', () => {
           : { ok: true, errors: [] }
       renderEditor({ lang: 'en' })
       await ready()
-      await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Tabs' }))
 
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
       await waitFor(() =>
-        expect(screen.getByRole('button', { name: /Explain/ })).toHaveAttribute('aria-invalid', 'true'),
+        expect(screen.getByRole('tab', { name: /Explain/ })).toHaveAttribute('aria-invalid', 'true'),
       )
-      await userEvent.click(screen.getByRole('button', { name: 'prompt.yaml' }))
+      await userEvent.click(screen.getByRole('tab', { name: 'prompt.yaml' }))
       expect(screen.getByTestId('prompt-header')).toBeInTheDocument()
       expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
     })
@@ -1381,7 +1388,7 @@ describe('workbench navigation', () => {
     await ready()
     await openVariantSettings('Thorough')
     await userEvent.type(screen.getByLabelText('Variant name'), 'X')
-    expect(screen.getByLabelText('Variants')).toHaveValue('ThoroughX')
+    expect(dropdownValue('Variants')).toBe('ThoroughX')
     expect(tree().getByRole('button', { name: 'ThoroughX' })).toHaveAttribute('aria-expanded', 'true')
   })
 
@@ -1390,12 +1397,10 @@ describe('workbench navigation', () => {
     await ready()
     await openMeta()
     await userEvent.type(screen.getByLabelText('Summary'), '!')
-    const agent = screen.getByLabelText('Agent')
-    await within(agent).findByRole('option', { name: 'Other' })
-    await userEvent.selectOptions(agent, 'other')
+    await pickAgent('Other')
     expect(await screen.findByRole('heading', { name: /unsaved changes/i })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
-    expect(screen.getByLabelText('Agent')).toHaveValue('explainer')
+    expect(dropdownValue('Agent')).toBe('Explainer')
     expect(screen.getByLabelText('Summary')).toHaveValue('Explains defects!')
   })
 
@@ -1405,12 +1410,10 @@ describe('workbench navigation', () => {
     // 'Quick' exists in both documents, so a selection kept by name would
     // survive the switch; 'Deep' is the new document's default, not its first.
     await userEvent.click(tree().getByRole('button', { name: 'Quick' }))
-    expect(screen.getByLabelText('Variants')).toHaveValue('Quick')
-    const agent = screen.getByLabelText('Agent')
-    await within(agent).findByRole('option', { name: 'Other' })
-    await userEvent.selectOptions(agent, 'other')
+    expect(dropdownValue('Variants')).toBe('Quick')
+    await pickAgent('Other')
     await waitFor(() => expect(tree().getByRole('button', { name: 'Deep' })).toBeInTheDocument())
-    expect(screen.getByLabelText('Variants')).toHaveValue('Deep')
+    expect(dropdownValue('Variants')).toBe('Deep')
     expect(tree().getByRole('button', { name: /Other deep/ })).toHaveAttribute('aria-current', 'true')
   })
 
@@ -1456,23 +1459,23 @@ describe('the Tabs layout', () => {
   it('replaces the tree with a tab strip, and persists across a reload', async () => {
     const first = renderEditor({ lang: 'en' })
     await ready()
-    await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Tabs' }))
     expect(screen.queryByTestId('prompt-tree')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'prompt.yaml' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('tab', { name: 'prompt.yaml' })).toHaveAttribute('aria-selected', 'false')
 
     first.unmount()
     renderEditor({ lang: 'en' })
     await ready()
-    expect(screen.getByRole('radio', { name: 'Tabs' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Tabs' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByTestId('prompt-tree')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'prompt.yaml' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'prompt.yaml' })).toBeInTheDocument()
   })
 
   it('opens the variant settings from the tab strip', async () => {
     renderEditor({ lang: 'en' })
     await ready()
-    await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Variant settings: Thorough' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Tabs' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Variant settings: Thorough' }))
     expect(screen.getByTestId('variant-actions')).toBeInTheDocument()
   })
 
@@ -1480,10 +1483,10 @@ describe('the Tabs layout', () => {
     docBody = { ...DOC, variants: [{ ...DOC.variants[0], messages: [] }, DOC.variants[1]] }
     renderEditor({ lang: 'en' })
     await ready()
-    await userEvent.click(screen.getByRole('radio', { name: 'Tabs' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Tabs' }))
     expect(screen.getByTestId('variant-actions')).toBeInTheDocument()
     expect(screen.getByText('This variant has no messages.')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Variant settings: Thorough' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('tab', { name: 'Variant settings: Thorough' })).toHaveAttribute('aria-selected', 'true')
   })
 })
 

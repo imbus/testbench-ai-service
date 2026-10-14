@@ -1,5 +1,10 @@
 import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Button } from 'primereact/button'
+import { Dropdown } from 'primereact/dropdown'
+import { InputText } from 'primereact/inputtext'
+import { Message } from 'primereact/message'
+import { Tag } from 'primereact/tag'
 import { useTestPrompt } from '../api/mutations'
 import { useModels, useProjects } from '../api/queries'
 import type { PromptMessageDoc } from '../api/types'
@@ -19,7 +24,7 @@ const CUSTOM = '__custom__'
  *
  * The model picker offers the catalogue (`GET /models`) but a model missing
  * from it must stay reachable: its "Other model…" entry reveals a free-text
- * `<input>` bound to the same state the picker writes, so typing a model the
+ * input bound to the same state the picker writes, so typing a model the
  * catalogue has never heard of still reaches the request. The input also
  * shows on its own whenever the chosen model is not a catalogue entry (the
  * catalogue is empty, failed, or arrived after the operator typed). There is
@@ -67,6 +72,16 @@ export function TestRunPanel({
     test.mutate({ messages, vars, agent_context: agentContext, model, project })
   }
 
+  // One option group per provider, then a label-less group holding only
+  // "Other model…": Prime's grouped Dropdown takes groups all the way down.
+  const modelGroups = [
+    ...providers.map((provider) => ({
+      label: provider.key_present ? provider.provider : `${provider.provider} (${t('testRunNoKey')})`,
+      items: provider.models.map((entry) => ({ label: `${entry.id} · ${entry.routing}`, value: entry.id })),
+    })),
+    { label: '', items: [{ label: t('testRunModelCustom'), value: CUSTOM }] },
+  ]
+
   const pickModel = (value: string) => {
     if (value === CUSTOM) {
       setCustomPicked(true)
@@ -86,41 +101,24 @@ export function TestRunPanel({
         <div className="field">
           <label htmlFor="testrun-model">{t('testRunModel')}</label>
           {hasCatalogue && (
-            <select
-              id="testrun-model"
-              className="input"
-              value={custom ? CUSTOM : selectedEntry ? model : ''}
-              onChange={(event) => pickModel(event.target.value)}
-            >
-              <option value="" disabled>
-                {t('testRunModelPlaceholder')}
-              </option>
-              {providers.map((provider) => (
-                <optgroup
-                  key={provider.provider}
-                  label={
-                    provider.key_present
-                      ? provider.provider
-                      : `${provider.provider} (${t('testRunNoKey')})`
-                  }
-                >
-                  {provider.models.map((entry) => (
-                    <option key={entry.id} value={entry.id}>
-                      {`${entry.id} · ${entry.routing}`}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-              <option value={CUSTOM}>{t('testRunModelCustom')}</option>
-            </select>
+            <Dropdown
+              inputId="testrun-model"
+              // `null` until something is picked shows the placeholder.
+              value={custom ? CUSTOM : selectedEntry ? model : null}
+              options={modelGroups}
+              optionGroupLabel="label"
+              optionGroupChildren="items"
+              placeholder={t('testRunModelPlaceholder')}
+              onChange={(event) => pickModel(event.value as string)}
+            />
           )}
           {custom && (
-            <input
+            <InputText
               // Without a catalogue this is the only control, so it takes the
               // label's `htmlFor`; beside the picker it names itself.
               id={hasCatalogue ? 'testrun-model-input' : 'testrun-model'}
               ref={modelInput}
-              className="input testrun-model-id"
+              className="testrun-model-id"
               aria-label={hasCatalogue ? t('testRunModelId') : undefined}
               placeholder={t('testRunModelIdPlaceholder')}
               value={model}
@@ -130,39 +128,31 @@ export function TestRunPanel({
           )}
           {selectedEntry && selectedProvider && (
             <div className="testrun-chips">
-              <span className="testrun-chip">{selectedProvider.provider}</span>
+              <Tag severity="secondary" value={selectedProvider.provider} />
               {selectedEntry.routing === 'fallback' && (
-                <span className="testrun-chip testrun-chip-warn">{t('testRunFallbackHint')}</span>
+                <Tag severity="warning" value={t('testRunFallbackHint')} />
               )}
-              {!selectedProvider.key_present && (
-                <span className="testrun-chip testrun-chip-warn">{t('testRunNoKey')}</span>
-              )}
+              {!selectedProvider.key_present && <Tag severity="warning" value={t('testRunNoKey')} />}
             </div>
           )}
         </div>
 
         <div className="field">
           <label htmlFor="testrun-project">{t('testRunProject')}</label>
-          <select
-            id="testrun-project"
-            className="input"
+          <Dropdown
+            inputId="testrun-project"
             value={project ?? ''}
-            onChange={(event) => setProject(event.target.value || null)}
-          >
-            <option value="">{t('testRunProjectGlobal')}</option>
-            {(projects.data?.projects ?? []).map((entry) => (
-              <option key={entry.name} value={entry.name}>
-                {entry.name}
-              </option>
-            ))}
-          </select>
+            options={[
+              { label: t('testRunProjectGlobal'), value: '' },
+              ...(projects.data?.projects ?? []).map((entry) => ({ label: entry.name, value: entry.name })),
+            ]}
+            onChange={(event) => setProject((event.value as string) || null)}
+          />
         </div>
       </div>
 
       <div className="testrun-actions">
-        <button type="button" className="btn btn-primary" disabled={!canRun} onClick={handleRun}>
-          {t('testRunGo')}
-        </button>
+        <Button type="button" label={t('testRunGo')} disabled={!canRun} onClick={handleRun} />
         {/* A sibling status note, not a swap of the button's own label --
             the button's accessible name must stay `t('testRunGo')` so it is
             still reachable by that name while a run is in flight. */}
@@ -183,29 +173,35 @@ export function TestRunPanel({
       </div>
 
       {test.isError && (
-        <div role="alert" className="testrun-error">
-          {(test.error as Error)?.message}
-        </div>
+        <Message
+          severity="error"
+          className="testrun-error"
+          text={(test.error as Error)?.message}
+          style={{ justifyContent: 'flex-start' }}
+        />
       )}
 
       {test.data && (
         <div className="testrun-result">
           <div className="testrun-chips">
-            <span className="testrun-chip">
+            <Tag severity="secondary" style={{ gap: 6 }}>
               <span className="testrun-chip-label">{t('testRunLatency')}</span>
               {test.data.latency_ms} ms
-            </span>
-            <span className="testrun-chip" title={t('testRunRoute')}>
+            </Tag>
+            <Tag severity="secondary" title={t('testRunRoute')} style={{ gap: 6 }}>
               <span className="testrun-chip-label">{t('testRunRoute')}</span>
               <code>
                 {test.data.resolved.provider} / {test.data.resolved.model}
               </code>
-            </span>
-            <span className="testrun-chip">
-              {test.data.resolved.credential_scope === 'project'
-                ? t('testRunScopeProject')
-                : t('testRunScopeGlobal')}
-            </span>
+            </Tag>
+            <Tag
+              severity="secondary"
+              value={
+                test.data.resolved.credential_scope === 'project'
+                  ? t('testRunScopeProject')
+                  : t('testRunScopeGlobal')
+              }
+            />
           </div>
           <div className="testrun-output">
             <MarkdownView text={test.data.text} />

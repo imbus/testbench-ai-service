@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { PromptDocument } from '../../api/types'
 import { MetaPane } from './MetaPane'
 import { i18n } from '../../i18n'
+import { chooseOption } from '../../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -60,7 +61,7 @@ describe('MetaPane', () => {
     render(<MetaPane draft={DOC} readOnly={false} defaultVariantIssue={null} onHeader={onHeader} />)
     await userEvent.type(screen.getByLabelText('Summary'), '!')
     expect(onHeader).toHaveBeenLastCalledWith('summary', 'Explains defects!')
-    await userEvent.selectOptions(screen.getByLabelText('Default variant'), 'Quick')
+    await chooseOption(userEvent.setup(), 'Default variant', 'Quick')
     expect(onHeader).toHaveBeenLastCalledWith('default_variant', 'Quick')
   })
 
