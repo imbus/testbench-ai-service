@@ -167,6 +167,8 @@ export type PromptMessageDoc = {
   file: string | null
   content: string
   readable: boolean
+  /** Client-only identity for editor tabs; assigned on load, stripped before saving. */
+  uid?: string
 }
 
 export type VarValueType = 'string' | 'text' | 'boolean' | 'number' | 'enum'

@@ -28,7 +28,7 @@ import { VarDeclTable } from '../components/VarDeclTable'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { MIN_PANE_HEIGHT, useEditorLayout, usePaneHeight } from '../state/editorLayout'
-import { isDirty, promptDraftReducer } from '../state/promptDraft'
+import { isDirty, newMessageUid, promptDraftReducer, withMessageUids, withoutMessageUids } from '../state/promptDraft'
 
 function emptyDocument(lang: string, agent: string): PromptDocument {
   return {
@@ -129,7 +129,7 @@ function toSaveRequest(doc: PromptDocument) {
     description: doc.description,
     default_model: doc.default_model,
     default_variant: doc.default_variant,
-    variants: doc.variants,
+    variants: withoutMessageUids(doc.variants),
   }
 }
 
@@ -196,6 +196,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const [draft, dispatch] = useReducer(promptDraftReducer, undefined, () =>
     emptyDocument(docLang, agentKey),
   )
+  const draftRef = useRef(draft)
+  draftRef.current = draft
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
   // What the centre pane shows. A message index is into the SELECTED
   // variant's own message list, like `diagnostics` below.
@@ -318,7 +320,13 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // no longer resolves still falls back safely (see `current` below).
   useEffect(() => {
     if (!document.data) return
-    const normalized = normalizeDocument(document.data, docLang, agentKey)
+    // Same route: the reload after a save. Its draft donates its uids by
+    // position, so the open tabs keep pointing at the same messages.
+    const sameRoute = originalRouteRef.current === `${docLang}/${agentKey}`
+    const normalized = withMessageUids(
+      normalizeDocument(document.data, docLang, agentKey),
+      sameRoute ? draftRef.current : null,
+    )
     originalRef.current = normalized
     originalRouteRef.current = `${docLang}/${agentKey}`
     dispatch({ type: 'reset', document: normalized })
@@ -566,12 +574,12 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
 
   const addVariant = () => {
     const name = uniqueVariantName(t('newVariantDefault'), draft.variants.map((v) => v.name))
-    dispatch({ type: 'addVariant', name })
+    dispatch({ type: 'addVariant', name, uid: newMessageUid() })
     openVariantSettings(name)
   }
 
   const addMessage = () => {
-    dispatch({ type: 'addMessage', variant: variantName })
+    dispatch({ type: 'addMessage', variant: variantName, uid: newMessageUid() })
     setSelection({ kind: 'message', index: messages.length })
   }
 
