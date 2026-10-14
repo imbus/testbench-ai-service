@@ -263,6 +263,32 @@ describe('RenderPreview', () => {
       expect(calls()).toHaveLength(0)
     })
 
+    it('waits for the pause after a return with unchanged inputs', async () => {
+      const { rerender } = renderPreview({ ...base, active: true })
+      await settle()
+      rerender(base)
+      rerender({ ...base, active: true })
+      await advance(0)
+      expect(calls()).toHaveLength(1)
+      fireEvent.change(screen.getByLabelText('tone'), { target: { value: 'casual' } })
+      await advance(499)
+      expect(calls()).toHaveLength(1)
+      await advance(1)
+      expect(calls()).toHaveLength(2)
+      await advance(1000)
+      expect(calls()).toHaveLength(2)
+    })
+
+    it('shows the JSON error, not a stuck "Rendering…", when the first attempt is refused', async () => {
+      const { rerender } = renderPreview(base)
+      fireEvent.change(screen.getByLabelText(/context/i), { target: { value: '{ nope' } })
+      rerender({ ...base, active: true })
+      await settle()
+      expect(calls()).toHaveLength(0)
+      expect(screen.getByText('The context is not valid JSON.')).toBeInTheDocument()
+      expect(screen.queryByText('Rendering…')).not.toBeInTheDocument()
+    })
+
     it('renders once on return when the inputs changed while away', async () => {
       const { rerender } = renderPreview({ ...base, active: true })
       await settle()

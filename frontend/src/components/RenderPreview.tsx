@@ -124,8 +124,9 @@ export function RenderPreview({
   const attemptedKey = useRef<string | null>(null)
   // Numbers each request; only the newest one may land on screen.
   const sequence = useRef(0)
-  // True from (re)activation until the first attempt after it: that one
-  // goes out at once, every later change waits for a pause.
+  // True from (re)activation until the effect's first active run after it:
+  // a render owed then goes out at once, every later change waits for a
+  // pause.
   const fresh = useRef(true)
 
   useEffect(() => {
@@ -170,8 +171,13 @@ export function RenderPreview({
       fresh.current = true
       return
     }
+    // Consumed before the unchanged-inputs return below: a return to the
+    // tab with nothing new to render must not leave the next keystroke
+    // free to skip the pause.
+    const wasFresh = fresh.current
+    fresh.current = false
     if (attemptedKey.current === inputKey) return
-    if (fresh.current) {
+    if (wasFresh) {
       attemptRef.current()
       return
     }
@@ -196,7 +202,10 @@ export function RenderPreview({
         {requestError && (
           <Message severity="error" text={requestError.message} style={{ fontSize: 12, justifyContent: 'flex-start' }} />
         )}
-        {!result && !requestError && (
+        {/* Only while a request is in flight or none was attempted yet: a
+            first attempt refused for invalid JSON sends nothing, and its
+            error is shown beside the textarea instead. */}
+        {!result && !requestError && (render.isPending || !parseError) && (
           <span className="text-muted" style={{ fontSize: 12 }}>
             {t('rendering')}
           </span>
