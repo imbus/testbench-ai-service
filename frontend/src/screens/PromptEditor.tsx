@@ -639,6 +639,15 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     editorRef.current?.insert(text)
   }
 
+  /** The sidebar's "new variable": declare it, then use it where the cursor is. */
+  const addVarFromSidebar = (key: string) => {
+    // `addVar` replaces a declaration wholesale, so an existing name is only
+    // inserted -- re-declaring it would reset its type, default and choices.
+    if (!(key in vars)) dispatch({ type: 'addVar', variant: variantName, key })
+    // The insert is a content edit, so it also keeps a preview tab.
+    insert(`{{ vars.${key} }}`)
+  }
+
   // Kept here rather than inline in `MetaPane`: only this screen owns the
   // 422 marker it clears.
   const setHeader = (
@@ -690,6 +699,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     onInsert: insert,
     onDeclare: declareUndeclared,
     onLint: () => void runLint(),
+    onAddVar: addVarFromSidebar,
   }
 
   // A message's editor model is named after its tab, so the key the pane

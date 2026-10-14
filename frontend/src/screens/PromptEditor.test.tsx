@@ -1551,6 +1551,34 @@ describe('editor tabs', () => {
   })
 })
 
+describe('creating a variable from the sidebar', () => {
+  const newVarField = () => within(screen.getByTestId('var-sidebar')).getByLabelText('New variable name')
+
+  it('declares it on the variant and inserts it at the cursor', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMessage(/Explain/)
+    await userEvent.type(newVarField(), 'audience{Enter}')
+    expect(screen.getByLabelText('user')).toHaveValue('Explain {{ agent.defect }}{{ vars.audience }}')
+
+    await openVariantSettings('Thorough')
+    expect(screen.getAllByTestId('var-row')).toHaveLength(2)
+  })
+
+  it('only inserts a name that is already declared, keeping its settings', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMessage(/Explain/)
+    await userEvent.type(newVarField(), 'tone{Enter}')
+    expect(screen.getByLabelText('user')).toHaveValue('Explain {{ agent.defect }}{{ vars.tone }}')
+
+    await openVariantSettings('Thorough')
+    expect(screen.getAllByTestId('var-row')).toHaveLength(1)
+    // A re-declare would have reset the default to null.
+    expect(within(screen.getByTestId('var-row')).getByDisplayValue('neutral')).toBeInTheDocument()
+  })
+})
+
 // Every test above switches to English to keep its English-text assertions
 // meaningful. This is the one that exercises the real German default.
 it('renders German labels by default', async () => {

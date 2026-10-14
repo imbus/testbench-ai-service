@@ -135,6 +135,7 @@ export const en = {
   varRequiredOff: 'optional',
   remove: 'Remove',
   varNewName: 'New variable name',
+  varNameInvalid: 'Use letters, digits and _ (not starting with a digit).',
   varEnumNeedsChoices: 'An enum variable needs at least one entry in choices.',
   messageRole: 'Role',
   moveUp: 'Move up',

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from 'primereact/button'
+import { InputText } from 'primereact/inputtext'
 import { Message } from 'primereact/message'
 import type { LintError } from '../../api/types'
 import { useTranslation } from 'react-i18next'
@@ -15,6 +16,45 @@ import { useTranslation } from 'react-i18next'
 export type LintState = { running: boolean; checking?: boolean; clean: boolean; error: string | null; errors: LintError[] }
 
 const caps = { fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' as const }
+
+/** What can follow `vars.` in a template: a Jinja attribute name. */
+const VAR_NAME = /^[A-Za-z_]\w*$/
+
+/**
+ * Declares a variable without leaving the editor. Only the name: type,
+ * description and default stay with the ⚙ variant settings, which this
+ * narrow column has no room for.
+ */
+function NewVar({ onAdd }: { onAdd: (name: string) => void }) {
+  const { t } = useTranslation()
+  const [name, setName] = useState('')
+  const key = name.trim()
+  const invalid = key !== '' && !VAR_NAME.test(key)
+  return (
+    <form
+      style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!key || invalid) return
+        onAdd(key)
+        setName('')
+      }}
+    >
+      <div style={{ display: 'flex', gap: 4 }}>
+        <InputText
+          aria-label={t('varNewName')}
+          aria-invalid={invalid || undefined}
+          placeholder={t('varNewName')}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          style={{ flex: 1, minWidth: 0, fontFamily: mono, fontSize: 12, padding: '2px 6px' }}
+        />
+        <Button type="submit" outlined label="+" aria-label={t('add')} title={t('add')} disabled={!key || invalid} style={{ padding: '0 8px', fontSize: 12 }} />
+      </div>
+      {invalid && <span className="text-muted" style={{ fontSize: 11 }}>{t('varNameInvalid')}</span>}
+    </form>
+  )
+}
 const mono = 'ui-monospace, Menlo, monospace'
 
 function VarButton({ name, label, type, used, disabled, onInsert }: { name: string; label?: string; type?: string; used: boolean; disabled: boolean; onInsert: () => void }) {
@@ -137,7 +177,7 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
 /**
  * The editor's right column: insertable variables and the syntax check.
  */
-export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, onInsert, onDeclare, onLint }: {
+export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, onInsert, onDeclare, onLint, onAddVar }: {
   agentVars: string[]
   /** Typed sample of the agent.* namespace; shown as a foldable field tree. */
   agentContext?: Record<string, unknown>
@@ -150,11 +190,18 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
   onInsert: (name: string) => void
   onDeclare: () => void
   onLint: () => void
+  /** Declares the variable (if new) and inserts it at the cursor. */
+  onAddVar: (name: string) => void
 }) {
   const { t } = useTranslation()
+  // Each in a row like `AgentField`'s: directly in this column, the button's
+  // `flex: 1` would stretch it vertically into the free space below.
   const list = (names: string[]) =>
     names.map((name) => (
-      <VarButton key={name} name={name} used={used.includes(name)} disabled={!canInsert} onInsert={() => onInsert(`{{ ${name} }}`)} />
+      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <span style={{ width: 12, flex: 'none' }} />
+        <VarButton name={name} used={used.includes(name)} disabled={!canInsert} onInsert={() => onInsert(`{{ ${name} }}`)} />
+      </div>
     ))
 
   const chrome = { width: 230, borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', padding: 12, overflow: 'auto' }
@@ -182,6 +229,8 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
         : list(agentVars)}
       <div className="text-muted" style={{ ...caps, marginTop: 8 }}>vars.* ({t('varsVariantScope')})</div>
       {list(declaredVars)}
+      {/* Creating a variable also inserts it, so it needs an editor that takes inserts. */}
+      {canInsert && <NewVar onAdd={onAddVar} />}
       {undeclared.length > 0 && (
         // `status`, not Prime's default `alert`: a notice about the draft,
         // not an error the operator has to stop for.

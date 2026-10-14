@@ -21,6 +21,7 @@ function setup(overrides: Partial<Parameters<typeof VarSidebar>[0]> = {}) {
     onInsert: vi.fn(),
     onDeclare: vi.fn(),
     onLint: vi.fn(),
+    onAddVar: vi.fn(),
     ...overrides,
   }
   render(<VarSidebar {...props} />)
@@ -55,6 +56,28 @@ describe('VarSidebar', () => {
   it('hides the declare button for a non-admin', () => {
     setup({ undeclared: ['depth'], canDeclare: false })
     expect(screen.queryByRole('button', { name: 'declare' })).not.toBeInTheDocument()
+  })
+
+  it('creates a variant variable from the vars.* section', async () => {
+    const props = setup()
+    const field = screen.getByLabelText('New variable name')
+    await userEvent.type(field, 'audience{Enter}')
+    expect(props.onAddVar).toHaveBeenCalledWith('audience')
+    expect(field).toHaveValue('')
+  })
+
+  it('refuses a name that cannot follow vars.', async () => {
+    const props = setup()
+    await userEvent.type(screen.getByLabelText('New variable name'), '1st name')
+    expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled()
+    expect(screen.getByText(/letters, digits and _/)).toBeInTheDocument()
+    await userEvent.keyboard('{Enter}')
+    expect(props.onAddVar).not.toHaveBeenCalled()
+  })
+
+  it('offers no new variable field when the editor cannot take an insert', () => {
+    setup({ canInsert: false })
+    expect(screen.queryByLabelText('New variable name')).not.toBeInTheDocument()
   })
 
   it('shows lint errors by line', () => {

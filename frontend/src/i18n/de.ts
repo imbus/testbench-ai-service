@@ -131,6 +131,7 @@ export const de = {
   varRequiredOff: 'optional',
   remove: 'Entfernen',
   varNewName: 'Neuer Variablenname',
+  varNameInvalid: 'Nur Buchstaben, Ziffern und _ (nicht mit einer Ziffer beginnen).',
   varEnumNeedsChoices: 'Eine Aufzählung benötigt mindestens einen Eintrag bei den Werten.',
   messageRole: 'Rolle',
   moveUp: 'Nach oben',
