@@ -238,7 +238,6 @@ export const de = {
   declareVars: 'deklarieren',
   lintLine: 'Zeile {{line}}: {{message}}',
   varsVariantScope: 'Variante',
-  varsStatus: '{{used}}/{{declared}} deklarierte Variablen genutzt · {{undeclared}} nicht deklariert',
   previewPane: 'Vorschau',
   resizePreviewPane: 'Höhe von Vorschau und Testlauf ändern',
   noMessages: 'Diese Variante hat keine Nachrichten.',

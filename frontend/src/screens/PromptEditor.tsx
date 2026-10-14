@@ -624,10 +624,10 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const alertStyle = { fontSize: 12, margin: '6px 16px', justifyContent: 'flex-start' }
 
   // The lint result for the open message -- the sidebar's lint block
-  // shows exactly this. "Clean" needs the open
-  // message checked (or, on the prompt.yaml / settings pane, every message)
-  // AND nothing flagged anywhere: a clean open message says nothing while
-  // any other message is still flagged.
+  // shows exactly this. "Clean" needs the open message checked (or, on the
+  // prompt.yaml / settings pane, every message) AND nothing flagged anywhere:
+  // a clean open message says nothing while any other message is still
+  // flagged.
   const lintState: LintState = {
     running: linting,
     checking: live.checking,

@@ -242,7 +242,6 @@ export const en = {
   declareVars: 'declare',
   lintLine: 'Line {{line}}: {{message}}',
   varsVariantScope: 'variant',
-  varsStatus: '{{used}}/{{declared}} declared vars used · {{undeclared}} undeclared',
   previewPane: 'Preview',
   resizePreviewPane: 'Resize preview and test run',
   noMessages: 'This variant has no messages.',
