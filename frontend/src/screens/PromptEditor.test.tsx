@@ -1242,8 +1242,9 @@ describe('sample vars for the render preview', () => {
     const preview = await openRender()
     await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
 
-    await waitFor(() => expect(renderCalls()).toHaveLength(1))
-    const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
+    // Opening the tab renders once by itself; the click is the second.
+    await waitFor(() => expect(renderCalls()).toHaveLength(2))
+    const body = JSON.parse(String((renderCalls().at(-1)![1] as RequestInit).body)) as {
       vars: Record<string, unknown>
     }
     expect(body.vars).toEqual({ tone: 'neutral', glossary: '' })
@@ -1280,8 +1281,9 @@ describe('sample vars for the render preview', () => {
     const preview = await openRender()
     await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
 
-    await waitFor(() => expect(renderCalls()).toHaveLength(1))
-    const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
+    // Opening the tab renders once by itself; the click is the second.
+    await waitFor(() => expect(renderCalls()).toHaveLength(2))
+    const body = JSON.parse(String((renderCalls().at(-1)![1] as RequestInit).body)) as {
       vars: Record<string, unknown>
     }
     expect(body.vars).toEqual({ tone: 'neutral', validate_output: false })
@@ -1316,8 +1318,9 @@ describe('sample vars for the render preview', () => {
     const preview = await openRender()
     await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
 
-    await waitFor(() => expect(renderCalls()).toHaveLength(1))
-    const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
+    // Opening the tab renders once by itself; the click is the second.
+    await waitFor(() => expect(renderCalls()).toHaveLength(2))
+    const body = JSON.parse(String((renderCalls().at(-1)![1] as RequestInit).body)) as {
       vars: Record<string, unknown>
     }
     expect(body.vars).toEqual({ tone: 'neutral' })
@@ -1561,8 +1564,9 @@ describe('editor tabs', () => {
     await ready()
     const preview = await openRender()
     await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
-    await waitFor(() => expect(renderCalls()).toHaveLength(1))
-    expect(String((renderCalls()[0][1] as RequestInit).body)).not.toContain('"uid"')
+    // Opening the tab renders once by itself; the click is the second.
+    await waitFor(() => expect(renderCalls()).toHaveLength(2))
+    for (const call of renderCalls()) expect(String((call[1] as RequestInit).body)).not.toContain('"uid"')
   })
 })
 
@@ -1627,6 +1631,38 @@ describe('the render tab', () => {
     expect(screen.getByTestId('render-preview')).toBeVisible()
     expect(within(pane).queryByTestId('render-preview')).not.toBeInTheDocument()
     expect(within(pane).getByTestId('test-run-panel')).toBeInTheDocument()
+  })
+})
+
+describe('the live render tab', () => {
+  it('renders on opening, without a click', async () => {
+    renderResponse = { messages: [{ role: 'user', content: 'Explain the crash', error: null }] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    expect(renderCalls()).toHaveLength(0)
+    const preview = await openRender()
+    expect(await preview.findByText('Explain the crash')).toBeInTheDocument()
+    expect(renderCalls()).toHaveLength(1)
+    expect(String((renderCalls()[0][1] as RequestInit).body)).not.toContain('"uid"')
+  })
+
+  it('shows the variables in the right column beside the output', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openRender()
+    const inputs = screen.getByTestId('render-inputs')
+    expect(within(inputs).getByTestId('render-vars')).toBeInTheDocument()
+    expect(within(inputs).getByLabelText('Context')).toBeInTheDocument()
+    expect(within(screen.getByTestId('render-output')).queryByTestId('render-vars')).not.toBeInTheDocument()
+  })
+
+  it('sends nothing while another tab is open', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMessage(/Explain/)
+    // Mounted behind the message tab, but idle.
+    expect(screen.getByTestId('render-preview')).not.toBeVisible()
+    expect(renderCalls()).toHaveLength(0)
   })
 })
 

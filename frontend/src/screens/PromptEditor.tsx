@@ -725,6 +725,9 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
       decls={vars}
       skeleton={agentContext}
       isAdmin={isAdmin}
+      // Live only on its own tab: kept mounted behind the others, it would
+      // otherwise re-render on every keystroke in a message.
+      active={current?.kind === 'render'}
     />
   )
 
@@ -805,9 +808,11 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         // The ▶ Render tab. Hidden rather than unmounted while another tab
         // is active, as it was in the bottom pane: hopping to a message and
         // back keeps the typed agent_context, var edits and last result.
+        // No padding or scroll of its own: the preview's two columns (output,
+        // inputs) each scroll and fill the full height, like editor + sidebar.
         <div
           data-testid="render-pane"
-          style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: '14px 24px', display: current?.kind === 'render' ? 'block' : 'none' }}
+          style={{ flex: 1, minWidth: 0, minHeight: 0, display: current?.kind === 'render' ? 'flex' : 'none' }}
         >
           {preview}
         </div>
