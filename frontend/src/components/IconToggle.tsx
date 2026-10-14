@@ -67,17 +67,3 @@ export const MatrixIcon = (
     <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
   </svg>
 )
-
-export const SplitIcon = (
-  <svg {...GLYPH}>
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M9 4v16M15 4v16" />
-  </svg>
-)
-
-export const TabsIcon = (
-  <svg {...GLYPH}>
-    <rect x="3" y="4" width="18" height="16" rx="2" />
-    <path d="M3 9h18M9 4v5M15 4v5" />
-  </svg>
-)

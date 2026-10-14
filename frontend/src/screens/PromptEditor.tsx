@@ -17,17 +17,15 @@ import { PaneResizer } from '../components/prompt/PaneResizer'
 import { PromptTree } from '../components/prompt/PromptTree'
 import { useLiveLint } from '../components/prompt/liveLint'
 import { messagePath, uniqueVariantName, type Selection } from '../components/prompt/selection'
-import { TabsLayout } from '../components/prompt/TabsLayout'
 import { undeclaredVars, usedTemplateVars } from '../components/prompt/templateVars'
 import { VariantPane } from '../components/prompt/VariantPane'
 import { VarSidebar, type LintState } from '../components/prompt/VarSidebar'
 import { RenderPreview } from '../components/RenderPreview'
 import { SavePromptDialog } from '../components/SavePromptDialog'
 import { TestRunPanel } from '../components/TestRunPanel'
-import { VarDeclTable } from '../components/VarDeclTable'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
-import { MIN_PANE_HEIGHT, useEditorLayout, usePaneHeight } from '../state/editorLayout'
+import { MIN_PANE_HEIGHT, usePaneHeight } from '../state/editorLayout'
 import { isDirty, newMessageUid, promptDraftReducer, withMessageUids, withoutMessageUids } from '../state/promptDraft'
 
 function emptyDocument(lang: string, agent: string): PromptDocument {
@@ -202,7 +200,6 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // What the centre pane shows. A message index is into the SELECTED
   // variant's own message list, like `diagnostics` below.
   const [selection, setSelection] = useState<Selection>({ kind: 'message', index: 0 })
-  const [layout, setLayout] = useEditorLayout()
   const [paneHeight, setPaneHeight] = usePaneHeight()
   const splitColumnRef = useRef<HTMLDivElement>(null)
   // The one open message's editor -- the sidebar inserts at its cursor.
@@ -626,8 +623,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
 
   const alertStyle = { fontSize: 12, margin: '6px 16px', justifyContent: 'flex-start' }
 
-  // The lint result for the open message -- the Split sidebar's lint block
-  // and the Tabs status bar both show exactly this. "Clean" needs the open
+  // The lint result for the open message -- the sidebar's lint block
+  // shows exactly this. "Clean" needs the open
   // message checked (or, on the prompt.yaml / settings pane, every message)
   // AND nothing flagged anywhere: a clean open message says nothing while
   // any other message is still flagged.
@@ -657,8 +654,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     onLint: () => void runLint(),
   }
 
-  // Built once and handed to whichever layout is active, so Split and Tabs
-  // share one wiring: the centre pane for `current`, the preview, the test run.
+  // Built once: the centre pane for `current`, the preview, the test run.
   const centre = (
     <>
       {current.kind === 'meta' && (
@@ -819,49 +815,6 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     </div>
   )
 
-  const tabs = (
-    <TabsLayout
-      messages={messages}
-      selection={current}
-      flagged={flagged}
-      readOnly={!isAdmin}
-      centre={centre}
-      variablesDrawer={
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <VarSidebar {...varSidebarProps} variant="drawer" />
-          {/* Declarations are edited here, as in the prototype -- except
-              while the centre already shows the variant settings pane, whose
-              own VarDeclTable is this same table: two copies would render
-              duplicate element ids (VarDeclTable derives them from the var
-              name) and two editors for one piece of state. */}
-          {selectedVariantObj && current.kind !== 'variant' && (
-            <VarDeclTable
-              vars={vars}
-              readOnly={!isAdmin}
-              onAdd={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
-              onEdit={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
-              onRemove={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}
-            />
-          )}
-        </div>
-      }
-      preview={preview}
-      testRun={testRun}
-      status={{
-        lint: lintState,
-        usedDeclared: used.filter((name) => declaredVars.includes(name)).length,
-        declared: declaredVars.length,
-        undeclared: undeclared.length,
-      }}
-      variantName={variantName}
-      onOpenMeta={() => setSelection({ kind: 'meta' })}
-      onOpenVariantSettings={() => openVariantSettings(variantName)}
-      onPickMessage={(index) => setSelection({ kind: 'message', index })}
-      onAddMessage={addMessage}
-      onLint={() => void runLint()}
-    />
-  )
-
   return (
     <div
       data-testid="prompt-editor"
@@ -878,8 +831,6 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         path={`prompts/${draft.file}`}
         variants={draft.variants.map((v) => v.name)}
         selectedVariant={variantName}
-        layout={layout}
-        onLayout={setLayout}
         onVariant={pickVariant}
         showSave={isAdmin}
         canSave={dirty && emptyEnumVariants.length === 0 && invalidJinja.length === 0}
@@ -917,7 +868,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         <Message severity="error" style={alertStyle} text={saveErrorMessage} />
       )}
 
-      {layout === 'tabs' ? tabs : split}
+      {split}
 
       {confirmOpen && (
         <SavePromptDialog

@@ -79,11 +79,6 @@ describe('VarSidebar', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('boom')
   })
 
-  it('renders no Lint button as the Tabs drawer (the status bar owns lint there)', () => {
-    setup({ variant: 'drawer' })
-    expect(screen.queryByRole('button', { name: /^lint$/i })).not.toBeInTheDocument()
-  })
-
   describe('with the agent context', () => {
     const agentContext = {
       test_case_set: '<str>',

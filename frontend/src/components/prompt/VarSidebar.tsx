@@ -135,12 +135,9 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
 }
 
 /**
- * The Split layout's right column: insertable variables and the syntax check.
- *
- * `variant="drawer"` is the Tabs layout's Variables drawer: no column chrome
- * (the drawer supplies its own) and no lint block (the status bar shows lint).
+ * The editor's right column: insertable variables and the syntax check.
  */
-export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, variant = 'column', onInsert, onDeclare, onLint }: {
+export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, onInsert, onDeclare, onLint }: {
   agentVars: string[]
   /** Typed sample of the agent.* namespace; shown as a foldable field tree. */
   agentContext?: Record<string, unknown>
@@ -150,7 +147,6 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
   canInsert: boolean
   canDeclare: boolean
   lint: LintState
-  variant?: 'column' | 'drawer'
   onInsert: (name: string) => void
   onDeclare: () => void
   onLint: () => void
@@ -161,10 +157,7 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
       <VarButton key={name} name={name} used={used.includes(name)} disabled={!canInsert} onInsert={() => onInsert(`{{ ${name} }}`)} />
     ))
 
-  const column = variant === 'column'
-  const chrome = column
-    ? { width: 230, borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', padding: 12, overflow: 'auto' }
-    : {}
+  const chrome = { width: 230, borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', padding: 12, overflow: 'auto' }
 
   return (
     <aside
@@ -206,20 +199,16 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
           }
         />
       )}
-      {column && (
-        <>
-          <div style={{ flex: 1 }} />
-          <Button type="button" text label={lint.running ? t('linting') : t('lint')} disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }} />
-          {lint.checking && !lint.running && <div className="text-muted">{t('lintChecking')}</div>}
-          {lint.error && <Message severity="error" text={lint.error} style={{ fontSize: 12, justifyContent: 'flex-start' }} />}
-          {/* `status`, not Prime's default `alert`: the editor's own marker
-              is already the alert for each of these lines. */}
-          {lint.errors.map((error, index) => (
-            <Message key={index} severity="error" role="status" text={t('lintLine', { line: error.line, message: error.message })} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />
-          ))}
-          {lint.clean && !lint.error && <Message severity="success" role="status" text={t('lintClean')} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />}
-        </>
-      )}
+      <div style={{ flex: 1 }} />
+      <Button type="button" text label={lint.running ? t('linting') : t('lint')} disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }} />
+      {lint.checking && !lint.running && <div className="text-muted">{t('lintChecking')}</div>}
+      {lint.error && <Message severity="error" text={lint.error} style={{ fontSize: 12, justifyContent: 'flex-start' }} />}
+      {/* `status`, not Prime's default `alert`: the editor's own marker
+          is already the alert for each of these lines. */}
+      {lint.errors.map((error, index) => (
+        <Message key={index} severity="error" role="status" text={t('lintLine', { line: error.line, message: error.message })} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />
+      ))}
+      {lint.clean && !lint.error && <Message severity="success" role="status" text={t('lintClean')} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />}
     </aside>
   )
 }

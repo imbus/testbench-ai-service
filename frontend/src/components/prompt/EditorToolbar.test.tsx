@@ -32,8 +32,8 @@ afterEach(() => vi.unstubAllGlobals())
 function setup(overrides: Partial<Parameters<typeof EditorToolbar>[0]> = {}) {
   const props = {
     path: 'prompts/de/explainer/prompt.yaml', variants: ['Thorough', 'Quick'], selectedVariant: 'Thorough',
-    layout: 'split' as const, canSave: true, showSave: true,
-    onVariant: vi.fn(), onLayout: vi.fn(), onSave: vi.fn(), ...overrides,
+    canSave: true, showSave: true,
+    onVariant: vi.fn(), onSave: vi.fn(), ...overrides,
   }
   function Screen() {
     const { lang = '', agent = '' } = useParams()
@@ -80,12 +80,6 @@ describe('EditorToolbar', () => {
     expect(screen.getByRole('button', { name: 'Previous variant' })).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Next variant' }))
     expect(props.onVariant).toHaveBeenCalledWith('Quick')
-  })
-
-  it('switches layout', async () => {
-    const props = setup()
-    await userEvent.click(screen.getByRole('button', { name: 'Tabs' }))
-    expect(props.onLayout).toHaveBeenCalledWith('tabs')
   })
 
   it('disables Save when there is nothing saveable', () => {

@@ -2,23 +2,19 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from 'primereact/button'
 import { Dropdown } from 'primereact/dropdown'
 import { usePromptTree } from '../../api/queries'
-import { IconToggle, SplitIcon, TabsIcon } from '../IconToggle'
 import { useTranslation } from 'react-i18next'
-import type { EditorLayout } from '../../state/editorLayout'
 
 const compact = { minHeight: 32, fontSize: 13 }
 
-export function EditorToolbar({ docLang, agentKey, path, variants, selectedVariant, layout, canSave, showSave, onVariant, onLayout, onSave }: {
+export function EditorToolbar({ docLang, agentKey, path, variants, selectedVariant, canSave, showSave, onVariant, onSave }: {
   docLang: string
   agentKey: string
   path: string
   variants: string[]
   selectedVariant: string
-  layout: EditorLayout
   canSave: boolean
   showSave: boolean
   onVariant: (name: string) => void
-  onLayout: (next: EditorLayout) => void
   onSave: () => void
 }): JSX.Element {
   const { t } = useTranslation()
@@ -53,14 +49,6 @@ export function EditorToolbar({ docLang, agentKey, path, variants, selectedVaria
       </div>
       <span className="text-muted" style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}>{path}</span>
       <div style={{ flex: 1 }} />
-      <IconToggle
-        value={layout}
-        options={[
-          { label: t('layoutSplit'), value: 'split', icon: SplitIcon },
-          { label: t('layoutTabs'), value: 'tabs', icon: TabsIcon },
-        ]}
-        onChange={onLayout}
-      />
       {showSave && <Button type="button" label={t('save')} disabled={!canSave} onClick={onSave} />}
     </div>
   )

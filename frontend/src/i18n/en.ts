@@ -226,8 +226,6 @@ export const en = {
   modelNewRouting: 'New routing',
   modelAdd: 'Add',
   modelRemove: 'Remove',
-  layoutSplit: 'Split',
-  layoutTabs: 'Tabs',
   promptLanguage: 'Language',
   promptAgent: 'Agent',
   prevVariant: 'Previous variant',
@@ -247,6 +245,5 @@ export const en = {
   varsStatus: '{{used}}/{{declared}} declared vars used · {{undeclared}} undeclared',
   previewPane: 'Preview',
   resizePreviewPane: 'Resize preview and test run',
-  drawerVariables: 'Variables',
   noMessages: 'This variant has no messages.',
 } as const

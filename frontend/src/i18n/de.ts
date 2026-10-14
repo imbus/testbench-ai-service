@@ -222,8 +222,6 @@ export const de = {
   modelNewRouting: 'Neue Anfrageform',
   modelAdd: 'Hinzufügen',
   modelRemove: 'Entfernen',
-  layoutSplit: 'Geteilt',
-  layoutTabs: 'Tabs',
   promptLanguage: 'Sprache',
   promptAgent: 'Agent',
   prevVariant: 'Vorherige Variante',
@@ -243,7 +241,6 @@ export const de = {
   varsStatus: '{{used}}/{{declared}} deklarierte Variablen genutzt · {{undeclared}} nicht deklariert',
   previewPane: 'Vorschau',
   resizePreviewPane: 'Höhe von Vorschau und Testlauf ändern',
-  drawerVariables: 'Variablen',
   noMessages: 'Diese Variante hat keine Nachrichten.',
 } as const
 
