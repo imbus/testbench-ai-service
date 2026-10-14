@@ -191,6 +191,7 @@ export const en = {
   openEditors: 'Open editors',
   closeTab: 'Close {{name}}',
   closeTabUnsaved: 'Close {{name}} (unsaved changes)',
+  openRender: 'Open render',
   noOpenEditor: 'Open a message, prompt.yaml or the variant settings from the tree.',
   save: 'Save',
   saving: 'Saving…',
@@ -244,6 +245,6 @@ export const en = {
   lintLine: 'Line {{line}}: {{message}}',
   varsVariantScope: 'variant',
   previewPane: 'Preview',
-  resizePreviewPane: 'Resize preview and test run',
+  resizePreviewPane: 'Resize test run',
   noMessages: 'This variant has no messages.',
 } as const

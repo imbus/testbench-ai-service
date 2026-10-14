@@ -19,7 +19,7 @@ const rowButton = { border: 0, background: 'transparent', color: 'inherit', font
  * A single click opens a row in the preview tab, a double click keeps it
  * open -- VS Code's explorer. The marked row is the active tab's.
  */
-export function PromptTree({ variants, selectedVariant, activeTab, flagged, invalidVariants = [], readOnly, onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onAddVariant, onAddMessage }: {
+export function PromptTree({ variants, selectedVariant, activeTab, flagged, invalidVariants = [], readOnly, onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onAddVariant, onAddMessage, onOpenRender }: {
   variants: PromptVariantDoc[]
   selectedVariant: string
   activeTab: TabId | null
@@ -33,6 +33,9 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
   onPickMessage: (index: number, pin: boolean) => void
   onAddVariant: () => void
   onAddMessage: () => void
+  /** Opens the variant's render preview tab. No handler, no row: the render
+   * endpoint is admin-gated, and the preview renders nothing without it. */
+  onOpenRender?: (pin: boolean) => void
 }) {
   const { t } = useTranslation()
   const files = [...new Set(variants.flatMap((v) => v.messages.filter((m) => m.source === 'file' && m.file).map((m) => m.file as string)))]
@@ -96,6 +99,19 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
             })}
             {open && !readOnly && (
               <Button type="button" text className="text-muted" label={t('addMessageShort')} onClick={onAddMessage} style={{ fontSize: 12, padding: '4px 14px 6px 34px', justifyContent: 'flex-start' }} />
+            )}
+            {/* Not gated on readOnly: rendering is not an edit. */}
+            {open && onOpenRender && (
+              <button
+                type="button"
+                aria-current={activeTab === 'render' || undefined}
+                onClick={() => onOpenRender(false)}
+                onDoubleClick={() => onOpenRender(true)}
+                style={{ ...rowButton, fontSize: 12, padding: '5px 14px 5px 34px', display: 'flex', gap: 6, alignItems: 'center', background: activeTab === 'render' ? 'var(--color-surface)' : 'transparent' }}
+              >
+                <span aria-hidden className="text-muted" style={{ fontSize: 10 }}>▶</span>
+                {t('render')}
+              </button>
             )}
           </div>
         )

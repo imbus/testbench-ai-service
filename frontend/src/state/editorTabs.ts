@@ -7,9 +7,10 @@ import type { PromptMessageDoc } from '../api/types'
  * Kept per variant: the editor always works on one variant, and switching
  * back to a variant restores the tabs it had. Message tabs are named by the
  * message's client-only `uid` (see `withMessageUids`), never its index, so a
- * reorder or delete never points a tab at a different message.
+ * reorder or delete never points a tab at a different message. `render` is
+ * the variant's render preview -- one per variant, like its settings.
  */
-export type TabId = 'meta' | 'variant' | `msg:${string}`
+export type TabId = 'meta' | 'variant' | 'render' | `msg:${string}`
 
 export type VariantTabs = {
   /** In opening order -- a reorder of the messages does not reorder tabs. */
@@ -75,7 +76,7 @@ export function visibleTabs(tabs: VariantTabs, valid: TabId[]): VariantTabs {
 }
 
 function validTabs(variant: TabsVariant): TabId[] {
-  return ['meta', 'variant', ...variant.messages.map(messageTabOf)]
+  return ['meta', 'variant', 'render', ...variant.messages.map(messageTabOf)]
 }
 
 function resolve(state: Record<string, VariantTabs>, variant: TabsVariant | undefined): VariantTabs {

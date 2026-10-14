@@ -187,6 +187,7 @@ export const de = {
   openEditors: 'Geöffnete Editoren',
   closeTab: '{{name}} schließen',
   closeTabUnsaved: '{{name}} schließen (ungespeicherte Änderungen)',
+  openRender: 'Rendern öffnen',
   noOpenEditor: 'Öffne eine Nachricht, prompt.yaml oder die Varianteneinstellungen im Baum.',
   save: 'Speichern',
   saving: 'Wird gespeichert…',
@@ -240,7 +241,7 @@ export const de = {
   lintLine: 'Zeile {{line}}: {{message}}',
   varsVariantScope: 'Variante',
   previewPane: 'Vorschau',
-  resizePreviewPane: 'Höhe von Vorschau und Testlauf ändern',
+  resizePreviewPane: 'Höhe des Testlaufs ändern',
   noMessages: 'Diese Variante hat keine Nachrichten.',
 } as const
 

@@ -124,6 +124,36 @@ describe('useEditorTabs', () => {
     expect(result.current.tabsFor({ ...A, messages: [...A.messages, msg('new')] }).active).toBe('msg:new')
   })
 
+  // The render preview is one tab per variant, like its settings; it has no
+  // message behind it, so it must survive the resolution that drops stale ones.
+  describe('the render tab', () => {
+    it('opens as the preview tab, or pinned', () => {
+      const { result } = renderHook(() => useEditorTabs())
+      act(() => result.current.update(A, (t) => openTab(t, 'render', false)))
+      expect(result.current.tabsFor(A)).toEqual(tabs(['render'], 'render', 'render'))
+      act(() => result.current.update(A, (t) => openTab(t, 'msg:a', true)))
+      act(() => result.current.update(A, (t) => openTab(t, 'render', true)))
+      expect(result.current.tabsFor(A)).toEqual(tabs(['render', 'msg:a'], 'render', null))
+    })
+
+    it('closes and hands over to its neighbour', () => {
+      const { result } = renderHook(() => useEditorTabs())
+      act(() => result.current.update(A, (t) => openTab(t, 'render', true)))
+      act(() => result.current.update(A, (t) => openTab(t, 'msg:b', true)))
+      act(() => result.current.update(A, (t) => openTab(t, 'render', false)))
+      act(() => result.current.update(A, (t) => closeTab(t, 'render')))
+      expect(result.current.tabsFor(A)).toEqual(tabs(['msg:a', 'msg:b'], 'msg:b', 'msg:a'))
+    })
+
+    it('is kept per variant', () => {
+      const B = { name: 'B', messages: [msg('x')] }
+      const { result } = renderHook(() => useEditorTabs())
+      act(() => result.current.update(A, (t) => openTab(t, 'render', true)))
+      expect(result.current.tabsFor(A).open).toEqual(['msg:a', 'render'])
+      expect(result.current.tabsFor(B).open).toEqual(['msg:x'])
+    })
+  })
+
   it('forgets the tabs of every variant on reset', () => {
     const { result } = renderHook(() => useEditorTabs())
     act(() => result.current.update(A, (t) => openTab(t, 'msg:b', true)))

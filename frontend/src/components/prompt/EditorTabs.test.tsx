@@ -77,4 +77,24 @@ describe('EditorTabs', () => {
     expect(screen.getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('tabindex', '0')
     expect(screen.getByRole('tab', { name: /prompt\.yaml/ })).toHaveAttribute('tabindex', '-1')
   })
+
+  it('renders a trailing slot after the tabs, outside the tablist', async () => {
+    const onOpen = vi.fn()
+    render(
+      <EditorTabs
+        tabs={TABS}
+        active="meta"
+        onActivate={vi.fn()}
+        onPin={vi.fn()}
+        onClose={vi.fn()}
+        trailing={<button type="button" onClick={onOpen}>Open render</button>}
+      />,
+    )
+    const button = screen.getByRole('button', { name: 'Open render' })
+    // Not one of the tabs: arrow keys and the tab count stay the tabs' own.
+    expect(screen.getByRole('tablist')).not.toContainElement(button)
+    expect(screen.getAllByRole('tab')).toHaveLength(3)
+    await userEvent.click(button)
+    expect(onOpen).toHaveBeenCalledOnce()
+  })
 })

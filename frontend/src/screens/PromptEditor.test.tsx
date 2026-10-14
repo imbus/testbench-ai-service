@@ -209,6 +209,8 @@ let planResult: { status: 200; body: PromptPlanResponse } | { status: 422; detai
 let lintResponder: (content: string) => { ok: boolean; errors: LintError[] }
 /** Set by a test to make `POST /prompts/lint` fail instead of answering. */
 let lintFailure: { status: number; detail: string } | null
+/** What `POST /prompts/render` answers. */
+let renderResponse: { messages: { role: string; content: string | null; error: string | null }[] }
 
 beforeEach(() => {
   docBody = DOC
@@ -224,6 +226,7 @@ beforeEach(() => {
   }
   lintResponder = () => ({ ok: true, errors: [] })
   lintFailure = null
+  renderResponse = { messages: [] }
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = (init?.method ?? 'GET').toUpperCase()
     if (url.startsWith('/admin/api/config')) return ok(CONFIG)
@@ -233,7 +236,7 @@ beforeEach(() => {
       return ok(lintResponder(body.content))
     }
     if (method === 'POST' && url.startsWith('/admin/api/prompts/render')) {
-      return ok({ messages: [] })
+      return ok(renderResponse)
     }
     // ABOVE the generic POST/PUT branches below: `/plan` is a POST to the
     // same `/admin/api/prompts/{lang}/{agent}` prefix the PUT below matches,
@@ -335,6 +338,11 @@ const openMeta = () => userEvent.click(tree().getByRole('button', { name: /promp
 const openVariantSettings = (name: string) =>
   userEvent.click(tree().getByRole('button', { name: `Variant settings: ${name}` }))
 const openMessage = (label: RegExp) => userEvent.click(tree().getByRole('button', { name: label }))
+/** Opens the ▶ Render tab from the tree; its own Render button is inside the preview. */
+async function openRender() {
+  await userEvent.click(tree().getByRole('button', { name: 'Render' }))
+  return within(screen.getByTestId('render-preview'))
+}
 
 /** Pick an agent in the toolbar, once the prompt tree has loaded its options. */
 async function pickAgent(name: string) {
@@ -453,6 +461,9 @@ describe('a non-admin session', () => {
     expect(screen.getByLabelText('Default variant')).toBeDisabled()
     expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^render$/i })).not.toBeInTheDocument()
+    // The render endpoint is admin-gated and the preview renders nothing
+    // without it, so there is no way to open an empty Render tab either.
+    expect(screen.queryByRole('button', { name: 'Open render' })).not.toBeInTheDocument()
   })
 })
 
@@ -1228,7 +1239,8 @@ describe('sample vars for the render preview', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
-    await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+    const preview = await openRender()
+    await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
 
     await waitFor(() => expect(renderCalls()).toHaveLength(1))
     const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
@@ -1265,7 +1277,8 @@ describe('sample vars for the render preview', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
-    await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+    const preview = await openRender()
+    await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
 
     await waitFor(() => expect(renderCalls()).toHaveLength(1))
     const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
@@ -1300,7 +1313,8 @@ describe('sample vars for the render preview', () => {
     renderEditor({ lang: 'en' })
     await ready()
 
-    await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+    const preview = await openRender()
+    await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
 
     await waitFor(() => expect(renderCalls()).toHaveLength(1))
     const body = JSON.parse(String((renderCalls()[0][1] as RequestInit).body)) as {
@@ -1545,9 +1559,74 @@ describe('editor tabs', () => {
   it('sends the render preview no message uids', async () => {
     renderEditor({ lang: 'en' })
     await ready()
-    await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+    const preview = await openRender()
+    await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
     await waitFor(() => expect(renderCalls()).toHaveLength(1))
     expect(String((renderCalls()[0][1] as RequestInit).body)).not.toContain('"uid"')
+  })
+})
+
+describe('the render tab', () => {
+  it('opens from the tree and shows the rendered output in the centre', async () => {
+    renderResponse = { messages: [{ role: 'user', content: 'Explain the crash', error: null }] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    const preview = await openRender()
+
+    const tab = screen.getByRole('tab', { name: /Render/ })
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(tab).toHaveTextContent('▶')
+    // A single click opens it as the preview tab, in place of the message.
+    expect(screen.getAllByRole('tab')).toHaveLength(1)
+    expect(tree().getByRole('button', { name: 'Render' })).toHaveAttribute('aria-current', 'true')
+    // The full-height preview replaces the editor; like prompt.yaml and the
+    // settings it has no variable sidebar.
+    expect(screen.queryByLabelText('user')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('var-sidebar')).not.toBeInTheDocument()
+
+    await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
+    expect(await preview.findByText('Explain the crash')).toBeInTheDocument()
+    expect(String((renderCalls()[0][1] as RequestInit).body)).not.toContain('"uid"')
+  })
+
+  it('opens pinned from the button at the end of the tab strip', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(screen.getByRole('button', { name: 'Open render' }))
+    // Pinned: the first message's preview tab stays open beside it.
+    expect(screen.getAllByRole('tab')).toHaveLength(2)
+    const tab = screen.getByRole('tab', { name: /Render/ })
+    expect(tab).toHaveAttribute('aria-selected', 'true')
+    expect(within(tab).getByText('Render')).toHaveStyle({ fontStyle: 'normal' })
+    expect(screen.getByTestId('render-preview')).toBeInTheDocument()
+  })
+
+  it('keeps the typed agent context across a tab switch', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    const preview = await openRender()
+    const context = preview.getByLabelText('Context')
+    await userEvent.clear(context)
+    await userEvent.type(context, '{{"defect": "x"}')
+    await openMessage(/Explain/)
+    await openRender()
+    expect(screen.getByLabelText('Context')).toHaveValue('{"defect": "x"}')
+  })
+
+  it('leaves only the test run in the bottom pane', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    const pane = screen.getByTestId('preview-pane')
+    expect(within(pane).getByTestId('test-run-panel')).toBeInTheDocument()
+    expect(within(pane).queryByTestId('render-preview')).not.toBeInTheDocument()
+    // Kept mounted (its typed context survives a tab switch), but out of sight
+    // until its tab is active.
+    expect(screen.getByTestId('render-preview')).not.toBeVisible()
+
+    await openRender()
+    expect(screen.getByTestId('render-preview')).toBeVisible()
+    expect(within(pane).queryByTestId('render-preview')).not.toBeInTheDocument()
+    expect(within(pane).getByTestId('test-run-panel')).toBeInTheDocument()
   })
 })
 

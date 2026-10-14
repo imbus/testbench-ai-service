@@ -21,7 +21,7 @@ function setup(overrides = {}) {
     variants: VARIANTS, selectedVariant: 'Thorough', activeTab: 'msg:u' as const,
     flagged: [], readOnly: false,
     onOpenMeta: vi.fn(), onPickVariant: vi.fn(), onOpenVariantSettings: vi.fn(),
-    onPickMessage: vi.fn(), onAddVariant: vi.fn(), onAddMessage: vi.fn(), ...overrides,
+    onPickMessage: vi.fn(), onAddVariant: vi.fn(), onAddMessage: vi.fn(), onOpenRender: vi.fn(), ...overrides,
   }
   render(<PromptTree {...props} />)
   return props
@@ -86,5 +86,26 @@ describe('PromptTree', () => {
     setup({ readOnly: true })
     expect(screen.queryByRole('button', { name: '+ message' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'New variant' })).not.toBeInTheDocument()
+  })
+
+  // Rendering is not an edit, so a read-only session sees the row too.
+  it('opens the render tab from a row under the open variant', async () => {
+    const props = setup({ readOnly: true })
+    const row = screen.getByRole('button', { name: 'Render' })
+    await userEvent.click(row)
+    expect(props.onOpenRender).toHaveBeenLastCalledWith(false)
+    await userEvent.dblClick(row)
+    expect(props.onOpenRender).toHaveBeenLastCalledWith(true)
+    expect(row).not.toHaveAttribute('aria-current')
+  })
+
+  it('marks the render row while the render tab is active', () => {
+    setup({ activeTab: 'render' })
+    expect(screen.getByRole('button', { name: 'Render' })).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('has no render row without a handler', () => {
+    setup({ onOpenRender: undefined })
+    expect(screen.queryByRole('button', { name: 'Render' })).not.toBeInTheDocument()
   })
 })

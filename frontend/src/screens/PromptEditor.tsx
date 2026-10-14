@@ -439,6 +439,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const current: Selection | null =
     tabs.active === 'meta' ? { kind: 'meta' }
       : tabs.active === 'variant' && selectedVariantObj ? { kind: 'variant' }
+      : tabs.active === 'render' && selectedVariantObj ? { kind: 'render' }
       : activeIndex >= 0 ? { kind: 'message', index: activeIndex }
       : null
   const currentMessage = current?.kind === 'message' ? messages[current.index] : undefined
@@ -713,6 +714,20 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     .filter((id): id is `msg:${string}` => id.startsWith('msg:'))
     .map(modelKeyOf)
 
+  // The render and test-run requests post these; the uids are client-only.
+  const [requestVariant] = selectedVariantObj ? withoutMessageUids([selectedVariantObj]) : []
+  const requestMessages = requestVariant?.messages ?? []
+
+  const preview = (
+    <RenderPreview
+      messages={requestMessages}
+      vars={sampleVars(vars)}
+      decls={vars}
+      skeleton={agentContext}
+      isAdmin={isAdmin}
+    />
+  )
+
   // Built once: the centre pane for `current`, the preview, the test run.
   const centre = (
     <>
@@ -786,6 +801,17 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           />
         </div>
       )}
+      {isAdmin && (
+        // The ▶ Render tab. Hidden rather than unmounted while another tab
+        // is active, as it was in the bottom pane: hopping to a message and
+        // back keeps the typed agent_context, var edits and last result.
+        <div
+          data-testid="render-pane"
+          style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: '14px 24px', display: current?.kind === 'render' ? 'block' : 'none' }}
+        >
+          {preview}
+        </div>
+      )}
       {currentMessage && current?.kind === 'message' && (
         // Not keyed by message: the editor survives a tab switch and swaps
         // in that message's own model (`modelKey`), undo history included.
@@ -832,20 +858,6 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     </>
   )
 
-  // The render and test-run requests post these; the uids are client-only.
-  const [requestVariant] = selectedVariantObj ? withoutMessageUids([selectedVariantObj]) : []
-  const requestMessages = requestVariant?.messages ?? []
-
-  const preview = (
-    <RenderPreview
-      messages={requestMessages}
-      vars={sampleVars(vars)}
-      decls={vars}
-      skeleton={agentContext}
-      isAdmin={isAdmin}
-    />
-  )
-
   const testRun = (
     <TestRunPanel
       messages={requestMessages}
@@ -860,6 +872,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const editorTabs: EditorTab[] = tabs.open.map((id) => {
     const isPreview = tabs.preview === id
     if (id === 'meta') return { id, label: 'prompt.yaml', dirty: isMetaDirty(original, draft), flagged: false, preview: isPreview }
+    if (id === 'render') return { id, label: t('render'), prefix: '▶', dirty: false, flagged: false, preview: isPreview }
     if (id === 'variant') {
       return { id, label: variantName, prefix: '⚙', dirty: selectedVariantObj ? isVariantDirty(original, selectedVariantObj) : false, flagged: false, preview: isPreview }
     }
@@ -883,6 +896,9 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         onPickMessage={(index, pin) => open(messageTabOf(messages[index], index), pin)}
         onAddVariant={addVariant}
         onAddMessage={addMessage}
+        // The render endpoint is admin-gated (RenderPreview renders nothing
+        // without it), so a non-admin gets no way to open an empty tab.
+        onOpenRender={isAdmin ? (pin) => open('render', pin) : undefined}
       />
       <div ref={splitColumnRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <EditorTabs
@@ -891,13 +907,16 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           onActivate={(id) => open(id, false)}
           onPin={(id) => tabsState.update(variantTabs(variantName), (prev) => pinTab(prev, id))}
           onClose={(id) => tabsState.update(variantTabs(variantName), (prev) => closeTab(prev, id))}
+          trailing={isAdmin && (
+            <Button type="button" text label="▶" aria-label={t('openRender')} title={t('openRender')} onClick={() => open('render', true)} style={{ padding: '0 6px', fontSize: 12 }} />
+          )}
         />
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           {centre}
           {currentMessage && <VarSidebar {...varSidebarProps} />}
         </div>
         {/* The editor above keeps at least 160px; the rest is the viewer's
-            to hand to Preview / Test run. */}
+            to hand to the test run. The render preview is a tab above. */}
         <PaneResizer
           height={paneHeight}
           min={MIN_PANE_HEIGHT}
@@ -912,14 +931,10 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
             // A height remembered from a taller window must not crush the editor.
             maxHeight: 'calc(100% - 160px)',
             flex: 'none',
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(420px, 100%), 1fr))',
-            gap: 16,
             padding: '10px 14px',
             overflow: 'auto',
           }}
         >
-          {preview}
           {testRun}
         </div>
       </div>
