@@ -10,15 +10,15 @@ beforeEach(() => i18n.changeLanguage('en'))
 
 const VARIANTS: PromptVariantDoc[] = [
   { name: 'Thorough', description: null, model: 'gpt-5.5', vars: {}, messages: [
-    { role: 'system', source: 'file', file: 'sys.jinja', content: 'x', readable: true },
-    { role: 'user', source: 'inline', file: null, content: 'Explain {{ agent.defect }}', readable: true },
+    { role: 'system', source: 'file', file: 'sys.jinja', content: 'x', readable: true, uid: 's' },
+    { role: 'user', source: 'inline', file: null, content: 'Explain {{ agent.defect }}', readable: true, uid: 'u' },
   ] },
   { name: 'Quick', description: null, model: null, vars: {}, messages: [] },
 ]
 
 function setup(overrides = {}) {
   const props = {
-    variants: VARIANTS, selectedVariant: 'Thorough', selection: { kind: 'message' as const, index: 1 },
+    variants: VARIANTS, selectedVariant: 'Thorough', activeTab: 'msg:u' as const,
     flagged: [], readOnly: false,
     onOpenMeta: vi.fn(), onPickVariant: vi.fn(), onOpenVariantSettings: vi.fn(),
     onPickMessage: vi.fn(), onAddVariant: vi.fn(), onAddMessage: vi.fn(), ...overrides,
@@ -40,11 +40,25 @@ describe('PromptTree', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Quick' }))
     expect(props.onPickVariant).toHaveBeenCalledWith('Quick')
     await userEvent.click(screen.getByRole('button', { name: /sys\.jinja/ }))
-    expect(props.onPickMessage).toHaveBeenCalledWith(0)
+    expect(props.onPickMessage).toHaveBeenCalledWith(0, false)
     await userEvent.click(screen.getByRole('button', { name: /prompt\.yaml/ }))
-    expect(props.onOpenMeta).toHaveBeenCalled()
+    expect(props.onOpenMeta).toHaveBeenCalledWith(false)
     await userEvent.click(screen.getByRole('button', { name: 'Variant settings: Thorough' }))
-    expect(props.onOpenVariantSettings).toHaveBeenCalledWith('Thorough')
+    expect(props.onOpenVariantSettings).toHaveBeenCalledWith('Thorough', false)
+  })
+
+  it('pins on a double click', async () => {
+    const props = setup()
+    await userEvent.dblClick(screen.getByRole('button', { name: /sys\.jinja/ }))
+    expect(props.onPickMessage).toHaveBeenLastCalledWith(0, true)
+    await userEvent.dblClick(screen.getByRole('button', { name: /prompt\.yaml/ }))
+    expect(props.onOpenMeta).toHaveBeenLastCalledWith(true)
+  })
+
+  it('marks the row of the active tab', () => {
+    setup({ activeTab: 'meta' })
+    expect(screen.getByRole('button', { name: /prompt\.yaml/ })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: /Explain/ })).not.toHaveAttribute('aria-current')
   })
 
   it('flags a message with lint errors', () => {
@@ -59,7 +73,7 @@ describe('PromptTree', () => {
   })
 
   it('renders a selected variant with no messages', () => {
-    setup({ selectedVariant: 'Quick', selection: { kind: 'variant' } })
+    setup({ selectedVariant: 'Quick', activeTab: 'variant' })
     expect(screen.getByRole('button', { name: '+ message' })).toBeInTheDocument()
   })
 

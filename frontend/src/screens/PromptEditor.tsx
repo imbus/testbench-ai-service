@@ -5,18 +5,19 @@ import { Message } from 'primereact/message'
 import type { Scope } from '../api/agents'
 import { ApiError } from '../api/client'
 import { useLintTemplate, usePlanPrompt, useSavePrompt } from '../api/mutations'
-import { agentContextOf, agentsUsingVariant } from '../api/prompts'
+import { agentContextOf, agentsUsingVariant, emptyMessage } from '../api/prompts'
 import { useConfig, usePromptDocument } from '../api/queries'
-import type { LintError, PromptDocument, PromptVarDecl } from '../api/types'
+import type { LintError, PromptDocument, PromptMessageDoc, PromptVarDecl } from '../api/types'
 import type { CodeEditorHandle } from '../components/CodeEditor'
 import { Modal } from '../components/Modal'
+import { EditorTabs, type EditorTab } from '../components/prompt/EditorTabs'
 import { EditorToolbar } from '../components/prompt/EditorToolbar'
 import { MessagePane } from '../components/prompt/MessagePane'
 import { MetaPane } from '../components/prompt/MetaPane'
 import { PaneResizer } from '../components/prompt/PaneResizer'
 import { PromptTree } from '../components/prompt/PromptTree'
 import { useLiveLint } from '../components/prompt/liveLint'
-import { messagePath, uniqueVariantName, type Selection } from '../components/prompt/selection'
+import { messageLabel, messagePath, uniqueVariantName, type Selection } from '../components/prompt/selection'
 import { undeclaredVars, usedTemplateVars } from '../components/prompt/templateVars'
 import { VariantPane } from '../components/prompt/VariantPane'
 import { VarSidebar, type LintState } from '../components/prompt/VarSidebar'
@@ -26,7 +27,17 @@ import { TestRunPanel } from '../components/TestRunPanel'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { MIN_PANE_HEIGHT, usePaneHeight } from '../state/editorLayout'
-import { isDirty, newMessageUid, promptDraftReducer, withMessageUids, withoutMessageUids } from '../state/promptDraft'
+import { closeTab, messageTabOf, openTab, pinTab, useEditorTabs, type TabId } from '../state/editorTabs'
+import {
+  isDirty,
+  isMessageDirty,
+  isMetaDirty,
+  isVariantDirty,
+  newMessageUid,
+  promptDraftReducer,
+  withMessageUids,
+  withoutMessageUids,
+} from '../state/promptDraft'
 
 function emptyDocument(lang: string, agent: string): PromptDocument {
   return {
@@ -197,9 +208,9 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const draftRef = useRef(draft)
   draftRef.current = draft
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
-  // What the centre pane shows. A message index is into the SELECTED
-  // variant's own message list, like `diagnostics` below.
-  const [selection, setSelection] = useState<Selection>({ kind: 'message', index: 0 })
+  // The open editor tabs, per variant. The active one is what the centre
+  // pane shows (`current` below).
+  const tabsState = useEditorTabs()
   const [paneHeight, setPaneHeight] = usePaneHeight()
   const splitColumnRef = useRef<HTMLDivElement>(null)
   // The one open message's editor -- the sidebar inserts at its cursor.
@@ -297,7 +308,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // about "where the operator is" starts over: the variant selection returns
   // to the new document's `default_variant` (a name kept from the previous
   // agent would otherwise stay selected whenever the new one happens to share
-  // it), the centre pane returns to message 0, and the previous agent's
+  // it), every variant's open tabs are dropped, and the previous agent's
   // `originalRef` is dropped so the `!original` guard below covers the load.
   // Declared BEFORE the document reset: when both fire in one commit (a
   // cached document for the new route), the document reset's `originalRef`
@@ -305,16 +316,15 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   useEffect(() => {
     originalRef.current = null
     setSelectedVariant(null)
-    setSelection({ kind: 'message', index: 0 })
+    tabsState.reset()
     clearDiagnostics()
   }, [docLang, agentKey])
 
   // A new `document.data` for the SAME route -- the first load, or the
   // refetch this screen's own successful save triggers -- re-seeds the draft
   // and invalidates every lint result (they describe the old text), but
-  // leaves the selection alone: saving from the prompt.yaml or variant
-  // settings pane must not jump the operator to message 0. A selection that
-  // no longer resolves still falls back safely (see `current` below).
+  // leaves the open tabs alone: saving must not close what the operator had
+  // open. A tab that no longer resolves simply drops out (`visibleTabs`).
   useEffect(() => {
     if (!document.data) return
     // Same route: the reload after a save. Its draft donates its uids by
@@ -366,7 +376,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // derives the open message itself -- only once `original` says the draft
   // belongs to this route, never from a previous agent's leftover draft.
   const liveVariant = original ? selectedVariantOf(draft, selectedVariant) : undefined
-  const liveIndex = selection.kind === 'message' ? selection.index : -1
+  const liveActive = tabsState.tabsFor(liveVariant).active
+  const liveIndex = liveVariant ? liveVariant.messages.findIndex((m, i) => messageTabOf(m, i) === liveActive) : -1
   const liveMessage = liveVariant?.messages[liveIndex]
   const liveLint = useLintTemplate()
   const live = useLiveLint(
@@ -422,12 +433,15 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const vars = selectedVariantObj?.vars ?? {}
   const messages = selectedVariantObj?.messages ?? []
 
-  // A message selection that no longer points at a message (empty variant, or
-  // an index past the end after a remove) shows the variant settings instead --
-  // never an undefined message.
-  const current: Selection =
-    selection.kind === 'message' && !messages[selection.index] ? { kind: 'variant' } : selection
-  const currentMessage = current.kind === 'message' ? messages[current.index] : undefined
+  // What the centre pane shows: the active tab. Null when every tab is closed.
+  const tabs = tabsState.tabsFor(selectedVariantObj)
+  const activeIndex = messages.findIndex((m, i) => messageTabOf(m, i) === tabs.active)
+  const current: Selection | null =
+    tabs.active === 'meta' ? { kind: 'meta' }
+      : tabs.active === 'variant' && selectedVariantObj ? { kind: 'variant' }
+      : activeIndex >= 0 ? { kind: 'message', index: activeIndex }
+      : null
+  const currentMessage = current?.kind === 'message' ? messages[current.index] : undefined
   const used = currentMessage ? usedTemplateVars(currentMessage.content) : []
   const agentVars = Object.keys(agentContext).map((k) => `agent.${k}`)
   const declaredVars = Object.keys(vars).map((k) => `vars.${k}`)
@@ -555,49 +569,65 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     }
   }
 
-  const pickVariant = (name: string) => {
-    setSelectedVariant(name)
-    // A message index means something different in a different variant's
-    // own message list.
-    clearDiagnostics()
-    setSelection({ kind: 'message', index: 0 })
+  /** What `useEditorTabs` resolves a variant's tabs against; `extra` is a
+   * message the draft adds in the same event, before the reducer has run. */
+  const variantTabs = (name: string, extra: PromptMessageDoc[] = []) => {
+    const variant = draft.variants.find((v) => v.name === name)
+    return { name, messages: [...(variant?.messages ?? []), ...extra] }
+  }
+  const open = (tab: TabId, pin: boolean) => tabsState.update(variantTabs(variantName), (prev) => openTab(prev, tab, pin))
+  /** The first edit in a preview tab keeps it, as in VS Code. */
+  const pinActive = () => {
+    if (tabs.active && tabs.preview === tabs.active) tabsState.update(variantTabs(variantName), (prev) => pinTab(prev, tabs.active as TabId))
   }
 
-  const openVariantSettings = (name: string) => {
+  const pickVariant = (name: string) => {
+    if (name === variantName) return
     setSelectedVariant(name)
+    // A message index means something different in a different variant's
+    // own message list. The variant's own tabs come back with it.
     clearDiagnostics()
-    setSelection({ kind: 'variant' })
+  }
+
+  const openVariantSettings = (name: string, pin = false) => {
+    if (name !== variantName) {
+      setSelectedVariant(name)
+      clearDiagnostics()
+    }
+    tabsState.update(variantTabs(name), (prev) => openTab(prev, 'variant', pin))
   }
 
   const addVariant = () => {
     const name = uniqueVariantName(t('newVariantDefault'), draft.variants.map((v) => v.name))
-    dispatch({ type: 'addVariant', name, uid: newMessageUid() })
-    openVariantSettings(name)
+    const uid = newMessageUid()
+    dispatch({ type: 'addVariant', name, uid })
+    setSelectedVariant(name)
+    clearDiagnostics()
+    // The reducer has not run yet, so the new variant is described by hand.
+    // Its message tab never opens: the settings open pinned and active.
+    tabsState.update({ name, messages: [{ ...emptyMessage(), uid }] }, (prev) => openTab(prev, 'variant', true))
   }
 
   const addMessage = () => {
-    dispatch({ type: 'addMessage', variant: variantName, uid: newMessageUid() })
-    setSelection({ kind: 'message', index: messages.length })
+    const uid = newMessageUid()
+    dispatch({ type: 'addMessage', variant: variantName, uid })
+    tabsState.update(variantTabs(variantName, [{ ...emptyMessage(), uid }]), (prev) => openTab(prev, `msg:${uid}`, true))
   }
 
   const removeMessage = (index: number) => {
     dispatch({ type: 'removeMessage', variant: variantName, index })
     // Every remaining entry's index now names a different message than the
     // one it was computed for -- clearing is honest; remapping would be
-    // guessing which message shifted where.
+    // guessing which message shifted where. The message's tab closes by
+    // itself: its uid no longer resolves (`visibleTabs`).
     clearDiagnostics()
-    // Selection moves to the previous message, or stays at 0 when the first
-    // was removed. Delete is only offered while the variant has more than one
-    // message (the reducer keeps the last one), so a message always remains;
-    // `current` still falls back to the variant settings if it ever did not.
-    setSelection({ kind: 'message', index: Math.max(0, index - 1) })
   }
 
   const moveMessage = (from: number, to: number) => {
     dispatch({ type: 'moveMessage', variant: variantName, index: from, to })
+    // The open tab follows the moved message by its uid; the index-keyed
+    // diagnostics cannot.
     clearDiagnostics()
-    // The selection follows the moved message.
-    setSelection({ kind: 'message', index: to })
   }
 
   const declareUndeclared = () => {
@@ -617,7 +647,14 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     // Clears a stale 422 marker the moment the operator actually edits the
     // field it was marking -- otherwise it would persist (with the old server
     // text) past a fix that has already made it wrong.
-    if (field === 'default_variant') setSaveFieldError(null)
+    pinActive()
+    if (field === 'default_variant') {
+      setSaveFieldError(null)
+      // Until the operator picks a variant, the one worked on is the default
+      // one -- changing the default must not swap the open variant (and with
+      // it the open tabs) out from under the prompt.yaml pane.
+      if (selectedVariant === null) setSelectedVariant(variantName)
+    }
     dispatch({ type: 'setHeader', field, value })
   }
 
@@ -633,11 +670,11 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     checking: live.checking,
     clean:
       flagged.length === 0 &&
-      (current.kind === 'message'
+      (current?.kind === 'message'
         ? checked.has(current.index)
         : messages.length > 0 && messages.every((_, index) => checked.has(index))),
     error: lintError,
-    errors: current.kind === 'message' ? (diagnostics[current.index] ?? []) : [],
+    errors: current?.kind === 'message' ? (diagnostics[current.index] ?? []) : [],
   }
 
   const varSidebarProps = {
@@ -654,10 +691,20 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     onLint: () => void runLint(),
   }
 
+  // Every open message tab of every variant keeps its editor model (undo, cursor, scroll).
+  const modelKeys = [...new Set([...tabsState.allOpen(), ...tabs.open])]
+    .filter((id): id is `msg:${string}` => id.startsWith('msg:'))
+    .map((id) => `${docLang}/${agentKey}/${id.slice(4)}`)
+
   // Built once: the centre pane for `current`, the preview, the test run.
   const centre = (
     <>
-      {current.kind === 'meta' && (
+      {!current && (
+        <div className="text-muted" style={{ flex: 1, display: 'grid', placeItems: 'center', fontSize: 13, padding: 24 }}>
+          {t('noOpenEditor')}
+        </div>
+      )}
+      {current?.kind === 'meta' && (
         <MetaPane
           draft={draft}
           readOnly={!isAdmin}
@@ -672,7 +719,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           onHeader={setHeader}
         />
       )}
-      {current.kind === 'variant' && selectedVariantObj && (
+      {current?.kind === 'variant' && selectedVariantObj && (
         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
           {messages.length === 0 && (
             <div className="text-muted" style={{ padding: '20px 24px 0', fontSize: 13 }}>
@@ -684,6 +731,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
             readOnly={!isAdmin}
             canRemove={draft.variants.length > 1}
             onRename={(to) => {
+              pinActive()
               dispatch({ type: 'renameVariant', from: selectedVariantObj.name, to })
               // The selection is resolved BY NAME, so it has to follow the
               // rename. Without this, the first keystroke makes the old
@@ -691,29 +739,42 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
               // `variants[0]`, and every later keystroke renames THAT
               // variant instead -- leaving the intended one named after
               // whatever the field held when the fall-through happened.
+              // The open tabs are kept by name too.
               setSelectedVariant(to)
+              tabsState.renameVariant(selectedVariantObj.name, to)
             }}
-            onModel={(model) =>
+            onModel={(model) => {
+              pinActive()
               dispatch({ type: 'setVariantModel', variant: selectedVariantObj.name, model })
-            }
+            }}
             onRemove={() => {
               dispatch({ type: 'removeVariant', name: selectedVariantObj.name })
+              tabsState.removeVariant(selectedVariantObj.name)
               // The selection falls through to another variant, whose
               // message indices the old diagnostics do not describe.
               clearDiagnostics()
             }}
-            onAddVar={(key) => dispatch({ type: 'addVar', variant: variantName, key })}
-            onEditVar={(key, decl) => dispatch({ type: 'editVar', variant: variantName, key, decl })}
-            onRemoveVar={(key) => dispatch({ type: 'removeVar', variant: variantName, key })}
+            onAddVar={(key) => {
+              pinActive()
+              dispatch({ type: 'addVar', variant: variantName, key })
+            }}
+            onEditVar={(key, decl) => {
+              pinActive()
+              dispatch({ type: 'editVar', variant: variantName, key, decl })
+            }}
+            onRemoveVar={(key) => {
+              pinActive()
+              dispatch({ type: 'removeVar', variant: variantName, key })
+            }}
           />
         </div>
       )}
-      {currentMessage && current.kind === 'message' && (
-        // Keyed by variant and index so switching messages remounts
-        // `CodeEditor` cleanly -- a fresh undo history per message, since
-        // the pane only ever holds one.
+      {currentMessage && current?.kind === 'message' && (
+        // Not keyed by message: the editor survives a tab switch and swaps
+        // in that message's own model (`modelKey`), undo history included.
+        // A different document still starts a fresh editor.
         <MessagePane
-          key={`${variantName}:${current.index}`}
+          key={`${docLang}/${agentKey}`}
           editorRef={editorRef}
           path={messagePath(draft.file, variantName, current.index, currentMessage)}
           message={currentMessage}
@@ -723,31 +784,44 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           diagnostics={diagnostics[current.index]}
           insertable={[...agentVars, ...declaredVars]}
           completion={completion}
+          modelKey={`${docLang}/${agentKey}/${currentMessage.uid ?? current.index}`}
+          keepModels={modelKeys}
           onRemove={() => removeMessage(current.index)}
           onMove={(to) => moveMessage(current.index, to)}
-          onRole={(role) =>
+          onRole={(role) => {
+            pinActive()
             dispatch({ type: 'setMessageRole', variant: variantName, index: current.index, role })
-          }
+          }}
           onContent={(content) => {
+            // The value sync after a tab switch re-sends the same text;
+            // only a real edit pins the tab and drops the lint result.
+            if (content === currentMessage.content) return
+            pinActive()
             dispatch({ type: 'setMessageContent', variant: variantName, index: current.index, content })
             // Only THIS message's own result is invalid -- it changed no
             // index, so every other message's result still points correctly.
             dropDiagnostic(current.index)
           }}
-          onSource={(source) =>
+          onSource={(source) => {
+            pinActive()
             dispatch({ type: 'setMessageSource', variant: variantName, index: current.index, source })
-          }
-          onFile={(file) =>
+          }}
+          onFile={(file) => {
+            pinActive()
             dispatch({ type: 'setMessageFile', variant: variantName, index: current.index, file })
-          }
+          }}
         />
       )}
     </>
   )
 
+  // The render and test-run requests post these; the uids are client-only.
+  const [requestVariant] = selectedVariantObj ? withoutMessageUids([selectedVariantObj]) : []
+  const requestMessages = requestVariant?.messages ?? []
+
   const preview = (
     <RenderPreview
-      messages={messages}
+      messages={requestMessages}
       vars={sampleVars(vars)}
       decls={vars}
       skeleton={agentContext}
@@ -757,30 +831,50 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
 
   const testRun = (
     <TestRunPanel
-      messages={messages}
+      messages={requestMessages}
       vars={sampleVars(vars)}
       agentContext={agentContext}
       isAdmin={isAdmin}
     />
   )
 
+  // `tabs.open` only holds ids that resolve (`visibleTabs`), so a message
+  // tab always finds its message.
+  const editorTabs: EditorTab[] = tabs.open.map((id) => {
+    const isPreview = tabs.preview === id
+    if (id === 'meta') return { id, label: 'prompt.yaml', dirty: isMetaDirty(original, draft), flagged: false, preview: isPreview }
+    if (id === 'variant') {
+      return { id, label: variantName, prefix: '⚙', dirty: selectedVariantObj ? isVariantDirty(original, selectedVariantObj) : false, flagged: false, preview: isPreview }
+    }
+    const index = messages.findIndex((m, i) => messageTabOf(m, i) === id)
+    const message = messages[index]
+    return { id, label: messageLabel(message, t('emptyMessage')), prefix: message.role, dirty: isMessageDirty(original, message), flagged: index in diagnostics, preview: isPreview }
+  })
+
   const split = (
     <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
       <PromptTree
         variants={draft.variants}
         selectedVariant={variantName}
-        selection={current}
+        activeTab={tabs.active}
         flagged={flagged}
         invalidVariants={saveFieldError?.kind === 'emptyVariants' ? saveFieldError.names : []}
         readOnly={!isAdmin}
-        onOpenMeta={() => setSelection({ kind: 'meta' })}
+        onOpenMeta={(pin) => open('meta', pin)}
         onPickVariant={pickVariant}
         onOpenVariantSettings={openVariantSettings}
-        onPickMessage={(index) => setSelection({ kind: 'message', index })}
+        onPickMessage={(index, pin) => open(messageTabOf(messages[index], index), pin)}
         onAddVariant={addVariant}
         onAddMessage={addMessage}
       />
       <div ref={splitColumnRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+        <EditorTabs
+          tabs={editorTabs}
+          active={tabs.active}
+          onActivate={(id) => open(id, false)}
+          onPin={(id) => tabsState.update(variantTabs(variantName), (prev) => pinTab(prev, id))}
+          onClose={(id) => tabsState.update(variantTabs(variantName), (prev) => closeTab(prev, id))}
+        />
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           {centre}
           {currentMessage && <VarSidebar {...varSidebarProps} />}

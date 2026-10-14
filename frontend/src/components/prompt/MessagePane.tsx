@@ -46,6 +46,8 @@ export function MessagePane({
   insertable,
   completion,
   editorRef,
+  modelKey,
+  keepModels,
   onRemove,
   onMove,
   onRole,
@@ -62,6 +64,9 @@ export function MessagePane({
   insertable: string[]
   completion?: CompletionContext
   editorRef: Ref<CodeEditorHandle>
+  /** Passed through to `CodeEditor`: one editor model per message tab. */
+  modelKey?: string
+  keepModels?: string[]
   onRemove: () => void
   onMove: (to: number) => void
   onRole: (role: MessageRole) => void
@@ -221,6 +226,8 @@ export function MessagePane({
           readOnly={readOnly}
           ariaLabel={editorLabel(message)}
           completion={completion}
+          modelKey={modelKey}
+          keepModels={keepModels}
         />
       </div>
     </div>

@@ -2,7 +2,8 @@ import { Button } from 'primereact/button'
 import { Tag } from 'primereact/tag'
 import type { PromptVariantDoc } from '../../api/types'
 import { useTranslation } from 'react-i18next'
-import { messageLabel, type Selection } from './selection'
+import { messageTabOf, type TabId } from '../../state/editorTabs'
+import { messageLabel } from './selection'
 
 const mono = 'ui-monospace, Menlo, monospace'
 const rowButton = { border: 0, background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', textAlign: 'left' as const }
@@ -14,19 +15,22 @@ const rowButton = { border: 0, background: 'transparent', color: 'inherit', font
  * carries its own settings button beside the expander, the open row is
  * marked with `aria-current` (not tree selection), and a `Tree` would also
  * fold the meta row and the file list into nodes that are not part of it.
+ *
+ * A single click opens a row in the preview tab, a double click keeps it
+ * open -- VS Code's explorer. The marked row is the active tab's.
  */
-export function PromptTree({ variants, selectedVariant, selection, flagged, invalidVariants = [], readOnly, onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onAddVariant, onAddMessage }: {
+export function PromptTree({ variants, selectedVariant, activeTab, flagged, invalidVariants = [], readOnly, onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onAddVariant, onAddMessage }: {
   variants: PromptVariantDoc[]
   selectedVariant: string
-  selection: Selection
+  activeTab: TabId | null
   flagged: number[]
   /** Variants a save 422 named (e.g. "needs at least one message") -- marked on their row. */
   invalidVariants?: string[]
   readOnly: boolean
-  onOpenMeta: () => void
+  onOpenMeta: (pin: boolean) => void
   onPickVariant: (name: string) => void
-  onOpenVariantSettings: (name: string) => void
-  onPickMessage: (index: number) => void
+  onOpenVariantSettings: (name: string, pin: boolean) => void
+  onPickMessage: (index: number, pin: boolean) => void
   onAddVariant: () => void
   onAddMessage: () => void
 }) {
@@ -42,9 +46,10 @@ export function PromptTree({ variants, selectedVariant, selection, flagged, inva
     >
       <button
         type="button"
-        aria-current={selection.kind === 'meta' || undefined}
-        onClick={onOpenMeta}
-        style={{ ...rowButton, padding: '8px 14px', display: 'flex', flexDirection: 'column', background: selection.kind === 'meta' ? 'var(--color-surface)' : 'transparent' }}
+        aria-current={activeTab === 'meta' || undefined}
+        onClick={() => onOpenMeta(false)}
+        onDoubleClick={() => onOpenMeta(true)}
+        style={{ ...rowButton, padding: '8px 14px', display: 'flex', flexDirection: 'column', background: activeTab === 'meta' ? 'var(--color-surface)' : 'transparent' }}
       >
         <span style={{ fontFamily: mono, fontSize: 12 }}>prompt.yaml</span>
         <span className="text-muted" style={{ fontSize: 11 }}>{t('promptMetaHint')}</span>
@@ -63,23 +68,24 @@ export function PromptTree({ variants, selectedVariant, selection, flagged, inva
         const invalid = invalidVariants.includes(variant.name)
         return (
           <div key={variant.name} style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '6px 14px', gap: 6, background: open && selection.kind === 'variant' ? 'var(--color-surface)' : 'transparent' }}>
+            <div style={{ display: 'flex', alignItems: 'center', padding: '6px 14px', gap: 6, background: open && activeTab === 'variant' ? 'var(--color-surface)' : 'transparent' }}>
               <button type="button" aria-expanded={open} aria-invalid={invalid || undefined} onClick={() => onPickVariant(variant.name)} style={{ ...rowButton, fontWeight: 500, padding: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6, color: invalid ? '#a33a2b' : 'inherit' }}>
                 <span aria-hidden style={{ fontSize: 10 }}>{open ? '▾' : '▸'}</span>
                 {variant.name}
               </button>
               {variant.model && <span className="text-muted" style={{ fontFamily: mono, fontSize: 11 }}>{variant.model}</span>}
-              <Button type="button" text label="⚙" aria-label={`${t('variantSettings')}: ${variant.name}`} title={t('variantSettings')} onClick={() => onOpenVariantSettings(variant.name)} style={{ padding: '0 4px', fontSize: 12 }} />
+              <Button type="button" text label="⚙" aria-label={`${t('variantSettings')}: ${variant.name}`} title={t('variantSettings')} onClick={() => onOpenVariantSettings(variant.name, false)} onDoubleClick={() => onOpenVariantSettings(variant.name, true)} style={{ padding: '0 4px', fontSize: 12 }} />
             </div>
             {open && variant.messages.map((message, index) => {
-              const current = selection.kind === 'message' && selection.index === index
+              const current = activeTab === messageTabOf(message, index)
               return (
                 <button
                   key={index}
                   type="button"
                   aria-current={current || undefined}
                   aria-invalid={flagged.includes(index) || undefined}
-                  onClick={() => onPickMessage(index)}
+                  onClick={() => onPickMessage(index, false)}
+                  onDoubleClick={() => onPickMessage(index, true)}
                   style={{ ...rowButton, fontSize: 12, padding: '5px 14px 5px 34px', display: 'flex', gap: 6, alignItems: 'center', background: current ? 'var(--color-surface)' : 'transparent' }}
                 >
                   <Tag severity="secondary" value={message.role} style={{ padding: '0 5px', fontSize: 10 }} />

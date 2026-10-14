@@ -31,12 +31,13 @@ vi.mock('../components/CodeEditor', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   return {
     CodeEditor: forwardRef(function MockCodeEditor(
-      { value, onChange, ariaLabel, readOnly, diagnostics }: {
+      { value, onChange, ariaLabel, readOnly, diagnostics, modelKey }: {
         value: string
         onChange: (value: string) => void
         ariaLabel: string
         readOnly?: boolean
         diagnostics?: LintError[]
+        modelKey?: string
       },
       ref,
     ) {
@@ -45,6 +46,7 @@ vi.mock('../components/CodeEditor', async () => {
         <div>
           <textarea
             aria-label={ariaLabel}
+            data-model={modelKey}
             value={value}
             readOnly={readOnly}
             onChange={(e) => onChange(e.target.value)}
@@ -327,11 +329,12 @@ function renderEditorWithNav({
   )
 }
 
-const openMeta = () => userEvent.click(screen.getByRole('button', { name: /prompt\.yaml/ }))
+// Scoped to the tree: a tab's close button is also a button named after the file.
+const tree = () => within(screen.getByTestId('prompt-tree'))
+const openMeta = () => userEvent.click(tree().getByRole('button', { name: /prompt\.yaml/ }))
 const openVariantSettings = (name: string) =>
-  userEvent.click(screen.getByRole('button', { name: `Variant settings: ${name}` }))
-const openMessage = (label: RegExp) =>
-  userEvent.click(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: label }))
+  userEvent.click(tree().getByRole('button', { name: `Variant settings: ${name}` }))
+const openMessage = (label: RegExp) => userEvent.click(tree().getByRole('button', { name: label }))
 
 /** Pick an agent in the toolbar, once the prompt tree has loaded its options. */
 async function pickAgent(name: string) {
@@ -1308,8 +1311,6 @@ describe('sample vars for the render preview', () => {
 })
 
 describe('workbench navigation', () => {
-  const tree = () => within(screen.getByTestId('prompt-tree'))
-
   it('shows the variant settings when the selected variant has no messages', async () => {
     docBody = { ...DOC, variants: [DOC.variants[0], { ...DOC.variants[1], messages: [] }] }
     renderEditor({ lang: 'en' })
@@ -1319,13 +1320,15 @@ describe('workbench navigation', () => {
     expect(screen.getByText('This variant has no messages.')).toBeInTheDocument()
   })
 
-  it('moves the selection to the previous message after removing the open one', async () => {
+  it('shows the empty state after removing the message of the only open tab', async () => {
     renderEditor({ lang: 'en' })
     await ready()
+    // The single click replaces the preview tab, so Explain is the only tab.
     await openMessage(/Explain/)
     await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
-    expect(tree().getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-current', 'true')
     expect(tree().queryByRole('button', { name: /Explain/ })).not.toBeInTheDocument()
+    expect(tree().getByRole('button', { name: /sys\.jinja/ })).not.toHaveAttribute('aria-current')
+    expect(screen.getByText('Open a message, prompt.yaml or the variant settings from the tree.')).toBeInTheDocument()
   })
 
   it('offers no Delete message on a one-message variant', async () => {
@@ -1407,6 +1410,144 @@ describe('workbench navigation', () => {
     await openMessage(/Explain/)
     await userEvent.click(within(screen.getByTestId('var-sidebar')).getByRole('button', { name: /vars\.tone/ }))
     expect(screen.getByLabelText('user')).toHaveValue('Explain {{ agent.defect }}{{ vars.tone }}')
+  })
+})
+
+const strip = () => within(screen.getByRole('tablist', { name: 'Open editors' }))
+
+describe('editor tabs', () => {
+  it('opens the first message as a preview tab', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    expect(strip().getAllByRole('tab')).toHaveLength(1)
+    expect(strip().getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('replaces the preview tab on a single click and keeps a double-clicked one', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMessage(/Explain/)
+    expect(strip().getAllByRole('tab')).toHaveLength(1)
+    await userEvent.dblClick(tree().getByRole('button', { name: /Explain/ }))
+    await openMeta()
+    expect(strip().getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
+      expect.stringContaining('Explain'),
+      expect.stringContaining('prompt.yaml'),
+    ])
+  })
+
+  it('pins a preview tab on the first edit and marks it unsaved', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMessage(/Explain/)
+    await userEvent.type(screen.getByLabelText('user'), '!')
+    expect(strip().getByRole('button', { name: /Close .*\(unsaved changes\)/ })).toBeInTheDocument()
+    await openMeta()
+    expect(strip().getAllByRole('tab')).toHaveLength(2)
+  })
+
+  it('closes a tab, activating its right neighbour, and shows the empty state after the last', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.dblClick(tree().getByRole('button', { name: /sys\.jinja/ }))
+    await userEvent.dblClick(tree().getByRole('button', { name: /prompt\.yaml/ }))
+    await userEvent.click(strip().getByRole('tab', { name: /sys\.jinja/ }))
+    await userEvent.click(strip().getByRole('button', { name: /^Close sys\.jinja/ }))
+    expect(strip().getByRole('tab', { name: /prompt\.yaml/ })).toHaveAttribute('aria-selected', 'true')
+    await userEvent.click(strip().getByRole('button', { name: /^Close prompt\.yaml/ }))
+    expect(screen.getByText('Open a message, prompt.yaml or the variant settings from the tree.')).toBeInTheDocument()
+  })
+
+  it('closes the tab of a deleted message', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.dblClick(tree().getByRole('button', { name: /sys\.jinja/ }))
+    await userEvent.dblClick(tree().getByRole('button', { name: /Explain/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
+    expect(strip().queryByRole('tab', { name: /Explain/ })).not.toBeInTheDocument()
+    expect(strip().getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps each variant’s tabs and restores them on the way back', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.dblClick(tree().getByRole('button', { name: /Explain/ }))
+    await userEvent.click(tree().getByRole('button', { name: 'Quick' }))
+    expect(strip().queryByRole('tab', { name: /Explain/ })).not.toBeInTheDocument()
+    await userEvent.click(tree().getByRole('button', { name: 'Thorough' }))
+    expect(strip().getByRole('tab', { name: /Explain/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('keeps the tabs of a renamed variant', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.dblClick(tree().getByRole('button', { name: /Explain/ }))
+    await openVariantSettings('Thorough')
+    const field = screen.getByLabelText('Variant name')
+    await userEvent.clear(field)
+    await userEvent.type(field, 'Deep')
+    expect(field).toHaveValue('Deep')
+    expect(strip().getByRole('tab', { name: /Explain/ })).toBeInTheDocument()
+  })
+
+  it('keeps the open tabs through a save', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.dblClick(tree().getByRole('button', { name: /Explain/ }))
+    await userEvent.type(screen.getByLabelText('user'), '!')
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText('/p/de/explainer/prompt.yaml')
+    await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
+    await waitFor(() => expect(putCalls()).toHaveLength(1))
+    expect(JSON.stringify(JSON.parse(String((putCalls()[0][1] as RequestInit).body)))).not.toContain('"uid"')
+    await waitFor(() => expect(strip().getByRole('tab', { name: /Explain/ })).toHaveAttribute('aria-selected', 'true'))
+  })
+
+  it('gives each message its own editor model', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    const first = screen.getByLabelText('system (sys.jinja)').getAttribute('data-model')
+    await openMessage(/Explain/)
+    const second = screen.getByLabelText('user').getAttribute('data-model')
+    expect(first).toMatch(/^de\/explainer\//)
+    expect(second).toMatch(/^de\/explainer\//)
+    expect(first).not.toBe(second)
+  })
+
+  it('shows the variant settings for a variant loaded without messages', async () => {
+    docBody = { ...DOC, variants: [{ ...DOC.variants[0], messages: [] }, DOC.variants[1]] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    expect(screen.getByTestId('variant-actions')).toBeInTheDocument()
+    expect(strip().getByRole('tab', { name: /Thorough/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('clears every diagnostic when the selected variant is removed', async () => {
+    lintResponder = (content) =>
+      content.includes('helpful')
+        ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+        : { ok: true, errors: [] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+    await waitFor(() => expect(tree().getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true'))
+    // Same variant: opening its settings no longer clears the diagnostics.
+    await openVariantSettings('Thorough')
+    expect(tree().getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true')
+    await userEvent.click(within(screen.getByTestId('variant-actions')).getByRole('button', { name: /^remove$/i }))
+    expect(treeMessages()).toHaveLength(1)
+    expect(treeMessages()[0]).not.toHaveAttribute('aria-invalid')
+  })
+
+  // The render preview and the test run post the open variant's messages;
+  // their client-only uids must not ride along.
+  it('sends the render preview no message uids', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(screen.getByRole('button', { name: /^render$/i }))
+    await waitFor(() => expect(renderCalls()).toHaveLength(1))
+    expect(String((renderCalls()[0][1] as RequestInit).body)).not.toContain('"uid"')
   })
 })
 
