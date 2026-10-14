@@ -39,6 +39,13 @@ export function EditorTabs({ tabs, active, onActivate, onPin, onClose }: {
   }, [active])
 
   const onKey = (event: KeyboardEvent, index: number) => {
+    // The close button stays out of the tab order, so Delete is the
+    // keyboard's way to close a tab.
+    if (event.key === 'Delete') {
+      event.preventDefault()
+      onClose(tabs[index].id)
+      return
+    }
     const step = event.key === 'ArrowRight' ? 1 : event.key === 'ArrowLeft' ? -1 : 0
     if (!step) return
     event.preventDefault()
@@ -59,6 +66,8 @@ export function EditorTabs({ tabs, active, onActivate, onPin, onClose }: {
         return (
           <div
             key={tab.id}
+            // Only a wrapper: the tablist's children are the buttons inside.
+            role="presentation"
             className="editor-tab"
             data-active={isActive}
             data-dirty={tab.dirty}

@@ -124,12 +124,11 @@ describe('useEditorTabs', () => {
     expect(result.current.tabsFor({ ...A, messages: [...A.messages, msg('new')] }).active).toBe('msg:new')
   })
 
-  it('lists every open tab across variants and forgets everything on reset', () => {
+  it('forgets the tabs of every variant on reset', () => {
     const { result } = renderHook(() => useEditorTabs())
     act(() => result.current.update(A, (t) => openTab(t, 'msg:b', true)))
-    act(() => result.current.update({ name: 'B', messages: [msg('x')] }, (t) => t))
-    expect(result.current.allOpen().sort()).toEqual(['msg:a', 'msg:b', 'msg:x'])
+    expect(result.current.tabsFor(A).open).toEqual(['msg:a', 'msg:b'])
     act(() => result.current.reset())
-    expect(result.current.allOpen()).toEqual([])
+    expect(result.current.tabsFor(A).open).toEqual(['msg:a'])
   })
 })

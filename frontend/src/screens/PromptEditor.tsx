@@ -604,7 +604,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     setSelectedVariant(name)
     clearDiagnostics()
     // The reducer has not run yet, so the new variant is described by hand.
-    // Its message tab never opens: the settings open pinned and active.
+    // Its first message opens as the preview tab (as for any variant), and
+    // the settings open beside it, pinned and active.
     tabsState.update({ name, messages: [{ ...emptyMessage(), uid }] }, (prev) => openTab(prev, 'variant', true))
   }
 
@@ -691,10 +692,16 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     onLint: () => void runLint(),
   }
 
-  // Every open message tab of every variant keeps its editor model (undo, cursor, scroll).
-  const modelKeys = [...new Set([...tabsState.allOpen(), ...tabs.open])]
+  // A message's editor model is named after its tab, so the key the pane
+  // shows and the keys kept alive below can never disagree.
+  const modelKeyOf = (tab: `msg:${string}`) => `${docLang}/${agentKey}/${tab.slice(4)}`
+  // Every open message tab of every variant keeps its editor model (undo,
+  // cursor, scroll). Resolved per variant: a deleted message's tab drops out
+  // at once, and a variant never touched still has its implicit first tab.
+  const modelKeys = draft.variants
+    .flatMap((variant) => tabsState.tabsFor(variant).open)
     .filter((id): id is `msg:${string}` => id.startsWith('msg:'))
-    .map((id) => `${docLang}/${agentKey}/${id.slice(4)}`)
+    .map(modelKeyOf)
 
   // Built once: the centre pane for `current`, the preview, the test run.
   const centre = (
@@ -784,7 +791,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           diagnostics={diagnostics[current.index]}
           insertable={[...agentVars, ...declaredVars]}
           completion={completion}
-          modelKey={`${docLang}/${agentKey}/${currentMessage.uid ?? current.index}`}
+          modelKey={modelKeyOf(messageTabOf(currentMessage, current.index))}
           keepModels={modelKeys}
           onRemove={() => removeMessage(current.index)}
           onMove={(to) => moveMessage(current.index, to)}

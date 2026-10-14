@@ -21,7 +21,7 @@ export type VariantTabs = {
 
 export type TabsVariant = { name: string; messages: PromptMessageDoc[] }
 
-export function messageTabOf(message: PromptMessageDoc, index: number): TabId {
+export function messageTabOf(message: PromptMessageDoc, index: number): `msg:${string}` {
   return `msg:${message.uid ?? `#${index}`}`
 }
 
@@ -112,7 +112,5 @@ export function useEditorTabs() {
 
   const reset = useCallback(() => setState({}), [])
 
-  const allOpen = useCallback(() => Object.values(state).flatMap((tabs) => tabs.open), [state])
-
-  return { tabsFor, update, renameVariant, removeVariant, reset, allOpen }
+  return { tabsFor, update, renameVariant, removeVariant, reset }
 }

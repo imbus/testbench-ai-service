@@ -33,10 +33,12 @@ function dropModel(key: string): void {
 /**
  * A Monaco editor for one Jinja template. Loaded lazily through `CodeEditor`.
  *
- * Deliberately free of behaviour: screen tests mock this component out to a
+ * Deliberately free of app logic: screen tests mock this component out to a
  * plain textarea, because Monaco needs DOM APIs jsdom does not implement.
  * Logic put here would be logic nothing covers -- the completion rules live
- * in `prompt/templateCompletion.ts`, which is tested on its own.
+ * in `prompt/templateCompletion.ts`, which is tested on its own. The model
+ * cache and its lifecycle below are the exception, deliberately untested
+ * under jsdom and checked by hand.
  * The `insert` handle is the one imperative entry point, used by the variable sidebar.
  *
  * With a `modelKey`, models live in a module-level cache and the editor
@@ -170,15 +172,20 @@ const MonacoEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function Mona
     view.current?.updateOptions({ readOnly: Boolean(readOnly), ariaLabel })
   }, [readOnly, ariaLabel])
 
+  // Also on a model switch: a cached model can be stale (another message on
+  // the same file was edited meanwhile) even when `value` itself is unchanged
+  // from the previous tab's.
   useEffect(() => {
-    const editor = view.current
-    const model = editor?.getModel()
-    if (!editor || !model) return
+    const model = view.current?.getModel()
+    if (!model) return
     if (model.getValue() !== value) {
-      // An edit, not setValue, so an outside change (revert, insert) stays undoable.
-      editor.executeEdits('sync', [{ range: model.getFullModelRange(), text: value }])
+      // An edit, not setValue, so an outside change (revert, insert) stays
+      // undoable. On the model rather than the editor: the editor's
+      // `executeEdits` is a no-op while read-only, which would leave a
+      // viewer's cached model stale for good.
+      model.pushEditOperations([], [{ range: model.getFullModelRange(), text: value }], () => null)
     }
-  }, [value])
+  }, [value, key])
 
   useEffect(() => {
     const model = view.current?.getModel()

@@ -64,6 +64,14 @@ describe('EditorTabs', () => {
     expect(props.onActivate).toHaveBeenLastCalledWith('meta')
   })
 
+  it('closes the focused tab with Delete', async () => {
+    const props = setup('msg:a')
+    screen.getByRole('tab', { name: /sys\.jinja/ }).focus()
+    await userEvent.keyboard('{Delete}')
+    expect(props.onClose).toHaveBeenCalledWith('msg:a')
+    expect(props.onActivate).not.toHaveBeenCalled()
+  })
+
   it('keeps only the active tab in the tab order', () => {
     setup('msg:a')
     expect(screen.getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('tabindex', '0')
