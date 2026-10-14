@@ -5,6 +5,31 @@ import { LANGUAGE, THEME, monaco, observeTheme, setCompletionContext } from './m
 
 const LINT_OWNER = 'jinja-lint'
 
+type Cached = { model: monaco.editor.ITextModel; view: monaco.editor.ICodeEditorViewState | null }
+
+/**
+ * Models by `modelKey`, module-level so a tab's undo history and view state
+ * outlive the editor itself (the pane unmounts while prompt.yaml or the
+ * variant settings are open). Disposed through `keepModels`.
+ */
+const cache = new Map<string, Cached>()
+const ANONYMOUS = 'anonymous:'
+let anonymousCount = 0
+
+function cachedModel(key: string, value: string): Cached {
+  let entry = cache.get(key)
+  if (!entry) {
+    entry = { model: monaco.editor.createModel(value, LANGUAGE), view: null }
+    cache.set(key, entry)
+  }
+  return entry
+}
+
+function dropModel(key: string): void {
+  cache.get(key)?.model.dispose()
+  cache.delete(key)
+}
+
 /**
  * A Monaco editor for one Jinja template. Loaded lazily through `CodeEditor`.
  *
@@ -14,11 +39,16 @@ const LINT_OWNER = 'jinja-lint'
  * in `prompt/templateCompletion.ts`, which is tested on its own.
  * The `insert` handle is the one imperative entry point, used by the variable sidebar.
  *
+ * With a `modelKey`, models live in a module-level cache and the editor
+ * swaps between them, so each keeps its undo history, cursor and scroll.
+ * `keepModels` names the keys still in use; the rest are disposed. Without
+ * a key the editor owns one private model, as before.
+ *
  * The editor is built once per mount; `readOnly` and `ariaLabel` are applied
  * in place, so neither discards undo history, cursor or scroll.
  */
 const MonacoEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function MonacoEditor(
-  { value, onChange, diagnostics, readOnly, ariaLabel, fill, completion },
+  { value, onChange, diagnostics, readOnly, ariaLabel, fill, completion, modelKey, keepModels },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null)
@@ -29,6 +59,13 @@ const MonacoEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function Mona
   completionRef.current = completion
   const readOnlyRef = useRef(readOnly)
   readOnlyRef.current = readOnly
+  // An editor without a key owns one private model, as before.
+  const anonymousKey = useRef<string | null>(null)
+  if (!modelKey && !anonymousKey.current) anonymousKey.current = `${ANONYMOUS}${++anonymousCount}`
+  const key = modelKey ?? (anonymousKey.current as string)
+  const keyRef = useRef(key)
+  const valueRef = useRef(value)
+  valueRef.current = value
 
   useImperativeHandle(
     ref,
@@ -48,9 +85,9 @@ const MonacoEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function Mona
   useEffect(() => {
     if (!host.current) return
     observeTheme()
-    const model = monaco.editor.createModel(value, LANGUAGE)
+    const entry = cachedModel(keyRef.current, valueRef.current)
     const editor = monaco.editor.create(host.current, {
-      model,
+      model: entry.model,
       theme: THEME,
       ariaLabel,
       readOnly: Boolean(readOnly),
@@ -68,10 +105,18 @@ const MonacoEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function Mona
       suggest: { showWords: false },
       fixedOverflowWidgets: true,
     })
+    if (entry.view) editor.restoreViewState(entry.view)
     view.current = editor
 
-    const unregister = setCompletionContext(model, () => completionRef.current)
-    const changes = model.onDidChangeContent(() => onChangeRef.current(model.getValue()))
+    // Completion is looked up by model, so it follows whichever model is shown.
+    let unregister = setCompletionContext(entry.model, () => completionRef.current)
+    const modelChanged = editor.onDidChangeModel(() => {
+      unregister()
+      const model = editor.getModel()
+      unregister = model ? setCompletionContext(model, () => completionRef.current) : () => {}
+    })
+    // Editor-level, so only the shown model reports edits.
+    const changes = editor.onDidChangeModelContent(() => onChangeRef.current(editor.getValue()))
 
     // Without `fill`, the editor grows with its content like a textarea.
     const resize = () => {
@@ -82,17 +127,44 @@ const MonacoEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function Mona
     resize()
 
     return () => {
+      const shown = cache.get(keyRef.current)
+      if (shown) shown.view = editor.saveViewState()
       sizes.dispose()
       changes.dispose()
+      modelChanged.dispose()
       unregister()
       editor.dispose()
-      model.dispose()
+      if (keyRef.current.startsWith(ANONYMOUS)) dropModel(keyRef.current)
       view.current = null
     }
     // Built once; the effects below sync `value`, `readOnly` and `ariaLabel`
     // in place, so remounting on every keystroke never happens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fill])
+
+  // Declared before the value sync, so a switch and a value change in one
+  // render apply in that order.
+  useEffect(() => {
+    const editor = view.current
+    if (!editor || keyRef.current === key) return
+    const previous = cache.get(keyRef.current)
+    if (previous) previous.view = editor.saveViewState()
+    keyRef.current = key
+    const entry = cachedModel(key, valueRef.current)
+    editor.setModel(entry.model)
+    if (entry.view) editor.restoreViewState(entry.view)
+  }, [key])
+
+  const keep = keepModels?.join('\n')
+  useEffect(() => {
+    if (keepModels === undefined) return
+    for (const cached of [...cache.keys()]) {
+      if (cached.startsWith(ANONYMOUS) || cached === keyRef.current) continue
+      if (!keepModels.includes(cached)) dropModel(cached)
+    }
+    // `keep` is the list's content; the array itself is new every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [keep])
 
   useEffect(() => {
     view.current?.updateOptions({ readOnly: Boolean(readOnly), ariaLabel })
@@ -123,7 +195,7 @@ const MonacoEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function Mona
       }
     })
     monaco.editor.setModelMarkers(model, LINT_OWNER, markers)
-  }, [diagnostics])
+  }, [diagnostics, key])
 
   return <div ref={host} data-testid="code-editor" style={fill ? { height: '100%' } : undefined} />
 })

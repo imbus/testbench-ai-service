@@ -12,6 +12,10 @@ export type CodeEditorProps = {
   fill?: boolean
   /** The names `agent.` / `vars.` complete to; no completion when absent. */
   completion?: CompletionContext
+  /** Which cached model the editor shows; switching keeps each model's undo history and view state. */
+  modelKey?: string
+  /** Every model key still in use; cached models not listed are disposed. */
+  keepModels?: string[]
 }
 
 export type CodeEditorHandle = {
