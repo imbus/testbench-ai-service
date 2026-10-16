@@ -49,7 +49,6 @@ function NewVar({ onAdd }: { onAdd: (name: string) => void }) {
           onChange={(event) => setName(event.target.value)}
           style={{ flex: 1, minWidth: 0, fontFamily: mono, fontSize: 12, padding: '2px 6px' }}
         />
-        <Button type="submit" outlined label="+" aria-label={t('add')} title={t('add')} disabled={!key || invalid} style={{ padding: '0 8px', fontSize: 12 }} />
       </div>
       {invalid && <span className="text-muted" style={{ fontSize: 11 }}>{t('varNameInvalid')}</span>}
     </form>
