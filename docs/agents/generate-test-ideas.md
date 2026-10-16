@@ -44,7 +44,7 @@ When authenticating with a **JWT token**, the token must also grant all of the f
    - At least one requirement is assigned below the theme, and no more than `max_requirements` (if set).
 3. The theme is marked as in progress: its description is replaced by a *"generation started"* marker (the previous description is kept below it), and the triggering user is set as locker and reviewer.
 4. The service collects the context for the prompt:
-   - **Requirement details.** If an `rm_service_url` is configured, each requirement's description, status, priority, owner and documents are fetched from the RM service. Every baseline of the requirement's repository in the TOV is tried, and the first one that knows the requirement wins. If the RM service is not configured, cannot be reached, or does not know a requirement, that requirement falls back to its TOV data (without a description). This never makes the run fail.
+   - **Requirement details.** If an `rm_service_url` is configured, each requirement's description, status, priority, owner and documents are fetched from the RM service. Every baseline of the requirement's repository in the TOV is tried, and the first one that knows the requirement wins. TestBench lists a TOV's baselines only on its legacy API, which a JWT cannot use, so with a JWT (or if that lookup fails) the service searches the RM service's own baselines instead: those of the projects in `rm_projects`, in that order, or of every RM project if it is unset. Within a project the `CURRENT` baseline is tried first. The match is on the requirement's ID and version, so a baseline other than the one the TOV references may answer. If the RM service is not configured, cannot be reached, or does not know a requirement, that requirement falls back to its TOV data (without a description). This never makes the run fail.
    - **Existing tests.** The theme's own attributes (path, priority, tags, user-defined fields, description, review comment), the subthemes below it, and every test case set below it with a short description and the requirements it is linked to.
 5. All requirements of the theme go into **one** prompt, so the model treats them as a unit. The model answers with JSON, which is validated against a schema. If it is invalid, the model is asked once more to repair it.
 6. The answer is normalised deterministically (see [Guardrails](#guardrails)), rendered as plain text, and written into the theme's description below the previous description. The theme is unlocked.
@@ -110,6 +110,7 @@ max_ideas_per_theme = 30
 # rm_service_url = "https://rm.example.com/api/"
 # rm_username = "rm-user"
 # rm_password = "rm-password"
+# rm_projects = ["Dream Car", "Dream Car Legacy"]
 ```
 
 The write-back templates (`started.jinja`, `template.jinja`, `failed.jinja`) are read from `templates/<language>/requirement/`, whatever agent key you choose.
@@ -125,8 +126,9 @@ The agent accepts the following options in its `args` table. They are validated 
 | `rm_service_url`      | String  | unset    | Base URL of the RM service to fetch requirement details from. If unset, only the TOV requirement data is used. |
 | `rm_username`         | String  | unset    | User name for HTTP basic auth against the RM service. Required if `rm_service_url` is set.                   |
 | `rm_password`         | String  | unset    | Password for HTTP basic auth against the RM service. Required if `rm_service_url` is set.                    |
+| `rm_projects`         | List of strings | all projects | RM projects searched, in this order, when TestBench cannot name the TOV's baselines (e.g. with a JWT). Must not be empty. Unset means every project the RM service lists. |
 
-For every requirement, the RM service is called with `POST {rm_service_url}projects/{project}/baselines/{baseline}/extended-requirement`. The request body is `{"id": ..., "version": ...}`.
+For every requirement, the RM service is called with `POST {rm_service_url}projects/{project}/baselines/{baseline}/extended-requirement`. The request body is `{"id": ..., "version": ...}`. When the RM service's baselines are searched, they are listed once per run with `GET {rm_service_url}projects` (skipped if `rm_projects` is set) and `GET {rm_service_url}projects/{project}/baselines`.
 
 ### Agent data
 

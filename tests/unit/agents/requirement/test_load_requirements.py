@@ -176,6 +176,122 @@ class TestFetchRequirementDetails:
         assert extended.description == "Details"
 
 
+class TestBaselineDiscovery:
+    """Without the TOV's baselines, the RM service's own projects and baselines are searched."""
+
+    async def test_a_jwt_connection_searches_the_rm_projects_without_asking_testbench(self, rm):
+        rm.rm_projects = {"Shop": [_rm_baseline("B1")]}
+        rm.known = {("B1", "473")}
+
+        (extended,) = await fetch_requirement_details(_jwt_conn(), RM_ARGS, TOV, [_assignment()])
+
+        assert rm.tov_baselines_calls == 0
+        assert extended.baseline == "B1"
+        assert [url for url, _ in rm.posted] == [_rm_url("B1")]
+
+    async def test_a_failing_tov_baseline_lookup_falls_back_to_the_search(self, rm):
+        rm.tov_baselines_error = requests.exceptions.HTTPError("403 Client Error: Forbidden")
+        rm.rm_projects = {"Shop": [_rm_baseline("B1")]}
+        rm.known = {("B1", "473")}
+
+        (extended,) = await fetch_requirement_details(MagicMock(), RM_ARGS, TOV, [_assignment()])
+
+        assert rm.tov_baselines_calls == 1
+        assert extended.baseline == "B1"
+
+    async def test_searches_every_rm_project_when_none_are_configured(self, rm):
+        rm.rm_projects = {"Other": [_rm_baseline("O1")], "Shop": [_rm_baseline("S1")]}
+        rm.known = {("S1", "473")}
+
+        (extended,) = await fetch_requirement_details(_jwt_conn(), RM_ARGS, TOV, [_assignment()])
+
+        assert extended.baseline == "S1"
+        assert rm.fetched[0] == f"{RM_URL}projects"
+        assert [url for url, _ in rm.posted] == [
+            f"{RM_URL}projects/Other/baselines/O1/extended-requirement",
+            _rm_url("S1"),
+        ]
+
+    async def test_searches_only_the_configured_rm_projects_in_their_order(self, rm):
+        rm.rm_projects = {
+            "Other": [_rm_baseline("O1")],
+            "Shop": [_rm_baseline("S1")],
+            "Ignored": [_rm_baseline("I1")],
+        }
+        args = RM_ARGS.model_copy(update={"rm_projects": ["Shop", "Other"]})
+
+        await fetch_requirement_details(_jwt_conn(), args, TOV, [_assignment()])
+
+        assert f"{RM_URL}projects" not in rm.fetched
+        assert [url for url, _ in rm.posted] == [
+            _rm_url("S1"),
+            f"{RM_URL}projects/Other/baselines/O1/extended-requirement",
+        ]
+
+    async def test_tries_the_current_baseline_of_a_project_first(self, rm):
+        rm.rm_projects = {
+            "Shop": [
+                _rm_baseline("Old", "LOCKED"),
+                _rm_baseline("Current Baseline", "CURRENT"),
+                _rm_baseline("Draft", "UNLOCKED"),
+            ]
+        }
+
+        await fetch_requirement_details(_jwt_conn(), RM_ARGS, TOV, [_assignment()])
+
+        assert [url for url, _ in rm.posted] == [
+            _rm_url("Current Baseline"),
+            _rm_url("Old"),
+            _rm_url("Draft"),
+        ]
+
+    async def test_lists_the_baselines_once_for_all_requirements(self, rm):
+        rm.rm_projects = {"Shop": [_rm_baseline("B1")]}
+        rm.known = {("B1", "1"), ("B1", "2")}
+        assignments = [_assignment(requirement_id) for requirement_id in ("1", "2")]
+
+        extended = await fetch_requirement_details(_jwt_conn(), RM_ARGS, TOV, assignments)
+
+        assert [requirement.baseline for requirement in extended] == ["B1", "B1"]
+        assert rm.fetched == [f"{RM_URL}projects", f"{RM_URL}projects/Shop/baselines"]
+
+    async def test_a_failing_project_does_not_stop_the_next_one(self, rm):
+        rm.rm_projects = {"Broken": [], "Shop": [_rm_baseline("B1")]}
+        rm.failing_projects = {"Broken"}
+        rm.known = {("B1", "473")}
+
+        (extended,) = await fetch_requirement_details(_jwt_conn(), RM_ARGS, TOV, [_assignment()])
+
+        assert extended.baseline == "B1"
+
+    async def test_an_unreachable_rm_service_falls_back_to_the_tov_data(self, rm):
+        rm.projects_error = requests.exceptions.ConnectionError("refused")
+        assignment = _assignment()
+
+        extended = await fetch_requirement_details(_jwt_conn(), RM_ARGS, TOV, [assignment])
+
+        assert extended == [ExtendedRequirement.from_assignment(assignment)]
+        assert rm.posted == []
+
+
+#: A syntactically valid JWT, as TestBench issues them for scoped access.
+JWT = (
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"
+    ".eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+    ".dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+)
+
+
+def _jwt_conn() -> MagicMock:
+    conn = MagicMock()
+    conn.session_token = JWT
+    return conn
+
+
+def _rm_baseline(name: str, baseline_type: str = "UNLOCKED") -> dict:
+    return {"name": name, "date": "2026-01-01T00:00:00.000Z", "type": baseline_type}
+
+
 RM_URL = "http://rm/"
 RM_ARGS = RequirementAgentArgs(rm_service_url=RM_URL, rm_username="u", rm_password="p")
 #: Two baselines of the requirements' repository, in the order the TOV lists them.
@@ -236,9 +352,43 @@ def rm(monkeypatch):
             response.status_code = 404
         return response
 
+    def _tov_baselines(_conn, _tov):
+        state.tov_baselines_calls += 1
+        if state.tov_baselines_error is not None:
+            raise state.tov_baselines_error
+        return BASELINES
+
+    state.fetched = []
+    state.rm_projects = {}
+    state.projects_error = None
+    state.failing_projects = set()
+    state.tov_baselines_error = None
+    state.tov_baselines_calls = 0
     session = MagicMock()
     session.__enter__.return_value = session
     session.post.side_effect = _post
-    monkeypatch.setattr(utils_module, "get_tov_baselines", lambda _conn, _tov: BASELINES)
+    session.get.side_effect = _fake_rm_get(state)
+    monkeypatch.setattr(utils_module, "get_tov_baselines", _tov_baselines)
     monkeypatch.setattr(utils_module, "_rm_session", lambda _args: session)
     return state
+
+
+def _fake_rm_get(state: SimpleNamespace):
+    """Fake the RM service's project and baseline listings from ``state.rm_projects``."""
+
+    def _get(url):
+        state.fetched.append(url)
+        path = url.removeprefix(RM_URL)
+        response = MagicMock()
+        if path == "projects":
+            if state.projects_error is not None:
+                raise state.projects_error
+            response.json.return_value = list(state.rm_projects)
+        else:
+            project = path.split("/")[1]
+            if project in state.failing_projects:
+                raise requests.exceptions.HTTPError("500 Server Error")
+            response.json.return_value = state.rm_projects[project]
+        return response
+
+    return _get

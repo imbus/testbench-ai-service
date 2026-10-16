@@ -7,8 +7,8 @@ from fastapi import HTTPException
 from testbench_ai_service.auth import (
     AuthInfo,
     AuthType,
-    _is_jwt,
     _validate_token,
+    is_jwt,
     validate_auth_token,
 )
 from testbench_ai_service.config import AppConfig
@@ -36,22 +36,22 @@ _SESSION_TOKEN = "opaque-session-token-no-dots"
 
 
 class TestIsJwt:
-    """Unit tests for the ``_is_jwt`` format detector."""
+    """Unit tests for the ``is_jwt`` format detector."""
 
     def test_valid_jwt_returns_true(self):
-        assert _is_jwt(_VALID_JWT)
+        assert is_jwt(_VALID_JWT)
 
     def test_opaque_token_returns_false(self):
-        assert not _is_jwt(_SESSION_TOKEN)
+        assert not is_jwt(_SESSION_TOKEN)
 
     def test_two_segments_returns_false(self):
-        assert not _is_jwt("a.b")
+        assert not is_jwt("a.b")
 
     def test_four_segments_returns_false(self):
-        assert not _is_jwt("a.b.c.d")
+        assert not is_jwt("a.b.c.d")
 
     def test_three_segments_but_invalid_base64_returns_false(self):
-        assert not _is_jwt("!!!.!!!.!!!")
+        assert not is_jwt("!!!.!!!.!!!")
 
 
 class TestValidateAuthToken:

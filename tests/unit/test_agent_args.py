@@ -20,7 +20,7 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.utils.config import get_agent_config
 
-REQUIREMENT_CLASS_PATH = "testbench_ai_service.agents.requirement.agent.RequirementAgent"
+REQUIREMENT_CLASS_PATH = "testbench_ai_service.agents.generate_test_idears.agent.RequirementAgent"
 
 
 class _ArgsWithRequired(AgentArgs):
@@ -33,7 +33,7 @@ def _requirement_agent(args: dict | None = None) -> AgentConfig:
         enabled=True,
         endpoint_path="/requirement-test-ideas",
         class_path=REQUIREMENT_CLASS_PATH,
-        prompt=PromptConfig(file=Path("requirement/prompt.yaml")),
+        prompt=PromptConfig(file=Path("generate_test_idears/prompt.yaml")),
         args=args or {},
     )
 
@@ -94,6 +94,12 @@ class TestStartupValidation:
     def test_rm_service_url_without_credentials_is_rejected(self):
         with pytest.raises(ValidationError, match="requires rm_username and rm_password"):
             _make_app_config(args={"rm_service_url": "http://rm"})
+
+    def test_an_empty_rm_projects_list_is_rejected(self):
+        with pytest.raises(ValidationError) as exc:
+            _make_app_config(args={"rm_projects": []})
+
+        assert ("agents", "requirement", "args", "rm_projects") in _error_locs(exc.value)
 
     def test_missing_required_arg_is_rejected(self, required_args):
         with pytest.raises(ValidationError) as exc:

@@ -12,12 +12,23 @@ class RequirementAgentArgs(AgentArgs):
         gt=0,
         description="Skip themes with more requirements than this. Unset means no limit.",
     )
+    # TODO: Support several RM services at the same time, e.g. a list of
+    #  {url, username, password, projects} entries, so requirements of different
+    #  repositories can be resolved against different RM services in one run.
     rm_service_url: str | None = Field(
         default=None,
         description="RM service to fetch requirement details from. Unset means TOV data only.",
     )
     rm_username: str | None = None
     rm_password: str | None = None
+    rm_projects: list[str] | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "RM projects searched, in this order, when TestBench cannot name the TOV's "
+            "baselines (e.g. with a JWT). Unset means every project of the RM service."
+        ),
+    )
     max_ideas_per_theme: int | None = Field(
         default=None,
         gt=0,

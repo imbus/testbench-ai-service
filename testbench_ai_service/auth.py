@@ -51,7 +51,7 @@ _jwt_token_scheme = APIKeyHeader(
 )
 
 
-def _is_jwt(token: str) -> bool:
+def is_jwt(token: str) -> bool:
     """Return True if *token* is a syntactically valid JWT.
 
     A JWT always consists of exactly three base64url-encoded segments separated
@@ -149,7 +149,7 @@ def validate_auth_token(
         )
 
     config: AppConfig = request.app.state.config
-    auth_type = AuthType.JWT_TOKEN if _is_jwt(token) else AuthType.SESSION_TOKEN
+    auth_type = AuthType.JWT_TOKEN if is_jwt(token) else AuthType.SESSION_TOKEN
     logger.debug("Authenticating via %s", auth_type.value)
 
     verify: bool | str = config.tb_ssl_ca_bundle or config.tb_ssl_verify

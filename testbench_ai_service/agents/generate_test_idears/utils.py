@@ -2,6 +2,7 @@ import asyncio
 from collections import defaultdict
 from http import HTTPStatus
 from pathlib import Path
+from typing import Any
 
 import requests
 from pydantic import ValidationError
@@ -19,6 +20,7 @@ from testbench_ai_service.agents.generate_test_idears.model import (
     Theme,
     ThemeContext,
 )
+from testbench_ai_service.auth import is_jwt
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
@@ -58,6 +60,16 @@ RM_REQUEST_TIMEOUT_SEC = (10, 60)
 
 #: Upper bound on the requests to the RM service in flight at once.
 RM_MAX_CONCURRENT_REQUESTS = 8
+
+#: Failures of listing the RM service's projects or baselines: transport and HTTP
+#: errors, and bodies that are not JSON or not shaped as expected.
+RM_LISTING_ERRORS = (
+    requests.exceptions.RequestException,
+    ValueError,
+    KeyError,
+    TypeError,
+    AttributeError,
+)
 
 #: Upper bound on the requests to TestBench in flight at once.
 TB_MAX_CONCURRENT_REQUESTS = 4
@@ -107,12 +119,16 @@ async def fetch_requirement_details(
 ) -> list[ExtendedRequirement]:
     """Look up each requirement's details in the RM service.
 
-    A requirement that no baseline of its repository contains keeps its TOV data
-    only. Without a configured ``rm_service_url`` every requirement does.
+    The baselines to search come from the TOV. When TestBench cannot name them (its
+    baseline lookup needs the legacy API, which a JWT cannot use), the baselines of the
+    RM projects in ``rm_projects`` - or of every RM project - are searched instead.
+
+    A requirement that no candidate baseline contains keeps its TOV data only.
+    Without a configured ``rm_service_url`` every requirement does.
 
     Args:
         conn: The active TestBench connection.
-        rm_service: The agent args holding the RM service URL and credentials.
+        rm_service: The agent args holding the RM service URL, credentials and projects.
         tov_key: Key of the TOV whose baselines are searched.
         requirements: The requirements loaded from the TOV.
 
@@ -123,30 +139,25 @@ async def fetch_requirement_details(
         logger.debug("No rm_service_url configured; using the TOV requirement data only")
         return [ExtendedRequirement.from_assignment(requirement) for requirement in requirements]
 
-    baselines_by_repo: dict[str, list[dict]] = defaultdict(list)
-    for baseline in await asyncio.to_thread(get_tov_baselines, conn, tov_key):
-        baselines_by_repo[baseline["repository"]].append(baseline)
-
-    for repository, baselines in baselines_by_repo.items():
-        if len(baselines) > 1:
-            logger.warning(
-                "Repository '%s' has %d baselines in TOV '%s': %s",
-                repository,
-                len(baselines),
-                tov_key,
-                [_baseline_name(baseline) for baseline in baselines],
-            )
+    tov_baselines = await _load_tov_baselines(conn, tov_key)
 
     # One pooled session for all lookups; the semaphore caps the requests in flight.
     semaphore = asyncio.Semaphore(RM_MAX_CONCURRENT_REQUESTS)
     with _rm_session(rm_service) as session:
+        if tov_baselines is None:
+            rm_baselines = await asyncio.to_thread(
+                discover_rm_baselines, session, rm_service.rm_service_url, rm_service.rm_projects
+            )
+            candidates = {requirement.repositoryId: rm_baselines for requirement in requirements}
+        else:
+            candidates = _baselines_by_repository(tov_baselines, tov_key)
         tasks = [
             asyncio.create_task(
                 _resolve_requirement(
                     session,
                     semaphore,
                     rm_service.rm_service_url,
-                    baselines_by_repo.get(requirement.repositoryId, []),
+                    candidates.get(requirement.repositoryId, []),
                     requirement,
                 )
             )
@@ -159,6 +170,105 @@ async def fetch_requirement_details(
             for task in tasks:
                 task.cancel()
             raise
+
+
+async def _load_tov_baselines(conn: TBConnection, tov_key: str) -> list[dict] | None:
+    """Return the TOV's requirement baselines, or ``None`` when TestBench cannot name them.
+
+    TestBench lists a TOV's baselines only on its legacy API, which a JWT cannot
+    authenticate against, so a JWT connection skips the lookup instead of failing on it.
+    """
+    if isinstance(conn.session_token, str) and is_jwt(conn.session_token):
+        logger.info(
+            "TOV baselines are not available with a JWT; searching the RM service's baselines"
+        )
+        return None
+    try:
+        return await asyncio.to_thread(get_tov_baselines, conn, tov_key)
+    except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as e:
+        logger.warning(
+            "Could not load the baselines of TOV '%s' from TestBench (%s); "
+            "searching the RM service's baselines",
+            tov_key,
+            e,
+        )
+        return None
+
+
+def _baselines_by_repository(baselines: list[dict], tov_key: str) -> dict[str, list[dict]]:
+    """Group the TOV's baselines by the repository they belong to."""
+    baselines_by_repo: dict[str, list[dict]] = defaultdict(list)
+    for baseline in baselines:
+        baselines_by_repo[baseline["repository"]].append(baseline)
+
+    for repository, repo_baselines in baselines_by_repo.items():
+        if len(repo_baselines) > 1:
+            logger.warning(
+                "Repository '%s' has %d baselines in TOV '%s': %s",
+                repository,
+                len(repo_baselines),
+                tov_key,
+                [_baseline_name(baseline) for baseline in repo_baselines],
+            )
+    return baselines_by_repo
+
+
+def discover_rm_baselines(
+    session: requests.Session, rm_service_url: str, rm_projects: list[str] | None
+) -> list[dict]:
+    """List the baselines of the RM projects to search, in the order they are tried.
+
+    Projects are searched in the order of ``rm_projects``, or of the RM service when
+    unset. Within a project its ``CURRENT`` baseline comes first. Never raises: a
+    project whose baselines cannot be listed is skipped, and an RM service that cannot
+    list its projects yields no baselines.
+
+    Args:
+        session: Session authenticated against the RM service (see ``_rm_session``).
+        rm_service_url: Base URL of the RM service, with a trailing slash.
+        rm_projects: Names of the RM projects to search, or ``None`` for all of them.
+
+    Returns:
+        Baselines shaped like the TOV's (``name`` and ``reqProjectName``).
+    """
+    if rm_projects is None:
+        try:
+            rm_projects = [
+                str(project) for project in _get_json(session, f"{rm_service_url}projects")
+            ]
+        except RM_LISTING_ERRORS as e:
+            logger.warning("Could not list the projects of the RM service: %s", e)
+            return []
+
+    baselines: list[dict] = []
+    for project in rm_projects:
+        url = f"{rm_service_url}projects/{project}/baselines"
+        try:
+            project_baselines = [
+                {"name": baseline["name"], "reqProjectName": project, "type": baseline.get("type")}
+                for baseline in _get_json(session, url)
+            ]
+        except RM_LISTING_ERRORS as e:
+            logger.warning("Could not list the baselines of RM project '%s': %s", project, e)
+            continue
+        # A project's current baseline is the likeliest to hold the TOV's requirement versions.
+        baselines.extend(
+            sorted(project_baselines, key=lambda baseline: baseline["type"] != "CURRENT")
+        )
+
+    logger.debug(
+        "Searching %d RM baselines: %s",
+        len(baselines),
+        [_baseline_name(baseline) for baseline in baselines],
+    )
+    return baselines
+
+
+def _get_json(session: requests.Session, url: str) -> Any:
+    """GET ``url`` and return its JSON body, raising on an error status."""
+    response = session.get(url)
+    response.raise_for_status()
+    return response.json()
 
 
 def _rm_session(rm_service: RequirementAgentArgs) -> requests.Session:
