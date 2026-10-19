@@ -55,7 +55,7 @@ export function PendingBanner({
               }}
             >
               <b>{draft.changeCount}</b> {t('unapplied')} ·{' '}
-              <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}>
+              <span style={{ fontFamily: 'var(--font-code)', fontSize: 12 }}>
                 {Object.keys(draft.edits).join(', ')}
               </span>
             </span>

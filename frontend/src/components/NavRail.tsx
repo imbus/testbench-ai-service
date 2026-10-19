@@ -182,7 +182,7 @@ export function NavRail({
       <div style={{ flex: 1 }} />
       <div
         className="text-muted"
-        style={{ padding: '8px 24px', fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+        style={{ padding: '8px 24px', fontSize: 11, fontFamily: 'var(--font-code)' }}
       >
         config.toml · prompts/
       </div>

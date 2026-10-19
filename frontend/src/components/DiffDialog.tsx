@@ -185,7 +185,7 @@ export function DiffDialog({
             <div
               className="text-muted"
               title={entry.path}
-              style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+              style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
             >
               {/* The basename, not the full path: the diff body below already
                   shows the full path in its own "--- / +++" headers, and
@@ -205,7 +205,7 @@ export function DiffDialog({
                 border: '1px solid var(--color-divider)',
                 fontSize: 12.5,
                 lineHeight: 1.5,
-                fontFamily: 'ui-monospace, Menlo, monospace',
+                fontFamily: 'var(--font-code)',
               }}
             >
               {entry.diff}

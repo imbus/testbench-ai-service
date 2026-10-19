@@ -84,10 +84,10 @@ export function Projects({
     >
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ margin: 0, fontSize: 30 }}>{t('projects')}</h2>
+          <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('projects')}</h2>
           <div
             className="text-muted"
-            style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+            style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
           >
             [testbench-ai-service.projects] · {config.data.config_path}
           </div>
@@ -310,7 +310,7 @@ function ProjectCard({
         >
           <span
             id={`${encodeURIComponent(languagePath)}-label`}
-            style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}
+            style={{ fontFamily: 'var(--font-code)', fontSize: 12 }}
           >
             language
           </span>
@@ -394,7 +394,7 @@ function ProjectCard({
                 >
                   <span
                     style={{
-                      fontFamily: 'ui-monospace, Menlo, monospace',
+                      fontFamily: 'var(--font-code)',
                       flex: 1,
                       minWidth: 0,
                       overflowWrap: 'anywhere',
@@ -409,7 +409,7 @@ function ProjectCard({
                       className="text-muted"
                       style={{
                         fontSize: 11,
-                        fontFamily: 'ui-monospace, Menlo, monospace',
+                        fontFamily: 'var(--font-code)',
                         overflowWrap: 'anywhere',
                       }}
                     >
@@ -452,7 +452,7 @@ function ProjectCard({
               style={{
                 margin: 0,
                 whiteSpace: 'pre-wrap',
-                fontFamily: 'ui-monospace, Menlo, monospace',
+                fontFamily: 'var(--font-code)',
                 fontSize: 11,
               }}
             >
@@ -462,7 +462,7 @@ function ProjectCard({
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span className="card-meta" style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>
+          <span className="card-meta" style={{ fontFamily: 'var(--font-code)' }}>
             [testbench-ai-service.{projectPath(name)}]
           </span>
           <div style={{ flex: 1 }} />

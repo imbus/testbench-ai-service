@@ -47,14 +47,14 @@ function NewVar({ onAdd }: { onAdd: (name: string) => void }) {
           placeholder={t('varNewName')}
           value={name}
           onChange={(event) => setName(event.target.value)}
-          style={{ flex: 1, minWidth: 0, fontFamily: mono, fontSize: 12, padding: '2px 6px' }}
+          style={{ flex: 1, minWidth: 0, fontFamily: codeFont, fontSize: 12, padding: '2px 6px' }}
         />
       </div>
       {invalid && <span className="text-muted" style={{ fontSize: 11 }}>{t('varNameInvalid')}</span>}
     </form>
   )
 }
-const mono = 'ui-monospace, Menlo, monospace'
+const codeFont = 'var(--font-code)'
 
 function VarButton({ name, label, type, used, disabled, onInsert }: { name: string; label?: string; type?: string; used: boolean; disabled: boolean; onInsert: () => void }) {
   return (
@@ -65,7 +65,7 @@ function VarButton({ name, label, type, used, disabled, onInsert }: { name: stri
       disabled={disabled}
       onClick={onInsert}
       title={name}
-      style={{ flex: 1, minWidth: 0, textAlign: 'left', color: 'inherit', fontFamily: mono, fontSize: 12, fontWeight: 400, padding: '2px 0', minHeight: 0, display: 'flex', justifyContent: 'space-between', gap: 6 }}
+      style={{ flex: 1, minWidth: 0, textAlign: 'left', color: 'inherit', fontFamily: codeFont, fontSize: 12, fontWeight: 400, padding: '2px 0', minHeight: 0, display: 'flex', justifyContent: 'space-between', gap: 6 }}
     >
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label ?? name}</span>
       <span style={{ display: 'flex', gap: 4, flex: 'none' }}>
@@ -146,7 +146,7 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
         {insertable ? (
           <VarButton name={path} label={label} type={type} used={used.includes(path)} disabled={disabled} onInsert={() => onInsert(`{{ ${path} }}`)} />
         ) : (
-          <span title={path} style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-between', gap: 6, fontFamily: mono, padding: '2px 0' }}>
+          <span title={path} style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-between', gap: 6, fontFamily: codeFont, padding: '2px 0' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
             {type && <span className="text-muted">{type}</span>}
           </span>
@@ -239,7 +239,7 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
           style={{ padding: 6, fontSize: 12, justifyContent: 'flex-start' }}
           content={
             <div>
-              {t('undeclaredVars')} <span style={{ fontFamily: mono }}>{undeclared.join(', ')}</span>{' '}
+              {t('undeclaredVars')} <span style={{ fontFamily: codeFont }}>{undeclared.join(', ')}</span>{' '}
               {canDeclare && (
                 <Button type="button" text label={t('declareVars')} style={{ fontSize: 11, padding: '0 4px' }} onClick={onDeclare} />
               )}

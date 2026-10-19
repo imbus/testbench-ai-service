@@ -124,7 +124,7 @@ function ActivityPanel({ isAdmin }: { isAdmin: boolean }) {
         style={{
           background: 'var(--color-surface)',
           padding: '10px 14px',
-          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontFamily: 'var(--font-code)',
           fontSize: 12,
           display: 'flex',
           flexDirection: 'column',
@@ -232,7 +232,7 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t('status')}</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('status')}</h2>
         <span className="text-muted" style={{ fontSize: 13 }}>
           {t('statusSub')}
         </span>
@@ -265,7 +265,7 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
             <Dot ok={testbench.reachable} />
             {testbench.reachable ? t('connected') : t('notConnected')}
           </div>
-          <div className="card-meta" style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>
+          <div className="card-meta" style={{ fontFamily: 'var(--font-code)' }}>
             {testbench.url}
           </div>
         </Card>
@@ -284,7 +284,7 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
                 }}
               >
                 <Dot ok={key.present} />
-                <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{key.name}</span>
+                <span style={{ fontFamily: 'var(--font-code)' }}>{key.name}</span>
                 <span className="text-muted">{key.present ? t('keySet') : t('keyMissing')}</span>
               </div>
             ))}

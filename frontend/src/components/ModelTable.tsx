@@ -206,7 +206,7 @@ export function ModelTable({
           field="model"
           header={t('modelName')}
           body={(row: Row) => (
-            <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{row.model}</span>
+            <span style={{ fontFamily: 'var(--font-code)' }}>{row.model}</span>
           )}
         />
         <Column field="provider" header={t('modelProvider')} />

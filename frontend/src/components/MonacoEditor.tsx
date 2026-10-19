@@ -98,7 +98,7 @@ const MonacoEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function Mona
       wordWrap: 'on',
       scrollBeyondLastLine: false,
       fontSize: 13,
-      fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
+      fontFamily: "'IBM Plex Sans', system-ui, sans-serif",
       lineNumbersMinChars: 3,
       renderLineHighlight: 'line',
       // Only the template's own names, never words picked up from the text.

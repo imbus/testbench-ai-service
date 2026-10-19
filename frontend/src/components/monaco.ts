@@ -40,6 +40,10 @@ export const THEME = 'tbai'
 // language service of its own.
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() }
 
+// The editor font is a web font; Monaco measures glyphs when an editor is
+// created, so re-measure once it has loaded or the cursor drifts off the text.
+document.fonts?.load("13px 'IBM Plex Sans'").then(() => monaco.editor.remeasureFonts())
+
 monaco.languages.register({ id: LANGUAGE })
 
 monaco.languages.setLanguageConfiguration(LANGUAGE, {

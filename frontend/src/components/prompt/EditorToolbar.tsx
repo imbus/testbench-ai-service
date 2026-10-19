@@ -32,7 +32,7 @@ export function EditorToolbar({ docLang, agentKey, path, variants, selectedVaria
 
   return (
     <div data-testid="editor-toolbar" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 16px', borderBottom: '1px solid var(--color-divider)', flexWrap: 'wrap' }}>
-      <h3 style={{ margin: 0, fontSize: 22 }}>{t('prompts')}</h3>
+      <h3 className="page-title" style={{ margin: 0, fontSize: 22 }}>{t('prompts')}</h3>
       <Dropdown aria-label={t('promptLanguage')} style={compact} value={docLang} options={languageOptions}
         onChange={(e) => {
           const code = e.value as string
@@ -47,7 +47,7 @@ export function EditorToolbar({ docLang, agentKey, path, variants, selectedVaria
           style={{ minHeight: 30, border: 0, borderRadius: 0, borderLeft: '1px solid var(--color-divider)', borderRight: '1px solid var(--color-divider)', fontSize: 13, fontWeight: 600 }} />
         <Button type="button" text label="›" aria-label={t('nextVariant')} title={t('nextVariant')} disabled={index < 0 || index >= variants.length - 1} onClick={() => onVariant(variants[index + 1])} style={stepper} />
       </div>
-      <span className="text-muted" style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12 }}>{path}</span>
+      <span className="text-muted" style={{ fontFamily: 'var(--font-code)', fontSize: 12 }}>{path}</span>
       <div style={{ flex: 1 }} />
       {showSave && <Button type="button" label={t('save')} disabled={!canSave} onClick={onSave} />}
     </div>

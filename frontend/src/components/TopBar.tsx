@@ -48,7 +48,7 @@ export function TopBar({
           className="text-muted"
           style={{
             fontSize: 12,
-            fontFamily: 'ui-monospace, Menlo, monospace',
+            fontFamily: 'var(--font-code)',
             whiteSpace: 'nowrap',
           }}
         >

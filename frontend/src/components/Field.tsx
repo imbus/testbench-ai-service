@@ -257,7 +257,7 @@ export function Field({
           // already in the screen's subheading, so 'llm_config.model' would
           // read as 'llm_config.' twice. The id and htmlFor stay the full
           // dotted key, which is what makes them unique on a screen.
-          style={{ fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace', display: 'block' }}
+          style={{ fontSize: 13, fontFamily: 'var(--font-code)', display: 'block' }}
         >
           {spec.label ?? lastSegment(spec.key)}
         </label>

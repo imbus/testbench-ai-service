@@ -38,7 +38,7 @@ export function RestartBanner({ fields }: { fields: string[] }) {
       text={
         <>
           {t('restartNeeded')} {t('restartWhich')}{' '}
-          <code style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{fields.join(', ')}</code>
+          <code style={{ fontFamily: 'var(--font-code)' }}>{fields.join(', ')}</code>
         </>
       }
     />

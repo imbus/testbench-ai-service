@@ -18,7 +18,7 @@ function FileGroup({
   return (
     <div data-testid={testid}>
       <div style={{ fontSize: 13 }}>{heading}</div>
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, fontFamily: 'var(--font-code)' }}>
         {files.map((file) => (
           <li key={file} data-testid="confirm-file">
             {file}

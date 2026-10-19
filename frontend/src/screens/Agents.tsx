@@ -32,7 +32,7 @@ const SWITCH_ROOT = { role: undefined, 'aria-checked': undefined }
  *  points, so without this they run on under the next column. */
 const MONO_CELL = {
   fontSize: 12,
-  fontFamily: 'ui-monospace, Menlo, monospace',
+  fontFamily: 'var(--font-code)',
   minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -89,10 +89,10 @@ export function Agents({ isAdmin }: { isAdmin: boolean }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div>
-          <h2 style={{ margin: 0, fontSize: 30 }}>{t('agents')}</h2>
+          <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('agents')}</h2>
           <div
             className="text-muted"
-            style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+            style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
           >
             [testbench-ai-service.agents] · {config.data.config_path}
           </div>
@@ -330,7 +330,7 @@ function AgentTitle({
       {meta.data?.name && (
         <div
           className="text-muted"
-          style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+          style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}
         >
           {agentKey}
         </div>
@@ -476,7 +476,7 @@ function Matrix({
           // The agent's cell names the row, as a `<th scope="row">` would.
           pt={{ bodyCell: { role: 'rowheader' } }}
           body={(row: Row) => (
-            <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{row.agentKey}</span>
+            <span style={{ fontFamily: 'var(--font-code)' }}>{row.agentKey}</span>
           )}
         />
         {columns.map((project) => {

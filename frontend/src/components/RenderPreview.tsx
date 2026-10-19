@@ -217,7 +217,7 @@ export function RenderPreview({
             style={{ borderTop: index > 0 ? '1px solid var(--color-divider)' : undefined, paddingTop: index > 0 ? 8 : 0 }}
           >
             {/* The message role, straight from the wire -- not translated. */}
-            <div className="text-muted" style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+            <div className="text-muted" style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}>
               {message.role}
             </div>
             {message.content && <MarkdownView text={message.content} />}
@@ -285,7 +285,7 @@ export function RenderPreview({
               `Field.tsx`'s `spec.key`. */}
           <span
             className="text-muted"
-            style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+            style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}
           >
             agent_context
           </span>
@@ -294,7 +294,7 @@ export function RenderPreview({
             rows={12}
             style={{
               width: '100%',
-              fontFamily: 'ui-monospace, Menlo, monospace',
+              fontFamily: 'var(--font-code)',
               fontSize: 12,
               resize: 'vertical',
             }}

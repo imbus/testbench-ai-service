@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { TabId } from '../../state/editorTabs'
 import './EditorTabs.css'
 
-const mono = 'ui-monospace, Menlo, monospace'
+const codeFont = 'var(--font-code)'
 
 export type EditorTab = {
   id: TabId
@@ -109,7 +109,7 @@ export function EditorTabs({ tabs, active, onActivate, onPin, onClose, trailing 
                 style={{
                   border: 0, background: 'transparent', color: isActive ? 'var(--color-text)' : 'inherit', cursor: 'pointer',
                   display: 'flex', alignItems: 'center', gap: 6, padding: '0 6px 0 12px', height: '100%',
-                  fontFamily: mono, fontSize: 12, whiteSpace: 'nowrap', opacity: isActive ? 1 : 0.75,
+                  fontFamily: codeFont, fontSize: 12, whiteSpace: 'nowrap', opacity: isActive ? 1 : 0.75,
                 }}
               >
                 {tab.prefix && <span className="text-muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>{tab.prefix}</span>}

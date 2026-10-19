@@ -175,10 +175,10 @@ export function AgentDetail({
       }}
     >
       <div>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{meta.data?.name ?? agentKey}</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{meta.data?.name ?? agentKey}</h2>
         <div
           className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+          style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
         >
           {agentKey} · {config.data.config_path}
         </div>
@@ -241,7 +241,7 @@ export function AgentDetail({
           <h3 style={{ margin: 0, fontSize: 16 }}>{t('promptVars')}</h3>
           <span
             className="text-muted"
-            style={{ fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+            style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}
           >
             prompt.vars
           </span>

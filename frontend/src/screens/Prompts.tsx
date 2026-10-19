@@ -10,7 +10,7 @@ import { useLang } from '../i18n'
  *  without this they run on under the next column. */
 const MONO_CELL = {
   fontSize: 11,
-  fontFamily: 'ui-monospace, Menlo, monospace',
+  fontFamily: 'var(--font-code)',
   minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -99,11 +99,11 @@ export function Prompts() {
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t('prompts')}</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('prompts')}</h2>
         {rows.length > 0 && (
           <div
             className="text-muted"
-            style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+            style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
           >
             {t('agents')}: {rows.length} · {langs.join(' · ')}
           </div>

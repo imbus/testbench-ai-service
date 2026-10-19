@@ -29,7 +29,7 @@ function editorLabel(message: PromptMessageDoc): string {
   return message.file ? `${message.role} (${message.file})` : message.role
 }
 
-const mono = 'ui-monospace, Menlo, monospace'
+const codeFont = 'var(--font-code)'
 const small = { minHeight: 26, fontSize: 12 }
 // A label must never separate from its control when the row wraps (Task 10's
 // controller ruling) -- each pair is its own no-wrap inline group.
@@ -93,7 +93,7 @@ export function MessagePane({
             one row can't fit path + every control at 1440-1280px, so the
             toolbar is two deliberate rows rather than an undirected wrap. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px 4px', fontSize: 12 }}>
-          <span className="text-muted" style={{ fontFamily: mono, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+          <span className="text-muted" style={{ fontFamily: codeFont, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
             {path}
           </span>
           <div style={{ flex: 1 }} />
@@ -171,12 +171,12 @@ export function MessagePane({
                 id={fileId}
                 value={message.file ?? ''}
                 onChange={(event) => onFile(event.target.value)}
-                style={{ ...small, padding: '1px 6px', width: '26ch', minWidth: '26ch', fontFamily: mono }}
+                style={{ ...small, padding: '1px 6px', width: '26ch', minWidth: '26ch', fontFamily: codeFont }}
               />
             </div>
           )}
           {message.source === 'file' && readOnly && message.file && (
-            <span className="text-muted" style={{ fontSize: 11, fontFamily: mono }}>
+            <span className="text-muted" style={{ fontSize: 11, fontFamily: codeFont }}>
               {message.file}
             </span>
           )}
