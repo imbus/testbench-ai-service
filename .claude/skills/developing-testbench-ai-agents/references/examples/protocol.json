@@ -1,0 +1,28 @@
+[
+  {
+    "testCaseSetKey": "4611686020000136098",
+    "executionKey": "4611686020000221774",
+    "durationMillis": 4200,
+    "comments": {
+      "html": "<html><body><p>Executed by an AI agent.</p></body></html>",
+      "plain": "Executed by an AI agent."
+    },
+    "testCases": [
+      {
+        "uniqueID": "iTB-TC-1-PC-3",
+        "testCaseExecutionKey": "191901",
+        "durationMillis": 4200,
+        "result": {
+          "status": "Performed",
+          "execStatus": "NotBlocked",
+          "verdict": "Pass",
+          "timestamp": "2026-10-19T08:00:00.000+02:00"
+        },
+        "comments": {
+          "html": "<html><body><p><strong>&#10004; passed</strong></p></body></html>",
+          "plain": "passed"
+        }
+      }
+    ]
+  }
+]
