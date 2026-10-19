@@ -136,7 +136,6 @@ export function ConfigSection({
         display: 'flex',
         flexDirection: 'column',
         gap: 20,
-        maxWidth: 1100,
       }}
     >
       {/* The artboard sets the screen title and the TOML section it edits on
@@ -208,7 +207,7 @@ export function ConfigSection({
         </TabView>
       )}
 
-      <div style={{ maxWidth: 860 }}>
+      <div>
         {fields.map((spec) => {
           const issue = issues.find((entry) => issueMatchesField(entry.path, spec.key))?.message
           // In project scope the saved value comes from `disk` ONLY. `running`
@@ -274,7 +273,7 @@ export function ConfigSection({
       )}
 
       {section === 'llm' && scope.kind === 'project' && credentials.length > 0 && (
-        <div style={{ maxWidth: 860 }}>
+        <div>
           <h3 style={{ fontSize: 16, marginBottom: 8 }}>{t('credentialsHeading')}</h3>
           {credentials.map((entry) => (
             <div key={entry.provider} className="text-muted" style={{ fontSize: 12 }}>

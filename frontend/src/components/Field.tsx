@@ -267,7 +267,7 @@ export function Field({
       </div>
       <div
         style={{
-          maxWidth: 480,
+          width: '100%',
           display: 'flex',
           flexDirection: 'column',
           gap: 4,

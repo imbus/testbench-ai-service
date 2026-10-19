@@ -78,7 +78,6 @@ export function MetaPane({
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
         gap: '16px 24px',
-        maxWidth: 900,
         alignContent: 'start',
         overflow: 'auto',
       }}

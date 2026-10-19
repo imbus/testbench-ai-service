@@ -172,7 +172,6 @@ export function AgentDetail({
         display: 'flex',
         flexDirection: 'column',
         gap: 18,
-        maxWidth: 900,
       }}
     >
       <div>

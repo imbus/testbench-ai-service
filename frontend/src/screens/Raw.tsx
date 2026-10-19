@@ -55,7 +55,6 @@ export function Raw() {
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
-        maxWidth: 1000,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

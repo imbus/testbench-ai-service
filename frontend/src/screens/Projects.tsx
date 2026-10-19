@@ -80,7 +80,6 @@ export function Projects({
         display: 'flex',
         flexDirection: 'column',
         gap: 20,
-        maxWidth: 1400,
       }}
     >
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
