@@ -229,7 +229,6 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
         display: 'flex',
         flexDirection: 'column',
         gap: 24,
-        maxWidth: 1200,
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
