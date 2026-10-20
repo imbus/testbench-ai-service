@@ -20,6 +20,7 @@ const STATUS: StatusResponse = {
   agents: { total: 3, enabled: 2, project_overrides: 4, projects: 2 },
   in_flight_tasks: 0,
   restart_required: [],
+  token_usage: { available: true, models: [] },
 }
 
 const ACTIVITY: ActivityEntry[] = [
@@ -231,5 +232,56 @@ describe('formatActivityTime', () => {
     expect(formatActivityTime('2026-10-12T10:12:03.000+00:00', now, 'en-GB', 'UTC')).toBe(
       '12/10/26, 10:12:03',
     )
+  })
+})
+
+describe('token usage', () => {
+  function stubStatus(tokenUsage: StatusResponse['token_usage']) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(url.includes('/activity') ? [] : { ...STATUS, token_usage: tokenUsage }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    )
+  }
+
+  const entry = (model: string, input: number, output: number) => ({
+    provider: 'openai',
+    model,
+    calls: 3,
+    input_tokens: input,
+    output_tokens: output,
+    reasoning_tokens: 100,
+    last_used: '2026-10-20T09:00:00+00:00',
+  })
+
+  test('sums all models and lists each one', async () => {
+    stubStatus({ available: true, models: [entry('gpt-5', 12000, 3000), entry('o3', 500, 250)] })
+    renderStatus()
+
+    await waitFor(() =>
+      expect(screen.getByTestId('token-total')).toHaveTextContent('12.500 Eingabe-Tokens / 3.250 Ausgabe-Tokens'),
+    )
+    expect(screen.getByText('gpt-5')).toBeInTheDocument()
+    expect(screen.getByText('o3')).toBeInTheDocument()
+    expect(screen.getByText('12.000')).toBeInTheDocument()
+  })
+
+  test('says so when nothing has been counted yet', async () => {
+    stubStatus({ available: true, models: [] })
+    renderStatus()
+    expect(await screen.findByText(/noch keine llm-aufrufe/i)).toBeInTheDocument()
+  })
+
+  test('says so when the usage file cannot be read, rather than showing zero', async () => {
+    stubStatus({ available: false, models: [] })
+    renderStatus()
+    expect(await screen.findByText(/nicht gelesen werden/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('token-total')).not.toBeInTheDocument()
   })
 })

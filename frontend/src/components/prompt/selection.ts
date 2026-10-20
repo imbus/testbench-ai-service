@@ -1,7 +1,7 @@
 import type { PromptMessageDoc } from '../../api/types'
 
 /** What the editor's centre pane shows. `message.index` is into the SELECTED variant. */
-export type Selection = { kind: 'meta' } | { kind: 'variant' } | { kind: 'message'; index: number }
+export type Selection = { kind: 'meta' } | { kind: 'variant' } | { kind: 'render' } | { kind: 'message'; index: number }
 
 /** The tree/tab label: a file-backed message by its file, an inline one by its first line. */
 export function messageLabel(message: PromptMessageDoc, empty: string): string {

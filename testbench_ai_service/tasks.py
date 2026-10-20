@@ -7,6 +7,7 @@ from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import log_context, logger
 from testbench_ai_service.models.agent import ExecutionContext
+from testbench_ai_service.usage import UsageRecordingClient, UsageStore
 from testbench_ai_service.utils.build_prompt_utils import get_prompt_model
 
 
@@ -17,6 +18,7 @@ async def run_agent(
     conn: TBConnection,
     llm_factory: LLMFactory,
     item_ids: list[str],
+    usage_store: UsageStore | None = None,
 ):
     """
     Resolves the LLM client and delegates execution to the agent.
@@ -28,6 +30,7 @@ async def run_agent(
         conn:      TestBench connection.
         llm_factory: Factory used to obtain the LLM client for this project.
         item_ids:  Validated item IDs returned by ``precheck()``.
+        usage_store: Where the run's token usage is counted; ``None`` counts nothing.
 
     Every record logged during the run carries the triggering user, the
     project, the agent and a fresh run id, which is what lets the console show
@@ -39,7 +42,7 @@ async def run_agent(
         agent=agent_key,
         run_id=uuid4().hex,
     ):
-        await _run_agent(agent_key, agent, context, conn, llm_factory, item_ids)
+        await _run_agent(agent_key, agent, context, conn, llm_factory, item_ids, usage_store)
 
 
 async def _run_agent(
@@ -49,6 +52,7 @@ async def _run_agent(
     conn: TBConnection,
     llm_factory: LLMFactory,
     item_ids: list[str],
+    usage_store: UsageStore | None = None,
 ):
     start_time = time.time()
     logger.info(
@@ -57,11 +61,15 @@ async def _run_agent(
         context.project_name,
     )
     try:
+        prompt_model = get_prompt_model(context.prompt_config)
         llm_client = llm_factory.get_client(
             config=context.llm_config,
-            prompt_model=get_prompt_model(context.prompt_config),
+            prompt_model=prompt_model,
             project_name=context.project_name,
         )
+        if usage_store is not None:
+            provider = llm_factory.resolve_provider(context.llm_config, prompt_model)
+            llm_client = UsageRecordingClient(llm_client, usage_store, str(provider))
         logger.debug("Initialised llm_client for agent '%s': %s", agent_key, llm_client.__class__)
 
         await agent.run(context=context, conn=conn, llm_client=llm_client, item_ids=item_ids)

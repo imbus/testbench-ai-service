@@ -1,6 +1,9 @@
 import { useState } from 'react'
+import { Card as PrimeCard } from 'primereact/card'
+import { Message } from 'primereact/message'
+import { SelectButton } from 'primereact/selectbutton'
 import { useActivity, useStatus } from '../api/queries'
-import type { ActivityScope } from '../api/types'
+import type { ActivityScope, UsageSummary } from '../api/types'
 import { useTranslation } from 'react-i18next'
 import { type Lang, useLang } from '../i18n'
 
@@ -48,13 +51,24 @@ export function formatActivityTime(
 
 function Card({ kicker, children }: { kicker: string; children: React.ReactNode }) {
   return (
-    <div className="card blueprint" style={{ padding: 16 }}>
+    // Prime's `Card` for the surface inside the artboard's blueprint frame:
+    // the registration marks are `.blueprint > .corner`, direct children
+    // only, and Card nests its content two levels down. The frame's border
+    // and (soft-corner) rounding belong to the wrapper, so the card drops its
+    // own radius. The kicker, title and meta lines keep the artboard's
+    // classes, which Card's title slots do not match.
+    <div className="blueprint">
       <i className="corner tl" />
       <i className="corner tr" />
       <i className="corner bl" />
       <i className="corner br" />
-      <div className="card-kicker">{kicker}</div>
-      {children}
+      <PrimeCard
+        style={{ height: '100%', borderRadius: 0 }}
+        pt={{ content: { style: { display: 'flex', flexDirection: 'column', gap: 8 } } }}
+      >
+        <div className="card-kicker">{kicker}</div>
+        {children}
+      </PrimeCard>
     </div>
   )
 }
@@ -92,25 +106,25 @@ function ActivityPanel({ isAdmin }: { isAdmin: boolean }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <h4 style={{ margin: 0 }}>{isAdmin ? t('activity') : t('myActivity')}</h4>
-        {isAdmin &&
-          SCOPES.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className={s === scope ? 'btn btn-secondary' : 'btn btn-ghost'}
-              aria-pressed={s === scope}
-              onClick={() => setScope(s)}
-            >
-              {scopeLabel[s]}
-            </button>
-          ))}
+        {/* `allowEmpty` off: the log always shows one scope. */}
+        {isAdmin && (
+          <SelectButton
+            aria-label={t('activity')}
+            value={scope}
+            options={SCOPES.map((s) => ({ label: scopeLabel[s], value: s }))}
+            allowEmpty={false}
+            onChange={(event) => {
+              if (event.value) setScope(event.value as ActivityScope)
+            }}
+          />
+        )}
       </div>
       <div
         className="blueprint"
         style={{
           background: 'var(--color-surface)',
           padding: '10px 14px',
-          fontFamily: 'ui-monospace, Menlo, monospace',
+          fontFamily: 'var(--font-code)',
           fontSize: 12,
           display: 'flex',
           flexDirection: 'column',
@@ -179,6 +193,69 @@ function ActivityPanel({ isAdmin }: { isAdmin: boolean }) {
   )
 }
 
+const NUMBER_CELL = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' } as const
+
+/**
+ * Token totals per model, largest consumer first (the backend's order).
+ *
+ * Spans the full width below the fact cards: a table with one row per model
+ * does not fit the 220px columns the other cards share.
+ */
+function TokenUsageCard({ usage }: { usage: UsageSummary }) {
+  const { t } = useTranslation()
+  const lang = useLang()
+  const format = (value: number) => value.toLocaleString(LOCALES[lang])
+  const input = usage.models.reduce((sum, entry) => sum + entry.input_tokens, 0)
+  const output = usage.models.reduce((sum, entry) => sum + entry.output_tokens, 0)
+
+  return (
+    <Card kicker={t('tokenUsage')}>
+      {!usage.available ? (
+        <div className="card-meta">{t('tokenUsageUnavailable')}</div>
+      ) : usage.models.length === 0 ? (
+        <div className="card-meta">{t('tokenUsageEmpty')}</div>
+      ) : (
+        <>
+          <div className="card-title" data-testid="token-total">
+            {t('tokenUsageTotal', { input: format(input), output: format(output) })}
+          </div>
+          <table style={{ fontSize: 12, borderCollapse: 'collapse', width: '100%' }}>
+            <thead className="text-muted">
+              <tr>
+                <th style={{ textAlign: 'left', fontWeight: 500 }}>{t('tokenUsageModel')}</th>
+                <th style={{ ...NUMBER_CELL, fontWeight: 500 }}>{t('tokenUsageCalls')}</th>
+                <th style={{ ...NUMBER_CELL, fontWeight: 500 }}>{t('tokenUsageInput')}</th>
+                <th style={{ ...NUMBER_CELL, fontWeight: 500 }}>{t('tokenUsageOutput')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usage.models.map((entry) => (
+                <tr key={`${entry.provider}/${entry.model}`}>
+                  <td style={{ fontFamily: 'var(--font-code)' }}>
+                    {entry.model} <span className="text-muted">({entry.provider})</span>
+                  </td>
+                  <td style={NUMBER_CELL}>{format(entry.calls)}</td>
+                  <td style={NUMBER_CELL}>{format(entry.input_tokens)}</td>
+                  <td
+                    style={NUMBER_CELL}
+                    title={
+                      entry.reasoning_tokens
+                        ? t('tokenUsageReasoning', { reasoning: format(entry.reasoning_tokens) })
+                        : undefined
+                    }
+                  >
+                    {format(entry.output_tokens)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </Card>
+  )
+}
+
 export function Status({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation()
   const status = useStatus()
@@ -191,18 +268,22 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
     // any, is shown underneath only as diagnostic detail.
     const detail = (status.error as Error)?.message
     return (
-      <div role="alert" style={{ padding: 28 }}>
-        <div>{t('statusError')}</div>
-        {detail && (
-          <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            {detail}
-          </div>
-        )}
+      <div style={{ padding: 28 }}>
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start' }}
+          content={
+            <div>
+              <div>{t('statusError')}</div>
+              {detail && <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>{detail}</div>}
+            </div>
+          }
+        />
       </div>
     )
   }
 
-  const { service, testbench, api_keys, agents } = status.data
+  const { service, testbench, api_keys, agents, token_usage } = status.data
 
   return (
     <div
@@ -211,11 +292,10 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
         display: 'flex',
         flexDirection: 'column',
         gap: 24,
-        maxWidth: 1200,
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t('status')}</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('status')}</h2>
         <span className="text-muted" style={{ fontSize: 13 }}>
           {t('statusSub')}
         </span>
@@ -248,7 +328,7 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
             <Dot ok={testbench.reachable} />
             {testbench.reachable ? t('connected') : t('notConnected')}
           </div>
-          <div className="card-meta" style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>
+          <div className="card-meta" style={{ fontFamily: 'var(--font-code)' }}>
             {testbench.url}
           </div>
         </Card>
@@ -267,7 +347,7 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
                 }}
               >
                 <Dot ok={key.present} />
-                <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{key.name}</span>
+                <span style={{ fontFamily: 'var(--font-code)' }}>{key.name}</span>
                 <span className="text-muted">{key.present ? t('keySet') : t('keyMissing')}</span>
               </div>
             ))}
@@ -283,6 +363,8 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </Card>
       </div>
+
+      <TokenUsageCard usage={token_usage} />
 
       <ActivityPanel isAdmin={isAdmin} />
     </div>

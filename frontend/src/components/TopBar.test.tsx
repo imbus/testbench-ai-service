@@ -58,8 +58,8 @@ it('labels the theme toggle with what it will do, not with what it shows', async
 it('switches the language', async () => {
   render(<TopBar {...props} />)
 
-  await userEvent.click(screen.getByRole('radio', { name: 'EN' }))
+  await userEvent.click(screen.getByRole('button', { name: 'EN' }))
 
   expect(i18n.language).toBe('en')
-  expect(screen.getByRole('radio', { name: 'EN' })).toBeChecked()
+  expect(screen.getByRole('button', { name: 'EN' })).toHaveAttribute('aria-pressed', 'true')
 })

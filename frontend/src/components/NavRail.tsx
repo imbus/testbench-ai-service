@@ -1,5 +1,6 @@
 import { Fragment } from 'react'
 import { NavLink } from 'react-router-dom'
+import { Badge } from 'primereact/badge'
 import { useTranslation } from 'react-i18next'
 import { type Translations } from '../i18n'
 
@@ -130,11 +131,15 @@ export function NavRail({
                 gap: 10,
                 padding: '8px 14px',
                 margin: '0 8px',
-                color: 'inherit',
+                // accent-100 is too pale to see under a light accent like
+                // TestBench orange, and soft corners drop the left border, so
+                // the active item needs a stronger tint and the text accent.
+                color: isActive ? 'var(--color-accent-fg)' : 'inherit',
+                fontWeight: isActive ? 600 : undefined,
                 textDecoration: 'none',
                 fontSize: 14,
                 borderLeft: `2px solid ${isActive ? 'var(--color-accent)' : 'transparent'}`,
-                background: isActive ? 'var(--color-accent-100)' : 'transparent',
+                background: isActive ? 'color-mix(in srgb, var(--color-accent) 16%, transparent)' : 'transparent',
                 opacity: restricted ? 0.5 : isActive ? 1 : 0.8,
               })}
             >
@@ -168,9 +173,7 @@ export function NavRail({
                 </svg>
               )}
               {badge !== null && (
-                <span className="tag tag-accent" style={{ padding: '1px 6px', fontSize: 10 }}>
-                  {badge}
-                </span>
+                <Badge value={badge} style={{ fontSize: 10 }} />
               )}
             </NavLink>
           </Fragment>
@@ -179,7 +182,7 @@ export function NavRail({
       <div style={{ flex: 1 }} />
       <div
         className="text-muted"
-        style={{ padding: '8px 24px', fontSize: 11, fontFamily: 'ui-monospace, Menlo, monospace' }}
+        style={{ padding: '8px 24px', fontSize: 11, fontFamily: 'var(--font-code)' }}
       >
         config.toml · prompts/
       </div>

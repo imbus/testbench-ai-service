@@ -14,7 +14,7 @@ export function ReadOnlyField({ spec, value }: { spec: FieldSpec; value: unknown
       }}
     >
       <div>
-        <div style={{ fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+        <div style={{ fontSize: 13, fontFamily: 'var(--font-code)' }}>
           {spec.label ?? lastSegment(spec.key)}
         </div>
         <div className="text-muted" style={{ fontSize: 11 }}>

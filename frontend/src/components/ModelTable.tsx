@@ -1,4 +1,9 @@
 import { useState } from 'react'
+import { Button } from 'primereact/button'
+import { Column } from 'primereact/column'
+import { DataTable } from 'primereact/datatable'
+import { Dropdown } from 'primereact/dropdown'
+import { InputText } from 'primereact/inputtext'
 
 import { joinPath, splitPath } from '../api/paths'
 import type { ConfigIssue, ExtraModelEntry, RoutingFamily } from '../api/types'
@@ -163,7 +168,19 @@ export function ModelTable({
   }
 
   const effective = withDraft(entries, draft.edits)
-  const modelNames = Object.keys(effective)
+  const rows = Object.entries(effective).map(([model, entry]) => ({
+    model,
+    ...entry,
+    issue: rowIssue(model),
+  }))
+  type Row = (typeof rows)[number]
+
+  // A config issue renders as a full-width row expansion under its model,
+  // the same place the hand-rolled grid put it: Prime expands exactly the
+  // rows listed here, keyed by `dataKey`.
+  const expandedRows = Object.fromEntries(
+    rows.filter((row) => row.issue).map((row) => [row.model, true]),
+  )
 
   return (
     <div style={{ marginTop: 24 }}>
@@ -172,71 +189,42 @@ export function ModelTable({
         {t('modelsHint')}
       </p>
 
-      {modelNames.length === 0 ? (
-        <p className="text-muted" style={{ fontSize: 13 }}>
-          {t('modelsEmpty')}
-        </p>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
-          {/* The three columns were unlabelled: a sighted operator had to infer
-              "provider" and "routing" from the values, and a screen reader read
-              three bare strings. `modelName`/`modelProvider`/`modelRouting`
-              already exist in both locale files for exactly this. */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr 1fr auto',
-              gap: 12,
-              fontSize: 11,
-              fontWeight: 600,
-              paddingBottom: 4,
-              borderBottom: '1px solid var(--color-divider)',
-            }}
-          >
-            <span>{t('modelName')}</span>
-            <span>{t('modelProvider')}</span>
-            <span>{t('modelRouting')}</span>
-            <span />
-          </div>
-          {modelNames.map((model) => {
-            const entry = effective[model]
-            const issue = rowIssue(model)
-            return (
-              <div
-                key={model}
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr 1fr auto',
-                  gap: 12,
-                  alignItems: 'center',
-                  padding: '6px 0',
-                  borderBottom: '1px solid var(--color-divider)',
-                }}
-              >
-                <span style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{model}</span>
-                <span>{entry.provider}</span>
-                <span>{entry.routing}</span>
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  disabled={readOnly}
-                  onClick={() => onRemove(model)}
-                >
-                  {t('modelRemove')}
-                </button>
-                {issue && (
-                  <span
-                    role="alert"
-                    style={{ gridColumn: '1 / -1', fontSize: 11, color: '#a33a2b' }}
-                  >
-                    {issue}
-                  </span>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
+      <DataTable
+        value={rows}
+        dataKey="model"
+        size="small"
+        emptyMessage={t('modelsEmpty')}
+        expandedRows={expandedRows}
+        rowExpansionTemplate={(row: Row) => (
+          <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
+            {row.issue}
+          </span>
+        )}
+        style={{ marginBottom: 16 }}
+      >
+        <Column
+          field="model"
+          header={t('modelName')}
+          body={(row: Row) => (
+            <span style={{ fontFamily: 'var(--font-code)' }}>{row.model}</span>
+          )}
+        />
+        <Column field="provider" header={t('modelProvider')} />
+        <Column field="routing" header={t('modelRouting')} />
+        <Column
+          style={{ width: '1%', textAlign: 'right' }}
+          body={(row: Row) => (
+            <Button
+              type="button"
+              text
+              size="small"
+              label={t('modelRemove')}
+              disabled={readOnly}
+              onClick={() => onRemove(row.model)}
+            />
+          )}
+        />
+      </DataTable>
 
       <div
         style={{
@@ -250,10 +238,8 @@ export function ModelTable({
           <label htmlFor="model-new-name" style={{ fontSize: 11 }}>
             {t('modelNewName')}
           </label>
-          <input
+          <InputText
             id="model-new-name"
-            className="input"
-            type="text"
             value={newName}
             disabled={readOnly}
             onChange={(event) => setNewName(event.target.value)}
@@ -263,41 +249,36 @@ export function ModelTable({
           <label htmlFor="model-new-provider" style={{ fontSize: 11 }}>
             {t('modelNewProvider')}
           </label>
-          <select
-            id="model-new-provider"
-            className="input"
+          <Dropdown
+            inputId="model-new-provider"
             value={newProvider}
             disabled={readOnly}
-            onChange={(event) => onProviderChange(event.target.value)}
-          >
-            {PROVIDERS.map((provider) => (
-              <option key={provider} value={provider}>
-                {PROVIDER_LABELS[provider] ?? provider}
-              </option>
-            ))}
-          </select>
+            options={PROVIDERS.map((provider) => ({
+              value: provider,
+              label: PROVIDER_LABELS[provider] ?? provider,
+            }))}
+            onChange={(event) => onProviderChange(event.value)}
+          />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <label htmlFor="model-new-routing" style={{ fontSize: 11 }}>
             {t('modelNewRouting')}
           </label>
-          <select
-            id="model-new-routing"
-            className="input"
+          <Dropdown
+            inputId="model-new-routing"
             value={newRouting}
             disabled={readOnly}
-            onChange={(event) => setNewRouting(event.target.value as RoutingFamily)}
-          >
-            {routingChoicesFor(newProvider).map((routing) => (
-              <option key={routing} value={routing}>
-                {routing}
-              </option>
-            ))}
-          </select>
+            options={routingChoicesFor(newProvider)}
+            onChange={(event) => setNewRouting(event.value as RoutingFamily)}
+          />
         </div>
-        <button type="button" className="btn" disabled={readOnly} onClick={onAdd}>
-          {t('modelAdd')}
-        </button>
+        <Button
+          type="button"
+          outlined
+          label={t('modelAdd')}
+          disabled={readOnly}
+          onClick={onAdd}
+        />
       </div>
     </div>
   )

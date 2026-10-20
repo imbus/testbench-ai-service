@@ -5,6 +5,7 @@ import { DraftProvider, useDraft } from '../state/draft'
 import type { FieldSpec } from '../screens/fields'
 import { Field } from './Field'
 import { i18n } from '../i18n'
+import { chooseOption } from '../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -102,7 +103,7 @@ describe('Field', () => {
     }
     render(<Harness spec={spec} saved={{ language: 'de' }} />)
 
-    await userEvent.selectOptions(screen.getByLabelText('language'), 'en')
+    await chooseOption(userEvent.setup(), 'language', 'en')
 
     expect(screen.getByTestId('edits')).toHaveTextContent('{"language":"en"}')
   })
@@ -201,13 +202,15 @@ describe('Field', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Invalid boolean value')
   })
 
-  it('toggles the bool switch via keyboard (Enter key)', async () => {
+  // Space, the key the switch pattern requires: Prime's switch is a native
+  // checkbox underneath, which toggles on Space and not on Enter.
+  it('toggles the bool switch via keyboard (Space key)', async () => {
     const spec: FieldSpec = { key: 'debug', type: 'bool', hint: 'Verbose logging' }
     render(<Harness spec={spec} saved={{ debug: false }} />)
 
     const switchButton = screen.getByRole('switch', { name: 'debug' })
     await userEvent.tab()
-    await userEvent.keyboard('{Enter}')
+    await userEvent.keyboard(' ')
 
     expect(switchButton).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByTestId('edits')).toHaveTextContent('{"debug":true}')

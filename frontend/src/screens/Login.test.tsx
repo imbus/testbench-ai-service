@@ -60,7 +60,7 @@ test('offers the language and theme controls before sign-in', async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Dunkles Design' }))
   expect(props.onToggleTheme).toHaveBeenCalled()
 
-  await userEvent.click(screen.getByRole('radio', { name: 'EN' }))
+  await userEvent.click(screen.getByRole('button', { name: 'EN' }))
   expect(i18n.language).toBe('en')
   expect(screen.getByRole('button', { name: 'Sign in with TestBench' })).toBeInTheDocument()
 })

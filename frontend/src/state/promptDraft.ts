@@ -3,14 +3,14 @@ import type { MessageRole, MessageSource, PromptDocument, PromptMessageDoc, Prom
 
 export type PromptDraftAction =
   | { type: 'setHeader'; field: 'name' | 'summary' | 'description' | 'default_model' | 'default_variant'; value: string }
-  | { type: 'addVariant'; name: string }
+  | { type: 'addVariant'; name: string; uid: string }
   | { type: 'renameVariant'; from: string; to: string }
   | { type: 'removeVariant'; name: string }
   | { type: 'setVariantModel'; variant: string; model: string | null }
   | { type: 'addVar'; variant: string; key: string }
   | { type: 'editVar'; variant: string; key: string; decl: PromptVarDecl }
   | { type: 'removeVar'; variant: string; key: string }
-  | { type: 'addMessage'; variant: string }
+  | { type: 'addMessage'; variant: string; uid: string }
   | { type: 'removeMessage'; variant: string; index: number }
   | { type: 'moveMessage'; variant: string; index: number; to: number }
   | { type: 'setMessageRole'; variant: string; index: number; role: MessageRole }
@@ -80,8 +80,13 @@ export function promptDraftReducer(
     case 'setHeader':
       return { ...state, [action.field]: action.value }
 
-    case 'addVariant':
-      return { ...state, variants: [...state.variants, emptyVariant(action.name)] }
+    case 'addVariant': {
+      const variant = emptyVariant(action.name)
+      return {
+        ...state,
+        variants: [...state.variants, { ...variant, messages: variant.messages.map((m) => ({ ...m, uid: action.uid })) }],
+      }
+    }
 
     case 'renameVariant': {
       const renamed = mapVariant(state, action.from, (v) => ({ ...v, name: action.to }))
@@ -149,7 +154,7 @@ export function promptDraftReducer(
     case 'addMessage':
       return mapVariant(state, action.variant, (v) => ({
         ...v,
-        messages: [...v.messages, emptyMessage()],
+        messages: [...v.messages, { ...emptyMessage(), uid: action.uid }],
       }))
 
     case 'removeMessage':
@@ -296,4 +301,74 @@ export function changedFiles(original: PromptDocument, draft: PromptDocument): s
     }
   }
   return files
+}
+
+let uidCounter = 0
+
+/** A fresh client-only message identity. Callers pass it INTO actions, so the reducer stays pure. */
+export function newMessageUid(): string {
+  uidCounter += 1
+  return `m${uidCounter}`
+}
+
+/**
+ * Gives every message a client-only `uid` for the editor tabs.
+ *
+ * `previous` is the draft being replaced on the SAME route -- the reload after
+ * a save. The saved document equals that draft position for position, so its
+ * uids are adopted by (variant name, index) and open tabs survive the save.
+ */
+export function withMessageUids(doc: PromptDocument, previous?: PromptDocument | null): PromptDocument {
+  return {
+    ...doc,
+    variants: doc.variants.map((variant) => {
+      const before = previous?.variants.find((v) => v.name === variant.name)?.messages ?? []
+      return {
+        ...variant,
+        messages: (variant.messages ?? []).map((message, index) => ({
+          ...message,
+          uid: before[index]?.uid ?? newMessageUid(),
+        })),
+      }
+    }),
+  }
+}
+
+/** The variants as the server takes them: without the client-only `uid`. */
+export function withoutMessageUids(variants: PromptVariantDoc[]): PromptVariantDoc[] {
+  return variants.map((variant) => ({
+    ...variant,
+    messages: variant.messages.map(({ role, source, file, content, readable }) => ({ role, source, file, content, readable })),
+  }))
+}
+
+function sameMessage(a: PromptMessageDoc, b: PromptMessageDoc): boolean {
+  return a.role === b.role && a.source === b.source && a.file === b.file && a.content === b.content
+}
+
+/** Whether the message differs from the loaded message with the same uid; a new message is dirty. */
+export function isMessageDirty(original: PromptDocument, message: PromptMessageDoc): boolean {
+  for (const variant of original.variants) {
+    const before = variant.messages.find((m) => m.uid === message.uid)
+    if (before) return !sameMessage(before, message)
+  }
+  return true
+}
+
+/** Whether prompt.yaml's own header fields changed. */
+export function isMetaDirty(original: PromptDocument, draft: PromptDocument): boolean {
+  return (['name', 'summary', 'description', 'default_model', 'default_variant'] as const).some(
+    (field) => original[field] !== draft[field],
+  )
+}
+
+/** Whether the variant's settings changed. Matched by name, so a renamed variant is dirty. */
+export function isVariantDirty(original: PromptDocument, variant: PromptVariantDoc): boolean {
+  const before = original.variants.find((v) => v.name === variant.name)
+  if (!before) return true
+  return (
+    before.model !== variant.model ||
+    before.description !== variant.description ||
+    JSON.stringify(before.vars) !== JSON.stringify(variant.vars)
+  )
 }

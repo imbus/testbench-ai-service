@@ -122,6 +122,7 @@ enabled = false
 | `debug`            | Boolean | Enable debug mode (verbose logging, auto-reload).                                                             | `false`                         |
 | `language`         | String  | Default language for prompt resolution and localization (`"en"` or `"de"`).                               | `"de"`                          |
 | `prompts_dir`      | String  | Directory containing prompt YAML files. Relative paths in prompt configs are resolved against this directory. | Built-in prompts directory        |
+| `usage_file`       | String  | SQLite file holding the token usage per model, shown on the web console's Status screen. A relative path is resolved against the directory of `config.toml`. Delete the file to reset the counts. Changing it takes effect after a restart. | `usage.sqlite` next to `config.toml` |
 
 **Example:**
 

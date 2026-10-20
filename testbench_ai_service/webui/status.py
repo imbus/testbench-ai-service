@@ -1,6 +1,9 @@
 """Read-only operational probes for the console's Status screen."""
 
+import asyncio
 import os
+import sqlite3
+from dataclasses import asdict
 from datetime import datetime, timezone
 
 import requests
@@ -8,12 +11,15 @@ import requests
 from testbench_ai_service import __version__
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
+from testbench_ai_service.usage import UsageStore
 from testbench_ai_service.webui.models import (
     AgentSummary,
     ApiKeyStatus,
+    ModelUsageEntry,
     ServiceStatus,
     StatusResponse,
     TestBenchStatus,
+    UsageSummary,
 )
 
 #: Provider credentials the service understands. Presence is reported, never values.
@@ -80,11 +86,26 @@ def agent_summary(config: AppConfig) -> AgentSummary:
     )
 
 
+async def read_token_usage(store: UsageStore) -> UsageSummary:
+    """The per-model totals, or an explicit "unavailable" if the file cannot be read.
+
+    Read off the event loop, like the writes: the file may be locked by a
+    writer for up to the store's timeout.
+    """
+    try:
+        totals = await asyncio.to_thread(store.totals)
+    except (sqlite3.Error, OSError) as e:
+        logger.warning("Could not read token usage from '%s': %r", store.path, e)
+        return UsageSummary(available=False)
+    return UsageSummary(models=[ModelUsageEntry(**asdict(entry)) for entry in totals])
+
+
 def build_status(
     config: AppConfig,
     started_at: datetime,
     in_flight_tasks: int = 0,
     restart_required: list[str] | None = None,
+    token_usage: UsageSummary | None = None,
 ) -> StatusResponse:
     uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
     return StatusResponse(
@@ -101,4 +122,5 @@ def build_status(
         agents=agent_summary(config),
         in_flight_tasks=in_flight_tasks,
         restart_required=restart_required or [],
+        token_usage=token_usage or UsageSummary(),
     )

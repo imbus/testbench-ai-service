@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Token usage per model on the web console's Status screen. Every LLM call -- agent runs and
+  prompt test runs alike -- adds its input and output tokens to a running total per provider and
+  model, kept in a SQLite file that survives restarts. Only the totals are stored, never the
+  individual calls. The file is `usage.sqlite` next to `config.toml` unless `usage_file` says
+  otherwise; delete it to start counting from zero. A prompt test run in the editor also shows its
+  own token count next to the latency.
 - A web console at `/admin`, served by the service itself and bundled in the release
   binary. Sign in with TestBench credentials against the server configured as `tb_server_url`;
   the console then shows service status, a tail of the log file, and the effective Service, LLM

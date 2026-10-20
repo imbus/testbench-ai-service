@@ -1,3 +1,4 @@
+import { Message } from 'primereact/message'
 import { useTranslation } from 'react-i18next'
 
 /**
@@ -12,34 +13,34 @@ export function RestartBanner({ fields }: { fields: string[] }) {
   if (fields.length === 0) return null
 
   return (
-    <div
+    // A PrimeReact `Message` stretched into a full-width strip, with the
+    // restart glyph as its icon. It keeps the bar's `status` role rather than
+    // Message's own `alert`: nothing here demands the operator's attention now.
+    <Message
+      severity="info"
       role="status"
-      style={{
-        background: 'var(--color-surface)',
-        borderBottom: '1px solid var(--color-divider)',
-        padding: '6px 16px',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        fontSize: 13,
-      }}
-    >
-      <svg
-        width="14"
-        height="14"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        aria-hidden="true"
-      >
-        <path d="M21 12a9 9 0 1 1-3-6.7" />
-        <path d="M21 3v6h-6" />
-      </svg>
-      <span>
-        {t('restartNeeded')} {t('restartWhich')}{' '}
-        <code style={{ fontFamily: 'ui-monospace, Menlo, monospace' }}>{fields.join(', ')}</code>
-      </span>
-    </div>
+      className="banner"
+      style={{ gap: 12, borderColor: 'var(--color-divider)', padding: '6px 16px' }}
+      icon={
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          aria-hidden="true"
+        >
+          <path d="M21 12a9 9 0 1 1-3-6.7" />
+          <path d="M21 3v6h-6" />
+        </svg>
+      }
+      text={
+        <>
+          {t('restartNeeded')} {t('restartWhich')}{' '}
+          <code style={{ fontFamily: 'var(--font-code)' }}>{fields.join(', ')}</code>
+        </>
+      }
+    />
   )
 }

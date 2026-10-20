@@ -1,4 +1,6 @@
 import { useEffect } from 'react'
+import { Button } from 'primereact/button'
+import { Message } from 'primereact/message'
 import type { ApiError } from '../api/client'
 import { useApply, usePreview } from '../api/mutations'
 import type { ConfigIssue } from '../api/types'
@@ -155,16 +157,24 @@ export function DiffDialog({
       {preview.isPending && <div>…</div>}
 
       {preview.isError && (
-        <div role="alert" style={{ color: '#a33a2b' }}>
-          {(preview.error as Error).message}
-        </div>
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start' }}
+          text={(preview.error as Error).message}
+        />
       )}
 
       {data && !data.valid && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={{ color: '#a33a2b' }}>{t('invalidDraft')}</div>
-          <IssueList issues={data.issues} />
-        </div>
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start' }}
+          content={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div>{t('invalidDraft')}</div>
+              <IssueList issues={data.issues} />
+            </div>
+          }
+        />
       )}
 
       {data?.valid && data.diffs.length === 0 && <div>{t('noChanges')}</div>}
@@ -175,7 +185,7 @@ export function DiffDialog({
             <div
               className="text-muted"
               title={entry.path}
-              style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+              style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
             >
               {/* The basename, not the full path: the diff body below already
                   shows the full path in its own "--- / +++" headers, and
@@ -195,7 +205,7 @@ export function DiffDialog({
                 border: '1px solid var(--color-divider)',
                 fontSize: 12.5,
                 lineHeight: 1.5,
-                fontFamily: 'ui-monospace, Menlo, monospace',
+                fontFamily: 'var(--font-code)',
               }}
             >
               {entry.diff}
@@ -218,9 +228,11 @@ export function DiffDialog({
       {apply.isSuccess && apply.data.reload_detail && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <div>{t('applied')}</div>
-          <div role="alert" style={{ color: '#a33a2b' }}>
-            {apply.data.reload_detail}
-          </div>
+          <Message
+            severity="error"
+            style={{ justifyContent: 'flex-start' }}
+            text={apply.data.reload_detail}
+          />
           {/* This is exactly the moment the operator wants to know a backup
               exists: the dialog is staying open specifically because the
               reload didn't go cleanly, and a clean apply never renders this
@@ -234,25 +246,27 @@ export function DiffDialog({
       )}
 
       {apply.isError && (
-        <div role="alert" style={{ color: '#a33a2b' }}>
-          <div>{(apply.error as Error).message}</div>
-          {applyIssues && <IssueList issues={applyIssues} />}
-        </div>
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start' }}
+          content={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div>{(apply.error as Error).message}</div>
+              {applyIssues && <IssueList issues={applyIssues} />}
+            </div>
+          }
+        />
       )}
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-secondary" onClick={onClose}>
-          {t('close')}
-        </button>
+        <Button type="button" outlined label={t('close')} onClick={onClose} />
         {data?.valid && data.diffs.length > 0 && !apply.isSuccess && (
-          <button
+          <Button
             type="button"
-            className="btn btn-primary"
+            label={apply.isPending ? t('applying') : t('apply')}
             onClick={onApply}
             disabled={apply.isPending}
-          >
-            {apply.isPending ? t('applying') : t('apply')}
-          </button>
+          />
         )}
       </div>
     </Modal>

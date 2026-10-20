@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { Button } from 'primereact/button'
+import { InputText } from 'primereact/inputtext'
+import { Message } from 'primereact/message'
 import type { LintError } from '../../api/types'
 import { useTranslation } from 'react-i18next'
 
@@ -13,24 +16,63 @@ import { useTranslation } from 'react-i18next'
 export type LintState = { running: boolean; checking?: boolean; clean: boolean; error: string | null; errors: LintError[] }
 
 const caps = { fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' as const }
-const mono = 'ui-monospace, Menlo, monospace'
+
+/** What can follow `vars.` in a template: a Jinja attribute name. */
+const VAR_NAME = /^[A-Za-z_]\w*$/
+
+/**
+ * Declares a variable without leaving the editor. Only the name: type,
+ * description and default stay with the ⚙ variant settings, which this
+ * narrow column has no room for.
+ */
+function NewVar({ onAdd }: { onAdd: (name: string) => void }) {
+  const { t } = useTranslation()
+  const [name, setName] = useState('')
+  const key = name.trim()
+  const invalid = key !== '' && !VAR_NAME.test(key)
+  return (
+    <form
+      style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (!key || invalid) return
+        onAdd(key)
+        setName('')
+      }}
+    >
+      <div style={{ display: 'flex', gap: 4 }}>
+        <InputText
+          aria-label={t('varNewName')}
+          aria-invalid={invalid || undefined}
+          placeholder={t('varNewName')}
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          style={{ flex: 1, minWidth: 0, fontFamily: codeFont, fontSize: 12, padding: '2px 6px' }}
+        />
+      </div>
+      {invalid && <span className="text-muted" style={{ fontSize: 11 }}>{t('varNameInvalid')}</span>}
+    </form>
+  )
+}
+const codeFont = 'var(--font-code)'
 
 function VarButton({ name, label, type, used, disabled, onInsert }: { name: string; label?: string; type?: string; used: boolean; disabled: boolean; onInsert: () => void }) {
   return (
-    <button
+    <Button
       type="button"
+      text
       data-used={used}
       disabled={disabled}
       onClick={onInsert}
       title={name}
-      style={{ flex: 1, minWidth: 0, textAlign: 'left', border: 0, background: 'transparent', color: 'inherit', fontFamily: mono, fontSize: 12, padding: '2px 0', cursor: disabled ? 'default' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6 }}
+      style={{ flex: 1, minWidth: 0, textAlign: 'left', color: 'inherit', fontFamily: codeFont, fontSize: 12, fontWeight: 400, padding: '2px 0', minHeight: 0, display: 'flex', justifyContent: 'space-between', gap: 6 }}
     >
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label ?? name}</span>
       <span style={{ display: 'flex', gap: 4, flex: 'none' }}>
         {type && <span className="text-muted">{type}</span>}
-        {used && <span aria-hidden style={{ color: 'var(--color-accent)' }}>●</span>}
+        {used && <span aria-hidden style={{ color: 'var(--color-accent-fg)' }}>●</span>}
       </span>
-    </button>
+    </Button>
   )
 }
 
@@ -89,22 +131,22 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
     <div data-testid="agent-field" data-path={path}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         {children.length > 0 ? (
-          <button
+          <Button
             type="button"
+            text
+            label={open ? '▾' : '▸'}
             aria-expanded={open}
             aria-label={`${open ? '▾' : '▸'} ${path}`}
             onClick={() => setOpen(!open)}
-            style={{ border: 0, background: 'transparent', color: 'inherit', padding: 0, width: 12, cursor: 'pointer', fontSize: 10, flex: 'none' }}
-          >
-            {open ? '▾' : '▸'}
-          </button>
+            style={{ color: 'inherit', padding: 0, width: 12, minHeight: 0, fontSize: 10, flex: 'none' }}
+          />
         ) : (
           <span style={{ width: 12, flex: 'none' }} />
         )}
         {insertable ? (
           <VarButton name={path} label={label} type={type} used={used.includes(path)} disabled={disabled} onInsert={() => onInsert(`{{ ${path} }}`)} />
         ) : (
-          <span title={path} style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-between', gap: 6, fontFamily: mono, padding: '2px 0' }}>
+          <span title={path} style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-between', gap: 6, fontFamily: codeFont, padding: '2px 0' }}>
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
             {type && <span className="text-muted">{type}</span>}
           </span>
@@ -132,12 +174,9 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
 }
 
 /**
- * The Split layout's right column: insertable variables and the syntax check.
- *
- * `variant="drawer"` is the Tabs layout's Variables drawer: no column chrome
- * (the drawer supplies its own) and no lint block (the status bar shows lint).
+ * The editor's right column: insertable variables and the syntax check.
  */
-export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, variant = 'column', onInsert, onDeclare, onLint }: {
+export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, onInsert, onDeclare, onLint, onAddVar }: {
   agentVars: string[]
   /** Typed sample of the agent.* namespace; shown as a foldable field tree. */
   agentContext?: Record<string, unknown>
@@ -147,21 +186,24 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
   canInsert: boolean
   canDeclare: boolean
   lint: LintState
-  variant?: 'column' | 'drawer'
   onInsert: (name: string) => void
   onDeclare: () => void
   onLint: () => void
+  /** Declares the variable (if new) and inserts it at the cursor. */
+  onAddVar: (name: string) => void
 }) {
   const { t } = useTranslation()
+  // Each in a row like `AgentField`'s: directly in this column, the button's
+  // `flex: 1` would stretch it vertically into the free space below.
   const list = (names: string[]) =>
     names.map((name) => (
-      <VarButton key={name} name={name} used={used.includes(name)} disabled={!canInsert} onInsert={() => onInsert(`{{ ${name} }}`)} />
+      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <span style={{ width: 12, flex: 'none' }} />
+        <VarButton name={name} used={used.includes(name)} disabled={!canInsert} onInsert={() => onInsert(`{{ ${name} }}`)} />
+      </div>
     ))
 
-  const column = variant === 'column'
-  const chrome = column
-    ? { width: 230, borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', padding: 12, overflow: 'auto' }
-    : {}
+  const chrome = { width: 230, borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', padding: 12, overflow: 'auto' }
 
   return (
     <aside
@@ -186,32 +228,35 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
         : list(agentVars)}
       <div className="text-muted" style={{ ...caps, marginTop: 8 }}>vars.* ({t('varsVariantScope')})</div>
       {list(declaredVars)}
+      {/* Creating a variable also inserts it, so it needs an editor that takes inserts. */}
+      {canInsert && <NewVar onAdd={onAddVar} />}
       {undeclared.length > 0 && (
-        <div style={{ border: '1px solid #c9a227', padding: 6, color: '#7a5a00', background: 'color-mix(in srgb, #c9a227 12%, transparent)' }}>
-          {t('undeclaredVars')} <span style={{ fontFamily: mono }}>{undeclared.join(', ')}</span>{' '}
-          {canDeclare && (
-            <button type="button" className="btn btn-ghost" style={{ fontSize: 11, padding: '0 4px' }} onClick={onDeclare}>
-              {t('declareVars')}
-            </button>
-          )}
-        </div>
-      )}
-      {column && (
-        <>
-          <div style={{ flex: 1 }} />
-          <button type="button" className="btn btn-ghost" disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }}>
-            {lint.running ? t('linting') : t('lint')}
-          </button>
-          {lint.checking && !lint.running && <div className="text-muted">{t('lintChecking')}</div>}
-          {lint.error && <div role="alert" style={{ color: '#a33a2b' }}>{lint.error}</div>}
-          {lint.errors.map((error, index) => (
-            <div key={index} style={{ border: '1px solid #c0392b', background: 'color-mix(in srgb, #c0392b 10%, transparent)', padding: '6px 8px', color: '#a33a2b' }}>
-              {t('lintLine', { line: error.line, message: error.message })}
+        // `status`, not Prime's default `alert`: a notice about the draft,
+        // not an error the operator has to stop for.
+        <Message
+          severity="warn"
+          role="status"
+          style={{ padding: 6, fontSize: 12, justifyContent: 'flex-start' }}
+          content={
+            <div>
+              {t('undeclaredVars')} <span style={{ fontFamily: codeFont }}>{undeclared.join(', ')}</span>{' '}
+              {canDeclare && (
+                <Button type="button" text label={t('declareVars')} style={{ fontSize: 11, padding: '0 4px' }} onClick={onDeclare} />
+              )}
             </div>
-          ))}
-          {lint.clean && !lint.error && <div style={{ color: '#2e8b5e' }}>✓ {t('lintClean')}</div>}
-        </>
+          }
+        />
       )}
+      <div style={{ flex: 1 }} />
+      <Button type="button" text label={lint.running ? t('linting') : t('lint')} disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }} />
+      {lint.checking && !lint.running && <div className="text-muted">{t('lintChecking')}</div>}
+      {lint.error && <Message severity="error" text={lint.error} style={{ fontSize: 12, justifyContent: 'flex-start' }} />}
+      {/* `status`, not Prime's default `alert`: the editor's own marker
+          is already the alert for each of these lines. */}
+      {lint.errors.map((error, index) => (
+        <Message key={index} severity="error" role="status" text={t('lintLine', { line: error.line, message: error.message })} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />
+      ))}
+      {lint.clean && !lint.error && <Message severity="success" role="status" text={t('lintClean')} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />}
     </aside>
   )
 }

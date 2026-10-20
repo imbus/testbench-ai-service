@@ -1,10 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { TestRunPanel } from './TestRunPanel'
 import { i18n } from '../i18n'
+import { chooseOption, dropdownValue, openDropdown } from '../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -61,18 +62,20 @@ function renderPanel(props: Partial<ComponentProps<typeof TestRunPanel>> = {}) {
 
 test('lists catalogue models with their routing family', async () => {
   renderPanel()
-  expect(await screen.findByRole('option', { name: /claude-opus-5/ })).toBeInTheDocument()
+  const list = await openDropdown(userEvent.setup(), 'Model')
+  expect(within(list).getByRole('option', { name: /claude-opus-5/, hidden: true })).toBeInTheDocument()
 })
 
 test('marks a fallback model so a degraded call is visible', async () => {
   renderPanel()
-  const option = await screen.findByRole('option', { name: /my-model/ })
+  const list = await openDropdown(userEvent.setup(), 'Model')
+  const option = within(list).getByRole('option', { name: /my-model/, hidden: true })
   expect(option.textContent).toMatch(/fallback/i)
 })
 
 /** Opens the free-text model field via the picker's "Other model…" entry. */
 async function typeCustomModel(user: ReturnType<typeof userEvent.setup>, text: string) {
-  await user.selectOptions(screen.getByLabelText('Model'), 'Other model…')
+  await chooseOption(user, 'Model', 'Other model…')
   const field = screen.getByLabelText('Model ID')
   await user.clear(field)
   if (text) await user.type(field, text)
@@ -95,7 +98,7 @@ test('the free-text field stays hidden until "Other model…" is picked', async 
   renderPanel()
   expect(screen.queryByLabelText('Model ID')).not.toBeInTheDocument()
 
-  await userEvent.setup().selectOptions(screen.getByLabelText('Model'), 'Other model…')
+  await chooseOption(userEvent.setup(), 'Model', 'Other model…')
   expect(screen.getByLabelText('Model ID')).toBeInTheDocument()
 })
 
@@ -109,27 +112,25 @@ test('without a catalogue the free-text field is the model control', () => {
 test('the picker shows the catalogue model it selected', async () => {
   renderPanel()
   const user = userEvent.setup()
-  const picker = screen.getByLabelText('Model') as HTMLSelectElement
 
-  await user.selectOptions(picker, 'claude-opus-5')
+  await chooseOption(user, 'Model', /claude-opus-5/)
 
-  expect(picker.value).toBe('claude-opus-5')
+  expect(dropdownValue('Model')).toBe('claude-opus-5 · adaptive')
   expect(screen.queryByLabelText('Model ID')).not.toBeInTheDocument()
 })
 
 test('the picker reads "Other model…" for a model the catalogue lacks', async () => {
   renderPanel()
   const user = userEvent.setup()
-  const picker = screen.getByLabelText('Model') as HTMLSelectElement
 
   await typeCustomModel(user, 'typed-model')
 
-  expect(picker.selectedOptions[0].textContent).toBe('Other model…')
+  expect(dropdownValue('Model')).toBe('Other model…')
 })
 
 test('a picked fallback model says so beside the picker', async () => {
   renderPanel()
-  await userEvent.setup().selectOptions(screen.getByLabelText('Model'), 'my-model')
+  await chooseOption(userEvent.setup(), 'Model', /my-model/)
   expect(screen.getByText(/no tuned routing/i)).toBeInTheDocument()
 })
 
@@ -154,18 +155,52 @@ test('shows the resolved route including the credential scope', async () => {
   expect(screen.getByText(/global key/i)).toBeInTheDocument()
 })
 
+test('shows the token usage, reasoning included in the output', async () => {
+  runState = {
+    isPending: false,
+    error: null,
+    data: {
+      text: 'the answer',
+      latency_ms: 42,
+      usage: { input_tokens: 812, output_tokens: 356, reasoning_tokens: 120 },
+      resolved: { provider: 'openai', model: 'o3', credential_scope: 'global' },
+    },
+  }
+  renderPanel()
+
+  expect(await screen.findByText(/812 input tokens \/ 356 output tokens/)).toBeInTheDocument()
+  expect(screen.getByText(/incl\. 120 reasoning/)).toBeInTheDocument()
+})
+
+test('shows no token chip when the provider reported no usage', async () => {
+  runState = {
+    isPending: false,
+    error: null,
+    data: {
+      text: 'the answer',
+      latency_ms: 42,
+      usage: null,
+      resolved: { provider: 'anthropic', model: 'claude-opus-5', credential_scope: 'global' },
+    },
+  }
+  renderPanel()
+
+  expect(await screen.findByText(/the answer/)).toBeInTheDocument()
+  expect(screen.queryByText('Tokens')).not.toBeInTheDocument()
+})
+
 test('the button is disabled while a run is in flight', async () => {
   runState = { isPending: true, data: undefined, error: null }
   renderPanel()
   // A model is picked first, so this asserts the in-flight gate specifically
   // rather than passing because the (empty) model gate happens to fire.
-  await userEvent.setup().selectOptions(screen.getByLabelText('Model'), 'claude-opus-5')
+  await chooseOption(userEvent.setup(), 'Model', /claude-opus-5/)
   expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
 })
 
 test('a non-admin cannot start a run', async () => {
   renderPanel({ isAdmin: false })
-  await userEvent.setup().selectOptions(screen.getByLabelText('Model'), 'claude-opus-5')
+  await chooseOption(userEvent.setup(), 'Model', /claude-opus-5/)
   expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
 })
 
@@ -198,7 +233,8 @@ test('the admin-gate notice is announced', () => {
 
 test('has no add-model control — that lives on the LLM view', async () => {
   renderPanel()
-  await screen.findByRole('option', { name: /claude-opus-5/ })
+  const list = await openDropdown(userEvent.setup(), 'Model')
+  await within(list).findByRole('option', { name: /claude-opus-5/, hidden: true })
   expect(screen.queryByRole('button', { name: /add model/i })).not.toBeInTheDocument()
 })
 

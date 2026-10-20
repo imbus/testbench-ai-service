@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { Button } from 'primereact/button'
+import { Message } from 'primereact/message'
 import type { PromptPlanResponse } from '../api/types'
 import { useTranslation } from 'react-i18next'
 import { Modal } from './Modal'
@@ -16,7 +18,7 @@ function FileGroup({
   return (
     <div data-testid={testid}>
       <div style={{ fontSize: 13 }}>{heading}</div>
-      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, fontFamily: 'ui-monospace, Menlo, monospace' }}>
+      <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, fontFamily: 'var(--font-code)' }}>
         {files.map((file) => (
           <li key={file} data-testid="confirm-file">
             {file}
@@ -74,9 +76,15 @@ export function SavePromptDialog({
           <FileGroup heading={t('confirmSaveUpdated')} files={plan.updated} testid="confirm-updated" />
           <FileGroup heading={t('confirmSaveDeleted')} files={plan.deleted} testid="confirm-deleted" />
           {plan.deletions_skipped && (
-            <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-              {t('confirmSaveDeletionsSkipped')} {plan.deletions_skipped}
-            </div>
+            <Message
+              severity="error"
+              style={{ justifyContent: 'flex-start', fontSize: 12 }}
+              text={
+                <>
+                  {t('confirmSaveDeletionsSkipped')} {plan.deletions_skipped}
+                </>
+              }
+            />
           )}
         </>
       )}
@@ -84,23 +92,21 @@ export function SavePromptDialog({
       {children}
 
       {error && (
-        <div role="alert" style={{ fontSize: 12, color: '#a33a2b' }}>
-          {error}
-        </div>
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start', fontSize: 12 }}
+          text={error}
+        />
       )}
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <button type="button" className="btn btn-secondary" onClick={onCancel}>
-          {t('cancel')}
-        </button>
-        <button
+        <Button type="button" outlined label={t('cancel')} onClick={onCancel} />
+        <Button
           type="button"
-          className="btn btn-primary"
+          label={pending ? (plan === null ? t('planning') : t('saving')) : t('confirm')}
           onClick={onConfirm}
           disabled={pending || plan === null}
-        >
-          {pending ? (plan === null ? t('planning') : t('saving')) : t('confirm')}
-        </button>
+        />
       </div>
     </Modal>
   )

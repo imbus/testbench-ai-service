@@ -1,3 +1,5 @@
+import { Button } from 'primereact/button'
+import { InputText } from 'primereact/inputtext'
 import type { PromptVarDecl, PromptVariantDoc } from '../../api/types'
 import { VarDeclTable } from '../../components/VarDeclTable'
 import { useTranslation } from 'react-i18next'
@@ -51,8 +53,7 @@ export function VariantPane({
             <label htmlFor="variant-name" style={{ fontSize: 12 }}>
               {t('variantName')}
             </label>
-            <input
-              className="input"
+            <InputText
               id="variant-name"
               value={variant.name}
               onChange={(event) => onRename(event.target.value)}
@@ -62,17 +63,14 @@ export function VariantPane({
             <label htmlFor="variant-model" style={{ fontSize: 12 }}>
               {t('variantModel')}
             </label>
-            <input
-              className="input"
+            <InputText
               id="variant-model"
               value={variant.model ?? ''}
               onChange={(event) => onModel(event.target.value || null)}
             />
           </div>
           {canRemove && (
-            <button type="button" className="btn btn-ghost" onClick={onRemove}>
-              {t('remove')}
-            </button>
+            <Button type="button" text label={t('remove')} onClick={onRemove} />
           )}
         </div>
       )}

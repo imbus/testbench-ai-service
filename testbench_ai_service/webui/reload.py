@@ -47,6 +47,8 @@ RESTART_FIELDS: tuple[str, ...] = (
     # 'admin_ui.require_loopback' is deliberately NOT here: it is read per
     # request through get_app_config and is genuinely hot-swappable.
     "admin_ui.enabled",
+    # The usage store is opened once, from create_app(), and outlives reloads.
+    "usage_file",
 )
 
 # Consumed once by init_routers(); a change cannot reach the live router table.

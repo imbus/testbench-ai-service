@@ -143,12 +143,17 @@ describe('a project card', () => {
   it('offers the language override as a three-way choice', async () => {
     renderProjects()
     await ready()
-    const group = within(screen.getByTestId('project-Alpha')).getByRole('radiogroup', {
+    // A SelectButton: a named group of toggle buttons, the pick marked pressed.
+    const group = within(screen.getByTestId('project-Alpha')).getByRole('group', {
       name: 'language',
     })
 
-    expect(within(group).getByRole('radio', { name: 'en' })).toBeChecked()
-    expect(within(group).getByRole('radio', { name: /Inherited/ })).not.toBeChecked()
+    expect(within(group).getAllByRole('button')).toHaveLength(3)
+    expect(within(group).getByRole('button', { name: 'en' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(group).getByRole('button', { name: /Inherited/ })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
   })
 
   it('writes the language override to the project path', async () => {
@@ -156,7 +161,7 @@ describe('a project card', () => {
     await ready()
     const card = screen.getByTestId('project-Fresh')
 
-    await userEvent.click(within(card).getByRole('radio', { name: 'en' }))
+    await userEvent.click(within(card).getByRole('button', { name: 'en' }))
 
     expect(edits()).toEqual({ 'projects.Fresh.language': 'en' })
   })
@@ -168,7 +173,7 @@ describe('a project card', () => {
     await ready()
     const card = screen.getByTestId('project-Alpha')
 
-    await userEvent.click(within(card).getByRole('radio', { name: /Inherited/ }))
+    await userEvent.click(within(card).getByRole('button', { name: /Inherited/ }))
 
     expect(edits()).toEqual({ 'projects.Alpha.language': null })
   })
@@ -178,9 +183,9 @@ describe('a project card', () => {
     await ready()
     const card = screen.getByTestId('project-Legacy')
 
-    const inheriting = within(card).getByRole('radio', { name: /Inherited/ })
-    expect(inheriting).toBeChecked()
-    expect(inheriting.closest('label')?.textContent).toMatch(/de/)
+    const inheriting = within(card).getByRole('button', { name: /Inherited/ })
+    expect(inheriting).toHaveAttribute('aria-pressed', 'true')
+    expect(inheriting.textContent).toMatch(/de/)
   })
 
   it('has an on/off switch per agent', async () => {

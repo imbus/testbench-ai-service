@@ -262,7 +262,7 @@ describe('matrix view', () => {
   async function showMatrix() {
     renderAgents()
     await waitFor(() => expect(screen.getByText('reviewer')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('radio', { name: /matrix/i }))
+    await userEvent.click(screen.getByRole('button', { name: /matrix/i }))
   }
 
   it('has a column per project from the cached list', async () => {
@@ -309,7 +309,7 @@ describe('matrix view', () => {
     projectsBody = { projects: [], fetched_at: null, source: 'unavailable', error: 'down' }
     renderAgents()
     await waitFor(() => expect(screen.getByText('reviewer')).toBeInTheDocument())
-    await userEvent.click(screen.getByRole('radio', { name: /matrix/i }))
+    await userEvent.click(screen.getByRole('button', { name: /matrix/i }))
     // `Gone` is config-only, so it is still a column; the point is the
     // unavailable notice appears rather than the list silently looking short.
     expect(screen.getByTestId('projects-unavailable')).toBeInTheDocument()
@@ -326,7 +326,7 @@ describe('the matrix against an unapplied draft', () => {
     await waitFor(() => expect(screen.getByText('reviewer')).toBeInTheDocument())
 
     await userEvent.click(screen.getByRole('switch', { name: /reviewer/ }))
-    await userEvent.click(screen.getByRole('radio', { name: /matrix/i }))
+    await userEvent.click(screen.getByRole('button', { name: /matrix/i }))
 
     const cell = screen.getByLabelText(/reviewer.*Release 2\.0/)
     expect(cell).toHaveAttribute('data-state', 'inherit')

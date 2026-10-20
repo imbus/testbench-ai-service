@@ -7,9 +7,11 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from testbench_ai_service.llm.base import LLMResult, TokenUsage
 from testbench_ai_service.log import build_activity_handler
 from testbench_ai_service.log import logger as service_logger
 
+USAGE = TokenUsage(input_tokens=812, output_tokens=356, reasoning_tokens=120)
 MESSAGE = {"role": "user", "source": "inline", "file": None, "content": "Hallo {{ vars.name }}"}
 
 
@@ -32,7 +34,7 @@ def body(**overrides) -> dict:
 def fake_client(app):
     """Install a fake LLM client and return it."""
     client = MagicMock()
-    client.query_llm = AsyncMock(return_value="the answer")
+    client.query_llm_with_usage = AsyncMock(return_value=LLMResult(text="the answer", usage=USAGE))
     app.state.llm_factory.get_client = MagicMock(return_value=client)
     app.state.llm_factory.has_project_credential = MagicMock(return_value=False)
     return client
@@ -58,10 +60,36 @@ class TestHappyPath:
         assert payload["text"] == "the answer"
         assert payload["latency_ms"] >= 0
 
+    def test_returns_the_token_usage(self, client, login, fake_client):
+        login(roles=["Administrator"])
+        response = client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
+        assert response.json()["usage"] == {
+            "input_tokens": 812,
+            "output_tokens": 356,
+            "reasoning_tokens": 120,
+        }
+
+    def test_the_run_counts_towards_the_service_totals(self, client, login, app, fake_client):
+        login(roles=["Administrator"])
+        client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
+
+        [row] = app.state.usage_store.totals()
+        assert (row.provider, row.model, row.calls) == ("anthropic", "claude-opus-5", 1)
+        assert (row.input_tokens, row.output_tokens) == (812, 356)
+
+    def test_usage_is_null_when_the_provider_reported_none(self, client, login, fake_client):
+        # A custom client gets the base default, which reports no usage; the
+        # run must still succeed rather than fail on a missing count.
+        fake_client.query_llm_with_usage = AsyncMock(return_value=LLMResult(text="the answer"))
+        login(roles=["Administrator"])
+        response = client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
+        assert response.status_code == 200
+        assert response.json()["usage"] is None
+
     def test_sends_the_rendered_draft_not_the_raw_template(self, client, login, fake_client):
         login(roles=["Administrator"])
         client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
-        sent = fake_client.query_llm.await_args.kwargs["messages"]
+        sent = fake_client.query_llm_with_usage.await_args.kwargs["messages"]
         assert sent[0].content == "Hallo Welt"
 
     def test_lets_the_factory_resolve_the_provider(self, client, login, app, fake_client):
@@ -125,7 +153,7 @@ class TestProductionResolution:
             projects={"Car Configurator": {"llm_config": {"model": "claude-sonnet-5"}}},
         )
         fake = MagicMock()
-        fake.query_llm = AsyncMock(return_value="ok")
+        fake.query_llm_with_usage = AsyncMock(return_value=LLMResult(text="ok"))
         app.state.llm_factory.get_client = MagicMock(return_value=fake)
         app.state.llm_factory.has_project_credential = MagicMock(return_value=False)
 
@@ -162,7 +190,7 @@ class TestProductionResolution:
     def test_the_run_is_counted_while_in_flight(self, client, login, app, fake_client):
         """Design D6: the reload path's in-flight count must include a test run.
 
-        Captured from inside query_llm, because the count is back to zero by
+        Captured from inside query_llm_with_usage, because the count is back to zero by
         the time the response is returned -- which is exactly the property
         TaskRegistry.track's finally guarantees.
         """
@@ -170,9 +198,9 @@ class TestProductionResolution:
 
         async def counting_query(model, messages, **kwargs):
             seen.append(app.state.task_registry.labels())
-            return "ok"
+            return LLMResult(text="ok")
 
-        fake_client.query_llm = AsyncMock(side_effect=counting_query)
+        fake_client.query_llm_with_usage = AsyncMock(side_effect=counting_query)
         login(roles=["Administrator"])
 
         client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
@@ -195,10 +223,10 @@ class TestSingleFlightOverTheWire:
 
         async def slow_query(model, messages, **kwargs):
             await gate.wait()  # holds the first request open, yields the loop
-            return "answer"
+            return LLMResult(text="answer")
 
         fake = MagicMock()
-        fake.query_llm = AsyncMock(side_effect=slow_query)
+        fake.query_llm_with_usage = AsyncMock(side_effect=slow_query)
         app.state.llm_factory.get_client = MagicMock(return_value=fake)
         app.state.llm_factory.has_project_credential = MagicMock(return_value=False)
 
@@ -214,7 +242,7 @@ class TestSingleFlightOverTheWire:
             first = asyncio.create_task(
                 client.post("/admin/api/prompts/test", json=body(), headers=headers)
             )
-            await asyncio.sleep(0.2)  # let the first request reach query_llm
+            await asyncio.sleep(0.2)  # let the first request reach query_llm_with_usage
             second = await client.post("/admin/api/prompts/test", json=body(), headers=headers)
             gate.set()
             first_response = await first
@@ -225,7 +253,9 @@ class TestSingleFlightOverTheWire:
 
 class TestFailures:
     def test_a_provider_error_is_a_502(self, client, login, app, fake_client):
-        fake_client.query_llm = AsyncMock(side_effect=RuntimeError("404 model not found"))
+        fake_client.query_llm_with_usage = AsyncMock(
+            side_effect=RuntimeError("404 model not found")
+        )
         login(roles=["Administrator"])
         response = client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
         assert response.status_code == 502
@@ -234,7 +264,7 @@ class TestFailures:
     def test_a_provider_error_is_logged_for_the_user(
         self, client, login, app, fake_client, capture
     ):
-        fake_client.query_llm = AsyncMock(side_effect=RuntimeError("provider down"))
+        fake_client.query_llm_with_usage = AsyncMock(side_effect=RuntimeError("provider down"))
         login(roles=["Administrator"])
         client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
         failed = [r for r in capture.records if r.getMessage().startswith("Prompt test run failed")]
@@ -248,7 +278,9 @@ class TestFailures:
         self, client, login, app, fake_client, monkeypatch
     ):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret-value")
-        fake_client.query_llm = AsyncMock(side_effect=RuntimeError("401 bad key sk-secret-value"))
+        fake_client.query_llm_with_usage = AsyncMock(
+            side_effect=RuntimeError("401 bad key sk-secret-value")
+        )
         login(roles=["Administrator"])
         response = client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
         assert response.status_code == 502
@@ -259,7 +291,9 @@ class TestFailures:
         self, client, login, app, fake_client, monkeypatch, tmp_path
     ):
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-secret-value")
-        fake_client.query_llm = AsyncMock(side_effect=RuntimeError("401 bad key sk-secret-value"))
+        fake_client.query_llm_with_usage = AsyncMock(
+            side_effect=RuntimeError("401 bad key sk-secret-value")
+        )
         path = tmp_path / "activity.jsonl"
         handler = build_activity_handler(str(path), 1024 * 1024, 1)
         previous = service_logger.level
@@ -333,7 +367,7 @@ class TestEntraIdSuppression:
 
     def _run(self, app, tb_connection, message: str):
         fake = MagicMock()
-        fake.query_llm = AsyncMock(side_effect=RuntimeError(message))
+        fake.query_llm_with_usage = AsyncMock(side_effect=RuntimeError(message))
         app.state.llm_factory.get_client = MagicMock(return_value=fake)
         app.state.llm_factory.has_project_credential = MagicMock(return_value=False)
 

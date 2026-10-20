@@ -207,3 +207,6 @@ testbench_ai_service/static/
 # Rotated log files (`*.log` above does not match the numbered suffixes
 # RotatingFileHandler appends)
 *.log.[0-9]*
+
+# Token usage counted by a locally running service
+usage.sqlite

@@ -3,6 +3,7 @@ import asyncio
 import pytest
 from fastapi import HTTPException
 
+from testbench_ai_service.llm.base import LLMResult, TokenUsage
 from testbench_ai_service.webui.models import RenderedMessage
 from testbench_ai_service.webui.prompt_test import (
     PROMPT_TEST_TIMEOUT,
@@ -81,23 +82,26 @@ class TestToMessages:
 
 class TestRunQuery:
     @pytest.mark.asyncio
-    async def test_returns_text_and_a_latency(self):
+    async def test_returns_text_usage_and_a_latency(self):
+        usage = TokenUsage(input_tokens=10, output_tokens=20)
+
         class FakeClient:
-            async def query_llm(self, model, messages, **kwargs):
-                return "the answer"
+            async def query_llm_with_usage(self, model, messages, **kwargs):
+                return LLMResult(text="the answer", usage=usage)
 
         outcome = await run_query(FakeClient(), "claude-opus-5", [])
 
         assert isinstance(outcome, RunOutcome)
         assert outcome.text == "the answer"
+        assert outcome.usage == usage
         assert outcome.latency_ms >= 0
 
     @pytest.mark.asyncio
     async def test_a_slow_call_times_out(self):
         class SlowClient:
-            async def query_llm(self, model, messages, **kwargs):
+            async def query_llm_with_usage(self, model, messages, **kwargs):
                 await asyncio.sleep(5)
-                return "never"
+                return LLMResult(text="never")
 
         with pytest.raises(HTTPException) as excinfo:
             await run_query(SlowClient(), "claude-opus-5", [], timeout=0.01)

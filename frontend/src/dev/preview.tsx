@@ -6,9 +6,12 @@ import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { App } from '../App'
 import { SessionProvider } from '../state/session'
+import 'primereact/resources/themes/lara-light-amber/theme.css'
 import '../styles/fonts.css'
 import '../styles/industry.css'
 import '../styles/brand.css'
+import '../styles/brand-orange.css'
+import '../styles/prime-bridge.css'
 
 const signedIn = !new URLSearchParams(location.search).has('login')
 
@@ -37,6 +40,29 @@ const FIXTURES: Record<string, unknown> = {
     agents: { total: 4, enabled: 3, project_overrides: 2, projects: 2 },
     in_flight_tasks: 0,
     restart_required: [],
+    token_usage: {
+      available: true,
+      models: [
+        {
+          provider: 'openai',
+          model: 'gpt-5',
+          calls: 128,
+          input_tokens: 1843210,
+          output_tokens: 412877,
+          reasoning_tokens: 198340,
+          last_used: '2026-10-20T09:41:00+00:00',
+        },
+        {
+          provider: 'anthropic',
+          model: 'claude-sonnet-5',
+          calls: 37,
+          input_tokens: 402118,
+          output_tokens: 88412,
+          reasoning_tokens: 0,
+          last_used: '2026-10-19T16:02:00+00:00',
+        },
+      ],
+    },
   },
   '/admin/api/config': {
     running: {
@@ -53,6 +79,12 @@ const FIXTURES: Record<string, unknown> = {
     disk: {
       host: '127.0.0.1',
       port: 8010,
+      llm_config: {
+        extra_models: {
+          'gpt-5.5': { provider: 'openai', routing: 'reasoning' },
+          'claude-local-proxy': { provider: 'custom', routing: 'fallback' },
+        },
+      },
       agents: {
         test_case_set_reviewer: {
           prompt: { variant: 'Gründlich', vars: { tone: 'sachlich und sehr ausführlich formuliert' } },
@@ -78,6 +110,7 @@ const FIXTURES: Record<string, unknown> = {
       '- Für gesperrte Konten fehlt ein Negativtest.',
     ].join('\n'),
     latency_ms: 1840,
+    usage: { input_tokens: 1234, output_tokens: 356, reasoning_tokens: 128 },
     resolved: { provider: 'openai', model: 'gpt-5', credential_scope: 'global' },
   },
   '/admin/api/models': {

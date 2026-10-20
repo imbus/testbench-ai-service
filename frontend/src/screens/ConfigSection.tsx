@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import { Badge } from 'primereact/badge'
+import { Message } from 'primereact/message'
+import { TabPanel, TabView } from 'primereact/tabview'
 import { useSearchParams } from 'react-router-dom'
 import { configuredProjects, llmOverridingProjects, scopedLlmPath, type Scope } from '../api/agents'
 import type { ConfigIssue, ExtraModelEntry } from '../api/types'
@@ -72,13 +75,21 @@ export function ConfigSection({
     // renders nothing.
     const detail = (config.error as Error)?.message
     return (
-      <div role="alert" style={{ padding: 28 }}>
-        <div>{t('configError')}</div>
-        {detail && (
-          <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            {detail}
-          </div>
-        )}
+      <div style={{ padding: 28 }}>
+        {/* `Message` carries role="alert". */}
+        <Message
+          severity="error"
+          content={
+            <div>
+              <div>{t('configError')}</div>
+              {detail && (
+                <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  {detail}
+                </div>
+              )}
+            </div>
+          }
+        />
       </div>
     )
   }
@@ -125,17 +136,16 @@ export function ConfigSection({
         display: 'flex',
         flexDirection: 'column',
         gap: 20,
-        maxWidth: 1100,
       }}
     >
       {/* The artboard sets the screen title and the TOML section it edits on
           one line, so the section reads as the subject of the heading rather
           than as a caption under it. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t(TITLE_KEY[section])}</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t(TITLE_KEY[section])}</h2>
         <span
           className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+          style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
         >
           {TOML_SECTION[section]} · {config.data.config_path}
         </span>
@@ -165,61 +175,39 @@ export function ConfigSection({
       )}
 
       {section === 'service' && (
-        <div
-          role="tablist"
-          style={{ display: 'flex', gap: 20, borderBottom: '1px solid var(--color-divider)' }}
+        // Header-only, like ScopeTabs: the tab's fields render below from
+        // `fields`, so every panel is empty and the selection is controlled.
+        <TabView
+          activeIndex={Math.max(
+            0,
+            SERVICE_TABS.findIndex((entry) => entry.key === tab),
+          )}
+          onTabChange={(event) => setTab(SERVICE_TABS[event.index].key)}
         >
           {SERVICE_TABS.map((entry) => {
             const count = tabIssueCount(entry.key)
             return (
-              <button
+              <TabPanel
                 key={entry.key}
-                role="tab"
-                aria-selected={tab === entry.key}
-                aria-label={`${t(entry.labelKey)}${count > 0 ? ` (${t('issueCount', { count })})` : ''}`}
-                onClick={() => setTab(entry.key)}
-                style={{
-                  background: 'none',
-                  border: 0,
-                  borderBottom: `2px solid ${tab === entry.key ? 'var(--color-accent)' : 'transparent'}`,
-                  padding: '8px 0',
-                  font: 'inherit',
-                  fontSize: 14,
-                  color: 'inherit',
-                  opacity: tab === entry.key ? 1 : 0.7,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 6,
-                }}
-              >
-                {t(entry.labelKey)}
-                {count > 0 && (
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      width: 18,
-                      height: 18,
-                      borderRadius: '50%',
-                      background: '#a33a2b',
-                      color: '#fff',
-                      fontSize: 11,
-                      fontWeight: 600,
-                      flexShrink: 0,
-                    }}
-                  >
-                    {count}
+                header={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {t(entry.labelKey)}
+                    {count > 0 && <Badge severity="danger" value={count} />}
                   </span>
-                )}
-              </button>
+                }
+                // The badge is a bare number; the tab's name spells it out.
+                pt={{
+                  headerAction: {
+                    'aria-label': `${t(entry.labelKey)}${count > 0 ? ` (${t('issueCount', { count })})` : ''}`,
+                  },
+                }}
+              />
             )
           })}
-        </div>
+        </TabView>
       )}
 
-      <div style={{ maxWidth: 860 }}>
+      <div>
         {fields.map((spec) => {
           const issue = issues.find((entry) => issueMatchesField(entry.path, spec.key))?.message
           // In project scope the saved value comes from `disk` ONLY. `running`
@@ -285,7 +273,7 @@ export function ConfigSection({
       )}
 
       {section === 'llm' && scope.kind === 'project' && credentials.length > 0 && (
-        <div style={{ maxWidth: 860 }}>
+        <div>
           <h3 style={{ fontSize: 16, marginBottom: 8 }}>{t('credentialsHeading')}</h3>
           {credentials.map((entry) => (
             <div key={entry.provider} className="text-muted" style={{ fontSize: 12 }}>

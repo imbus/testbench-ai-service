@@ -1,4 +1,6 @@
 import { Link } from 'react-router-dom'
+import { Message } from 'primereact/message'
+import { Tag } from 'primereact/tag'
 import { usePromptTree } from '../api/queries'
 import type { PromptTreeEntry, PromptTreeLanguage, PromptUsage } from '../api/types'
 import { useTranslation } from 'react-i18next'
@@ -8,7 +10,7 @@ import { useLang } from '../i18n'
  *  without this they run on under the next column. */
 const MONO_CELL = {
   fontSize: 11,
-  fontFamily: 'ui-monospace, Menlo, monospace',
+  fontFamily: 'var(--font-code)',
   minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis',
@@ -63,13 +65,17 @@ export function Prompts() {
   if (tree.isError) {
     const detail = (tree.error as Error)?.message
     return (
-      <div role="alert" style={{ padding: 28 }}>
-        <div>{t('promptsError')}</div>
-        {detail && (
-          <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-            {detail}
-          </div>
-        )}
+      <div style={{ padding: 28 }}>
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start' }}
+          content={
+            <div>
+              <div>{t('promptsError')}</div>
+              {detail && <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>{detail}</div>}
+            </div>
+          }
+        />
       </div>
     )
   }
@@ -93,11 +99,11 @@ export function Prompts() {
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <h2 style={{ margin: 0, fontSize: 30 }}>{t('prompts')}</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('prompts')}</h2>
         {rows.length > 0 && (
           <div
             className="text-muted"
-            style={{ fontSize: 12, fontFamily: 'ui-monospace, Menlo, monospace' }}
+            style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
           >
             {t('agents')}: {rows.length} · {langs.join(' · ')}
           </div>
@@ -222,23 +228,21 @@ function PromptRowView({
               entry.variants.length > 0 && (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
                   {entry.variants.map((variant) => (
-                    <span
+                    <Tag
                       key={variant}
-                      className="tag tag-neutral"
+                      severity="secondary"
+                      value={variant}
                       style={{ fontSize: 11, padding: '1px 6px' }}
-                    >
-                      {variant}
-                    </span>
+                    />
                   ))}
                 </div>
               )
             ) : (
-              <span
-                className="tag tag-accent"
-                style={{ fontSize: 11, padding: '1px 6px', color: '#a33a2b', alignSelf: 'start' }}
-              >
-                {entry.error}
-              </span>
+              <Tag
+                severity="danger"
+                value={entry.error}
+                style={{ fontSize: 11, padding: '1px 6px', alignSelf: 'start' }}
+              />
             )}
           </div>
         )
@@ -256,13 +260,13 @@ function PromptRowView({
             // so the tag says who actually runs this file.
             const label = usage.agent === row.agent ? scope : `${usage.agent} · ${scope}`
             return (
-              <span
+              // Prime has no outlined Tag: `.tag-outline` draws the
+              // artboard's outline pill.
+              <Tag
                 key={`${usage.agent}-${usage.project ?? ''}`}
-                className="tag tag-outline"
-                style={{ fontSize: 11, padding: '1px 6px' }}
-              >
-                {label}
-              </span>
+                className="tag-outline"
+                value={label}
+              />
             )
           })
         )}

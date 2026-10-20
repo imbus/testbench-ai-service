@@ -12,6 +12,7 @@ from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import get_log_level_int, log_context, logger
 from testbench_ai_service.models.config import LLMConfig
 from testbench_ai_service.models.logging import LogLevel
+from testbench_ai_service.usage import UsageRecordingClient, UsageStore, get_usage_store
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
 from testbench_ai_service.webui.activity import MAX_LIMIT, read_activity
@@ -88,7 +89,7 @@ from testbench_ai_service.webui.prompts import (
 from testbench_ai_service.webui.reload import hot_reload, restart_required
 from testbench_ai_service.webui.security import require_loopback
 from testbench_ai_service.webui.session import Session, SessionStore
-from testbench_ai_service.webui.status import build_status
+from testbench_ai_service.webui.status import build_status, read_token_usage
 from testbench_ai_service.webui.validate import validate_config_dict
 
 router = APIRouter(
@@ -300,6 +301,7 @@ async def read_status(
     _: Session = Depends(current_session),
     config: AppConfig = Depends(get_app_config),
     registry: TaskRegistry = Depends(get_task_registry),
+    usage_store: UsageStore = Depends(get_usage_store),
 ) -> StatusResponse:
     """Service facts, TestBench reachability, credential presence, agent counts,
     in-flight runs, and whether the file on disk has changes the process has
@@ -311,7 +313,13 @@ async def read_status(
     """
     on_disk, _issues = validate_config_dict(read_config_file(Path(request.app.state.config_path)))
     pending = restart_required(config, on_disk) if on_disk is not None else []
-    return build_status(config, request.app.state.started_at, registry.count, pending)
+    return build_status(
+        config,
+        request.app.state.started_at,
+        registry.count,
+        pending,
+        await read_token_usage(usage_store),
+    )
 
 
 @router.get("/config", response_model=ConfigResponse)
@@ -676,6 +684,7 @@ async def run_prompt_test(
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
     registry: TaskRegistry = Depends(get_task_registry),
+    usage_store: UsageStore = Depends(get_usage_store),
     _log: Session = Depends(bind_log_user),
 ) -> PromptTestResponse:
     """Run the editor's draft against a real model.
@@ -723,6 +732,9 @@ async def run_prompt_test(
             status_code=status.HTTP_400_BAD_REQUEST, detail=scrub_all(str(e), secrets)
         ) from e
 
+    # A test run is a paid call like any other, so it counts towards the totals.
+    client = UsageRecordingClient(client, usage_store, str(provider))
+
     scope = "global"
     if body.project is not None and factory.has_project_credential(
         body.project, provider, llm_config
@@ -749,6 +761,7 @@ async def run_prompt_test(
     return PromptTestResponse(
         text=outcome.text,
         latency_ms=outcome.latency_ms,
+        usage=outcome.usage,
         resolved=ResolvedRoute(provider=provider, model=body.model, credential_scope=scope),
     )
 

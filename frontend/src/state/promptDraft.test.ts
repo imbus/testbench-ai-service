@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { PromptDocument, PromptMessageDoc } from '../api/types'
-import { changedFiles, isDirty, promptDraftReducer as reduce } from './promptDraft'
+import {
+  changedFiles, isDirty, isMessageDirty, isMetaDirty, isVariantDirty,
+  promptDraftReducer as reduce, withMessageUids, withoutMessageUids,
+} from './promptDraft'
 import { defaultTemplateName } from '../api/prompts'
 
 const base: PromptDocument = {
@@ -55,7 +58,7 @@ describe('header', () => {
 
 describe('variants', () => {
   it('adds a variant', () => {
-    const next = reduce(base, { type: 'addVariant', name: 'B' })
+    const next = reduce(base, { type: 'addVariant', name: 'B', uid: 'n1' })
     expect(next.variants.map((v) => v.name)).toEqual(['A', 'B'])
   })
   it('renames a variant', () => {
@@ -65,7 +68,7 @@ describe('variants', () => {
     expect(reduce(base, { type: 'renameVariant', from: 'A', to: 'Z' }).default_variant).toBe('Z')
   })
   it('removes a variant', () => {
-    const two = reduce(base, { type: 'addVariant', name: 'B' })
+    const two = reduce(base, { type: 'addVariant', name: 'B', uid: 'n1' })
     expect(reduce(two, { type: 'removeVariant', name: 'A' }).variants.map((v) => v.name)).toEqual(['B'])
   })
   it('refuses to remove the last variant', () => {
@@ -73,7 +76,7 @@ describe('variants', () => {
     expect(reduce(base, { type: 'removeVariant', name: 'A' }).variants).toHaveLength(1)
   })
   it('repoints default_variant to the first remaining variant when the default is removed', () => {
-    const two = reduce(base, { type: 'addVariant', name: 'B' })
+    const two = reduce(base, { type: 'addVariant', name: 'B', uid: 'n1' })
     expect(two.default_variant).toBe('A')
     const next = reduce(two, { type: 'removeVariant', name: 'A' })
     expect(next.variants.map((v) => v.name)).toEqual(['B'])
@@ -118,7 +121,7 @@ describe('variables', () => {
 
 describe('messages', () => {
   it('adds an inline message', () => {
-    const next = reduce(base, { type: 'addMessage', variant: 'A' })
+    const next = reduce(base, { type: 'addMessage', variant: 'A', uid: 'n1' })
     expect(next.variants[0].messages).toHaveLength(3)
     expect(next.variants[0].messages[2].source).toBe('inline')
   })
@@ -364,5 +367,87 @@ describe('message source', () => {
     const msg1 = next.variants[0].messages[1]
     expect(msg0.file).toBe('variant_user.jinja')
     expect(msg1.file).toBe('variant_user_2.jinja')
+  })
+})
+
+describe('message uids', () => {
+  it('gives every message a distinct uid', () => {
+    const doc = withMessageUids(base)
+    const uids = doc.variants[0].messages.map((m) => m.uid)
+    expect(uids.every((uid) => typeof uid === 'string' && uid.length > 0)).toBe(true)
+    expect(new Set(uids).size).toBe(2)
+  })
+
+  it('adopts the previous draft uids by variant name and position', () => {
+    const before = withMessageUids(base)
+    // The save reload: same positions, new objects.
+    const after = withMessageUids(structuredClone(base), before)
+    expect(after.variants[0].messages.map((m) => m.uid)).toEqual(before.variants[0].messages.map((m) => m.uid))
+  })
+
+  it('keeps uids through a move, so a reload after saving a move keeps them too', () => {
+    const loaded = withMessageUids(base)
+    const moved = reduce(loaded, { type: 'moveMessage', variant: 'A', index: 0, to: 1 })
+    const reloaded = withMessageUids(
+      { ...base, variants: [{ ...base.variants[0], messages: [base.variants[0].messages[1], base.variants[0].messages[0]] }] },
+      moved,
+    )
+    expect(reloaded.variants[0].messages.map((m) => m.uid)).toEqual(moved.variants[0].messages.map((m) => m.uid))
+  })
+
+  it('gives fresh uids where the previous draft has no counterpart', () => {
+    const before = withMessageUids(base)
+    const grown = { ...base, variants: [{ ...base.variants[0], messages: [...base.variants[0].messages, { role: 'user' as const, source: 'inline' as const, file: null, content: 'X', readable: true }] }] }
+    const after = withMessageUids(grown, before)
+    expect(after.variants[0].messages[2].uid).toBeTruthy()
+    expect(before.variants[0].messages.map((m) => m.uid)).not.toContain(after.variants[0].messages[2].uid)
+  })
+
+  it('uses the uid the action carries for a new message and a new variant', () => {
+    expect(reduce(base, { type: 'addMessage', variant: 'A', uid: 'n7' }).variants[0].messages[2].uid).toBe('n7')
+    expect(reduce(base, { type: 'addVariant', name: 'B', uid: 'n8' }).variants[1].messages[0].uid).toBe('n8')
+  })
+
+  it('strips uids for the save request', () => {
+    const stripped = withoutMessageUids(withMessageUids(base).variants)
+    expect(stripped[0].messages.every((m) => !('uid' in m))).toBe(true)
+    expect(stripped[0].messages[0]).toEqual(base.variants[0].messages[0])
+  })
+
+  it('does not count uids as a change', () => {
+    expect(isDirty(base, withMessageUids(base))).toBe(false)
+  })
+})
+
+describe('per-tab dirty', () => {
+  const original = withMessageUids(base)
+
+  it('marks only the edited message dirty', () => {
+    const next = reduce(original, { type: 'setMessageContent', variant: 'A', index: 1, content: 'U2' })
+    expect(isMessageDirty(original, next.variants[0].messages[1])).toBe(true)
+    expect(isMessageDirty(original, next.variants[0].messages[0])).toBe(false)
+  })
+
+  it('does not mark a moved but unchanged message dirty', () => {
+    const next = reduce(original, { type: 'moveMessage', variant: 'A', index: 0, to: 1 })
+    expect(isMessageDirty(original, next.variants[0].messages[1])).toBe(false)
+  })
+
+  it('marks a message with no original dirty', () => {
+    const next = reduce(original, { type: 'addMessage', variant: 'A', uid: 'n9' })
+    expect(isMessageDirty(original, next.variants[0].messages[2])).toBe(true)
+  })
+
+  it('tracks the header fields', () => {
+    expect(isMetaDirty(original, original)).toBe(false)
+    expect(isMetaDirty(original, reduce(original, { type: 'setHeader', field: 'name', value: 'N' }))).toBe(true)
+  })
+
+  it('tracks a variant by name, model, description and vars', () => {
+    expect(isVariantDirty(original, original.variants[0])).toBe(false)
+    const modelled = reduce(original, { type: 'setVariantModel', variant: 'A', model: 'x' })
+    expect(isVariantDirty(original, modelled.variants[0])).toBe(true)
+    const renamed = reduce(original, { type: 'renameVariant', from: 'A', to: 'Z' })
+    expect(isVariantDirty(original, renamed.variants[0])).toBe(true)
   })
 })
