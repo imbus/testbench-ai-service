@@ -3,7 +3,7 @@ import { Card as PrimeCard } from 'primereact/card'
 import { Message } from 'primereact/message'
 import { SelectButton } from 'primereact/selectbutton'
 import { useActivity, useStatus } from '../api/queries'
-import type { ActivityScope } from '../api/types'
+import type { ActivityScope, UsageSummary } from '../api/types'
 import { useTranslation } from 'react-i18next'
 import { type Lang, useLang } from '../i18n'
 
@@ -193,6 +193,69 @@ function ActivityPanel({ isAdmin }: { isAdmin: boolean }) {
   )
 }
 
+const NUMBER_CELL = { textAlign: 'right', fontVariantNumeric: 'tabular-nums' } as const
+
+/**
+ * Token totals per model, largest consumer first (the backend's order).
+ *
+ * Spans the full width below the fact cards: a table with one row per model
+ * does not fit the 220px columns the other cards share.
+ */
+function TokenUsageCard({ usage }: { usage: UsageSummary }) {
+  const { t } = useTranslation()
+  const lang = useLang()
+  const format = (value: number) => value.toLocaleString(LOCALES[lang])
+  const input = usage.models.reduce((sum, entry) => sum + entry.input_tokens, 0)
+  const output = usage.models.reduce((sum, entry) => sum + entry.output_tokens, 0)
+
+  return (
+    <Card kicker={t('tokenUsage')}>
+      {!usage.available ? (
+        <div className="card-meta">{t('tokenUsageUnavailable')}</div>
+      ) : usage.models.length === 0 ? (
+        <div className="card-meta">{t('tokenUsageEmpty')}</div>
+      ) : (
+        <>
+          <div className="card-title" data-testid="token-total">
+            {t('tokenUsageTotal', { input: format(input), output: format(output) })}
+          </div>
+          <table style={{ fontSize: 12, borderCollapse: 'collapse', width: '100%' }}>
+            <thead className="text-muted">
+              <tr>
+                <th style={{ textAlign: 'left', fontWeight: 500 }}>{t('tokenUsageModel')}</th>
+                <th style={{ ...NUMBER_CELL, fontWeight: 500 }}>{t('tokenUsageCalls')}</th>
+                <th style={{ ...NUMBER_CELL, fontWeight: 500 }}>{t('tokenUsageInput')}</th>
+                <th style={{ ...NUMBER_CELL, fontWeight: 500 }}>{t('tokenUsageOutput')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {usage.models.map((entry) => (
+                <tr key={`${entry.provider}/${entry.model}`}>
+                  <td style={{ fontFamily: 'var(--font-code)' }}>
+                    {entry.model} <span className="text-muted">({entry.provider})</span>
+                  </td>
+                  <td style={NUMBER_CELL}>{format(entry.calls)}</td>
+                  <td style={NUMBER_CELL}>{format(entry.input_tokens)}</td>
+                  <td
+                    style={NUMBER_CELL}
+                    title={
+                      entry.reasoning_tokens
+                        ? t('tokenUsageReasoning', { reasoning: format(entry.reasoning_tokens) })
+                        : undefined
+                    }
+                  >
+                    {format(entry.output_tokens)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </Card>
+  )
+}
+
 export function Status({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation()
   const status = useStatus()
@@ -220,7 +283,7 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
     )
   }
 
-  const { service, testbench, api_keys, agents } = status.data
+  const { service, testbench, api_keys, agents, token_usage } = status.data
 
   return (
     <div
@@ -300,6 +363,8 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </Card>
       </div>
+
+      <TokenUsageCard usage={token_usage} />
 
       <ActivityPanel isAdmin={isAdmin} />
     </div>

@@ -21,6 +21,7 @@ from testbench_ai_service.middlewares import (
     RequestScopeMiddleware,
 )
 from testbench_ai_service.routes import router
+from testbench_ai_service.usage import UsageStore, resolve_usage_file
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import load_translations
 from testbench_ai_service.webui.inflight import TaskRegistry
@@ -138,6 +139,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # Same reasoning as task_registry: created unconditionally so the route
     # never hits a missing attribute if it is ever reached before init_webui.
     app.state.prompt_test_flight = SingleFlight()
+    # Created here rather than in init_services: it outlives every reload,
+    # while the LLM factory is rebuilt by each one.
+    app.state.usage_store = UsageStore(resolve_usage_file(config.usage_file, app.state.config_path))
 
     init_routers(app)
     init_webui(app)

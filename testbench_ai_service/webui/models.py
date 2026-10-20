@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from testbench_ai_service.llm.base import LLMProvider, RoutingFamily
+from testbench_ai_service.llm.base import LLMProvider, RoutingFamily, TokenUsage
 from testbench_ai_service.models.config import PromptVarValue
 from testbench_ai_service.models.prompt import PromptVariableDefinition
 
@@ -120,6 +120,26 @@ class AgentSummary(BaseModel):
     projects: int
 
 
+class ModelUsageEntry(BaseModel):
+    provider: str
+    model: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    #: Part of ``output_tokens``, not on top of it.
+    reasoning_tokens: int
+    last_used: datetime
+
+
+class UsageSummary(BaseModel):
+    """Token totals per model since the usage file was created."""
+
+    #: False when the usage file could not be read; ``models`` is then empty
+    #: for that reason, not because nothing was used.
+    available: bool = True
+    models: list[ModelUsageEntry] = []
+
+
 class StatusResponse(BaseModel):
     service: ServiceStatus
     testbench: TestBenchStatus
@@ -127,6 +147,7 @@ class StatusResponse(BaseModel):
     agents: AgentSummary
     in_flight_tasks: int = 0
     restart_required: list[str] = []
+    token_usage: UsageSummary = Field(default_factory=UsageSummary)
 
 
 class ConfigResponse(BaseModel):
@@ -434,4 +455,6 @@ class ResolvedRoute(BaseModel):
 class PromptTestResponse(BaseModel):
     text: str
     latency_ms: int
+    #: Absent when the provider reported no usage; the run itself still counts.
+    usage: TokenUsage | None = None
     resolved: ResolvedRoute

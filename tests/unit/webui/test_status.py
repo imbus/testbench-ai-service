@@ -2,8 +2,10 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
+from testbench_ai_service.llm.base import TokenUsage
 from testbench_ai_service.models.config import ProjectAgentConfig, ProjectConfig
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.usage import UsageStore
 from testbench_ai_service.webui.status import agent_summary
 
 
@@ -129,3 +131,35 @@ def test_status_includes_restart_required_defaulting_to_empty(client, login):
 
     assert "restart_required" in body
     assert body["restart_required"] == []
+
+
+def test_status_reports_no_token_usage_on_a_fresh_service(client, login):
+    login()
+
+    body = client.get("/admin/api/status").json()
+
+    assert body["token_usage"] == {"available": True, "models": []}
+
+
+def test_status_reports_the_token_usage_per_model(app, client, login):
+    login()
+    app.state.usage_store.record("anthropic", "claude-opus-5", TokenUsage(800, 300, 100))
+    app.state.usage_store.record("anthropic", "claude-opus-5", TokenUsage(200, 100))
+
+    [entry] = client.get("/admin/api/status").json()["token_usage"]["models"]
+
+    assert entry["provider"] == "anthropic"
+    assert entry["model"] == "claude-opus-5"
+    assert (entry["calls"], entry["input_tokens"], entry["output_tokens"]) == (2, 1000, 400)
+    assert entry["reasoning_tokens"] == 100
+    assert entry["last_used"]
+
+
+def test_an_unreadable_usage_file_is_reported_not_raised(app, client, login):
+    login()
+    app.state.usage_store = UsageStore(app.state.usage_store.path.parent)  # a directory
+
+    response = client.get("/admin/api/status")
+
+    assert response.status_code == 200
+    assert response.json()["token_usage"] == {"available": False, "models": []}

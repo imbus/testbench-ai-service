@@ -12,7 +12,13 @@ from openai._types import (
 )
 from openai.types.responses import ResponseInputParam
 
-from testbench_ai_service.llm.base import LLMClient, RoutingFamily
+from testbench_ai_service.llm.base import (
+    LLMClient,
+    LLMResult,
+    RoutingFamily,
+    TokenUsage,
+    token_count,
+)
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import Message
 
@@ -99,6 +105,20 @@ REASONING_MODELS: frozenset[str] = frozenset(
 )
 
 
+def _usage(usage: object) -> TokenUsage | None:
+    """The Responses API's usage; its reasoning count is part of the output."""
+    input_tokens = token_count(getattr(usage, "input_tokens", None))
+    output_tokens = token_count(getattr(usage, "output_tokens", None))
+    if input_tokens is None or output_tokens is None:
+        return None
+    details = getattr(usage, "output_tokens_details", None)
+    return TokenUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        reasoning_tokens=token_count(getattr(details, "reasoning_tokens", None)),
+    )
+
+
 class OpenAIClient(LLMClient):
     def __init__(
         self,
@@ -132,6 +152,15 @@ class OpenAIClient(LLMClient):
         messages: list[Message],
         **kwargs: Any,
     ) -> str:
+        result = await self.query_llm_with_usage(model, messages, **kwargs)
+        return result.text
+
+    async def query_llm_with_usage(
+        self,
+        model: str,
+        messages: list[Message],
+        **kwargs: Any,
+    ) -> LLMResult:
         input_messages = cast(ResponseInputParam, [message.model_dump() for message in messages])
 
         family = self._routing_family(model)
@@ -145,7 +174,7 @@ class OpenAIClient(LLMClient):
             )
         return await self._query_fallback_model(model, input_messages, **kwargs)
 
-    async def _query_chat_model(self, model: str, input_messages: ResponseInputParam) -> str:
+    async def _query_chat_model(self, model: str, input_messages: ResponseInputParam) -> LLMResult:
         return await self._create_response(
             model=model,
             input_data=input_messages,
@@ -158,7 +187,7 @@ class OpenAIClient(LLMClient):
         model: str,
         input_messages: ResponseInputParam,
         reasoning_effort: str,
-    ) -> str:
+    ) -> LLMResult:
         return await self._create_response(
             model=model,
             input_data=input_messages,
@@ -174,7 +203,7 @@ class OpenAIClient(LLMClient):
         model: str,
         input_messages: ResponseInputParam,
         **kwargs: Any,
-    ) -> str:
+    ) -> LLMResult:
         logger.warning(
             "Model '%s' is not explicitly supported. Attempting a fallback request.", model
         )
@@ -189,7 +218,7 @@ class OpenAIClient(LLMClient):
 
     async def _create_response(
         self, model: str, input_data: str | ResponseInputParam, **kwargs: Any
-    ) -> str:
+    ) -> LLMResult:
         start_time = time.perf_counter()
         logger.debug("LLM request: OpenAI model '%s'", model)
         try:
@@ -208,7 +237,7 @@ class OpenAIClient(LLMClient):
         output_text = response.output_text
         if not output_text:
             raise RuntimeError(f"Model '{model}' returned an empty response.")
-        return str(output_text)
+        return LLMResult(text=str(output_text), usage=_usage(response.usage))
 
     async def close(self):
         await self.client.close()
@@ -241,12 +270,12 @@ class AzureOpenAIClient(OpenAIClient):
         self.deployment_mapping = deployment_mapping or {}
         self.model_routing = model_routing or {}
 
-    async def query_llm(
+    async def query_llm_with_usage(
         self,
         model: str,
         messages: list[Message],
         **kwargs: Any,
-    ) -> str:
+    ) -> LLMResult:
         canonical_model = self.deployment_mapping.get(model, model)
         input_messages = cast(ResponseInputParam, [message.model_dump() for message in messages])
         kwargs.pop("deployment_mapping", None)

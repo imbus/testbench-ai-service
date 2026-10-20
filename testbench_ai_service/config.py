@@ -156,6 +156,11 @@ class AppConfig(BaseModel):
         default=TEMPLATES_DIR,
         description="Directory containing jinja templates for agents.",
     )
+    usage_file: Path | None = Field(
+        default=None,
+        description="SQLite file holding the token usage per model. Relative paths are "
+        "resolved against the config file's directory; unset means 'usage.sqlite' there.",
+    )
     language: LanguageOption = LanguageOption.GERMAN
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)

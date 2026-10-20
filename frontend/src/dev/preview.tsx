@@ -40,6 +40,29 @@ const FIXTURES: Record<string, unknown> = {
     agents: { total: 4, enabled: 3, project_overrides: 2, projects: 2 },
     in_flight_tasks: 0,
     restart_required: [],
+    token_usage: {
+      available: true,
+      models: [
+        {
+          provider: 'openai',
+          model: 'gpt-5',
+          calls: 128,
+          input_tokens: 1843210,
+          output_tokens: 412877,
+          reasoning_tokens: 198340,
+          last_used: '2026-10-20T09:41:00+00:00',
+        },
+        {
+          provider: 'anthropic',
+          model: 'claude-sonnet-5',
+          calls: 37,
+          input_tokens: 402118,
+          output_tokens: 88412,
+          reasoning_tokens: 0,
+          last_used: '2026-10-19T16:02:00+00:00',
+        },
+      ],
+    },
   },
   '/admin/api/config': {
     running: {
@@ -87,6 +110,7 @@ const FIXTURES: Record<string, unknown> = {
       '- Für gesperrte Konten fehlt ein Negativtest.',
     ].join('\n'),
     latency_ms: 1840,
+    usage: { input_tokens: 1234, output_tokens: 356, reasoning_tokens: 128 },
     resolved: { provider: 'openai', model: 'gpt-5', credential_scope: 'global' },
   },
   '/admin/api/models': {

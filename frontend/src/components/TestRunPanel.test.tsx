@@ -155,6 +155,40 @@ test('shows the resolved route including the credential scope', async () => {
   expect(screen.getByText(/global key/i)).toBeInTheDocument()
 })
 
+test('shows the token usage, reasoning included in the output', async () => {
+  runState = {
+    isPending: false,
+    error: null,
+    data: {
+      text: 'the answer',
+      latency_ms: 42,
+      usage: { input_tokens: 812, output_tokens: 356, reasoning_tokens: 120 },
+      resolved: { provider: 'openai', model: 'o3', credential_scope: 'global' },
+    },
+  }
+  renderPanel()
+
+  expect(await screen.findByText(/812 input tokens \/ 356 output tokens/)).toBeInTheDocument()
+  expect(screen.getByText(/incl\. 120 reasoning/)).toBeInTheDocument()
+})
+
+test('shows no token chip when the provider reported no usage', async () => {
+  runState = {
+    isPending: false,
+    error: null,
+    data: {
+      text: 'the answer',
+      latency_ms: 42,
+      usage: null,
+      resolved: { provider: 'anthropic', model: 'claude-opus-5', credential_scope: 'global' },
+    },
+  }
+  renderPanel()
+
+  expect(await screen.findByText(/the answer/)).toBeInTheDocument()
+  expect(screen.queryByText('Tokens')).not.toBeInTheDocument()
+})
+
 test('the button is disabled while a run is in flight', async () => {
   runState = { isPending: true, data: undefined, error: null }
   renderPanel()

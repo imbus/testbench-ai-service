@@ -32,6 +32,24 @@ export interface AgentSummary {
   projects: number
 }
 
+export interface ModelUsageEntry {
+  provider: string
+  model: string
+  calls: number
+  input_tokens: number
+  output_tokens: number
+  /** Part of `output_tokens`, not on top of it. */
+  reasoning_tokens: number
+  last_used: string
+}
+
+/** Token totals per model since the usage file was created. */
+export interface UsageSummary {
+  /** `false` when the usage file could not be read -- `models` is then empty for that reason. */
+  available: boolean
+  models: ModelUsageEntry[]
+}
+
 export interface StatusResponse {
   service: ServiceStatus
   testbench: TestBenchStatus
@@ -39,6 +57,7 @@ export interface StatusResponse {
   agents: AgentSummary
   in_flight_tasks: number
   restart_required: string[]
+  token_usage: UsageSummary
 }
 
 export type ActivityScope = 'mine' | 'service' | 'all'
@@ -260,9 +279,20 @@ export interface ResolvedRoute {
   credential_scope: 'project' | 'global'
 }
 
+/** Token counts as the provider reported them for one test run. */
+export interface TokenUsage {
+  /** Every prompt token, cached ones included. */
+  input_tokens: number
+  output_tokens: number
+  /** Part of `output_tokens`, not on top of it; `null` when not reported. */
+  reasoning_tokens: number | null
+}
+
 export interface PromptTestResult {
   text: string
   latency_ms: number
+  /** `null` when the provider (or a custom client) reported no usage. */
+  usage?: TokenUsage | null
   resolved: ResolvedRoute
 }
 

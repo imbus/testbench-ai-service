@@ -9,6 +9,7 @@ import { useTestPrompt } from '../api/mutations'
 import { useModels, useProjects } from '../api/queries'
 import type { PromptMessageDoc } from '../api/types'
 import { useTranslation } from 'react-i18next'
+import { useLang } from '../i18n'
 import { MarkdownView } from './MarkdownView'
 
 /** The picker's "Other model…" entry -- not a model id, so it can never collide with one. */
@@ -47,6 +48,7 @@ export function TestRunPanel({
   isAdmin: boolean
 }) {
   const { t } = useTranslation()
+  const lang = useLang()
   const [project, setProject] = useState<string | null>(null)
   const [model, setModel] = useState('')
   const [customPicked, setCustomPicked] = useState(false)
@@ -188,6 +190,19 @@ export function TestRunPanel({
               <span className="testrun-chip-label">{t('testRunLatency')}</span>
               {test.data.latency_ms} ms
             </Tag>
+            {test.data.usage && (
+              <Tag severity="secondary" title={t('testRunTokensHint')} style={{ gap: 6 }}>
+                <span className="testrun-chip-label">{t('testRunTokens')}</span>
+                {t('testRunTokensValue', {
+                  input: test.data.usage.input_tokens.toLocaleString(lang),
+                  output: test.data.usage.output_tokens.toLocaleString(lang),
+                })}
+                {test.data.usage.reasoning_tokens != null &&
+                  ` ${t('testRunTokensReasoning', {
+                    reasoning: test.data.usage.reasoning_tokens.toLocaleString(lang),
+                  })}`}
+              </Tag>
+            )}
             <Tag severity="secondary" title={t('testRunRoute')} style={{ gap: 6 }}>
               <span className="testrun-chip-label">{t('testRunRoute')}</span>
               <code>

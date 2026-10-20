@@ -7,7 +7,13 @@ from anthropic import DEFAULT_MAX_RETRIES, NOT_GIVEN, AsyncAnthropic, NotGiven
 from anthropic.types import MessageParam
 from httpx import Timeout
 
-from testbench_ai_service.llm.base import LLMClient, RoutingFamily
+from testbench_ai_service.llm.base import (
+    LLMClient,
+    LLMResult,
+    RoutingFamily,
+    TokenUsage,
+    token_count,
+)
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.prompt import Message
 
@@ -35,6 +41,26 @@ ADAPTIVE_THINKING_MODELS: frozenset[str] = frozenset(
         "claude-sonnet-5",
     }
 )
+
+
+def _usage(usage: object) -> TokenUsage | None:
+    """Anthropic's usage, with cache reads and writes folded into the input.
+
+    ``input_tokens`` alone excludes cached prompt tokens, so on a cache hit it
+    would understate what the prompt cost.
+    """
+    input_tokens = token_count(getattr(usage, "input_tokens", None))
+    output_tokens = token_count(getattr(usage, "output_tokens", None))
+    if input_tokens is None or output_tokens is None:
+        return None
+    for field in ("cache_creation_input_tokens", "cache_read_input_tokens"):
+        input_tokens += token_count(getattr(usage, field, None)) or 0
+    details = getattr(usage, "output_tokens_details", None)
+    return TokenUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        reasoning_tokens=token_count(getattr(details, "thinking_tokens", None)),
+    )
 
 
 class AnthropicClient(LLMClient):
@@ -75,6 +101,15 @@ class AnthropicClient(LLMClient):
         messages: list[Message],
         **kwargs: Any,
     ) -> str:
+        result = await self.query_llm_with_usage(model, messages, **kwargs)
+        return result.text
+
+    async def query_llm_with_usage(
+        self,
+        model: str,
+        messages: list[Message],
+        **kwargs: Any,
+    ) -> LLMResult:
         system_prompt = next((msg.content for msg in messages if msg.role == "system"), NOT_GIVEN)
 
         anthropic_messages: list[MessageParam] = [
@@ -110,7 +145,7 @@ class AnthropicClient(LLMClient):
         system_prompt: str | NotGiven,
         reasoning_effort: str,
         **kwargs: Any,
-    ) -> str:
+    ) -> LLMResult:
         effort_to_budget = {"low": 2048, "medium": 4096, "high": 8192}
         budget_tokens = effort_to_budget.get(reasoning_effort, 4096)
 
@@ -136,7 +171,7 @@ class AnthropicClient(LLMClient):
         system_prompt: str | NotGiven,
         reasoning_effort: str,
         **kwargs: Any,
-    ) -> str:
+    ) -> LLMResult:
         valid_efforts = {"low", "medium", "high", "xhigh", "max"}
         effort = reasoning_effort if reasoning_effort in valid_efforts else "high"
 
@@ -159,7 +194,7 @@ class AnthropicClient(LLMClient):
         input_messages: list[MessageParam],
         system_prompt: str | NotGiven,
         **kwargs: Any,
-    ) -> str:
+    ) -> LLMResult:
         logger.warning(
             "Model '%s' is not explicitly supported. Attempting a fallback request.", model
         )
@@ -175,7 +210,7 @@ class AnthropicClient(LLMClient):
 
     async def _create_response(
         self, model: str, messages: list[MessageParam], **kwargs: Any
-    ) -> str:
+    ) -> LLMResult:
         if "max_tokens" not in kwargs and "thinking" not in kwargs:
             kwargs["max_tokens"] = 4096
 
@@ -201,7 +236,7 @@ class AnthropicClient(LLMClient):
 
         for block in response.content:
             if block.type == "text":
-                return str(block.text)
+                return LLMResult(text=str(block.text), usage=_usage(response.usage))
 
         raise RuntimeError(f"Model '{model}' returned an empty or non-text response.")
 

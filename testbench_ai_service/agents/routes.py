@@ -28,6 +28,7 @@ from testbench_ai_service.models.agent import (
 from testbench_ai_service.models.config import AgentConfig
 from testbench_ai_service.models.prompt import PromptDefinition
 from testbench_ai_service.tasks import run_agent
+from testbench_ai_service.usage import UsageStore, get_usage_store
 from testbench_ai_service.utils.agent import build_execution_context, has_required_permissions
 from testbench_ai_service.utils.config import agent_enabled, get_agent_config, get_prompt_config
 from testbench_ai_service.utils.i18n import get_translation
@@ -102,6 +103,7 @@ async def trigger_agent_execution(
     app_config: AppConfig,
     auth_info: AuthInfo,
     registry: TaskRegistry,
+    usage_store: UsageStore | None = None,
 ) -> TriggerAgentResponse:
     """Execute the trigger flow shared by all agent endpoints.
 
@@ -118,6 +120,7 @@ async def trigger_agent_execution(
         app_config:       The application configuration.
         auth_info:        Validated authentication context for this request.
         registry:         The console's in-flight task registry.
+        usage_store:      Where the run's token usage is counted.
 
     Returns:
         ``TriggerAgentResponse`` with ``status="accepted"`` and any precheck warnings.
@@ -205,6 +208,7 @@ async def trigger_agent_execution(
         conn=conn,
         llm_factory=llm_factory,
         item_ids=precheck_result.items,
+        usage_store=usage_store,
     )
     logger.debug("Scheduled background task for agent '%s'", agent_key)
 
@@ -283,6 +287,7 @@ def create_agent_router(
         app_config: AppConfig = Depends(get_app_config),
         auth_info: AuthInfo = Depends(validate_auth_token),
         registry: TaskRegistry = Depends(get_task_registry),
+        usage_store: UsageStore = Depends(get_usage_store),
     ) -> TriggerAgentResponse:
         return await trigger_agent_execution(
             agent_key=agent_key,
@@ -293,6 +298,7 @@ def create_agent_router(
             app_config=app_config,
             auth_info=auth_info,
             registry=registry,
+            usage_store=usage_store,
         )
 
     return router

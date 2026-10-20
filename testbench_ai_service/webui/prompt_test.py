@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, status
 
+from testbench_ai_service.llm.base import TokenUsage
 from testbench_ai_service.models.prompt import Message
 from testbench_ai_service.webui.models import RenderedMessage
 
@@ -34,6 +35,8 @@ class RunOutcome:
 
     text: str
     latency_ms: int
+    #: ``None`` when the provider -- or a custom client -- reported no usage.
+    usage: TokenUsage | None = None
 
 
 class SingleFlight:
@@ -98,10 +101,13 @@ async def run_query(
 
     ``latency_ms`` is wall-clock around the await, so it includes whatever
     retries the SDK performed -- which is what the operator experiences.
+    ``usage`` is the provider's count for the final, successful attempt only.
     """
     started = time.perf_counter()
     try:
-        text = await asyncio.wait_for(client.query_llm(model=model, messages=messages), timeout)
+        result = await asyncio.wait_for(
+            client.query_llm_with_usage(model=model, messages=messages), timeout
+        )
     # asyncio.TimeoutError is only an alias of the builtin from 3.11 on, and
     # pyproject declares support back to 3.10 -- catch both.
     except (asyncio.TimeoutError, TimeoutError) as e:
@@ -109,4 +115,8 @@ async def run_query(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail=f"The model did not answer within {timeout} seconds.",
         ) from e
-    return RunOutcome(text=text, latency_ms=int((time.perf_counter() - started) * 1000))
+    return RunOutcome(
+        text=result.text,
+        latency_ms=int((time.perf_counter() - started) * 1000),
+        usage=result.usage,
+    )
