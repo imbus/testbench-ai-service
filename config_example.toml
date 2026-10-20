@@ -98,6 +98,7 @@ file = "defect_explainer/prompt.yaml"
 # rm_service_url = "https://rm.example.com/api/"   # unset: aspects from the requirement title only
 # rm_username = "rm-user"
 # rm_password = "rm-password"
+# rm_projects = ["Dream Car"]                   # searched with a JWT; unset: every RM project
 # max_aspects = 12
 # counting_spec_status = ["InReview", "Released"]
 # work_spec_status = ["Planned", "InProgress", "InReview", "Released"]

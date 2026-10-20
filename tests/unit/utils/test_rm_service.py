@@ -53,3 +53,8 @@ async def test_without_an_rm_url_every_requirement_keeps_its_tov_data():
 
     assert extended.name == "Login"
     assert extended.description is None
+
+
+def test_an_empty_rm_projects_list_is_rejected():
+    with pytest.raises(ValidationError):
+        rm_service.RmServiceArgs(rm_projects=[])

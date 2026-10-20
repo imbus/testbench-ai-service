@@ -29,6 +29,8 @@ For JWT tokens the following API token permissions are required: `ReadOwnUserDet
 
 Without an RM service the requirement description is unknown; the aspects then rest on the title alone and the blocks say so.
 
+The RM lookup works as in the [requirement agent](generate-test-ideas.md): the baselines of the TOV are searched for the requirement. TestBench lists them only on its legacy API, which a JWT cannot use; with a JWT (or if that lookup fails) the baselines of the RM projects in `rm_projects`, or of every RM project, are searched instead, the `CURRENT` baseline of each project first.
+
 ## Variables
 
 | Variable | Values | Default |
@@ -51,6 +53,7 @@ file = "coverage_checker/prompt.yaml"
 # rm_service_url = "https://rm.example.com/api/"   # unset: aspects from the requirement title only
 # rm_username = "rm-user"
 # rm_password = "rm-password"
+# rm_projects = ["Dream Car"]                   # searched with a JWT; unset: every RM project
 max_aspects = 12
 counting_spec_status = ["InReview", "Released"]
 work_spec_status = ["Planned", "InProgress", "InReview", "Released"]
