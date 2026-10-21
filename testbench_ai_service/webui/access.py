@@ -6,7 +6,7 @@ combination is what TestBench itself treats as "manages this project".
 """
 
 import re
-from pathlib import PurePosixPath, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -15,11 +15,17 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.testbench import ProjectMember
 from testbench_ai_service.utils.testbench import get_own_project_memberships
+from testbench_ai_service.webui.models import PromptUsage
 from testbench_ai_service.webui.paths import split_path
+from testbench_ai_service.webui.prompts import WritePlan, prompt_usages
 from testbench_ai_service.webui.session import Session
 
 PROJECT_ADMIN_ROLE = "ProjectAdministrator"
 PROJECT_MANAGER_ROLE = "TestManager"
+
+# A fork's directory is ``<agent>__<slug>``. A project admin may only edit
+# directories that carry it, so a shared template can never qualify.
+FORK_MARKER = "__"
 
 # agents.<key>.prompt.file below a project: four segments.
 _PROMPT_FILE_DEPTH = 4
@@ -163,3 +169,64 @@ def check_config_edits(session: Session, edits: dict[str, Any]) -> None:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Not allowed to change {path!r}",
             )
+
+
+def owns_prompt(session: Session, directory: str, usages: list[PromptUsage]) -> bool:
+    """Whether *session* may edit the prompt in *directory* used by *usages*.
+
+    A project admin owns a prompt only when it is a fork (marker in the
+    directory name) that is used, and used exclusively by projects they manage.
+    "Only Alpha uses it today" is not enough without the marker: the template
+    would then change for whoever is pointed at it next. A global usage or an
+    unused fork is refused too.
+    """
+    if session.is_admin:
+        return True
+    return (
+        FORK_MARKER in directory
+        and bool(usages)
+        and all(u.project is not None and can_manage(session, u.project) for u in usages)
+    )
+
+
+def require_owned_prompt(
+    session: Session, prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]
+) -> None:
+    """Refuse (403) a save to a prompt *session* does not own."""
+    usages = prompt_usages(prompt_path, prompts_dir, on_disk)
+    if not owns_prompt(session, prompt_path.parent.name, usages):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to change this prompt",
+        )
+
+
+def require_within(plan: WritePlan, fork_dir: Path) -> None:
+    """Refuse (403) a save plan that touches any file outside *fork_dir*.
+
+    A fork's document may reference a shared template; writing or deleting it
+    would change every prompt that uses it. Paths are resolved first so a
+    ``..`` segment or a symlink cannot hide the escape.
+    """
+    root = fork_dir.resolve()
+    touched = [*plan.writes, *plan.creates, *plan.deletes]
+    if any(not path.resolve().is_relative_to(root) for path in touched):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to change files outside this prompt",
+        )
+
+
+def require_fork_target(session: Session, project: str, directory: str | None) -> None:
+    """Refuse (403) a fork a non-admin may not make.
+
+    The project must be one they manage, and an explicit directory must carry the
+    fork marker so the copy can never land on (or be mistaken for) a shared
+    template. The derived default ``<agent>__<slug>`` always carries it.
+    """
+    require_project_access(session, project)
+    if not session.is_admin and directory is not None and FORK_MARKER not in directory:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"A fork directory must contain {FORK_MARKER!r}",
+        )

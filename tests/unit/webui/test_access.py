@@ -9,8 +9,12 @@ from testbench_ai_service.webui.access import (
     can_manage,
     check_config_edits,
     managed_projects_from,
+    owns_prompt,
     read_managed_projects,
+    require_within,
 )
+from testbench_ai_service.webui.models import PromptUsage
+from testbench_ai_service.webui.prompts import WritePlan
 from testbench_ai_service.webui.session import SessionStore
 
 
@@ -148,3 +152,70 @@ def test_refusal_names_the_first_offending_path():
             {'projects."Alpha".language': "en", 'projects."Beta".language': "en"},
         )
     assert "Beta" in exc.value.detail
+
+
+def _usage(project: str | None, agent: str = "reviewer") -> PromptUsage:
+    return PromptUsage(agent=agent, project=project)
+
+
+def test_owns_prompt_requires_fork_marker():
+    # A shared template only one project happens to use today: no fork, no edit.
+    session = _session(False, frozenset({"Alpha"}))
+    assert owns_prompt(session, "test_case_set_reviewer", [_usage("Alpha")]) is False
+
+
+def test_owns_prompt_refuses_shared_fork():
+    session = _session(False, frozenset({"Alpha"}))
+    assert owns_prompt(session, "reviewer__alpha", [_usage("Alpha"), _usage("Beta")]) is False
+
+
+def test_owns_prompt_refuses_global_usage():
+    session = _session(False, frozenset({"Alpha"}))
+    assert owns_prompt(session, "reviewer__alpha", [_usage("Alpha"), _usage(None)]) is False
+
+
+def test_owns_prompt_refuses_unused_fork():
+    session = _session(False, frozenset({"Alpha"}))
+    assert owns_prompt(session, "reviewer__alpha", []) is False
+
+
+def test_owns_prompt_accepts_own_fork():
+    session = _session(False, frozenset({"Alpha"}))
+    assert owns_prompt(session, "reviewer__alpha", [_usage("Alpha")]) is True
+
+
+def test_owns_prompt_is_always_true_for_an_admin():
+    assert owns_prompt(_session(True), "reviewer", []) is True
+
+
+def test_require_within_refuses_shared_template(tmp_path):
+    fork = tmp_path / "de" / "reviewer__alpha"
+    shared = tmp_path / "de" / "reviewer" / "system.jinja"
+    plan = WritePlan(writes={fork / "prompt.yaml": "x", shared: "y"})
+    with pytest.raises(HTTPException) as e:
+        require_within(plan, fork)
+    assert e.value.status_code == 403
+
+
+def test_require_within_refuses_a_deletion_outside_the_fork(tmp_path):
+    fork = tmp_path / "de" / "reviewer__alpha"
+    plan = WritePlan(deletes=[tmp_path / "de" / "reviewer" / "user.jinja"])
+    with pytest.raises(HTTPException):
+        require_within(plan, fork)
+
+
+def test_require_within_refuses_dotdot_escapes(tmp_path):
+    fork = tmp_path / "de" / "reviewer__alpha"
+    plan = WritePlan(writes={fork / ".." / "reviewer" / "system.jinja": "y"})
+    with pytest.raises(HTTPException):
+        require_within(plan, fork)
+
+
+def test_require_within_accepts_files_inside_the_fork(tmp_path):
+    fork = tmp_path / "de" / "reviewer__alpha"
+    plan = WritePlan(
+        writes={fork / "prompt.yaml": "x"},
+        creates={fork / "new.jinja"},
+        deletes=[fork / "old.jinja"],
+    )
+    require_within(plan, fork)

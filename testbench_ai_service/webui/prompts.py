@@ -541,7 +541,9 @@ def _project_usages(
     return usages
 
 
-def _usages(prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]) -> list[PromptUsage]:
+def prompt_usages(
+    prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]
+) -> list[PromptUsage]:
     """Which config keys resolve to *prompt_path*.
 
     Matched on RESOLVED paths, never on the directory's name: a fork's
@@ -615,7 +617,7 @@ def _tree_entry(
     agent: str, prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]
 ) -> PromptTreeEntry:
     relative = prompt_path.relative_to(prompts_dir).as_posix()
-    used_by = _usages(prompt_path, prompts_dir, on_disk)
+    used_by = prompt_usages(prompt_path, prompts_dir, on_disk)
     try:
         meta = read_prompt_meta(prompt_path, prompts_dir)
     except HTTPException as e:

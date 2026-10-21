@@ -315,6 +315,9 @@ class PromptTreeEntry(BaseModel):
     #: the tree's own identity -- an unreadable config.toml leaves this empty
     #: rather than hiding the entry itself.
     used_by: list[PromptUsage] = []
+    #: Whether the signed-in user may edit this prompt. Set per request by the
+    #: route, never by ``build_tree``: it depends on who is asking.
+    editable: bool = False
 
 
 class PromptTreeLanguage(BaseModel):

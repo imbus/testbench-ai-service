@@ -17,8 +17,12 @@ from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
 from testbench_ai_service.webui.access import (
     check_config_edits,
+    owns_prompt,
     refresh_managed_projects,
+    require_fork_target,
+    require_owned_prompt,
     require_project_access,
+    require_within,
 )
 from testbench_ai_service.webui.activity import MAX_LIMIT, read_activity
 from testbench_ai_service.webui.agent_context import agent_context_sample
@@ -30,7 +34,6 @@ from testbench_ai_service.webui.auth import (
     current_session,
     get_session_store,
     is_admin_role,
-    require_admin,
     require_csrf,
     require_editor,
     set_session_cookies,
@@ -590,7 +593,7 @@ async def apply_config(
 @router.get("/prompts", response_model=PromptTreeResponse)
 def read_prompt_tree(
     request: Request,
-    _session: Session = Depends(current_session),
+    session: Session = Depends(current_session),
     config: AppConfig = Depends(get_app_config),
 ) -> PromptTreeResponse:
     """Every prompt on disk, including the ones that do not parse."""
@@ -603,7 +606,11 @@ def read_prompt_tree(
         # reaches a broken prompt. An unreadable config must not cost them that.
         logger.warning("Listing prompts without usage labels: %s", e.detail)
         on_disk = {}
-    return build_tree(config.prompts_dir, on_disk)
+    tree = build_tree(config.prompts_dir, on_disk)
+    for language in tree.languages:
+        for entry in language.prompts:
+            entry.editable = owns_prompt(session, Path(entry.file).parent.name, entry.used_by)
+    return tree
 
 
 @router.get("/prompts/{lang}/{agent}", response_model=PromptDocumentResponse)
@@ -814,13 +821,25 @@ def read_model_catalogue(
     return build_catalogue(config, project)
 
 
+def _require_owned(session: Session, request: Request, path: Path, prompts_dir: Path) -> None:
+    """Refuse a non-admin save to a prompt they do not own; admins are never checked.
+
+    Ownership is read from the on-disk config, like the other routes do, since
+    it is what decides which project a prompt file belongs to.
+    """
+    if session.is_admin:
+        return
+    on_disk = read_config_file(Path(request.app.state.config_path))
+    require_owned_prompt(session, path, prompts_dir, on_disk)
+
+
 @router.post("/prompts/{lang}/{agent}/plan", response_model=PromptPlanResponse)
 def plan_prompt_save(
     lang: str,
     agent: str,
     body: PromptSaveRequest,
     request: Request,
-    _session: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
 ) -> PromptPlanResponse:
@@ -834,8 +853,11 @@ def plan_prompt_save(
     prompts_dir = _require_prompts_dir(config)
     path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
     _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
+    _require_owned(session, request, path, prompts_dir)
 
     plan = build_write_set(body, path, prompts_dir)
+    if not session.is_admin:
+        require_within(plan, path.parent)
     return PromptPlanResponse(
         created=sorted(str(p) for p in plan.creates),
         updated=sorted(str(p) for p in plan.writes if p not in plan.creates),
@@ -850,7 +872,7 @@ def save_prompt(
     agent: str,
     body: PromptSaveRequest,
     request: Request,
-    _session: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
     _log: Session = Depends(bind_log_user),
@@ -863,7 +885,11 @@ def save_prompt(
     # app.state, the way `read_config` and `read_prompt_metadata` already do.
     _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
 
+    _require_owned(session, request, path, prompts_dir)
+
     plan = build_write_set(body, path, prompts_dir)
+    if not session.is_admin:
+        require_within(plan, path.parent)
     result = write_all(dict(plan.writes), deletes=plan.deletes)
     return PromptSaveResponse(
         written=[str(p) for p in result.written],
@@ -880,7 +906,7 @@ async def fork_prompt(
     agent: str,
     body: PromptForkRequest,
     request: Request,
-    session: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
     _log: Session = Depends(bind_log_user),
@@ -908,6 +934,9 @@ async def fork_prompt(
     rather than locked against.
     """
     prompts_dir = _require_prompts_dir(config)
+
+    # A project admin forks only for their own project and into a fork directory.
+    require_fork_target(session, body.project, body.directory)
 
     # The config key this fork would write, validated up front, before
     # build_fork or any existence check: join_path raises a bare ValueError

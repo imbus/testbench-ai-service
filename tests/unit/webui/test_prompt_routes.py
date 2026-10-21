@@ -105,7 +105,12 @@ def app(make_app, prompt_tree, config_path):
     # a real operator's first override for either would already have.
     application = make_app(
         prompts_dir=str(prompt_tree),
-        projects={"Car Configurator": ProjectConfig(), "Proj": ProjectConfig()},
+        projects={
+            "Car Configurator": ProjectConfig(),
+            "Proj": ProjectConfig(),
+            "Alpha": ProjectConfig(),
+            "Beta": ProjectConfig(),
+        },
     )
     application.state.config_path = config_path
     return application
@@ -612,3 +617,129 @@ class TestRenderAsProjectAdmin:
     def test_admin_render_without_project_still_works(self, client, login):
         login(roles=["Administrator"])
         assert self._post(client).status_code == 200
+
+
+class TestProjectAdminForks:
+    FORK = "/admin/api/prompts/de/explainer__alpha"
+
+    @pytest.fixture
+    def own_fork(self, prompt_tree, config_path):
+        """A fork of ``explainer`` that only Alpha uses, declared in config.toml."""
+        fork = prompt_tree / "de" / "explainer__alpha"
+        fork.mkdir()
+        for name in ("prompt.yaml", "system.jinja", "user.jinja"):
+            (fork / name).write_bytes((prompt_tree / "de/explainer" / name).read_bytes())
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8")
+            + '\n[testbench-ai-service.projects."Alpha".agents.explainer.prompt]\n'
+            + 'file = "de/explainer__alpha/prompt.yaml"\n'
+            + '[testbench-ai-service.projects."Beta".agents.explainer.prompt]\n'
+            + 'file = "de/explainer/prompt.yaml"\n',
+            encoding="utf-8",
+        )
+        return fork
+
+    def _body(self, file="system.jinja"):
+        return {
+            "name": "Erklärer",
+            "default_model": "gpt-5.5",
+            "default_variant": "A",
+            "variants": [
+                {
+                    "name": "A",
+                    "messages": [
+                        {"role": "system", "source": "file", "file": file, "content": "Neu"}
+                    ],
+                }
+            ],
+        }
+
+    def test_project_admin_forks_for_own_project(self, client, login_project_admin):
+        login_project_admin(managed=["Alpha"])
+        response = client.post(
+            "/admin/api/prompts/de/explainer/fork",
+            json={"project": "Alpha"},
+            headers=csrf(client),
+        )
+        assert response.status_code == 200
+        assert response.json()["agent"] == "explainer__alpha"
+
+    def test_project_admin_fork_for_foreign_project_is_403(
+        self, client, login_project_admin, prompt_tree
+    ):
+        login_project_admin(managed=["Alpha"], other=["Beta"])
+        response = client.post(
+            "/admin/api/prompts/de/explainer/fork",
+            json={"project": "Beta"},
+            headers=csrf(client),
+        )
+        assert response.status_code == 403
+        assert not (prompt_tree / "de/explainer__beta").exists()
+
+    def test_project_admin_fork_with_directory_without_marker_is_403(
+        self, client, login_project_admin, prompt_tree
+    ):
+        login_project_admin(managed=["Alpha"])
+        response = client.post(
+            "/admin/api/prompts/de/explainer/fork",
+            json={"project": "Alpha", "directory": "mine"},
+            headers=csrf(client),
+        )
+        assert response.status_code == 403
+        assert not (prompt_tree / "de/mine").exists()
+
+    def test_project_admin_saves_own_fork(self, client, login_project_admin, own_fork):
+        login_project_admin(managed=["Alpha"])
+        response = client.put(self.FORK, json=self._body(), headers=csrf(client))
+        assert response.status_code == 200
+        assert (own_fork / "system.jinja").read_text(encoding="utf-8") == "Neu"
+
+    def test_project_admin_cannot_save_shared_prompt(
+        self, client, login_project_admin, own_fork, prompt_tree
+    ):
+        login_project_admin(managed=["Alpha"])
+        shared = prompt_tree / "de/explainer/system.jinja"
+        before = shared.read_text(encoding="utf-8")
+        response = client.put(
+            "/admin/api/prompts/de/explainer", json=self._body(), headers=csrf(client)
+        )
+        assert response.status_code == 403
+        assert shared.read_text(encoding="utf-8") == before
+
+    def test_project_admin_cannot_save_template_outside_fork(
+        self, client, login_project_admin, own_fork, prompt_tree
+    ):
+        """The fork's document may point at a shared template; saving through it
+        would rewrite that template for every prompt that uses it."""
+        shared = prompt_tree / "de/explainer/system.jinja"
+        document = (own_fork / "prompt.yaml").read_text(encoding="utf-8")
+        (own_fork / "prompt.yaml").write_text(
+            document.replace('file: "system.jinja"', 'file: "../explainer/system.jinja"'),
+            encoding="utf-8",
+        )
+        login_project_admin(managed=["Alpha"])
+        before = shared.read_text(encoding="utf-8")
+        response = client.put(
+            self.FORK, json=self._body(file="../explainer/system.jinja"), headers=csrf(client)
+        )
+        assert response.status_code == 403
+        assert shared.read_text(encoding="utf-8") == before
+        assert not (own_fork / "system.jinja.bak").exists()
+
+    def test_project_admin_plan_mirrors_save_refusal(self, client, login_project_admin, own_fork):
+        login_project_admin(managed=["Alpha"])
+        response = client.post(
+            "/admin/api/prompts/de/explainer/plan", json=self._body(), headers=csrf(client)
+        )
+        assert response.status_code == 403
+
+    def test_tree_marks_only_owned_forks_editable(self, client, login_project_admin, own_fork):
+        login_project_admin(managed=["Alpha"])
+        prompts = client.get("/admin/api/prompts").json()["languages"][0]["prompts"]
+        editable = {p["agent"]: p["editable"] for p in prompts}
+        assert editable == {"explainer": False, "explainer__alpha": True}
+
+    def test_tree_marks_everything_editable_for_admin(self, admin_client, own_fork):
+        prompts = admin_client.get("/admin/api/prompts").json()["languages"][0]["prompts"]
+        assert prompts
+        assert all(p["editable"] for p in prompts)
