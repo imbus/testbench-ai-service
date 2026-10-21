@@ -15,7 +15,11 @@ from testbench_ai_service.models.logging import LogLevel
 from testbench_ai_service.usage import UsageRecordingClient, UsageStore, get_usage_store
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
-from testbench_ai_service.webui.access import check_config_edits
+from testbench_ai_service.webui.access import (
+    check_config_edits,
+    refresh_managed_projects,
+    require_project_access,
+)
 from testbench_ai_service.webui.activity import MAX_LIMIT, read_activity
 from testbench_ai_service.webui.agent_context import agent_context_sample
 from testbench_ai_service.webui.atomic import write_atomic
@@ -259,15 +263,17 @@ def read_projects(session: Session = Depends(current_session)) -> ProjectsRespon
 
 @router.post("/projects/refresh", response_model=ProjectsResponse)
 def refresh_projects(
-    session: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     _: None = Depends(require_csrf),
     _log: Session = Depends(bind_log_user),
 ) -> ProjectsResponse:
     """Re-read the project list from TestBench and replace the cache.
 
-    Admin-gated and CSRF-guarded despite writing nothing to disk: it spends the
-    stored TestBench credential on an outbound call, which is not something a
-    cross-site page may trigger on the operator's behalf.
+    Editor-gated (admin or project admin) and CSRF-guarded despite writing
+    nothing to disk: it spends the stored TestBench credential on an outbound
+    call, which is not something a cross-site page may trigger on the
+    operator's behalf. It also re-reads the caller's managed projects, so a
+    project assigned in TestBench takes effect without a new sign-in.
 
     A sync ``def`` on purpose -- the vendored TestBench client is blocking, so
     this belongs in the threadpool rather than stalling the event loop for
@@ -278,6 +284,7 @@ def refresh_projects(
     kept rather than being replaced with an empty one.
     """
     record_projects(session, fetch_projects_via_link(session.tb_link))
+    refresh_managed_projects(session)
     return projects_response(session)
 
 
@@ -627,15 +634,17 @@ def lint_prompt_template(
 @router.post("/prompts/render", response_model=RenderResponse)
 def render_prompt_preview(
     body: RenderRequest,
-    _session: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     _csrf: None = Depends(require_csrf),
 ) -> RenderResponse:
     """Render the messages against a sample context.
 
-    Admin-only **and** sandboxed (design D3). Rendering evaluates operator
-    text, and an unsandboxed environment here would be remote code execution
-    against the service; admin is the second layer, not the only one.
+    Editors only (admin, or a project admin for a project they manage) **and**
+    sandboxed (design D3). Rendering evaluates operator text, and an
+    unsandboxed environment here would be remote code execution against the
+    service; the role check is the second layer, not the only one.
     """
+    require_project_access(session, body.project)
     return RenderResponse(
         messages=render_messages(body.messages, dict(body.vars), body.agent_context)
     )
@@ -689,7 +698,7 @@ def _provider_error_detail(
 async def run_prompt_test(
     body: PromptTestRequest,
     request: Request,
-    session: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
     registry: TaskRegistry = Depends(get_task_registry),
@@ -701,8 +710,11 @@ async def run_prompt_test(
     The one console action that spends money, so the order matters: render
     first and refuse on failure BEFORE a client is created. Rendering goes
     through the same sandboxed environment as POST /prompts/render -- a test
-    run is not a hole in that sandbox.
+    run is not a hole in that sandbox. A project admin may only run for a
+    project they manage; the check comes first so nothing is rendered or
+    spent otherwise.
     """
+    require_project_access(session, body.project)
     rendered = render_messages(body.messages, dict(body.vars), body.agent_context)
     failed = [item for item in rendered if item.error is not None]
     if failed:
@@ -778,24 +790,27 @@ async def run_prompt_test(
 @router.get("/models", response_model=ModelCatalogueResponse)
 def read_model_catalogue(
     project: str | None = None,
-    _session: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     config: AppConfig = Depends(get_app_config),
 ) -> ModelCatalogueResponse:
     """Every model the console can offer, grouped by provider.
 
-    Admin-gated despite being a read: it is the catalogue for the one console
+    Editor-gated despite being a read: it is the catalogue for the one console
     action that spends money, and it reports which provider credentials are
-    present. Presence only -- no endpoint returns a credential value.
+    present. Presence only -- no endpoint returns a credential value. A project
+    admin must name a project they manage, since the answer includes that
+    project's credential presence.
 
-    Admin-gated **only**, and deliberately the one route here without
+    Role-gated **only**, and deliberately the one route here without
     ``require_csrf``. The console's own ``apiFetch`` (``api/client.ts``)
     attaches ``X-CSRF-Token`` to unsafe methods only, so a browser GET never
     sends one and the guard would 403 every real request -- a permanently
     empty model picker. It would also defend nothing: CSRF protects
     state-changing requests, and this one returns presence booleans to a
-    session that is already authenticated and already admin. ``require_admin``
-    is the access control.
+    session that is already authenticated and already an editor.
+    ``require_editor`` plus the project check are the access control.
     """
+    require_project_access(session, project)
     return build_catalogue(config, project)
 
 

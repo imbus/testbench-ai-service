@@ -406,3 +406,31 @@ class TestEntraIdSuppression:
 
         assert response.status_code == 502
         assert "deployment not found" in response.text
+
+
+class TestProjectAdmin:
+    def test_project_admin_test_run_for_own_project(self, client, login_project_admin, fake_client):
+        login_project_admin(managed=["Alpha"])
+        response = client.post(
+            "/admin/api/prompts/test", json=body(project="Alpha"), headers=csrf(client)
+        )
+        assert response.status_code == 200
+        assert response.json()["text"] == "the answer"
+
+    def test_project_admin_test_run_without_project_is_403(
+        self, client, login_project_admin, fake_client
+    ):
+        login_project_admin(managed=["Alpha"])
+        response = client.post("/admin/api/prompts/test", json=body(), headers=csrf(client))
+        assert response.status_code == 403
+        fake_client.query_llm_with_usage.assert_not_called()
+
+    def test_project_admin_test_run_for_foreign_project_is_403(
+        self, client, login_project_admin, fake_client
+    ):
+        login_project_admin(managed=["Alpha"], other=["Beta"])
+        response = client.post(
+            "/admin/api/prompts/test", json=body(project="Beta"), headers=csrf(client)
+        )
+        assert response.status_code == 403
+        fake_client.query_llm_with_usage.assert_not_called()

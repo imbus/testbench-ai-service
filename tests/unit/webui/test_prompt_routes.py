@@ -582,3 +582,33 @@ def test_a_fork_producing_an_unloadable_config_removes_what_it_created(
     response = admin_client.post("/admin/api/prompts/de/explainer/fork", json={"project": "Proj"})
     assert response.status_code == 422
     assert not (prompt_tree / "de/explainer__proj").exists()
+
+
+RENDER_PAYLOAD = {"messages": [{"role": "user", "source": "inline", "file": None, "content": "hi"}]}
+
+
+class TestRenderAsProjectAdmin:
+    def _post(self, client, **extra):
+        return client.post(
+            "/admin/api/prompts/render",
+            json={**RENDER_PAYLOAD, **extra},
+            headers=csrf(client),
+        )
+
+    def test_project_admin_renders_for_own_project(self, client, login_project_admin):
+        login_project_admin(managed=["Alpha"])
+        response = self._post(client, project="Alpha")
+        assert response.status_code == 200
+        assert response.json()["messages"][0]["content"] == "hi"
+
+    def test_project_admin_render_without_project_is_403(self, client, login_project_admin):
+        login_project_admin(managed=["Alpha"])
+        assert self._post(client).status_code == 403
+
+    def test_project_admin_render_for_foreign_project_is_403(self, client, login_project_admin):
+        login_project_admin(managed=["Alpha"], other=["Beta"])
+        assert self._post(client, project="Beta").status_code == 403
+
+    def test_admin_render_without_project_still_works(self, client, login):
+        login(roles=["Administrator"])
+        assert self._post(client).status_code == 200

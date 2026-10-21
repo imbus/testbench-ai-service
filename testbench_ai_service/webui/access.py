@@ -75,6 +75,38 @@ def can_manage(session: Session, project: str | None) -> bool:
     return project in session.managed_projects
 
 
+def require_project_access(session: Session, project: str | None) -> None:
+    """Refuse (403) a project-scoped action on a project *session* may not manage.
+
+    Without a project only a global admin passes: a project admin's rights exist
+    per project, so an unscoped request would act beyond them.
+    """
+    if not can_manage(session, project):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to act on this project",
+        )
+
+
+def refresh_managed_projects(session: Session) -> None:
+    """Re-read the managed projects over the session's TestBench link.
+
+    Memberships change in TestBench while a console session lives on; the
+    project refresh is the operator's way to pick that up without signing in
+    again. A failed read keeps the previous set, like ``record_projects`` does
+    for the project list: a timeout is no reason to lock a project admin out.
+    """
+    if session.tb_link is None:
+        logger.warning("No TestBench link; keeping the managed projects as they are")
+        return
+    try:
+        memberships = session.tb_link.call(get_own_project_memberships)
+    except Exception as e:  # keep the last good set rather than failing the refresh
+        logger.warning("Could not re-read the TestBench project memberships: %r", e)
+        return
+    session.managed_projects = managed_projects_from(session.roles, memberships)
+
+
 def _safe_prompt_file(value: Any) -> bool:
     """Whether *value* is a relative path without ``..`` on any platform.
 

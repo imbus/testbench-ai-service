@@ -409,6 +409,9 @@ class RenderRequest(BaseModel):
     messages: list[PromptMessageDoc] = []
     vars: dict[str, PromptVarValue] = {}
     agent_context: dict[str, Any] = {}
+    #: The project the preview is for. Rendering itself does not depend on it;
+    #: it is what a project admin's access is checked against.
+    project: str | None = None
 
 
 class CatalogueModel(BaseModel):
@@ -441,7 +444,6 @@ class PromptTestRequest(RenderRequest):
     """
 
     model: str
-    project: str | None = None
 
 
 class ResolvedRoute(BaseModel):

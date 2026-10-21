@@ -244,3 +244,50 @@ def test_the_login_route_runs_in_the_threadpool():
     in the threadpool instead.
     """
     assert not inspect.iscoroutinefunction(sign_in)
+
+
+# --- project admins --------------------------------------------------------
+
+
+def test_project_admin_can_refresh_projects(client, login_project_admin):
+    csrf = login_project_admin(managed=["Alpha"]).cookies[CSRF_COOKIE]
+    response = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
+    assert response.status_code == 200
+
+
+def test_refresh_rereads_managed_projects(client, login_project_admin, tb_connection):
+    csrf = login_project_admin(managed=["Alpha"]).cookies[CSRF_COOKIE]
+    assert client.get("/admin/api/session").json()["managed_projects"] == ["Alpha"]
+
+    original_get = tb_connection.session.get.side_effect
+
+    def _get(url, *args, **kwargs):
+        if url.endswith("2/users/self/projectRoles"):
+            response = MagicMock()
+            response.json.return_value = [
+                {
+                    "userKey": "u-1",
+                    "userLogin": "a.mueller",
+                    "userName": "A. Mueller",
+                    "projectKey": f"key-{name}",
+                    "projectName": name,
+                    "roles": ["TestManager"],
+                }
+                for name in ("Alpha", "Gamma")
+            ]
+            return response
+        return original_get(url, *args, **kwargs)
+
+    tb_connection.session.get.side_effect = _get
+    client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
+    assert client.get("/admin/api/session").json()["managed_projects"] == ["Alpha", "Gamma"]
+
+
+def test_failed_membership_reread_keeps_the_managed_projects(
+    client, login_project_admin, tb_connection
+):
+    csrf = login_project_admin(managed=["Alpha"]).cookies[CSRF_COOKIE]
+    tb_connection.session.get.side_effect = requests.exceptions.ConnectionError("no route")
+    response = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
+    assert response.status_code == 200
+    assert client.get("/admin/api/session").json()["managed_projects"] == ["Alpha"]

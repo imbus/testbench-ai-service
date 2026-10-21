@@ -58,3 +58,17 @@ class TestPayload:
             "/admin/api/models", params={"project": "Car Configurator"}, headers=csrf(client)
         )
         assert response.status_code == 200
+
+
+class TestProjectAdmin:
+    def test_project_admin_models_for_own_project(self, client, login_project_admin):
+        login_project_admin(managed=["Alpha"])
+        assert client.get("/admin/api/models?project=Alpha").status_code == 200
+
+    def test_project_admin_models_without_project_is_403(self, client, login_project_admin):
+        login_project_admin(managed=["Alpha"])
+        assert client.get("/admin/api/models").status_code == 403
+
+    def test_project_admin_models_for_foreign_project_is_403(self, client, login_project_admin):
+        login_project_admin(managed=["Alpha"], other=["Beta"])
+        assert client.get("/admin/api/models?project=Beta").status_code == 403
