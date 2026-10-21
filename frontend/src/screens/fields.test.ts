@@ -1,4 +1,4 @@
-import { LLM_FIELDS, LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt } from './fields'
+import { LLM_FIELDS, PROJECT_ADMIN_LLM_SETTINGS, LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt } from './fields'
 
 const CONFIG = {
   host: '127.0.0.1',
@@ -144,5 +144,21 @@ describe('llmFields', () => {
     )
     expect(provider?.options).toEqual(['openai', 'azure_openai', 'anthropic', 'custom'])
     expect(provider?.hint).toBeTruthy()
+  })
+})
+
+describe('for a project admin', () => {
+  test('provider never offers custom, which runs an operator-named class', () => {
+    const scope = { kind: 'project', project: 'Alpha' } as const
+    const provider = (projectAdmin: boolean) =>
+      llmFields(scope, { projectAdmin }).find((field) => field.setting === 'provider')
+    expect(provider(true)?.options).not.toContain('custom')
+    expect(provider(false)?.options).toContain('custom')
+  })
+
+  test('the writable llm_config settings are an allow-list', () => {
+    expect([...PROJECT_ADMIN_LLM_SETTINGS].sort()).toEqual(
+      ['api_version', 'extra_models', 'max_retries', 'model', 'provider', 'timeout'],
+    )
   })
 })

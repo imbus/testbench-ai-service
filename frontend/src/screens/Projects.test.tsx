@@ -80,13 +80,16 @@ function edits(): Record<string, unknown> {
   return JSON.parse(screen.getByTestId('edits').textContent ?? '{}')
 }
 
-function renderProjects({ isAdmin = true }: { isAdmin?: boolean } = {}) {
+function renderProjects({
+  isAdmin = true,
+  managedProjects = [],
+}: { isAdmin?: boolean; managedProjects?: string[] } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <DraftProvider saved={DISK}>
-          <Projects isAdmin={isAdmin} issues={[]} />
+          <Projects isAdmin={isAdmin} managedProjects={managedProjects} issues={[]} />
           <Edits />
         </DraftProvider>
       </MemoryRouter>
@@ -504,5 +507,28 @@ describe('the llm_config panel links into the LLM screen', () => {
       'href',
       '/admin/llm?project=Release%202.0',
     )
+  })
+})
+
+// --- project admins -----------------------------------------------------
+
+describe('a project admin', () => {
+  it('edits the managed project and reads every other one', async () => {
+    renderProjects({ isAdmin: false, managedProjects: ['Alpha'] })
+    await ready()
+
+    const alpha = within(screen.getByTestId('project-Alpha'))
+    for (const control of alpha.getAllByRole('switch')) expect(control).toBeEnabled()
+    expect(alpha.getByRole('group', { name: 'language' })).toBeInTheDocument()
+
+    const modelled = within(screen.getByTestId('project-Modelled'))
+    for (const control of modelled.getAllByRole('switch')) expect(control).toBeDisabled()
+    expect(modelled.queryByRole('group', { name: 'language' })).not.toBeInTheDocument()
+  })
+
+  it('still gets no refresh', async () => {
+    renderProjects({ isAdmin: false, managedProjects: ['Alpha'] })
+    await ready()
+    expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument()
   })
 })

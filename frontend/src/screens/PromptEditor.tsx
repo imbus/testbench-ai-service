@@ -6,7 +6,7 @@ import type { Scope } from '../api/agents'
 import { ApiError } from '../api/client'
 import { useLintTemplate, usePlanPrompt, useSavePrompt } from '../api/mutations'
 import { agentContextOf, agentsUsingVariant, emptyMessage } from '../api/prompts'
-import { useConfig, usePromptDocument } from '../api/queries'
+import { useConfig, usePromptDocument, usePromptTree } from '../api/queries'
 import type { LintError, PromptDocument, PromptMessageDoc, PromptVarDecl } from '../api/types'
 import type { CodeEditorHandle } from '../components/CodeEditor'
 import { Modal } from '../components/Modal'
@@ -189,7 +189,7 @@ function withoutIndex(set: ReadonlySet<number>, index: number): ReadonlySet<numb
   return next
 }
 
-export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
+export function PromptEditor({ isAdmin: isGlobalAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation()
   // The route's own `:lang` names the PROMPT FILE's language (which
   // `prompts_dir/<lang>/` a save reads and writes) -- unrelated to the
@@ -197,6 +197,19 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const { lang: docLang = '', agent: agentKey = '' } = useParams()
 
   const document = usePromptDocument(docLang || undefined, agentKey || undefined)
+  // The server decides what a project admin may touch (their own forks) and
+  // marks it per tree entry; an admin edits everything regardless.
+  const tree = usePromptTree()
+  const treeEntry = tree.data?.languages
+    ?.find((entry) => entry.lang === docLang)
+    ?.prompts?.find((entry) => entry.agent === agentKey)
+  const isAdmin = isGlobalAdmin || treeEntry?.editable === true
+  // An owned fork is used only by managed projects, so the first user is a
+  // project the server will accept for render and test runs. An admin runs
+  // unscoped.
+  const runProject = isGlobalAdmin ? null : (treeEntry?.used_by.find((use) => use.project)?.project ?? null)
+  const canRender = isAdmin && (isGlobalAdmin || runProject !== null)
+  const managedForRun = runProject ? [runProject] : []
   const config = useConfig()
   const save = useSavePrompt(docLang, agentKey)
   const plan = usePlanPrompt(docLang, agentKey)
@@ -724,7 +737,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
       vars={sampleVars(vars)}
       decls={vars}
       skeleton={agentContext}
-      isAdmin={isAdmin}
+      canRender={canRender}
+      project={runProject}
       // Live only on its own tab: kept mounted behind the others, it would
       // otherwise re-render on every keystroke in a message.
       active={current?.kind === 'render'}
@@ -868,7 +882,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
       messages={requestMessages}
       vars={sampleVars(vars)}
       agentContext={agentContext}
-      isAdmin={isAdmin}
+      isAdmin={isGlobalAdmin}
+      managedProjects={isAdmin ? managedForRun : []}
     />
   )
 
@@ -901,9 +916,9 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         onPickMessage={(index, pin) => open(messageTabOf(messages[index], index), pin)}
         onAddVariant={addVariant}
         onAddMessage={addMessage}
-        // The render endpoint is admin-gated (RenderPreview renders nothing
-        // without it), so a non-admin gets no way to open an empty tab.
-        onOpenRender={isAdmin ? (pin) => open('render', pin) : undefined}
+        // The render endpoint is gated (RenderPreview renders nothing without
+        // it), so a viewer gets no way to open an empty tab.
+        onOpenRender={canRender ? (pin) => open('render', pin) : undefined}
       />
       <div ref={splitColumnRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <EditorTabs

@@ -76,16 +76,18 @@ const column = {
  * inactive -- the pane stays mounted behind other tabs, and a hidden render
  * per keystroke in a message would only spend server time.
  *
- * Admin-only: `POST /prompts/render` evaluates operator-supplied Jinja
- * server-side, and the route is admin-gated to match -- offering the button
- * to a non-admin would just spend a click on a 403.
+ * Editors only: `POST /prompts/render` evaluates operator-supplied Jinja
+ * server-side, and the route is gated to match -- offering the button to a
+ * viewer would just spend a click on a 403. A project admin's render is scoped
+ * to `project`, which the server checks against their managed projects.
  */
 export function RenderPreview({
   messages,
   vars,
   decls = {},
   skeleton,
-  isAdmin,
+  canRender,
+  project = null,
   active,
 }: {
   messages: PromptMessageDoc[]
@@ -93,7 +95,9 @@ export function RenderPreview({
   /** The variant's declared vars, one sample-value control each. */
   decls?: Record<string, PromptVarDecl>
   skeleton: Record<string, unknown>
-  isAdmin: boolean
+  canRender: boolean
+  /** The project the render is scoped to; set for a project admin, null for an admin. */
+  project?: string | null
   /** Whether the Render tab is the open one; renders live only then. */
   active: boolean
 }) {
@@ -152,7 +156,7 @@ export function RenderPreview({
     }
     setParseError(false)
     const id = ++sequence.current
-    render.mutateAsync({ messages, vars: sending, agent_context: context }).then(
+    render.mutateAsync({ messages, vars: sending, agent_context: context, project }).then(
       (data) => {
         if (id !== sequence.current) return
         setResult(data)
@@ -166,7 +170,7 @@ export function RenderPreview({
   }
 
   useEffect(() => {
-    if (!isAdmin) return
+    if (!canRender) return
     if (!active) {
       fresh.current = true
       return
@@ -187,11 +191,11 @@ export function RenderPreview({
       if (attemptedKey.current !== inputKey) attemptRef.current()
     }, RENDER_DELAY_MS)
     return () => clearTimeout(timer)
-  }, [isAdmin, active, inputKey])
+  }, [canRender, active, inputKey])
 
   // Design D3: not merely hidden -- absent. A disabled button would still
   // announce a feature that 403s the moment it is clicked.
-  if (!isAdmin) return null
+  if (!canRender) return null
 
   return (
     <div data-testid="render-preview" style={{ flex: 1, minWidth: 0, minHeight: 0, height: '100%', display: 'flex' }}>

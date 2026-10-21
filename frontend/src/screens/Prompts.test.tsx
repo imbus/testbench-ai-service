@@ -23,6 +23,7 @@ const TREE: PromptTreeResponse = {
           ok: true,
           error: null,
           used_by: [],
+          editable: true,
         },
         {
           agent: 'explainer',
@@ -32,6 +33,7 @@ const TREE: PromptTreeResponse = {
           ok: false,
           error: 'Invalid YAML at line 4',
           used_by: [],
+          editable: true,
         },
       ],
     },
@@ -46,6 +48,7 @@ const TREE: PromptTreeResponse = {
           ok: true,
           error: null,
           used_by: [],
+          editable: true,
         },
       ],
     },

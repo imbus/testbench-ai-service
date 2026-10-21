@@ -21,6 +21,7 @@ const FIXTURES: Record<string, unknown> = {
     roles: ['Administrator'],
     is_admin: true,
     tb_server_url: 'https://tb.example.com:9443/api/',
+    managed_projects: [],
   },
   '/admin/api/status': {
     service: {

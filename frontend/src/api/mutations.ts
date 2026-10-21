@@ -90,6 +90,8 @@ export function useRenderPrompt() {
       messages: PromptMessageDoc[]
       vars: Record<string, unknown>
       agent_context: Record<string, unknown>
+      /** Required for a project admin: the managed project the render runs as. */
+      project?: string | null
     }) =>
       apiFetch<RenderResponse>('/prompts/render', {
         method: 'POST',

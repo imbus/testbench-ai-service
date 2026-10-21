@@ -44,6 +44,7 @@ const CONFIG = {
 function renderSection({
   section = 'service',
   isAdmin = false,
+  managedProjects = [],
   disk = CONFIG.disk,
   running = CONFIG.running,
   issues = [],
@@ -51,6 +52,7 @@ function renderSection({
 }: {
   section?: 'service' | 'llm' | 'logging'
   isAdmin?: boolean
+  managedProjects?: string[]
   disk?: Record<string, unknown>
   running?: Record<string, unknown>
   issues?: ConfigIssue[]
@@ -74,7 +76,12 @@ function renderSection({
     <MemoryRouter initialEntries={[initialEntries]}>
       <QueryClientProvider client={client}>
         <DraftProvider saved={disk}>
-          <ConfigSection section={section} isAdmin={isAdmin} issues={issues} />
+          <ConfigSection
+            section={section}
+            isAdmin={isAdmin}
+            managedProjects={managedProjects}
+            issues={issues}
+          />
         </DraftProvider>
       </QueryClientProvider>
     </MemoryRouter>,
@@ -474,4 +481,41 @@ test('a validation issue on a project field lands on that field', async () => {
     ],
   })
   expect(await screen.findByText('not a valid provider')).toBeInTheDocument()
+})
+
+// --- project admins: an allow-list of llm_config settings ----------------
+
+test('a project admin edits only the allow-listed llm_config fields of a managed project', async () => {
+  renderSection({
+    section: 'llm',
+    isAdmin: false,
+    managedProjects: ['Alpha'],
+    running: PROJECT_CONFIG.running,
+    disk: PROJECT_CONFIG.disk,
+    initialEntries: '/admin/llm?project=Alpha',
+  })
+  await screen.findByRole('tab', { name: 'Alpha' })
+
+  // Editable: provider, model, timeout, max_retries, api_version.
+  for (const name of ['provider', 'model', 'timeout', 'max_retries', 'api_version']) {
+    expect(screen.getByLabelText(name)).toBeInTheDocument()
+  }
+  // Read-only: everything else, however harmless it looks.
+  for (const name of ['class_path', 'azure_endpoint', 'auth_method']) {
+    expect(screen.queryByLabelText(name)).not.toBeInTheDocument()
+    expect(screen.getByText(name)).toBeInTheDocument()
+  }
+})
+
+test('a project admin reads the global scope and a project they do not manage', async () => {
+  renderSection({
+    section: 'llm',
+    isAdmin: false,
+    managedProjects: ['Beta'],
+    running: PROJECT_CONFIG.running,
+    disk: PROJECT_CONFIG.disk,
+    initialEntries: '/admin/llm?project=Alpha',
+  })
+  await screen.findByRole('tab', { name: 'Alpha' })
+  expect(screen.queryByLabelText('model')).not.toBeInTheDocument()
 })

@@ -19,6 +19,7 @@ import { useConfig, useProjects } from '../api/queries'
 import type { ConfigIssue } from '../api/types'
 import { AgentSwitch } from '../components/AgentSwitch'
 import { useTranslation } from 'react-i18next'
+import { canEditScope } from '../state/access'
 import { useDraft } from '../state/draft'
 import { LANGUAGES } from './agentFields'
 import { valueAt } from './fields'
@@ -37,9 +38,12 @@ function issueFor(issues: ConfigIssue[], key: string): string | undefined {
  */
 export function Projects({
   isAdmin,
+  managedProjects = [],
   issues = [],
 }: {
   isAdmin: boolean
+  /** Projects a project admin may edit; every other card is read-only for them. */
+  managedProjects?: string[]
   issues?: ConfigIssue[]
 }) {
   const { t } = useTranslation()
@@ -196,7 +200,7 @@ export function Projects({
               disk={disk}
               running={running}
               issues={issues}
-              isAdmin={isAdmin}
+              canEdit={canEditScope(isAdmin, managedProjects, name)}
             />
           ))}
         </div>
@@ -215,7 +219,7 @@ function ProjectCard({
   disk,
   running,
   issues,
-  isAdmin,
+  canEdit,
 }: {
   name: string
   inTestBench: boolean
@@ -223,7 +227,8 @@ function ProjectCard({
   disk: Record<string, unknown>
   running: Record<string, unknown>
   issues: ConfigIssue[]
-  isAdmin: boolean
+  /** May this session edit this project: an admin, or its project admin. */
+  canEdit: boolean
 }) {
   const { t } = useTranslation()
   const draft = useDraft()
@@ -314,7 +319,7 @@ function ProjectCard({
           >
             language
           </span>
-          {isAdmin ? (
+          {canEdit ? (
             // `INHERIT` stands in for "no override": Prime matches the value
             // against each option's, and an empty value would select nothing.
             <SelectButton
@@ -390,7 +395,7 @@ function ProjectCard({
                     ) === true
                   }
                   label={`${agentKey} · ${name}`}
-                  readOnly={!isAdmin}
+                  readOnly={!canEdit}
                 >
                   <span
                     style={{
@@ -466,7 +471,7 @@ function ProjectCard({
             [testbench-ai-service.{projectPath(name)}]
           </span>
           <div style={{ flex: 1 }} />
-          {isAdmin && declared && (
+          {canEdit && declared && (
             <Button
               type="button"
               text

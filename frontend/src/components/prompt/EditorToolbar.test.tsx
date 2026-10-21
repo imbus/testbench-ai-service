@@ -13,11 +13,11 @@ beforeEach(() => i18n.changeLanguage('en'))
 
 const TREE: PromptTreeResponse = { languages: [
   { lang: 'de', prompts: [
-    { agent: 'explainer', file: 'de/explainer/prompt.yaml', name: 'Explainer', variants: ['Thorough', 'Quick'], ok: true, error: null, used_by: [] },
-    { agent: 'broken', file: 'de/broken/prompt.yaml', name: null, variants: [], ok: false, error: 'bad yaml', used_by: [] },
+    { agent: 'explainer', file: 'de/explainer/prompt.yaml', name: 'Explainer', variants: ['Thorough', 'Quick'], ok: true, error: null, used_by: [], editable: true },
+    { agent: 'broken', file: 'de/broken/prompt.yaml', name: null, variants: [], ok: false, error: 'bad yaml', used_by: [], editable: true },
   ] },
   { lang: 'en', prompts: [
-    { agent: 'reviewer', file: 'en/reviewer/prompt.yaml', name: 'Reviewer', variants: ['A'], ok: true, error: null, used_by: [] },
+    { agent: 'reviewer', file: 'en/reviewer/prompt.yaml', name: 'Reviewer', variants: ['A'], ok: true, error: null, used_by: [], editable: true },
   ] },
 ] }
 

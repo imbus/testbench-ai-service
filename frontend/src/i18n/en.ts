@@ -53,6 +53,7 @@ export const en = {
   // *all* writes, not just Service/LLM/Logging, matching the German copy's
   // same deliberate deviation.
   readOnly: 'Read only — changes require the Admin role.',
+  projectAdminHint: 'You can edit the projects in which you are a TestManager.',
   agentsOn: 'enabled',
   overrides: 'overrides',
   overrideCount_one: '{{count}} override',
@@ -185,6 +186,7 @@ export const en = {
   testRunScopeGlobal: 'global key',
   testRunFallbackHint: 'no tuned routing',
   testRunNoKey: 'no key',
+  testRunProjectPlaceholder: 'Select a project',
   testRunAdminOnly: 'Only administrators can start a test run.',
   testRunAddHint: 'Missing a model? Add it under LLM.',
   promptsError: 'The prompt tree could not be loaded.',

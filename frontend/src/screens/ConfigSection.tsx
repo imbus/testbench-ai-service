@@ -11,7 +11,15 @@ import { ModelTable } from '../components/ModelTable'
 import { ReadOnlyField } from '../components/ReadOnlyField'
 import { ScopeTabs } from '../components/ScopeTabs'
 import { useTranslation } from 'react-i18next'
-import { LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt, type FieldSpec } from './fields'
+import { canEditScope } from '../state/access'
+import {
+  LOGGING_FIELDS,
+  PROJECT_ADMIN_LLM_SETTINGS,
+  SERVICE_TABS,
+  llmFields,
+  valueAt,
+  type FieldSpec,
+} from './fields'
 
 type Section = 'service' | 'llm' | 'logging'
 
@@ -40,10 +48,13 @@ function issueMatchesField(issuePath: string, fieldKey: string): boolean {
 export function ConfigSection({
   section,
   isAdmin,
+  managedProjects = [],
   issues = [],
 }: {
   section: Section
   isAdmin: boolean
+  /** Projects a project admin may edit; empty for an admin or a viewer. */
+  managedProjects?: string[]
   /** Field-addressed validation failures from the last preview or apply. */
   issues?: ConfigIssue[]
 }) {
@@ -99,8 +110,18 @@ export function ConfigSection({
   if (section === 'service') {
     fields = (SERVICE_TABS.find((entry) => entry.key === tab) ?? SERVICE_TABS[0]).fields
   } else {
-    fields = section === 'llm' ? llmFields(scope) : LOGGING_FIELDS
+    fields =
+      section === 'llm'
+        ? llmFields(scope, { projectAdmin: !isAdmin })
+        : LOGGING_FIELDS
   }
+  // Global scope and the other sections stay admin-only. In a project scope a
+  // project admin edits only the allow-listed settings, and only in a project
+  // they manage; everything else renders read-only for them.
+  const scopeEditable = section === 'llm' ? canEditScope(isAdmin, managedProjects, project) : isAdmin
+  const mayEditField = (spec: FieldSpec): boolean =>
+    isAdmin ||
+    (scopeEditable && section === 'llm' && PROJECT_ADMIN_LLM_SETTINGS.includes(spec.setting ?? ''))
 
   // For Service tabs, determine which have issues
   const tabIssueCount = (tabKey: string): number => {
@@ -123,7 +144,10 @@ export function ConfigSection({
     ...(projects.data?.projects ?? []).map((entry) => entry.name),
     ...configuredProjects(running),
   ]
-  const addable = [...new Set(known)].filter((name) => !tabs.includes(name))
+  // A project admin can only start an override on a project they manage.
+  const addable = [...new Set(known)].filter(
+    (name) => !tabs.includes(name) && (isAdmin || managedProjects.includes(name)),
+  )
   // Presence only. No endpoint returns a credential value and no code here may
   // print one. Defaulted rather than assumed: `/models` can be absent, failed
   // or still loading, and none of those is worth a crashed screen.
@@ -234,7 +258,7 @@ export function ConfigSection({
               : undefined
           // Non-admins keep the phase-1 read-only rendering unchanged rather
           // than getting a form full of disabled inputs.
-          return isAdmin ? (
+          return mayEditField(spec) ? (
             <Field
               key={spec.key}
               spec={spec}

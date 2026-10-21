@@ -22,6 +22,7 @@ import { ReadOnlyField } from '../components/ReadOnlyField'
 import { ScopeTabs } from '../components/ScopeTabs'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
+import { canEditScope } from '../state/access'
 import { useDraft } from '../state/draft'
 import {
   AGENT_FIELDS,
@@ -47,9 +48,12 @@ function issueFor(issues: ConfigIssue[], key: string): string | undefined {
  */
 export function AgentDetail({
   isAdmin,
+  managedProjects = [],
   issues = [],
 }: {
   isAdmin: boolean
+  /** Projects a project admin may edit; the global scope stays admin-only. */
+  managedProjects?: string[]
   issues?: ConfigIssue[]
 }) {
   const { t } = useTranslation()
@@ -72,6 +76,9 @@ export function AgentDetail({
   const globalAgent = effectiveAgent(running, agentKey, null)
   const scope: Scope = project === null ? { kind: 'global' } : { kind: 'project', project }
   const scopedAgent = effectiveAgent(running, agentKey, project)
+  // The scope decides, not the session alone: a project admin edits their
+  // project's override and still only reads the global agent.
+  const canEdit = canEditScope(isAdmin, managedProjects, project)
 
   // The effective language of the scope being edited. A project's `language`
   // override decides which prompts_dir/<lang>/ its prompt files come from, so
@@ -155,7 +162,9 @@ export function AgentDetail({
     ...(projects.data?.projects ?? []).map((entry) => entry.name),
     ...configuredProjects(running),
   ]
-  const addable = [...new Set(known)].filter((name) => !overriders.includes(name))
+  const addable = [...new Set(known)].filter(
+    (name) => !overriders.includes(name) && (isAdmin || managedProjects.includes(name)),
+  )
   const tabs = [...new Set(project !== null ? [...overriders, project] : overriders)]
 
   /** What this control falls back to when the current scope says nothing. */
@@ -213,7 +222,7 @@ export function AgentDetail({
             // added to AGENT_FIELDS would otherwise be silently read as the
             // variant.
             const setting = spec.setting ?? ''
-            return isAdmin ? (
+            return canEdit ? (
               <Field
                 key={spec.key}
                 spec={spec}
@@ -267,7 +276,7 @@ export function AgentDetail({
                 disk={disk}
                 inheritable={inheritable}
                 issues={issues}
-                isAdmin={isAdmin}
+                canEdit={canEdit}
               />
             ))}
             {undeclared.map((name) => (
@@ -300,7 +309,7 @@ export function AgentDetail({
         ))}
       </section>
 
-      {scope.kind === 'project' && isAdmin && (
+      {scope.kind === 'project' && canEdit && (
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
           <div>
             <Button
@@ -379,7 +388,7 @@ function VarField({
   disk,
   inheritable,
   issues,
-  isAdmin,
+  canEdit,
 }: {
   scope: Scope
   agentKey: string
@@ -389,7 +398,7 @@ function VarField({
   /** The variables this scope inherits, already resolved by `inheritedVars`. */
   inheritable: Record<string, unknown>
   issues: ConfigIssue[]
-  isAdmin: boolean
+  canEdit: boolean
 }) {
   const { t } = useTranslation()
   const spec = promptVarField(scope, agentKey, varName, definition)
@@ -400,7 +409,7 @@ function VarField({
   const label =
     scope.kind === 'project' && fromGlobal !== undefined ? t('globalScope') : t('promptDefault')
 
-  if (!isAdmin) return <ReadOnlyField spec={spec} value={saved ?? inheritedValue} />
+  if (!canEdit) return <ReadOnlyField spec={spec} value={saved ?? inheritedValue} />
 
   return (
     <Field

@@ -53,14 +53,20 @@ soon as you sign out — whichever comes first.
 
 The console reads your global TestBench roles at sign-in:
 
-| Role                             | What you get                                       |
-| -------------------------------- | -------------------------------------------------- |
-| Global `Administrator`           | Full console, including changing configuration     |
-| Any other role                   | Read-only console                                  |
+| Role                                                  | What you get                                                                                                                                                                  |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Global `Administrator`                                | Full console, including changing configuration                                                                                                                               |
+| Global `ProjectAdministrator` + `TestManager` in a project | Edits those projects: their configuration (without `class_path`, `azure_endpoint`, `auth_method` or the `custom` provider), their own prompt forks, render and test runs |
+| Any other role                                        | Read-only console                                                                                                                                                             |
 
-Editing is Administrator-only. A non-admin session sees the same screens with
-the values displayed rather than as form fields, and every route that changes
-something refuses a non-admin regardless of what the browser sends.
+Global configuration, the service settings and the raw `config.toml` are
+Administrator-only. A project administrator sees those screens with the values
+displayed rather than as form fields, and edits only inside the projects they
+manage. In a project's LLM configuration they may change `provider` (never
+`custom`), `model`, `timeout`, `max_retries`, `api_version` and `extra_models`;
+every other setting there is shown read-only. Every route that changes
+something checks this again regardless of what the browser sends, and refuses
+what the role does not allow.
 
 ---
 
@@ -206,8 +212,8 @@ A variable that is set in `config.toml` but not declared by the selected variant
 is still shown, flagged, so a value the prompt will ignore cannot hide in the
 file.
 
-In a **project** scope an administrator also gets **Give this project its own
-prompt**, which copies the prompt this project loads and points the project at
+In a **project** scope an administrator (or the administrator of that project)
+also gets **Give this project its own prompt**, which copies the prompt this project loads and points the project at
 the copy. See [Giving a project its own copy of a
 prompt](#giving-a-project-its-own-copy-of-a-prompt). It is on the agent screen
 rather than on the Projects screen because a fork is per agent, and the agent
@@ -278,8 +284,9 @@ why — but an unparseable file has to be repaired on disk first. The editor
 cannot open it.
 
 Any signed-in session can browse the tree and open a prompt that parses.
-Editing is Administrator-only, same as the rest of the console: a non-admin
-sees the same form, with every control read-only.
+Editing is limited to Administrators and, for the forks of their own projects,
+project administrators; any other session sees the same form with every
+control read-only.
 
 ### Prompt detail
 
@@ -295,8 +302,9 @@ checks every message of the selected variant at once, on demand — it does not
 check continuously as you type — and reports the line of the first error in
 each. It is available to any signed-in session. **Render** evaluates the
 variant's messages against its variables and the agent's own context, and is
-**Administrator-only** — unlike lint, it executes the template text, so a
-non-admin session sees lint errors but no Render button. Preview always runs
+**limited to editors** — unlike lint, it executes the template text, so a
+read-only session sees lint errors but no Render button. A project
+administrator renders a fork as one of the projects that use it. Preview always runs
 inside a sandboxed Jinja environment, whatever the template does.
 
 The **context** pane that Render fills in is built server-side from the real
@@ -413,7 +421,8 @@ save from an earlier release, is not swept up — there is no "clean up
 
 On an **agent's** screen, in a project scope, **Give this project its own
 prompt** copies the prompt the project currently loads and points the project
-at the copy. It is Administrator-only.
+at the copy. It is available to Administrators and to the administrator of
+the project.
 
 The copy lands in a sibling directory beside the prompt it came from:
 

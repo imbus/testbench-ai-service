@@ -39,13 +39,15 @@ afterEach(() => vi.restoreAllMocks())
 // sit under this single catch-all data route -- see main.tsx's own comment.
 const renderApp = ({
   isAdmin = false,
+  managedProjects = [],
   route = '/admin/status',
-}: { isAdmin?: boolean; route?: string } = {}) => {
+}: { isAdmin?: boolean; managedProjects?: string[]; route?: string } = {}) => {
   asSession({
     username: 'a.mueller',
     roles: isAdmin ? ['Administrator'] : ['Test Manager'],
     is_admin: isAdmin,
     tb_server_url: 'https://tb:9443/api/',
+    managed_projects: managedProjects,
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const router = createMemoryRouter([{ path: '*', element: <App /> }], { initialEntries: [route] })
@@ -123,6 +125,16 @@ it('does not show the pending-changes banner to a non-admin', async () => {
 
   await screen.findByRole('navigation')
   expect(screen.queryByText(/nicht übernommene Änderungen/)).not.toBeInTheDocument()
+})
+
+it('shows a project admin the pending-changes banner and no read-only notice', async () => {
+  window.localStorage.setItem('tbai_admin_draft', JSON.stringify({ port: 9999 }))
+
+  renderApp({ isAdmin: false, managedProjects: ['Alpha'] })
+
+  await screen.findByText(/nicht übernommene Änderungen/)
+  expect(screen.queryByText(/nur lesend/i)).not.toBeInTheDocument()
+  expect(screen.getByText(/Projekte bearbeiten, in denen Sie TestManager sind/)).toBeInTheDocument()
 })
 
 it('routes /admin/raw to the raw config screen', async () => {
@@ -386,12 +398,14 @@ it('clears the marker when the session ends', async () => {
     roles: ['Administrator'],
     is_admin: true,
     tb_server_url: 'https://tb:9443/api/',
+    managed_projects: [],
   }
   const ADMIN_B = {
     username: 'b.schmidt',
     roles: ['Administrator'],
     is_admin: true,
     tb_server_url: 'https://tb:9443/api/',
+    managed_projects: [],
   }
 
   function useStatefulSession() {

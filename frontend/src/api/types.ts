@@ -3,6 +3,8 @@ export interface SessionInfo {
   roles: string[]
   is_admin: boolean
   tb_server_url: string
+  /** Projects this user may edit as a project admin; empty for everyone else. */
+  managed_projects: string[]
 }
 
 export interface ServiceStatus {
@@ -174,6 +176,8 @@ export type PromptTreeEntry = {
   ok: boolean
   error: string | null
   used_by: PromptUsage[]
+  /** Server-computed: may this session edit the file (admin: all; project admin: own forks). */
+  editable: boolean
 }
 export type PromptTreeLanguage = { lang: string; prompts: PromptTreeEntry[] }
 export type PromptTreeResponse = { languages: PromptTreeLanguage[] }

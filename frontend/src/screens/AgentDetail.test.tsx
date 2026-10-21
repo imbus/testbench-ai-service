@@ -178,7 +178,8 @@ function edits(): Record<string, unknown> {
 function renderDetail({
   agentKey = 'reviewer',
   isAdmin = true,
-}: { agentKey?: string; isAdmin?: boolean } = {}) {
+  managedProjects = [],
+}: { agentKey?: string; isAdmin?: boolean; managedProjects?: string[] } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -187,7 +188,9 @@ function renderDetail({
           <Routes>
             <Route
               path="/admin/agents/:agentKey"
-              element={<AgentDetail isAdmin={isAdmin} issues={[]} />}
+              element={
+                <AgentDetail isAdmin={isAdmin} managedProjects={managedProjects} issues={[]} />
+              }
             />
           </Routes>
           <Edits />
@@ -507,6 +510,24 @@ describe('a non-admin session', () => {
   })
 })
 
+describe('a project admin', () => {
+  it('reads the global scope and edits a managed project', async () => {
+    renderDetail({ isAdmin: false, managedProjects: ['Alpha'] })
+    await ready()
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
+    expect(screen.getByRole('switch', { name: 'enabled' })).toBeInTheDocument()
+  })
+
+  it('reads a project they do not manage', async () => {
+    renderDetail({ isAdmin: false, managedProjects: ['Beta'] })
+    await ready()
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument()
+  })
+})
+
 // --- vars inherit the way the runtime merges them ------------------------
 
 describe('prompt variables in a project that declares its own', () => {
@@ -621,8 +642,17 @@ describe('forking a prompt for a project', () => {
   })
 
   it('does not offer the fork to a non-admin session', async () => {
-    await renderAgentDetail({ isAdmin: false, project: 'Car Configurator' })
+    renderDetail({ isAdmin: false })
+    await ready()
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
     expect(screen.queryByRole('button', { name: FORK_BUTTON })).not.toBeInTheDocument()
+  })
+
+  it("offers the fork to a project admin in their project's scope", async () => {
+    renderDetail({ isAdmin: false, managedProjects: ['Alpha'] })
+    await ready()
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
+    expect(screen.getByRole('button', { name: FORK_BUTTON })).toBeInTheDocument()
   })
 
   it('offers the fork in project scope, to an admin', async () => {

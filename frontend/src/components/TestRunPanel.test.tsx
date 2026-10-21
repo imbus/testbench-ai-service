@@ -246,3 +246,25 @@ test('the hint to add a model is an in-app link, not a full page load', async ()
   const link = await screen.findByRole('link', { name: /llm/i })
   expect(link).toHaveAttribute('href', '/admin/llm')
 })
+
+test('a project admin picks only a managed project and has no "no project" option', async () => {
+  renderPanel({ isAdmin: false, managedProjects: ['Alpha', 'Beta'] })
+  const list = await openDropdown(userEvent.setup(), 'Project')
+  expect(within(list).getByRole('option', { name: 'Alpha', hidden: true })).toBeInTheDocument()
+  expect(within(list).getByRole('option', { name: 'Beta', hidden: true })).toBeInTheDocument()
+  expect(within(list).queryByRole('option', { name: /default configuration/i, hidden: true })).toBeNull()
+})
+
+test('a project admin cannot run before choosing a project, then runs scoped to it', async () => {
+  renderPanel({ isAdmin: false, managedProjects: ['Alpha'] })
+  const user = userEvent.setup()
+  const button = screen.getByRole('button', { name: /test run/i })
+
+  await typeCustomModel(user, 'typed-model')
+  expect(button).toBeDisabled()
+
+  await chooseOption(user, 'Project', 'Alpha')
+  expect(button).toBeEnabled()
+  await user.click(button)
+  expect(mutate).toHaveBeenCalledWith(expect.objectContaining({ project: 'Alpha' }))
+})

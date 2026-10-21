@@ -9,6 +9,7 @@ const session: SessionInfo = {
   roles: ['Administrator'],
   is_admin: true,
   tb_server_url: 'https://tb:9443/api/',
+  managed_projects: [],
 }
 
 const props = {

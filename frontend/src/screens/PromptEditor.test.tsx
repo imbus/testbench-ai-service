@@ -210,6 +210,9 @@ let lintResponder: (content: string) => { ok: boolean; errors: LintError[] }
 /** Set by a test to make `POST /prompts/lint` fail instead of answering. */
 let lintFailure: { status: number; detail: string } | null
 /** What `POST /prompts/render` answers. */
+/** What the tree says about the `explainer` entry: the server's own per-entry `editable` and `used_by`. */
+let explainerEntry: { editable: boolean; used_by: { agent: string; project: string | null }[] }
+/** What `POST /prompts/render` answers. */
 let renderResponse: { messages: { role: string; content: string | null; error: string | null }[] }
 
 beforeEach(() => {
@@ -227,6 +230,7 @@ beforeEach(() => {
   lintResponder = () => ({ ok: true, errors: [] })
   lintFailure = null
   renderResponse = { messages: [] }
+  explainerEntry = { editable: false, used_by: [] }
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     const method = (init?.method ?? 'GET').toUpperCase()
     if (url.startsWith('/admin/api/config')) return ok(CONFIG)
@@ -254,8 +258,8 @@ beforeEach(() => {
     // slash, so it never matched that branch anyway.
     if (method === 'GET' && url === '/admin/api/prompts') {
       return ok({ languages: [{ lang: 'de', prompts: [
-        { agent: 'explainer', file: 'de/explainer/prompt.yaml', name: 'Explainer', variants: ['Thorough', 'Quick'], ok: true, error: null, used_by: [] },
-        { agent: 'other', file: 'de/other/prompt.yaml', name: 'Other', variants: ['Quick', 'Deep'], ok: true, error: null, used_by: [] },
+        { agent: 'explainer', file: 'de/explainer/prompt.yaml', name: 'Explainer', variants: ['Thorough', 'Quick'], ok: true, error: null, ...explainerEntry },
+        { agent: 'other', file: 'de/other/prompt.yaml', name: 'Other', variants: ['Quick', 'Deep'], ok: true, error: null, used_by: [], editable: false },
       ] }] })
     }
     if (method === 'GET' && url === '/admin/api/prompts/de/other') return ok(OTHER_DOC)
@@ -463,6 +467,33 @@ describe('a non-admin session', () => {
     expect(screen.queryByRole('button', { name: /^render$/i })).not.toBeInTheDocument()
     // The render endpoint is admin-gated and the preview renders nothing
     // without it, so there is no way to open an empty Render tab either.
+    expect(screen.queryByRole('button', { name: 'Open render' })).not.toBeInTheDocument()
+  })
+})
+
+describe('a project admin', () => {
+  it('edits a fork the server marks editable, and renders as its project', async () => {
+    explainerEntry = { editable: true, used_by: [{ agent: 'explainer', project: 'Alpha' }] }
+    renderEditor({ lang: 'en', isAdmin: false })
+    await ready()
+
+    await openMeta()
+    expect(promptName()).not.toHaveAttribute('readonly')
+    // Save is shown (disabled until something changes), and Render is offered.
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Open render' }))
+    await waitFor(() => expect(renderCalls().length).toBeGreaterThan(0))
+    expect(JSON.parse(String(renderCalls()[0][1]?.body))).toMatchObject({ project: 'Alpha' })
+  })
+
+  it('reads a prompt the server marks not editable', async () => {
+    explainerEntry = { editable: false, used_by: [{ agent: 'explainer', project: null }] }
+    renderEditor({ lang: 'en', isAdmin: false })
+    await ready()
+
+    await openMeta()
+    expect(promptName()).toHaveAttribute('readonly')
+    expect(screen.queryByRole('button', { name: /^save$/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Open render' })).not.toBeInTheDocument()
   })
 })

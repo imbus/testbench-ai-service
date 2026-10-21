@@ -21,7 +21,7 @@ const CUSTOM = '__custom__'
  * The one console action that spends money -- so a run is never implicit,
  * the button is disabled the moment one is in flight (the backend's own 409
  * against a concurrent run is a backstop, not something this relies on), and
- * a non-admin never sees an enabled button at all.
+ * a session that may not run never sees an enabled button at all.
  *
  * The model picker offers the catalogue (`GET /models`) but a model missing
  * from it must stay reachable: its "Other model…" entry reveals a free-text
@@ -41,11 +41,17 @@ export function TestRunPanel({
   vars,
   agentContext,
   isAdmin,
+  managedProjects = [],
 }: {
   messages: PromptMessageDoc[]
   vars: Record<string, unknown>
   agentContext: Record<string, unknown>
   isAdmin: boolean
+  /**
+   * The projects a non-admin may run against (a project admin's managed ones).
+   * Empty means this session may not run at all. Ignored for an admin.
+   */
+  managedProjects?: string[]
 }) {
   const { t } = useTranslation()
   const lang = useLang()
@@ -54,7 +60,10 @@ export function TestRunPanel({
   const [customPicked, setCustomPicked] = useState(false)
   const modelInput = useRef<HTMLInputElement>(null)
   const projects = useProjects()
-  const models = useModels(project ?? undefined)
+  // A non-admin may only ask about a project they manage; the unscoped
+  // catalogue is admin-only, so it is not even requested before a pick.
+  const mayRun = isAdmin || managedProjects.length > 0
+  const models = useModels(project ?? undefined, { enabled: isAdmin || project !== null })
   const test = useTestPrompt()
 
   const providers = models.data?.providers ?? []
@@ -68,7 +77,8 @@ export function TestRunPanel({
   // An empty model is a guaranteed 502 on a paid endpoint: the request reaches
   // a real client, which asks the provider about a model called "". The one
   // console action that spends money does not get to be spent on nothing.
-  const canRun = isAdmin && !test.isPending && model.trim() !== ''
+  const canRun =
+    mayRun && (isAdmin || project !== null) && !test.isPending && model.trim() !== ''
 
   const handleRun = () => {
     test.mutate({ messages, vars, agent_context: agentContext, model, project })
@@ -144,10 +154,20 @@ export function TestRunPanel({
           <Dropdown
             inputId="testrun-project"
             value={project ?? ''}
-            options={[
-              { label: t('testRunProjectGlobal'), value: '' },
-              ...(projects.data?.projects ?? []).map((entry) => ({ label: entry.name, value: entry.name })),
-            ]}
+            // A project admin has no "no project" run: the server refuses an
+            // unscoped test for them, so the option is not offered.
+            options={
+              isAdmin
+                ? [
+                    { label: t('testRunProjectGlobal'), value: '' },
+                    ...(projects.data?.projects ?? []).map((entry) => ({
+                      label: entry.name,
+                      value: entry.name,
+                    })),
+                  ]
+                : managedProjects.map((name) => ({ label: name, value: name }))
+            }
+            placeholder={isAdmin ? undefined : t('testRunProjectPlaceholder')}
             onChange={(event) => setProject((event.value as string) || null)}
           />
         </div>
@@ -167,7 +187,7 @@ export function TestRunPanel({
             {t('testRunPending')}
           </span>
         )}
-        {!isAdmin && (
+        {!mayRun && (
           <span className="testrun-status" aria-live="polite">
             {t('testRunAdminOnly')}
           </span>

@@ -138,14 +138,36 @@ const LLM_SETTINGS: Omit<FieldSpec, 'key'>[] = [
  * must not: the service always has a provider, and offering "none" there is a
  * setting that cannot boot.
  */
-export function llmFields(scope: Scope): FieldSpec[] {
+export function llmFields(scope: Scope, { projectAdmin = false } = {}): FieldSpec[] {
   const project = scope.kind === 'project'
   return LLM_SETTINGS.map((spec) => ({
     ...spec,
     key: scopedLlmPath(scope, spec.setting),
     ...(project && spec.type === 'select' ? { allowEmpty: true } : {}),
+    // `custom` loads an operator-named class: code execution, so the server
+    // refuses it from a project admin and the picker does not offer it.
+    ...(projectAdmin && spec.setting === 'provider'
+      ? { options: spec.options?.filter((option) => option !== 'custom') }
+      : {}),
   }))
 }
+
+/**
+ * The only `llm_config` settings a project admin may write in a project scope.
+ *
+ * An allow-list, not a block-list: a setting added to the LLM list later is
+ * read-only for a project admin until someone decides otherwise, since the
+ * dangerous ones (`class_path`, `azure_endpoint`, `auth_method`) are exactly
+ * the ones a block-list would have to remember. Mirrors the server's policy.
+ */
+export const PROJECT_ADMIN_LLM_SETTINGS: readonly string[] = [
+  'provider',
+  'model',
+  'timeout',
+  'max_retries',
+  'api_version',
+  'extra_models',
+]
 
 export const LLM_FIELDS: FieldSpec[] = llmFields({ kind: 'global' })
 

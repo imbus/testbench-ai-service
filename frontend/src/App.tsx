@@ -17,6 +17,7 @@ import { Status } from './screens/Status'
 import type { ConfigIssue } from './api/types'
 import { useConfig, useStatus } from './api/queries'
 import { DraftProvider } from './state/draft'
+import { isEditor } from './state/access'
 import { useSession } from './state/session'
 import { useTranslation } from 'react-i18next'
 import { applyTheme, preferredTheme, storedTheme, type Theme } from './theme'
@@ -90,7 +91,7 @@ export function App() {
          
           onSignOut={() => void signOut()}
         />
-        {session.is_admin && <PendingBanner onIssues={setIssues} />}
+        {isEditor(session) && <PendingBanner onIssues={setIssues} />}
         <RestartBanner fields={restartFields} />
         {!session.is_admin && (
           // The same full-width `Message` strip as RestartBanner, and for the
@@ -100,7 +101,9 @@ export function App() {
             role="status"
             className="banner"
             style={{ borderColor: 'var(--color-divider)', padding: '8px var(--space-4)' }}
-            text={t('readOnly')}
+            // A project admin can edit, so the read-only notice would be wrong for
+            // them; they get the scope of what they may edit instead.
+            text={t(isEditor(session) ? 'projectAdminHint' : 'readOnly')}
           />
         )}
         <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
@@ -129,6 +132,7 @@ export function App() {
                   <ConfigSection
                     section="llm"
                     isAdmin={session.is_admin}
+                    managedProjects={session.managed_projects}
                     issues={issues}
                   />
                 }
@@ -153,13 +157,21 @@ export function App() {
               <Route
                 path="/admin/agents/:agentKey"
                 element={
-                  <AgentDetail isAdmin={session.is_admin} issues={issues} />
+                  <AgentDetail
+                    isAdmin={session.is_admin}
+                    managedProjects={session.managed_projects}
+                    issues={issues}
+                  />
                 }
               />
               <Route
                 path="/admin/projects"
                 element={
-                  <Projects isAdmin={session.is_admin} issues={issues} />
+                  <Projects
+                    isAdmin={session.is_admin}
+                    managedProjects={session.managed_projects}
+                    issues={issues}
+                  />
                 }
               />
               <Route path="/admin/raw" element={<Raw />} />

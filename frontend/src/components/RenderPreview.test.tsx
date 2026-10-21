@@ -41,7 +41,8 @@ type Props = {
   vars: Record<string, unknown>
   decls?: Record<string, PromptVarDecl>
   skeleton: Record<string, unknown>
-  isAdmin: boolean
+  canRender: boolean
+  project?: string | null
   /** Defaults to false: the manual-render tests below predate live render. */
   active?: boolean
   lang?: Lang
@@ -72,7 +73,7 @@ function renderPreview(
 
 describe('RenderPreview', () => {
   it('prefills the context pane from the skeleton', () => {
-    renderPreview({ messages: [], vars: {}, skeleton: { role: '' }, isAdmin: true })
+    renderPreview({ messages: [], vars: {}, skeleton: { role: '' }, canRender: true })
     expect(screen.getByLabelText(/context/i)).toHaveValue(JSON.stringify({ role: '' }, null, 2))
   })
 
@@ -81,18 +82,18 @@ describe('RenderPreview', () => {
       messages: [],
       vars: {},
       skeleton: { a: '' },
-      isAdmin: true,
+      canRender: true,
     })
     await userEvent.clear(screen.getByLabelText(/context/i))
     await userEvent.type(screen.getByLabelText(/context/i), '{{"a":"typed"}')
-    rerender({ messages: [], vars: {}, skeleton: { a: '', b: '' }, isAdmin: true })
+    rerender({ messages: [], vars: {}, skeleton: { a: '', b: '' }, canRender: true })
     expect(screen.getByLabelText(/context/i)).toHaveValue(
       JSON.stringify({ a: 'typed', b: '' }, null, 2),
     )
   })
 
   it('reports invalid JSON without rendering', async () => {
-    renderPreview({ messages: [], vars: {}, skeleton: {}, isAdmin: true })
+    renderPreview({ messages: [], vars: {}, skeleton: {}, canRender: true })
     await userEvent.clear(screen.getByLabelText(/context/i))
     await userEvent.type(screen.getByLabelText(/context/i), '{{ not json')
     await userEvent.click(screen.getByRole('button', { name: /render/i }))
@@ -108,10 +109,21 @@ describe('RenderPreview', () => {
       messages: [],
       vars: {},
       skeleton: {},
-      isAdmin: false,
+      canRender: false,
     })
     expect(screen.queryByRole('button', { name: /render/i })).not.toBeInTheDocument()
     expect(container).toBeEmptyDOMElement()
+  })
+
+  it('sends the project a project admin renders as', async () => {
+    renderPreview({ messages: [], vars: {}, skeleton: {}, canRender: true, project: 'Alpha' })
+    await userEvent.click(screen.getByRole('button', { name: /render/i }))
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((entry) =>
+        String(entry[0]).startsWith('/admin/api/prompts/render'),
+      )
+      expect(JSON.parse(call?.[1]?.body as string)).toMatchObject({ project: 'Alpha' })
+    })
   })
 
   it('shows a per-message error beside its output', async () => {
@@ -121,7 +133,7 @@ describe('RenderPreview', () => {
     const messages: PromptMessageDoc[] = [
       { role: 'user', source: 'inline', file: null, content: '{{ foo }}', readable: true },
     ]
-    renderPreview({ messages, vars: {}, skeleton: {}, isAdmin: true })
+    renderPreview({ messages, vars: {}, skeleton: {}, canRender: true })
     await userEvent.click(screen.getByRole('button', { name: /render/i }))
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent(/Undefined variable: foo/),
@@ -132,7 +144,7 @@ describe('RenderPreview', () => {
   // meaningful. This one exercises the German dictionary for real.
   it('renders German labels', async () => {
     await i18n.changeLanguage('de')
-    renderPreview({ messages: [], vars: {}, skeleton: {}, isAdmin: true })
+    renderPreview({ messages: [], vars: {}, skeleton: {}, canRender: true })
     expect(screen.getByRole('button', { name: 'Rendern' })).toBeInTheDocument()
   })
 
@@ -165,7 +177,7 @@ describe('RenderPreview', () => {
           strict: decl({ name: 'strict', value_type: 'boolean' }),
         },
         skeleton: {},
-        isAdmin: true,
+        canRender: true,
       })
       const tone = screen.getByLabelText('tone')
       expect(tone).toHaveValue('formal')
@@ -184,7 +196,7 @@ describe('RenderPreview', () => {
           may: decl({ name: 'may', default_value: 'b' }),
         },
         skeleton: {},
-        isAdmin: true,
+        canRender: true,
       })
       await userEvent.clear(screen.getByLabelText(/must/))
       await userEvent.clear(screen.getByLabelText('may'))
@@ -198,7 +210,7 @@ describe('RenderPreview', () => {
         vars: { tone: 'formal' },
         decls: { tone: decl({ name: 'tone', default_value: 'formal' }) },
         skeleton: {},
-        isAdmin: true,
+        canRender: true,
       })
       await userEvent.type(screen.getByLabelText('tone'), '!')
       await userEvent.click(screen.getByRole('button', { name: /reset to defaults/i }))
@@ -220,7 +232,7 @@ describe('RenderPreview', () => {
       vars: { tone: 'formal' },
       decls: { tone },
       skeleton: {},
-      isAdmin: true,
+      canRender: true,
     }
 
     // Only the timeouts: the delay under test is a setTimeout.
