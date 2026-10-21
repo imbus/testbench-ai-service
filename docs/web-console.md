@@ -53,11 +53,11 @@ soon as you sign out — whichever comes first.
 
 The console reads your global TestBench roles at sign-in:
 
-| Role                                                  | What you get                                                                                                                                                                  |
-| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Global `Administrator`                                | Full console, including changing configuration                                                                                                                               |
-| Global `ProjectAdministrator` + `TestManager` in a project | Edits those projects: their configuration (without `class_path`, `azure_endpoint`, `auth_method` or the `custom` provider), their own prompt forks, render and test runs |
-| Any other role                                        | Read-only console                                                                                                                                                             |
+| Role                                                       | What you get                                                                                                                                                                                         |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Global `Administrator`                                     | Full console, including changing configuration                                                                                                                                                       |
+| Global `ProjectAdministrator` + `TestManager` in a project | Edits those projects only: project-scope `llm_config` limited to `provider` (not `custom`), `model`, `timeout`, `max_retries`, `api_version`, `extra_models`; own prompt forks, render and test runs |
+| Any other role                                             | Read-only console                                                                                                                                                                                    |
 
 Global configuration, the service settings and the raw `config.toml` are
 Administrator-only. A project administrator sees those screens with the values
