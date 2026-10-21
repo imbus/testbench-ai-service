@@ -231,6 +231,14 @@ test('the admin-gate notice is announced', () => {
   expect(screen.getByText(/administrator/i)).toHaveAttribute('aria-live', 'polite')
 })
 
+test('the gate notice does not claim runs are for administrators only', () => {
+  // A ProjectAdministrator who manages nothing yet lands here too; telling
+  // them "only administrators" would be wrong -- a managed project suffices.
+  renderPanel({ isAdmin: false, managedProjects: [] })
+  expect(screen.queryByText(/only administrators/i)).not.toBeInTheDocument()
+  expect(screen.getByText(/project you manage/i)).toBeInTheDocument()
+})
+
 test('has no add-model control — that lives on the LLM view', async () => {
   renderPanel()
   const list = await openDropdown(userEvent.setup(), 'Model')

@@ -183,7 +183,8 @@ export const de = {
   testRunFallbackHint: 'keine abgestimmte Route',
   testRunNoKey: 'kein Schlüssel',
   testRunProjectPlaceholder: 'Projekt auswählen',
-  testRunAdminOnly: 'Nur Administratoren können einen Testlauf starten.',
+  testRunNoProjects:
+    'Testläufe erfordern die Administrator-Rolle oder ein Projekt, das Sie als TestManager verwalten.',
   testRunAddHint: 'Modell nicht dabei? Unter LLM hinzufügen.',
   promptsError: 'Der Prompt-Baum konnte nicht geladen werden.',
   noPromptTree: 'Keine Prompts gefunden.',

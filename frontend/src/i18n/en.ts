@@ -187,7 +187,8 @@ export const en = {
   testRunFallbackHint: 'no tuned routing',
   testRunNoKey: 'no key',
   testRunProjectPlaceholder: 'Select a project',
-  testRunAdminOnly: 'Only administrators can start a test run.',
+  testRunNoProjects:
+    'Test runs need the Administrator role or a project you manage as TestManager.',
   testRunAddHint: 'Missing a model? Add it under LLM.',
   promptsError: 'The prompt tree could not be loaded.',
   noPromptTree: 'No prompts found.',

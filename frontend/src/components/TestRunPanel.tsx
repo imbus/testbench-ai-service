@@ -189,7 +189,7 @@ export function TestRunPanel({
         )}
         {!mayRun && (
           <span className="testrun-status" aria-live="polite">
-            {t('testRunAdminOnly')}
+            {t('testRunNoProjects')}
           </span>
         )}
       </div>
