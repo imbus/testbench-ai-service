@@ -36,6 +36,7 @@ def test_case_set(
     sequence=None,
     status: str = "Released",
     description: str = "<html><body><p>Checks the login</p></body></html>",
+    review_comment: str = "",
 ) -> SimpleNamespace:
     return SimpleNamespace(
         details=SimpleNamespace(
@@ -46,6 +47,7 @@ def test_case_set(
             spec=SimpleNamespace(
                 key=f"spec-{key}",
                 description=description,
+                reviewComment=review_comment,
                 status=SimpleNamespace(value=status),
                 requirements=[ref(k) for k in links],
             ),

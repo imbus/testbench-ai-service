@@ -44,8 +44,10 @@ class TestCase(BaseModel):
     calls: list[TestCall]
 
 
-class LinkedSet(BaseModel):
-    """A test case set linked to the requirement, with only its linked test cases."""
+class TestCaseSetDetail(BaseModel):
+    """A test case set with the test cases the model reads."""
+
+    __test__ = False
 
     key: str
     spec_key: str
@@ -54,8 +56,13 @@ class LinkedSet(BaseModel):
     path: str
     description: str
     spec_status: str
-    linked_as_whole: bool
     test_cases: list[TestCase]
+
+
+class LinkedSet(TestCaseSetDetail):
+    """A test case set linked to the requirement, with only its linked test cases."""
+
+    linked_as_whole: bool
 
 
 class RequirementContext(BaseModel):

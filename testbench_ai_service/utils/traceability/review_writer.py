@@ -8,7 +8,7 @@ the review agent stay where they are; without a block yet, it goes on top.
 
 import asyncio
 import re
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from enum import Enum
 from html import escape
 
@@ -26,7 +26,7 @@ from testbench_ai_service.utils.testbench import (
     get_test_case_set_details,
     post_project_tov_structure,
 )
-from testbench_ai_service.utils.traceability.models import LinkedSet
+from testbench_ai_service.utils.traceability.models import TestCaseSetDetail
 
 
 class WriteOutcome(str, Enum):
@@ -74,6 +74,19 @@ def replace_block(comment_html: str, pattern: re.Pattern[str], block: str) -> st
     return f"{block}<br/>{inner}"
 
 
+def remove_block(comment_html: str, pattern: re.Pattern[str]) -> str | None:
+    """The comment without its block for this requirement, or ``None`` if it has none.
+
+    The ``<br/>`` that separated the block from the rest of the comment goes with it.
+    Returns the inner HTML, without ``<html>``/``<body>`` wrapper.
+    """
+    inner = strip_html_body_tags(comment_html or "").strip()
+    separated = re.compile(rf"(?:{pattern.pattern})(?:\s*<br\s*/?>)?", pattern.flags)
+    if not separated.search(inner):
+        return None
+    return separated.sub("", inner, count=1).strip()
+
+
 async def _patch_review_comment(
     conn: TBConnection, project_key: str, spec_key: str, html: str
 ) -> None:
@@ -91,7 +104,7 @@ async def write_review_block(
     project_key: str,
     tov_key: str,
     user_key: str,
-    linked_set: LinkedSet,
+    test_case_set: TestCaseSetDetail,
     pattern: re.Pattern[str],
     block: str,
 ) -> WriteOutcome:
@@ -100,33 +113,79 @@ async def write_review_block(
     A set locked by another user is skipped. Never raises: a failure is logged and
     reported, so one set cannot stop the others.
     """
+    return await _update_review_comment(
+        conn,
+        project_key,
+        tov_key,
+        user_key,
+        test_case_set,
+        lambda comment: replace_block(comment, pattern, block),
+    )
+
+
+async def remove_review_block(
+    conn: TBConnection,
+    project_key: str,
+    tov_key: str,
+    user_key: str,
+    test_case_set: TestCaseSetDetail,
+    pattern: re.Pattern[str],
+) -> WriteOutcome:
+    """Remove the block *pattern* matches from the set's review comment, if it is there.
+
+    Same locking and error handling as :func:`write_review_block`; a comment without
+    the block is left as it is and reported as written.
+    """
+    return await _update_review_comment(
+        conn,
+        project_key,
+        tov_key,
+        user_key,
+        test_case_set,
+        lambda comment: remove_block(comment, pattern),
+    )
+
+
+async def _update_review_comment(
+    conn: TBConnection,
+    project_key: str,
+    tov_key: str,
+    user_key: str,
+    test_case_set: TestCaseSetDetail,
+    update: Callable[[str], str | None],
+) -> WriteOutcome:
+    """Apply *update* to the set's fresh review comment; ``None`` means nothing to write."""
     try:
         tree = await asyncio.to_thread(
-            post_project_tov_structure, conn, project_key, tov_key, linked_set.unique_id
+            post_project_tov_structure, conn, project_key, tov_key, test_case_set.unique_id
         )
         spec = getattr(tree.root, "spec", None)
         if spec is None:
             logger.warning(
                 "The lock state of test case set '%s' is unknown; its review comment is not "
                 "written",
-                linked_set.path,
+                test_case_set.path,
             )
             return WriteOutcome.FAILED
         locker = getattr(spec, "locker", None)
         if locker is not None and locker.key != user_key:
             logger.warning(
                 "Test case set '%s' is locked by another user; its review comment is not written",
-                linked_set.path,
+                test_case_set.path,
             )
             return WriteOutcome.LOCKED
         details = await asyncio.to_thread(
-            get_test_case_set_details, conn, project_key, linked_set.key
+            get_test_case_set_details, conn, project_key, test_case_set.key
         )
-        html = add_html_body_tags(replace_block(details.spec.reviewComment, pattern, block))
-        await _patch_review_comment(conn, project_key, details.spec.key, html)
+        inner = update(details.spec.reviewComment)
+        if inner is None:
+            return WriteOutcome.WRITTEN
+        await _patch_review_comment(conn, project_key, details.spec.key, add_html_body_tags(inner))
     except Exception as error:
         logger.error(
-            "Writing the review comment of test case set '%s' failed: %r", linked_set.path, error
+            "Writing the review comment of test case set '%s' failed: %r",
+            test_case_set.path,
+            error,
         )
         return WriteOutcome.FAILED
     return WriteOutcome.WRITTEN

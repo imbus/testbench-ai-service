@@ -15,9 +15,9 @@ from testbench_ai_service.utils.traceability.models import (
     AskStep,
     Aspect,
     AspectEvidence,
-    LinkedSet,
     SetInterpretation,
     TestCase,
+    TestCaseSetDetail,
 )
 
 STEP = "interpretation"
@@ -38,7 +38,7 @@ def render_aspects(aspects: list[Aspect]) -> str:
     return "\n".join(f"{aspect.id} [{aspect.kind}] {aspect.statement}" for aspect in aspects)
 
 
-def render_test_case_set(linked_set: LinkedSet) -> str:
+def render_test_case_set(linked_set: TestCaseSetDetail) -> str:
     return "\n".join(
         [
             f"{linked_set.title} ({linked_set.path})",
@@ -95,7 +95,7 @@ async def interpret_set(
     ask: AskStep,
     requirement: str,
     aspects: list[Aspect],
-    linked_set: LinkedSet,
+    linked_set: TestCaseSetDetail,
     batch_size: int,
 ) -> list[AspectEvidence]:
     """Ask the model which of the set's test cases prove which aspect.
@@ -104,7 +104,7 @@ async def interpret_set(
         ask: Asks one prompt step.
         requirement: The rendered requirement.
         aspects: The validated aspects.
-        linked_set: The set with its linked test cases.
+        linked_set: The set with the test cases to read.
         batch_size: Most test cases sent in one call.
 
     Raises:

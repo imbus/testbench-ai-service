@@ -13,6 +13,8 @@ from testbench_ai_service.utils.traceability.context import (
     linked_set_keys,
     linked_test_cases,
     load_requirement_context,
+    load_unassigned_requirement,
+    test_case_set_detail,
 )
 from tests.unit.utils.traceability.fakes import call, case, test_case_set
 
@@ -137,3 +139,49 @@ async def test_an_unknown_requirement_raises(monkeypatch):
 
     with pytest.raises(context_module.RequirementNotFoundError, match="'x'"):
         await load_requirement_context(SimpleNamespace(), RmServiceArgs(), "7", "42", "x", None, [])
+
+
+def test_a_set_detail_has_all_test_cases_linked_or_not():
+    tcs = test_case_set("1", "/A", cases=[case("TC-1", links=[REQ]), case("TC-2")])
+
+    detail = test_case_set_detail(tcs)
+
+    assert [c.key for c in detail.test_cases] == ["TC-1", "TC-2"]
+    assert (detail.key, detail.unique_id, detail.description) == ("1", "U-1", "Checks the login")
+
+
+async def test_an_unassigned_requirement_keeps_the_testbench_key_of_the_trigger(monkeypatch):
+    asked = []
+
+    async def _find(conn, rm_args, tov_key, ids):
+        asked.append(ids)
+        return ExtendedRequirement(
+            name="Logout",
+            extendedID="EXT-9",
+            key={"id": "REQ-9", "version": "3"},
+            owner="o",
+            status="s",
+            priority="p",
+            requirement=True,
+            description="d",
+            documents=None,
+            baseline="B",
+        )
+
+    monkeypatch.setattr(context_module, "find_rm_requirement", _find)
+
+    with_key = await load_unassigned_requirement(None, RmServiceArgs(), "42", "555", "REQ-9")
+    without_key = await load_unassigned_requirement(None, RmServiceArgs(), "42", None, "REQ-9")
+
+    assert asked == [["REQ-9", "555"], ["REQ-9"]]
+    assert (with_key.key, with_key.title, with_key.external_ref) == ("555", "Logout", "EXT-9")
+    assert without_key.key == "REQ-9"
+
+
+async def test_an_unassigned_requirement_the_rm_service_does_not_know_is_none(monkeypatch):
+    async def _find(*args):
+        return None
+
+    monkeypatch.setattr(context_module, "find_rm_requirement", _find)
+
+    assert await load_unassigned_requirement(None, RmServiceArgs(), "42", "555", None) is None

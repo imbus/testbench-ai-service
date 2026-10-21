@@ -10,6 +10,8 @@ from testbench_ai_service.utils.traceability.models import LinkedSet
 from testbench_ai_service.utils.traceability.review_writer import (
     WriteOutcome,
     block_pattern,
+    remove_block,
+    remove_review_block,
     render_block,
     replace_block,
     write_review_block,
@@ -190,4 +192,62 @@ async def test_an_unknown_lock_state_is_not_written(monkeypatch, root):
     conn = _conn()
 
     assert await _write(conn) == WriteOutcome.FAILED
+    conn.session.patch.assert_not_called()
+
+
+class TestRemoveBlock:
+    def test_a_comment_without_the_block_is_left_alone(self):
+        assert remove_block("<p>note</p>", block_pattern(HEADINGS, "REQ-42")) is None
+
+    def test_the_block_and_its_separator_go(self):
+        comment = f"{_block()}<br/><p>Please check step 3</p>"
+
+        assert remove_block(comment, block_pattern(HEADINGS, "REQ-42")) == (
+            "<p>Please check step 3</p>"
+        )
+
+    def test_only_the_block_of_this_requirement_goes(self):
+        other = _block(ref="REQ-43")
+        comment = f"{_block()}<br/>{other}"
+
+        assert remove_block(comment, block_pattern(HEADINGS, "REQ-42")) == other
+
+    def test_a_comment_of_only_the_block_becomes_empty(self):
+        assert remove_block(_block(), block_pattern(HEADINGS, "REQ-42")) == ""
+
+
+async def test_removing_patches_the_comment_without_the_block(monkeypatch):
+    _stub_testbench(monkeypatch, comment=f"<html><body>{_block()}<br/><p>note</p></body></html>")
+    conn = _conn()
+
+    outcome = await remove_review_block(
+        conn, "7", "42", "me", _linked_set(), block_pattern(HEADINGS, "REQ-42")
+    )
+
+    assert outcome == WriteOutcome.WRITTEN
+    body = conn.session.patch.call_args.kwargs["json"]
+    assert body["reviewComment"]["html"] == "<html><body><p>note</p></body></html>"
+
+
+async def test_removing_from_a_comment_without_the_block_writes_nothing(monkeypatch):
+    _stub_testbench(monkeypatch)
+    conn = _conn()
+
+    outcome = await remove_review_block(
+        conn, "7", "42", "me", _linked_set(), block_pattern(HEADINGS, "REQ-42")
+    )
+
+    assert outcome == WriteOutcome.WRITTEN
+    conn.session.patch.assert_not_called()
+
+
+async def test_removing_skips_a_set_locked_by_someone_else(monkeypatch):
+    _stub_testbench(monkeypatch, locker_key="other", comment=_block())
+    conn = _conn()
+
+    outcome = await remove_review_block(
+        conn, "7", "42", "me", _linked_set(), block_pattern(HEADINGS, "REQ-42")
+    )
+
+    assert outcome == WriteOutcome.LOCKED
     conn.session.patch.assert_not_called()

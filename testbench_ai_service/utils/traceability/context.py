@@ -18,6 +18,7 @@ from testbench_ai_service.utils.rm_service import (
     Requirement,
     RmServiceArgs,
     fetch_requirement_details,
+    find_rm_requirement,
 )
 from testbench_ai_service.utils.testbench import get_requirements, get_test_case_set_catalog
 from testbench_ai_service.utils.traceability.models import (
@@ -25,6 +26,7 @@ from testbench_ai_service.utils.traceability.models import (
     RequirementContext,
     TestCall,
     TestCase,
+    TestCaseSetDetail,
 )
 
 
@@ -100,20 +102,79 @@ def _test_case(test_case, set_details) -> TestCase:
     )
 
 
+def _set_fields(test_case_set: TestCaseSet, cases: Iterable) -> dict:
+    details = test_case_set.details
+    return {
+        "key": details.key,
+        "spec_key": details.spec.key,
+        "unique_id": details.uniqueID,
+        "title": details.name,
+        "path": details.path,
+        "description": visible_text(details.spec.description or ""),
+        "spec_status": details.spec.status.value,
+        "test_cases": [_test_case(test_case, details) for test_case in cases],
+    }
+
+
 def _linked_set(test_case_set: TestCaseSet, requirement_key: str) -> LinkedSet:
     whole, cases = linked_test_cases(test_case_set, requirement_key)
-    details = test_case_set.details
-    return LinkedSet(
-        key=details.key,
-        spec_key=details.spec.key,
-        unique_id=details.uniqueID,
-        title=details.name,
-        path=details.path,
-        description=visible_text(details.spec.description or ""),
-        spec_status=details.spec.status.value,
-        linked_as_whole=whole,
-        test_cases=[_test_case(test_case, details) for test_case in cases],
-    )
+    return LinkedSet(**_set_fields(test_case_set, cases), linked_as_whole=whole)
+
+
+def test_case_set_detail(test_case_set: TestCaseSet) -> TestCaseSetDetail:
+    """The set with all its test cases, linked or not."""
+    return TestCaseSetDetail(**_set_fields(test_case_set, test_case_set.test_cases.values()))
+
+
+test_case_set_detail.__test__ = False  # type: ignore[attr-defined]
+
+
+async def load_requirement(
+    conn: TBConnection,
+    rm_args: RmServiceArgs,
+    project_key: str,
+    tov_key: str,
+    root_key: str | None,
+    root_uid: str | None,
+) -> tuple[Requirement, list[RequirementAssignment]]:
+    """Load the triggered requirement with its RM description.
+
+    Returns:
+        The requirement and all requirement assignments of the TOV.
+
+    Raises:
+        RequirementNotFoundError: The TOV has no such requirement.
+    """
+    assignments = await asyncio.to_thread(get_requirements, conn, project_key, None, tov_key)
+    assignment = find_requirement(assignments, root_key, root_uid)
+    if assignment is None:
+        raise RequirementNotFoundError(
+            f"Requirement root_key={root_key!r} root_uid={root_uid!r} is not in TOV '{tov_key}'"
+        )
+    (extended,) = await fetch_requirement_details(conn, rm_args, tov_key, [assignment])
+    return Requirement.from_details(assignment, extended), list(assignments)
+
+
+async def load_unassigned_requirement(
+    conn: TBConnection,
+    rm_args: RmServiceArgs,
+    tov_key: str,
+    root_key: str | None,
+    root_uid: str | None,
+) -> Requirement | None:
+    """Load a requirement the TOV does not assign from the RM service alone.
+
+    Returns:
+        The requirement, or ``None`` when no RM service is configured or it does not
+        know the requirement.
+    """
+    ids = [value for value in (root_uid, root_key) if value]
+    extended = await find_rm_requirement(conn, rm_args, tov_key, ids)
+    if extended is None:
+        return None
+    # No test references an unassigned requirement, so any key unique to it will do;
+    # the TestBench key from the trigger is the right one when it is there.
+    return Requirement.from_rm(root_key or extended.key.id, extended)
 
 
 async def load_requirement_context(
@@ -141,14 +202,7 @@ async def load_requirement_context(
     Raises:
         RequirementNotFoundError: The TOV has no such requirement.
     """
-    assignments = await asyncio.to_thread(get_requirements, conn, project_key, None, tov_key)
-    assignment = find_requirement(assignments, root_key, root_uid)
-    if assignment is None:
-        raise RequirementNotFoundError(
-            f"Requirement root_key={root_key!r} root_uid={root_uid!r} is not in TOV '{tov_key}'"
-        )
-    (extended,) = await fetch_requirement_details(conn, rm_args, tov_key, [assignment])
-    requirement = Requirement.from_details(assignment, extended)
+    requirement, _ = await load_requirement(conn, rm_args, project_key, tov_key, root_key, root_uid)
 
     if catalog is None:
         catalog = await asyncio.to_thread(
@@ -156,7 +210,11 @@ async def load_requirement_context(
         )
     wanted = set(set_keys)
     linked_sets = sorted(
-        (_linked_set(tcs, assignment.key) for tcs in catalog.values() if tcs.details.key in wanted),
+        (
+            _linked_set(tcs, requirement.key)
+            for tcs in catalog.values()
+            if tcs.details.key in wanted
+        ),
         key=lambda linked_set: linked_set.path,
     )
     return RequirementContext(
