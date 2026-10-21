@@ -1,3 +1,4 @@
+import json
 import os
 import re
 from typing import Any
@@ -22,10 +23,12 @@ class LLMFactory:
     """
 
     def __init__(self) -> None:
-        # Keyed by (provider, auth method): 'auth_method' is per-project
-        # overridable, so a provider alone would let a project configured for
-        # Entra ID get a cache hit on the API-key client built at startup.
-        self._clients: dict[tuple[LLMProvider, AzureAuthMethod], LLMClient] = {}
+        # Keyed by (provider, auth method, client config): 'auth_method' is
+        # per-project overridable, so a provider alone would let a project
+        # configured for Entra ID get a cache hit on the API-key client built
+        # at startup. The config part (see _config_key) keeps one project's
+        # timeout/api_version/extra_models out of the client others share.
+        self._clients: dict[tuple[LLMProvider, AzureAuthMethod, str], LLMClient] = {}
         self._project_clients: dict[tuple[str, LLMProvider], LLMClient] = {}
 
     def init_clients(self, configs: list[LLMConfig]):
@@ -66,14 +69,30 @@ class LLMFactory:
                 self._project_clients[key] = self._create_client(provider, config, credential)
                 return self._project_clients[key]
 
-        # If no global client for provider/auth method is found, retrieve the
-        # credential and create the client
-        global_key = (provider, config.auth_method)
+        # If no global client for this provider/auth method/config is found,
+        # retrieve the credential and create the client
+        global_key = (provider, config.auth_method, self._config_key(config))
         if global_key not in self._clients:
             credential = self._get_credential(provider, config)
             self._clients[global_key] = self._create_client(provider, config, credential)
 
         return self._clients[global_key]
+
+    @staticmethod
+    def _config_key(config: LLMConfig) -> str:
+        """A stable string for everything in *config* a client is built from.
+
+        Project admins can set timeout, max_retries, api_version and
+        extra_models on their project's merged config; without this, whichever
+        project asked first would seed the global client every other project
+        then shares. Identical configs still share one client. ``model`` is
+        left out: it is chosen per request and never reaches the client, so
+        agents on different models need not each open their own.
+        """
+        dumped = config.model_dump(mode="json", exclude_none=True)
+        dumped.pop("model", None)
+        # default=str only guards an extra the JSON dump could not convert.
+        return json.dumps(dumped, sort_keys=True, default=str)
 
     def has_project_credential(
         self, project_name: str, provider: LLMProvider, config: LLMConfig

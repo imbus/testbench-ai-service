@@ -22,6 +22,20 @@ def _make_llm_config(
     config.auth_method = auth_method
     config.timeout = None
     config.max_retries = None
+    # The global cache key is built from model_dump; mirror the attributes so a
+    # test that changes one after construction still changes the key.
+    config.model_dump.side_effect = lambda **_: {
+        name: getattr(config, name)
+        for name in (
+            "provider",
+            "auth_method",
+            "model",
+            "azure_endpoint",
+            "api_version",
+            "timeout",
+            "max_retries",
+        )
+    }
     return config
 
 
@@ -94,6 +108,54 @@ class TestLLMFactoryGetClient:
         assert result is global_client
 
 
+class TestGlobalClientCacheKey:
+    """The shared global client must not be seeded by one project's settings.
+
+    A project admin may set timeout, max_retries, api_version and extra_models
+    for their project; if the global cache only keyed on provider and auth
+    method, whichever project asked first would configure the client every
+    other project then shares.
+    """
+
+    @patch.object(LLMFactory, "_create_client", side_effect=lambda *a, **k: MagicMock())
+    @patch.object(LLMFactory, "_get_api_key", return_value="test-key")
+    def test_configs_differing_only_in_timeout_get_distinct_clients(self, mock_key, mock_create):
+        factory = LLMFactory()
+        default = factory.get_client(LLMConfig(provider=LLMProvider.OPENAI))
+        patient = factory.get_client(LLMConfig(provider=LLMProvider.OPENAI, timeout=300))
+        assert default is not patient
+        assert mock_create.call_count == 2
+
+    @patch.object(LLMFactory, "_create_client", side_effect=lambda *a, **k: MagicMock())
+    @patch.object(LLMFactory, "_get_api_key", return_value="test-key")
+    def test_identical_configs_share_one_client(self, mock_key, mock_create):
+        factory = LLMFactory()
+        first = factory.get_client(LLMConfig(provider=LLMProvider.OPENAI, timeout=30))
+        second = factory.get_client(LLMConfig(provider=LLMProvider.OPENAI, timeout=30))
+        assert first is second
+        mock_create.assert_called_once()
+
+    @patch.object(LLMFactory, "_create_client", side_effect=lambda *a, **k: MagicMock())
+    @patch.object(LLMFactory, "_get_api_key", return_value="test-key")
+    def test_the_model_alone_does_not_split_the_client(self, mock_key, mock_create):
+        """The model is chosen per request, never baked into the client."""
+        factory = LLMFactory()
+        a = factory.get_client(LLMConfig(provider=LLMProvider.OPENAI, model="gpt-4o"))
+        b = factory.get_client(LLMConfig(provider=LLMProvider.OPENAI, model="gpt-5.5"))
+        assert a is b
+
+    @patch.object(LLMFactory, "_get_api_key", return_value="test-key")
+    async def test_close_clients_closes_every_global_variant(self, mock_key):
+        clients = [AsyncMock(), AsyncMock()]
+        factory = LLMFactory()
+        with patch.object(LLMFactory, "_create_client", side_effect=clients):
+            factory.get_client(LLMConfig(provider=LLMProvider.OPENAI))
+            factory.get_client(LLMConfig(provider=LLMProvider.OPENAI, max_retries=5))
+        await factory.close_clients()
+        for client in clients:
+            client.close.assert_awaited_once()
+
+
 class TestLLMFactoryInitClients:
     """Tests for ``LLMFactory.init_clients``."""
 
@@ -112,7 +174,7 @@ class TestLLMFactoryCloseClients:
         factory = LLMFactory()
         client_a = AsyncMock()
         client_b = AsyncMock()
-        factory._clients[(LLMProvider.OPENAI, AzureAuthMethod.API_KEY)] = client_a
+        factory._clients[(LLMProvider.OPENAI, AzureAuthMethod.API_KEY, "{}")] = client_a
         factory._project_clients[("ProjectA", LLMProvider.OPENAI)] = client_b
         await factory.close_clients()
         client_a.close.assert_awaited_once()
