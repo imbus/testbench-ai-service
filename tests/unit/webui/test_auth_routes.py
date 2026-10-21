@@ -89,7 +89,7 @@ def test_project_administrator_is_not_admin(login):
 def test_bad_credentials_return_401(client, tb_connection):
     error = requests.exceptions.HTTPError(response=type("R", (), {"status_code": 401})())
     tb_connection.read_user_roles.side_effect = error
-    with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+    with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
         response = client.post("/admin/api/session", json={"username": "a", "password": "wrong"})
     assert response.status_code == 401
     assert SESSION_COOKIE not in response.cookies
@@ -101,7 +101,7 @@ def test_testbench_error_unrelated_to_credentials_returns_502(client, tb_connect
     was never the issue."""
     error = requests.exceptions.HTTPError(response=type("R", (), {"status_code": 503})())
     tb_connection.read_user_roles.side_effect = error
-    with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+    with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
         response = client.post("/admin/api/session", json={"username": "a", "password": "pw"})
     assert response.status_code == 502
 
@@ -109,7 +109,7 @@ def test_testbench_error_unrelated_to_credentials_returns_502(client, tb_connect
 def test_malformed_server_url_is_a_config_error_not_a_401(client):
     """TBConnection raises ValueError for a URL without an explicit port."""
     with patch(
-        "testbench_ai_service.webui.auth.TBConnection",
+        "testbench_ai_service.webui.tb_link.TBConnection",
         side_effect=ValueError("Invalid server URL"),
     ):
         response = client.post("/admin/api/session", json={"username": "a", "password": "pw"})
@@ -191,16 +191,12 @@ def test_meta_exposes_nothing_else(client):
 
 
 def test_require_admin_accepts_an_admin():
-    session = SessionStore().create(
-        username="a", roles=["Administrator"], is_admin=True, tb_session_token="t"
-    )
+    session = SessionStore().create(username="a", roles=["Administrator"], is_admin=True)
     assert require_admin(session) is session
 
 
 def test_require_admin_refuses_a_non_admin():
-    session = SessionStore().create(
-        username="p", roles=["ProjectUser"], is_admin=False, tb_session_token="t"
-    )
+    session = SessionStore().create(username="p", roles=["ProjectUser"], is_admin=False)
     with pytest.raises(HTTPException) as exc:
         require_admin(session)
     assert exc.value.status_code == 403
@@ -210,7 +206,7 @@ def test_require_loopback_refuses_remote_client(make_app, tb_connection):
     app = make_app(admin_ui=AdminUiConfig(require_loopback=True))
     with (
         TestClient(app, client=("10.0.0.9", 5000), raise_server_exceptions=False) as c,
-        patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection),
+        patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection),
     ):
         response = c.post("/admin/api/session", json={"username": "a", "password": "pw"})
     assert response.status_code == 403

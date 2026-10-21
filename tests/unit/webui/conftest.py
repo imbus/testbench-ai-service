@@ -91,7 +91,7 @@ def login(client, tb_connection):
     def _login(username="a.mueller", password="pw", roles=None):
         if roles is not None:
             tb_connection.read_user_roles.return_value = roles
-        with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+        with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
             return client.post(
                 "/admin/api/session", json={"username": username, "password": password}
             )

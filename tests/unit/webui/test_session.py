@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -36,7 +37,7 @@ def _create(store: SessionStore, is_admin: bool = True):
         username="a.mueller",
         roles=["Administrator"] if is_admin else ["ProjectUser"],
         is_admin=is_admin,
-        tb_session_token="tb-token-abc",
+        tb_link=MagicMock(),
     )
 
 
@@ -141,5 +142,49 @@ def test_the_project_cache_is_per_session(store: SessionStore):
 
 def test_create_defaults_user_key_to_none():
     store = SessionStore()
-    session = store.create(username="a", roles=[], is_admin=False, tb_session_token="t")
+    session = store.create(username="a", roles=[], is_admin=False)
     assert session.user_key is None
+
+
+# --- the TestBench link's lifetime --------------------------------------
+
+
+def test_revoke_closes_the_testbench_link(store: SessionStore):
+    """An open link keeps a heartbeat thread pinging TestBench; logging out
+    must stop it."""
+    session = _create(store)
+    store.revoke(session.sid)
+    session.tb_link.close.assert_called_once()
+
+
+def test_expiry_closes_the_testbench_link(store: SessionStore, clock: Clock):
+    session = _create(store)
+    clock.advance(IDLE_TIMEOUT + timedelta(seconds=1))
+    store.get(session.sid)
+    session.tb_link.close.assert_called_once()
+
+
+def test_create_sweeps_abandoned_sessions(store: SessionStore, clock: Clock):
+    """A session whose browser never returns is never looked up again, so
+    only a sweep can stop its heartbeat."""
+    abandoned = _create(store)
+    clock.advance(IDLE_TIMEOUT + timedelta(seconds=1))
+    _create(store)
+    assert abandoned.sid not in store._sessions
+    abandoned.tb_link.close.assert_called_once()
+
+
+def test_create_leaves_live_sessions_alone(store: SessionStore, clock: Clock):
+    live = _create(store)
+    clock.advance(IDLE_TIMEOUT - timedelta(minutes=1))
+    _create(store)
+    assert store.get(live.sid) is live
+    live.tb_link.close.assert_not_called()
+
+
+def test_close_all_ends_every_session(store: SessionStore):
+    sessions = [_create(store), _create(store)]
+    store.close_all()
+    assert store._sessions == {}
+    for session in sessions:
+        session.tb_link.close.assert_called_once()

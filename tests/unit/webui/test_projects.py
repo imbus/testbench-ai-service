@@ -9,12 +9,13 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.webui.models import ProjectRef
 from testbench_ai_service.webui.projects import (
     fetch_projects,
-    fetch_projects_with_token,
+    fetch_projects_via_link,
     parse_projects,
     projects_response,
     record_projects,
 )
 from testbench_ai_service.webui.session import SessionStore
+from testbench_ai_service.webui.tb_link import TestBenchLink
 
 TB_URL = "https://localhost:9443/api/"
 
@@ -27,9 +28,7 @@ def config() -> AppConfig:
 
 @pytest.fixture
 def session():
-    return SessionStore().create(
-        username="a.mueller", roles=["Administrator"], is_admin=True, tb_session_token="tb-token"
-    )
+    return SessionStore().create(username="a.mueller", roles=["Administrator"], is_admin=True)
 
 
 def _payload(*projects: dict) -> dict:
@@ -144,61 +143,60 @@ def test_fetch_records_the_time_even_when_it_failed():
     assert fetch_projects(conn).fetched_at is not None
 
 
-# --- fetch_projects_with_token -------------------------------------------
+# --- fetch_projects_via_link --------------------------------------------
 
 
-def test_fetch_with_token_reuses_the_stored_token_and_never_the_password(config):
-    with patch("testbench_ai_service.webui.projects.TBConnection") as conn_cls:
-        conn_cls.return_value.get_all_projects.return_value = _payload(
-            {"name": "Alpha", "key": "11"}
-        )
-        result = fetch_projects_with_token(config, "tb-token")
-    kwargs = conn_cls.call_args.kwargs
-    assert kwargs["sessionToken"] == "tb-token"
-    assert "password" not in kwargs
+def _unauthorized() -> requests.exceptions.HTTPError:
+    response = requests.Response()
+    response.status_code = 401
+    return requests.exceptions.HTTPError("401", response=response)
+
+
+def _live_conn(*projects: dict) -> MagicMock:
+    conn = MagicMock()
+    conn.session_terminated = False
+    conn.get_all_projects.return_value = _payload(*projects)
+    return conn
+
+
+def test_fetch_via_link_reuses_the_open_connection(config):
+    conn = _live_conn({"name": "Alpha", "key": "11"})
+    link = TestBenchLink(config, "a.mueller", "pw", conn)
+    with patch("testbench_ai_service.webui.tb_link.TBConnection") as conn_cls:
+        result = fetch_projects_via_link(link)
+    conn_cls.assert_not_called()
+    conn.close.assert_not_called()
     assert result.projects == [ProjectRef(name="Alpha", key="11")]
+    assert result.error is None
 
 
-def test_fetch_with_token_closes_the_connection_even_on_failure(config):
-    with patch("testbench_ai_service.webui.projects.TBConnection") as conn_cls:
-        conn_cls.return_value.get_all_projects.side_effect = requests.exceptions.Timeout("slow")
-        fetch_projects_with_token(config, "tb-token")
-    conn_cls.return_value.close.assert_called_once()
-
-
-def test_fetch_with_token_reports_an_unusable_server_url_as_an_error(config):
-    """TBConnection validates the URL shape in its constructor. That is a
-    configuration problem, not a reason to 500 a refresh."""
-    with patch(
-        "testbench_ai_service.webui.projects.TBConnection",
-        side_effect=ValueError("Invalid server URL"),
-    ):
-        result = fetch_projects_with_token(config, "tb-token")
+def test_fetch_via_link_without_a_link_reports_an_error():
+    result = fetch_projects_via_link(None)
     assert result.projects == []
-    assert "Invalid server URL" in (result.error or "")
+    assert result.error
 
 
-def test_fetch_with_token_survives_a_connection_that_cannot_be_hardened(config):
-    """Setting up the connection is where an unreachable server shows up.
-
-    Reading ``conn.session`` completes the vendored client's lazy setup -- the
-    server version read, the authentication, the heartbeat -- so a TestBench
-    that is down, or a stored token it no longer accepts, raises there rather
-    than in ``get_all_projects``. That must still be a reported failure, not a
-    500 out of a function documented never to raise.
-    """
-    with (
-        patch("testbench_ai_service.webui.projects.TBConnection") as conn_cls,
-        patch(
-            "testbench_ai_service.webui.projects.harden_connection",
-            side_effect=requests.exceptions.ConnectionError("server down"),
-        ),
-    ):
-        result = fetch_projects_with_token(config, "tb-token")
-
+def test_fetch_via_link_reports_a_failed_renewal_as_an_error(config):
+    """TestBench ended the session and the password no longer works: a
+    refresh failure, not a 500."""
+    dead = _live_conn()
+    dead.session_terminated = True
+    link = TestBenchLink(config, "a.mueller", "pw", dead)
+    rejected = MagicMock()
+    rejected.read_user_roles.side_effect = _unauthorized()
+    with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=rejected):
+        result = fetch_projects_via_link(link)
     assert result.projects == []
-    assert "server down" in (result.error or "")
-    conn_cls.return_value.close.assert_called_once()
+    assert "Invalid credentials" in (result.error or "")
+    rejected.close.assert_called_once()
+
+
+def test_fetch_via_link_reports_a_transport_failure_as_an_error(config):
+    conn = _live_conn()
+    conn.get_all_projects.side_effect = requests.exceptions.Timeout("slow")
+    result = fetch_projects_via_link(TestBenchLink(config, "a.mueller", "pw", conn))
+    assert result.projects == []
+    assert "slow" in (result.error or "")
 
 
 # --- record_projects / projects_response ---------------------------------

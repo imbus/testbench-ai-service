@@ -75,7 +75,7 @@ def admin(file_client, tb_connection):
     def _login(roles=None):
         if roles is not None:
             tb_connection.read_user_roles.return_value = roles
-        with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+        with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
             return file_client.post(
                 "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
             )
@@ -108,7 +108,7 @@ def credentialed_admin(credentialed_client, tb_connection):
     def _login(roles=None):
         if roles is not None:
             tb_connection.read_user_roles.return_value = roles
-        with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+        with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
             return credentialed_client.post(
                 "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
             )
@@ -141,7 +141,7 @@ def aot_admin(aot_client, tb_connection):
     def _login(roles=None):
         if roles is not None:
             tb_connection.read_user_roles.return_value = roles
-        with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+        with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
             return aot_client.post(
                 "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
             )

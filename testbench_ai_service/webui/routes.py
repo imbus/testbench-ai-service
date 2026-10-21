@@ -71,7 +71,7 @@ from testbench_ai_service.webui.models import (
 from testbench_ai_service.webui.multi_write import write_all
 from testbench_ai_service.webui.paths import join_path
 from testbench_ai_service.webui.projects import (
-    fetch_projects_with_token,
+    fetch_projects_via_link,
     projects_response,
     record_projects,
 )
@@ -213,7 +213,7 @@ def sign_in(
         username=body.username,
         roles=login.roles,
         is_admin=is_admin_role(login.roles),
-        tb_session_token=login.token,
+        tb_link=login.link,
         user_key=login.user_key,
     )
     record_projects(session, login.projects)
@@ -254,7 +254,6 @@ def read_projects(session: Session = Depends(current_session)) -> ProjectsRespon
 
 @router.post("/projects/refresh", response_model=ProjectsResponse)
 def refresh_projects(
-    config: AppConfig = Depends(get_app_config),
     session: Session = Depends(require_admin),
     _: None = Depends(require_csrf),
     _log: Session = Depends(bind_log_user),
@@ -273,7 +272,7 @@ def refresh_projects(
     ``source == "unavailable"`` on a 200, and the previously cached list is
     kept rather than being replaced with an empty one.
     """
-    record_projects(session, fetch_projects_with_token(config, session.tb_session_token))
+    record_projects(session, fetch_projects_via_link(session.tb_link))
     return projects_response(session)
 
 

@@ -158,7 +158,9 @@ class TestProductionResolution:
         app.state.llm_factory.has_project_credential = MagicMock(return_value=False)
 
         with TestClient(app, raise_server_exceptions=False) as scoped:
-            with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+            with patch(
+                "testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection
+            ):
                 scoped.post("/admin/api/session", json={"username": "a", "password": "p"})
             scoped.post(
                 "/admin/api/prompts/test",
@@ -232,7 +234,9 @@ class TestSingleFlightOverTheWire:
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
-            with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+            with patch(
+                "testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection
+            ):
                 signed_in = await client.post(
                     "/admin/api/session", json={"username": "a", "password": "p"}
                 )
@@ -372,7 +376,9 @@ class TestEntraIdSuppression:
         app.state.llm_factory.has_project_credential = MagicMock(return_value=False)
 
         with TestClient(app, raise_server_exceptions=False) as scoped:
-            with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+            with patch(
+                "testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection
+            ):
                 scoped.post("/admin/api/session", json={"username": "a", "password": "p"})
             return scoped.post(
                 "/admin/api/prompts/test",

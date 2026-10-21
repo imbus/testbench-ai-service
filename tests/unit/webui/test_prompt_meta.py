@@ -116,7 +116,7 @@ def signed_in(client, tb_connection):
     def _login(roles=None):
         if roles is not None:
             tb_connection.read_user_roles.return_value = roles
-        with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+        with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
             return client.post(
                 "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
             )
@@ -313,7 +313,7 @@ def test_meta_is_404_when_no_prompts_dir_is_configured(prompts_dir, tmp_path, tb
     app.state.config_path = tmp_path / "config.toml"
     app.state.config.prompts_dir = None
     with TestClient(app, raise_server_exceptions=False) as c:
-        with patch("testbench_ai_service.webui.auth.TBConnection", return_value=tb_connection):
+        with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
             c.post("/admin/api/session", json={"username": "a", "password": "pw"})
         assert _meta(c).status_code == 404
 

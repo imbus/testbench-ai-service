@@ -35,23 +35,27 @@ def test_login_caches_the_project_list_on_the_session(client, login):
     assert body["fetched_at"] is not None
 
 
-def test_login_fetches_projects_before_closing_the_connection(login, tb_connection):
-    """The whole point of fetching at login is to reuse the connection that is
-    already open and authenticated. Fetching after ``close()`` would either fail
-    or silently re-authenticate."""
+def test_login_keeps_the_connection_open(login, tb_connection):
+    """Closing the login connection stops its heartbeat, and TestBench 4 then
+    drops the session token after about five minutes -- every later call on
+    it would fail."""
     login()
-    names = [
-        call[0] for call in tb_connection.mock_calls if call[0] in ("get_all_projects", "close")
-    ]
-    assert names.index("get_all_projects") < names.index("close")
+    tb_connection.get_all_projects.assert_called_once()
+    tb_connection.close.assert_not_called()
 
 
-def test_login_opens_exactly_one_connection(login, tb_connection):
-    """One outbound connection per login (design D3): the stored token may be
-    the operator's plaintext password, so it is used as rarely as possible."""
-    with patch("testbench_ai_service.webui.projects.TBConnection") as refresh_conn_cls:
-        login()
-    refresh_conn_cls.assert_not_called()
+def test_login_opens_exactly_one_connection(client, tb_connection):
+    with patch(
+        "testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection
+    ) as conn_cls:
+        client.post("/admin/api/session", json={"username": "a.mueller", "password": "pw"})
+    conn_cls.assert_called_once()
+
+
+def test_logout_closes_the_login_connection(client, login, tb_connection):
+    csrf = login().cookies[CSRF_COOKIE]
+    client.delete("/admin/api/session", headers={CSRF_HEADER: csrf})
+    tb_connection.close.assert_called_once()
 
 
 def test_a_failed_projects_fetch_still_signs_the_operator_in(client, login, tb_connection):
@@ -109,42 +113,86 @@ def test_get_projects_never_leaks_the_testbench_token(client, login):
     assert "tb-token-abc" not in response.text
 
 
-def test_get_projects_makes_no_outbound_call(client, login):
-    """It is a read of the cache. If it re-fetched, every page load would spend
-    the stored credential again."""
+def test_get_projects_makes_no_outbound_call(client, login, tb_connection):
+    """It is a read of the cache. If it re-fetched, every page load would cost
+    a TestBench round-trip."""
     login()
-    with patch("testbench_ai_service.webui.projects.TBConnection") as conn_cls:
-        assert client.get("/admin/api/projects").status_code == 200
-    conn_cls.assert_not_called()
+    tb_connection.get_all_projects.reset_mock()
+    assert client.get("/admin/api/projects").status_code == 200
+    tb_connection.get_all_projects.assert_not_called()
 
 
 # --- POST /projects/refresh ---------------------------------------------
 
 
-def _refresh_connection(*projects: dict) -> MagicMock:
-    conn = MagicMock()
-    conn.get_all_projects.return_value = _payload(*projects)
-    return conn
+def _unauthorized() -> requests.exceptions.HTTPError:
+    response = requests.Response()
+    response.status_code = 401
+    return requests.exceptions.HTTPError("401", response=response)
 
 
-def test_refresh_replaces_the_cached_list(client, login):
+def test_refresh_replaces_the_cached_list(client, login, tb_connection):
     csrf = login().cookies[CSRF_COOKIE]
-    conn = _refresh_connection({"name": "Gamma", "key": "13"})
-    with patch("testbench_ai_service.webui.projects.TBConnection", return_value=conn):
-        body = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf}).json()
+    tb_connection.get_all_projects.return_value = _payload({"name": "Gamma", "key": "13"})
+    body = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf}).json()
     assert [p["name"] for p in body["projects"]] == ["Gamma"]
     assert body["source"] == "testbench"
     # And the replacement is what the next plain read sees.
     assert [p["name"] for p in client.get("/admin/api/projects").json()["projects"]] == ["Gamma"]
 
 
-def test_refresh_authenticates_with_the_stored_token_not_a_password(client, login):
+def test_refresh_reuses_the_live_login_connection(client, login, tb_connection):
     csrf = login().cookies[CSRF_COOKIE]
-    conn = _refresh_connection({"name": "Gamma", "key": "13"})
-    with patch("testbench_ai_service.webui.projects.TBConnection", return_value=conn) as conn_cls:
+    with patch("testbench_ai_service.webui.tb_link.TBConnection") as conn_cls:
         client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
-    assert conn_cls.call_args.kwargs["sessionToken"] == "tb-token-abc"
-    conn.close.assert_called_once()
+    conn_cls.assert_not_called()
+    tb_connection.close.assert_not_called()
+
+
+def _fresh_login_connection(*projects: dict) -> MagicMock:
+    conn = MagicMock()
+    conn.session_token = "tb-token-new"
+    conn.session_terminated = False
+    conn.read_user_roles.return_value = ["Administrator"]
+    conn.get_all_projects.return_value = _payload(*projects)
+    return conn
+
+
+def test_refresh_logs_in_again_when_the_heartbeat_lost_the_session(client, login, tb_connection):
+    """The bug this guards: TestBench ended the session (token idle past five
+    minutes, server restart, ...). The refresh must renew it rather than fail."""
+    csrf = login(password="pw").cookies[CSRF_COOKIE]
+    tb_connection.session_terminated = True
+    fresh = _fresh_login_connection({"name": "Gamma", "key": "13"})
+    with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=fresh) as conn_cls:
+        body = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf}).json()
+    assert body["source"] == "testbench"
+    assert [p["name"] for p in body["projects"]] == ["Gamma"]
+    assert conn_cls.call_args.kwargs["loginname"] == "a.mueller"
+    assert conn_cls.call_args.kwargs["password"] == "pw"
+    tb_connection.close.assert_called_once()
+
+
+def test_refresh_logs_in_again_on_a_401_the_heartbeat_has_not_seen_yet(
+    client, login, tb_connection
+):
+    csrf = login().cookies[CSRF_COOKIE]
+    tb_connection.get_all_projects.side_effect = _unauthorized()
+    fresh = _fresh_login_connection({"name": "Gamma", "key": "13"})
+    with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=fresh):
+        body = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf}).json()
+    assert body["source"] == "testbench"
+    assert [p["name"] for p in body["projects"]] == ["Gamma"]
+
+
+def test_the_renewed_connection_is_the_one_logout_closes(client, login, tb_connection):
+    csrf = login().cookies[CSRF_COOKIE]
+    tb_connection.session_terminated = True
+    fresh = _fresh_login_connection()
+    with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=fresh):
+        client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
+    client.delete("/admin/api/session", headers={CSRF_HEADER: csrf})
+    fresh.close.assert_called_once()
 
 
 def test_refresh_requires_the_admin_role(client, login):
@@ -168,26 +216,22 @@ def test_refresh_without_a_session_is_401(client):
     assert client.post("/admin/api/projects/refresh").status_code == 401
 
 
-def test_a_failed_refresh_is_a_200_reporting_unavailable(client, login):
+def test_a_failed_refresh_is_a_200_reporting_unavailable(client, login, tb_connection):
     """A refresh that could not reach TestBench is a fact about TestBench, not a
     failure of the console -- and the operator still needs the rest of the
     screen to work."""
     csrf = login().cookies[CSRF_COOKIE]
-    conn = MagicMock()
-    conn.get_all_projects.side_effect = requests.exceptions.ConnectionError("no route")
-    with patch("testbench_ai_service.webui.projects.TBConnection", return_value=conn):
-        response = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
+    tb_connection.get_all_projects.side_effect = requests.exceptions.ConnectionError("no route")
+    response = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
     assert response.status_code == 200
     assert response.json()["source"] == "unavailable"
     assert "no route" in response.json()["error"]
 
 
-def test_a_failed_refresh_keeps_the_list_it_could_not_replace(client, login):
+def test_a_failed_refresh_keeps_the_list_it_could_not_replace(client, login, tb_connection):
     csrf = login().cookies[CSRF_COOKIE]
-    conn = MagicMock()
-    conn.get_all_projects.side_effect = requests.exceptions.ConnectionError("no route")
-    with patch("testbench_ai_service.webui.projects.TBConnection", return_value=conn):
-        body = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf}).json()
+    tb_connection.get_all_projects.side_effect = requests.exceptions.ConnectionError("no route")
+    body = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf}).json()
     assert [p["name"] for p in body["projects"]] == ["Alpha", "Release 2.0"]
 
 

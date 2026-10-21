@@ -1,12 +1,10 @@
 """The console's TestBench project list.
 
 Fetched **once**, inside the connection the login already has, and cached on the
-session for its lifetime (design D3). The reason is not performance: on
-TestBench 3 the stored ``tb_session_token`` *is* the operator's plaintext
-password (see :mod:`~testbench_ai_service.webui.session`), so every additional
-outbound call is another use of a credential the console would rather not touch.
-``POST /projects/refresh`` exists for the operator who added a project since
-signing in.
+session for its lifetime (design D3), so page loads never cost a TestBench
+round-trip. ``POST /projects/refresh`` exists for the operator who added a
+project since signing in; it reuses the session's live connection (see
+:mod:`~testbench_ai_service.webui.tb_link`).
 
 Nothing in this module raises. A TestBench that cannot answer must not be able
 to fail a login, nor a config edit that has nothing to do with projects
@@ -14,22 +12,16 @@ to fail a login, nor a config edit that has nothing to do with projects
 :class:`ProjectFetch`, and the console surfaces it next to an empty list.
 """
 
-import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from testbench_cli_reporter.testbench import Connection as TBConnection
+from fastapi import HTTPException
 
-from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
-from testbench_ai_service.transport import (
-    DEFAULT_CONNECT_TIMEOUT,
-    DEFAULT_READ_TIMEOUT,
-    harden_connection,
-)
 from testbench_ai_service.webui.models import ProjectRef, ProjectsResponse
 from testbench_ai_service.webui.session import Session
+from testbench_ai_service.webui.tb_link import TestBenchLink
 
 
 @dataclass(frozen=True)
@@ -99,48 +91,26 @@ def fetch_projects(conn: Any) -> ProjectFetch:
     return ProjectFetch(projects=parse_projects(payload), fetched_at=_now())
 
 
-def fetch_projects_with_token(config: AppConfig, token: str) -> ProjectFetch:
-    """Open a short-lived connection from the stored token and fetch. Never raises.
+def fetch_projects_via_link(link: TestBenchLink | None) -> ProjectFetch:
+    """Fetch over the session's live connection. Never raises.
 
-    Used only by ``POST /projects/refresh``; the login path calls
-    :func:`fetch_projects` on the connection it already has instead of opening a
-    second one.
+    Used only by ``POST /projects/refresh``. The link renews the TestBench
+    session if it has ended -- by the heartbeat's 401, or a 401 on this very
+    call -- so a refresh long after the five-minute token lifetime still works.
+    A renewal that fails (TestBench down, password changed) is reported like
+    any other failed fetch.
     """
+    if link is None:
+        return ProjectFetch(projects=[], fetched_at=_now(), error="No TestBench connection")
     try:
-        conn = TBConnection(
-            config.tb_server_url,
-            verify=config.tb_ssl_ca_bundle or config.tb_ssl_verify,
-            sessionToken=token,
-            connection_timeout_sec=math.ceil(DEFAULT_READ_TIMEOUT),
-        )
-    except ValueError as e:
-        # TBConnection validates the URL shape in its constructor, and only
-        # there. A misconfigured tb_server_url is the operator's problem to fix
-        # in the Service form -- it is not a reason to fail the request they
-        # actually made.
-        logger.error("Cannot reach TestBench to list projects: %s", e)
-        return ProjectFetch(projects=[], fetched_at=_now(), error=str(e))
-
-    try:
-        # harden_connection reads conn.session, which is what completes the
-        # vendored client's lazy setup -- server version, authentication,
-        # heartbeat. An unreachable server or a token TestBench no longer
-        # accepts fails here, not in get_all_projects, so this needs the same
-        # catch fetch_projects has rather than propagating into a 500.
-        harden_connection(
-            conn,
-            connect_timeout=DEFAULT_CONNECT_TIMEOUT,
-            read_timeout=DEFAULT_READ_TIMEOUT,
-        )
+        payload = link.call(lambda conn: conn.get_all_projects())
+    except HTTPException as e:
+        logger.warning("Could not renew the TestBench session to list projects: %s", e.detail)
+        return ProjectFetch(projects=[], fetched_at=_now(), error=str(e.detail))
     except Exception as e:  # see fetch_projects: a narrower tuple would not hold
-        logger.warning("Could not open a TestBench connection to list projects: %s", e)
-        conn.close()
+        logger.warning("Could not read the TestBench project list: %s", e)
         return ProjectFetch(projects=[], fetched_at=_now(), error=str(e) or type(e).__name__)
-
-    try:
-        return fetch_projects(conn)
-    finally:
-        conn.close()
+    return ProjectFetch(projects=parse_projects(payload), fetched_at=_now())
 
 
 def record_projects(session: Session, fetch: ProjectFetch) -> None:

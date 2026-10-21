@@ -1,13 +1,17 @@
 """Server-side session store for the console.
 
-The browser only ever receives an opaque session id.  The TestBench session
-token stays here, so a stolen cookie cannot be replayed against TestBench.
-Note that on TestBench 3, ``Connection.authenticate`` sets ``session_token``
-to the user's plaintext password, so on those deployments the value stored
-here is the password itself -- a disclosure of this store's memory yields
-credentials, not merely a replayable token.
+The browser only ever receives an opaque session id.  The TestBench
+connection stays here, so a stolen cookie cannot be replayed against TestBench.
+Each session owns a :class:`~testbench_ai_service.webui.tb_link.TestBenchLink`
+that keeps the TestBench session alive and logs in again when TestBench ends
+it -- which means the operator's credentials are held in this store's memory
+for the life of the session. A disclosure of that memory yields credentials,
+not merely a replayable token (on TestBench 3 that was already true, since
+the "session token" there is the plaintext password).
 
 The store is process-local: restarting the service logs everyone out.
+Every way a session ends -- revoke, expiry, shutdown -- closes its link, so no
+heartbeat thread outlives the session it belongs to.
 """
 
 import secrets
@@ -16,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 
 from testbench_ai_service.webui.models import ProjectRef
+from testbench_ai_service.webui.tb_link import TestBenchLink
 
 IDLE_TIMEOUT = timedelta(minutes=60)
 ABSOLUTE_TIMEOUT = timedelta(hours=8)
@@ -38,9 +43,12 @@ class Session:
     username: str
     roles: list[str]
     is_admin: bool
-    tb_session_token: str = field(repr=False)
     created_at: datetime
     last_seen: datetime
+
+    # The live TestBench connection (see module docstring). None only for
+    # sessions built without one, e.g. in tests.
+    tb_link: TestBenchLink | None = field(default=None, repr=False)
 
     # The TestBench user key, the identity the activity view filters on
     # (design D2). None when the login could not read it -- the user then
@@ -48,9 +56,8 @@ class Session:
     user_key: str | None = None
 
     # The TestBench project list, fetched once inside the login connection and
-    # cached here for the life of the session (design D3): the token that would
-    # be needed to re-fetch it may be the operator's plaintext password, so it
-    # is used as rarely as the console can manage. ``projects_error`` records a
+    # cached here for the life of the session (design D3), so page loads never
+    # cost a TestBench round-trip. ``projects_error`` records a
     # failed fetch without failing the login (D4) -- editing service, LLM and
     # logging settings must not depend on an unrelated TestBench endpoint.
     # ``POST /projects/refresh`` replaces all three.
@@ -78,17 +85,18 @@ class SessionStore:
         username: str,
         roles: list[str],
         is_admin: bool,
-        tb_session_token: str,
+        tb_link: TestBenchLink | None = None,
         user_key: str | None = None,
     ) -> Session:
         moment = self._now()
+        self._sweep(moment)
         session = Session(
             sid=secrets.token_urlsafe(32),
             csrf_token=secrets.token_urlsafe(32),
             username=username,
             roles=roles,
             is_admin=is_admin,
-            tb_session_token=tb_session_token,
+            tb_link=tb_link,
             created_at=moment,
             last_seen=moment,
             user_key=user_key,
@@ -108,15 +116,36 @@ class SessionStore:
             return None
 
         moment = self._now()
-        if (
-            moment - session.last_seen > self._idle_timeout
-            or moment - session.created_at > self._absolute_timeout
-        ):
-            del self._sessions[sid]
+        if self._is_expired(session, moment):
+            self.revoke(sid)
             return None
 
         session.last_seen = moment
         return session
 
     def revoke(self, sid: str) -> None:
-        self._sessions.pop(sid, None)
+        session = self._sessions.pop(sid, None)
+        if session is not None and session.tb_link is not None:
+            session.tb_link.close()
+
+    def close_all(self) -> None:
+        """End every session; for service shutdown."""
+        for sid in list(self._sessions):
+            self.revoke(sid)
+
+    def _is_expired(self, session: Session, moment: datetime) -> bool:
+        return (
+            moment - session.last_seen > self._idle_timeout
+            or moment - session.created_at > self._absolute_timeout
+        )
+
+    def _sweep(self, moment: datetime) -> None:
+        """Drop every expired session, not just the one being looked up.
+
+        A session whose browser never comes back is otherwise never looked up
+        again, and its link would keep a heartbeat thread pinging TestBench
+        for as long as the process runs.
+        """
+        for sid, session in list(self._sessions.items()):
+            if self._is_expired(session, moment):
+                self.revoke(sid)

@@ -65,6 +65,11 @@ async def close_services(app: FastAPI):
 
     await app.state.llm_factory.close_clients()
 
+    # Stops every console session's TestBench heartbeat.
+    sessions = getattr(app.state, "webui_sessions", None)
+    if sessions is not None:
+        sessions.close_all()
+
 
 def init_routers(app: FastAPI):
     """Initialization of app routers"""

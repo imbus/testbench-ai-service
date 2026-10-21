@@ -1,22 +1,14 @@
 """Console authentication: TestBench login, cookies, CSRF, and role checks."""
 
-import math
 import secrets
 from dataclasses import dataclass
 
-import requests
 from fastapi import Cookie, Depends, Header, HTTPException, Request, Response, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.config import AppConfig
-from testbench_ai_service.exceptions import TRANSPORT_ERRORS, handle_requests_transport_error
 from testbench_ai_service.log import log_user_key, log_username, logger
 from testbench_ai_service.models.testbench import GlobalHumanRole
-from testbench_ai_service.transport import (
-    DEFAULT_CONNECT_TIMEOUT,
-    DEFAULT_READ_TIMEOUT,
-    harden_connection,
-)
 from testbench_ai_service.utils.testbench import get_user_key
 from testbench_ai_service.webui.projects import ProjectFetch, fetch_projects
 from testbench_ai_service.webui.session import (
@@ -26,6 +18,7 @@ from testbench_ai_service.webui.session import (
     Session,
     SessionStore,
 )
+from testbench_ai_service.webui.tb_link import TestBenchLink, open_connection
 
 
 def get_session_store(request: Request) -> SessionStore:
@@ -44,17 +37,22 @@ def is_admin_role(roles: list[str]) -> bool:
 
 @dataclass(frozen=True)
 class LoginResult:
-    """Everything one login connection yields before it is closed again.
+    """Everything one login yields.
 
-    ``projects`` rides along because this is the only moment the console has an
-    authenticated TestBench connection in hand (design D3). It always carries a
-    result -- a failed fetch is an ``error`` on it, never an exception, so an
-    unreachable project endpoint cannot fail the login (D4).
+    ``link`` holds the login connection, still open: its heartbeat is what
+    keeps the TestBench session token alive (TestBench 4 drops an idle one
+    after about five minutes), and it logs in again if TestBench ends the
+    session anyway. The session store owns it from here and closes it.
+
+    ``projects`` rides along because the login connection is already
+    authenticated (design D3). It always carries a result -- a failed fetch is
+    an ``error`` on it, never an exception, so an unreachable project endpoint
+    cannot fail the login (D4).
     """
 
-    token: str
     roles: list[str]
     projects: ProjectFetch
+    link: TestBenchLink
     user_key: str | None = None
 
 
@@ -75,73 +73,17 @@ def authenticate(config: AppConfig, username: str, password: str) -> LoginResult
         HTTPException 401: TestBench rejected the credentials.
         HTTPException 500: ``tb_server_url`` is not a usable TestBench URL.
         HTTPException 502: TestBench is unreachable, or rejected the request for
-            a reason other than the credentials themselves (e.g. a 503 while the
-            server is starting up, or a wrong-but-shape-valid URL path).
+            a reason other than the credentials themselves.
     """
-    try:
-        conn = TBConnection(
-            config.tb_server_url,
-            verify=config.tb_ssl_ca_bundle or config.tb_ssl_verify,
-            loginname=username,
-            password=password,
-            connection_timeout_sec=math.ceil(DEFAULT_READ_TIMEOUT),
-        )
-    except ValueError as e:
-        # TBConnection validates the URL shape here, and only here. A ValueError
-        # raised later (e.g. read_user_roles' "User key not found in checkLogin
-        # response" on the TestBench 3 path) is not a configuration problem and
-        # must not be caught by this branch -- hence the narrow try above.
-        logger.error("Cannot log in to TestBench: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"TestBench server URL is not usable, check the configuration: {e}",
-        ) from e
-
-    try:
-        harden_connection(
-            conn,
-            connect_timeout=DEFAULT_CONNECT_TIMEOUT,
-            read_timeout=DEFAULT_READ_TIMEOUT,
-        )
-        roles = conn.read_user_roles(conn.session)
-        token = conn.session_token
-        if not token:
-            # Defends against a real defect in the vendored library: on the
-            # TestBench 4 path, Connection.authenticate swallows an HTTPError
-            # that carries a response, so a wrong password can leave
-            # session_token as None and raise nothing at all.
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-            )
-        # Inside the try, before the finally closes the connection: the project
-        # list is the one thing the console needs that requires an outbound
-        # call, and this is the only place it can be had without spending the
-        # stored token a second time.
-        return LoginResult(
-            token=token,
-            roles=list(roles),
-            projects=fetch_projects(conn),
-            user_key=_read_user_key(conn),
-        )
-    except requests.exceptions.HTTPError as e:
-        response_status = e.response.status_code if e.response is not None else None
-        if response_status in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
-            logger.warning("Console login rejected for user %r", username)
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
-            ) from e
-        # Any other status (a 503 while TestBench is starting up, a wrong but
-        # shape-valid URL path, ...) is not a credentials problem and must not
-        # be reported as one.
-        logger.error("TestBench returned an error during console login: %s", e)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="TestBench server returned an unexpected error",
-        ) from e
-    except TRANSPORT_ERRORS as e:
-        handle_requests_transport_error(e)
-    finally:
-        conn.close()
+    conn, roles = open_connection(config, username, password)
+    # fetch_projects and _read_user_key never raise, so nothing past this point
+    # can leave the open connection without an owner.
+    return LoginResult(
+        roles=roles,
+        projects=fetch_projects(conn),
+        link=TestBenchLink(config, username, password, conn),
+        user_key=_read_user_key(conn),
+    )
 
 
 def _cookie_secure(config: AppConfig) -> bool:

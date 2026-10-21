@@ -12,7 +12,7 @@ def test_projects_refresh_records_carry_the_user(client, login, capture):
     capture.records.clear()
     with (
         patch(
-            "testbench_ai_service.webui.routes.fetch_projects_with_token",
+            "testbench_ai_service.webui.routes.fetch_projects_via_link",
             side_effect=lambda *a, **k: service_logger.info("refreshing") or [],
         ),
         patch("testbench_ai_service.webui.routes.record_projects"),
