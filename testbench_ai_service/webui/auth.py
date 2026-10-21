@@ -10,7 +10,7 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import log_user_key, log_username, logger
 from testbench_ai_service.models.testbench import GlobalHumanRole
 from testbench_ai_service.utils.testbench import get_user_key
-from testbench_ai_service.webui.access import read_managed_projects
+from testbench_ai_service.webui.access import PROJECT_ADMIN_ROLE, read_managed_projects
 from testbench_ai_service.webui.projects import ProjectFetch, fetch_projects
 from testbench_ai_service.webui.session import (
     CSRF_COOKIE,
@@ -174,6 +174,24 @@ def require_editor(session: Session = Depends(current_session)) -> Session:
             detail=(
                 "This action requires the TestBench Administrator role "
                 "or project administration rights"
+            ),
+        )
+    return session
+
+
+def require_refresher(session: Session = Depends(current_session)) -> Session:
+    """Guard the project refresh: an admin or anyone with the ProjectAdministrator role.
+
+    Deliberately wider than ``require_editor``: the refresh is how a project
+    admin whose managed set is still empty (the login read failed, or the
+    TestManager membership came later) picks up their projects. Gating it on
+    a non-empty set would lock out exactly the users it exists for.
+    """
+    if not (session.is_admin or PROJECT_ADMIN_ROLE in session.roles):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "This action requires the TestBench Administrator or ProjectAdministrator role"
             ),
         )
     return session

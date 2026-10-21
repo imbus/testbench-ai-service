@@ -10,6 +10,8 @@ interface SessionState {
   busy: boolean
   signIn: (username: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  /** Re-read `GET /session`, e.g. after a refresh re-read the managed projects. */
+  reload: () => Promise<void>
 }
 
 const SessionContext = createContext<SessionState | null>(null)
@@ -46,6 +48,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  // A failed re-read keeps the session as it is: a transient error is no
+  // reason to sign the operator out, and an expired session surfaces as a
+  // 401 on the next real request anyway.
+  const reload = useCallback(async () => {
+    try {
+      setSession(await apiFetch<SessionInfo>('/session'))
+    } catch {
+      // keep the current session
+    }
+  }, [])
+
   const signOut = useCallback(async () => {
     try {
       await apiFetch('/session', { method: 'DELETE' })
@@ -57,12 +70,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionContext.Provider
-      value={{ session, loading, busy, error, signIn, signOut }}
+      value={{ session, loading, busy, error, signIn, signOut, reload }}
     >
       {children}
     </SessionContext.Provider>
   )
 }
+
+/**
+ * The session's `reload`, or a no-op outside a `SessionProvider` -- hooks
+ * such as `useRefreshProjects` run in screens that tests render without one.
+ */
+export function useReloadSession(): () => Promise<void> {
+  return useContext(SessionContext)?.reload ?? noReload
+}
+
+const noReload = async () => {}
 
 export function useSession(): SessionState {
   const value = useContext(SessionContext)

@@ -23,6 +23,18 @@ export function canEditScope(
   return isAdmin || (project !== null && managedProjects.includes(project))
 }
 
+/** The global TestBench role whose holders may refresh the project list. */
+export const PROJECT_ADMIN_ROLE = 'ProjectAdministrator'
+
+/**
+ * Whether the project refresh is offered: admins, and every ProjectAdministrator
+ * -- also one who manages nothing yet, since the refresh is how they get any.
+ * Mirrors `require_refresher` on the server.
+ */
+export function canRefreshProjects(isAdmin: boolean, roles: readonly string[]): boolean {
+  return isAdmin || roles.includes(PROJECT_ADMIN_ROLE)
+}
+
 /** Whether this session can edit anything at all (so the read-only notice is wrong). */
 export function isEditor(session: SessionInfo): boolean {
   return session.is_admin || session.managed_projects.length > 0

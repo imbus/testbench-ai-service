@@ -83,13 +83,19 @@ function edits(): Record<string, unknown> {
 function renderProjects({
   isAdmin = true,
   managedProjects = [],
-}: { isAdmin?: boolean; managedProjects?: string[] } = {}) {
+  roles = [],
+}: { isAdmin?: boolean; managedProjects?: string[]; roles?: string[] } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <DraftProvider saved={DISK}>
-          <Projects isAdmin={isAdmin} managedProjects={managedProjects} issues={[]} />
+          <Projects
+            isAdmin={isAdmin}
+            managedProjects={managedProjects}
+            roles={roles}
+            issues={[]}
+          />
           <Edits />
         </DraftProvider>
       </MemoryRouter>
@@ -526,8 +532,16 @@ describe('a project admin', () => {
     expect(modelled.queryByRole('group', { name: 'language' })).not.toBeInTheDocument()
   })
 
-  it('still gets no refresh', async () => {
-    renderProjects({ isAdmin: false, managedProjects: ['Alpha'] })
+  it('gets the refresh even while managing nothing yet', async () => {
+    // The refresh is how a ProjectAdministrator whose login read failed, or
+    // who became TestManager later, picks up their projects at all.
+    renderProjects({ isAdmin: false, managedProjects: [], roles: ['ProjectAdministrator'] })
+    await ready()
+    expect(screen.getByRole('button', { name: /refresh/i })).toBeInTheDocument()
+  })
+
+  it('gets no refresh from managed projects alone, without the role', async () => {
+    renderProjects({ isAdmin: false, managedProjects: ['Alpha'], roles: ['ProjectUser'] })
     await ready()
     expect(screen.queryByRole('button', { name: /refresh/i })).not.toBeInTheDocument()
   })

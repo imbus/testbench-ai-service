@@ -36,6 +36,7 @@ from testbench_ai_service.webui.auth import (
     is_admin_role,
     require_csrf,
     require_editor,
+    require_refresher,
     set_session_cookies,
 )
 from testbench_ai_service.webui.catalogue import PROVIDER_KEY_NAMES, build_catalogue
@@ -256,8 +257,8 @@ async def read_session(
 def read_projects(session: Session = Depends(current_session)) -> ProjectsResponse:
     """The project list cached at login. A pure read -- no outbound call.
 
-    Open to any signed-in user, like every other read: only ``refresh`` and the
-    config write routes require the admin role. ``source == "unavailable"`` is
+    Open to any signed-in user, like every other read: ``refresh`` needs the
+    admin or ProjectAdministrator role, and the write routes check per project. ``source == "unavailable"`` is
     how the Projects screen learns that an empty list means "we could not ask",
     at which point it offers a free-text project name instead.
     """
@@ -266,17 +267,19 @@ def read_projects(session: Session = Depends(current_session)) -> ProjectsRespon
 
 @router.post("/projects/refresh", response_model=ProjectsResponse)
 def refresh_projects(
-    session: Session = Depends(require_editor),
+    session: Session = Depends(require_refresher),
     _: None = Depends(require_csrf),
     _log: Session = Depends(bind_log_user),
 ) -> ProjectsResponse:
     """Re-read the project list from TestBench and replace the cache.
 
-    Editor-gated (admin or project admin) and CSRF-guarded despite writing
-    nothing to disk: it spends the stored TestBench credential on an outbound
-    call, which is not something a cross-site page may trigger on the
-    operator's behalf. It also re-reads the caller's managed projects, so a
-    project assigned in TestBench takes effect without a new sign-in.
+    Open to admins and to every ProjectAdministrator -- also one who manages
+    nothing yet, since re-reading the managed projects is how they get any
+    (``require_refresher``). CSRF-guarded despite writing nothing to disk: it
+    spends the stored TestBench credential on an outbound call, which is not
+    something a cross-site page may trigger on the operator's behalf. The
+    re-read also revokes: a project dropped in TestBench stops being editable
+    without a new sign-in.
 
     A sync ``def`` on purpose -- the vendored TestBench client is blocking, so
     this belongs in the threadpool rather than stalling the event loop for

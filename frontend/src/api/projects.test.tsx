@@ -9,7 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 import { usePromptMeta, useProjects } from './queries'
 import { useRefreshProjects } from './mutations'
-import type { ProjectsResponse, PromptMeta } from './types'
+import { SessionProvider, useSession } from '../state/session'
+import type { ProjectsResponse, PromptMeta, SessionInfo } from './types'
 
 const PROJECTS: ProjectsResponse = {
   projects: [
@@ -19,6 +20,14 @@ const PROJECTS: ProjectsResponse = {
   fetched_at: '2026-09-10T08:00:00Z',
   source: 'testbench',
   error: null,
+}
+
+const SESSION: SessionInfo = {
+  username: 'p.admin',
+  roles: ['ProjectAdministrator'],
+  is_admin: false,
+  managed_projects: [],
+  tb_server_url: 'https://tb.example.com:9443/api/',
 }
 
 const META: PromptMeta = {
@@ -151,6 +160,34 @@ describe('useRefreshProjects', () => {
     )
     await userEvent.click(screen.getByRole('button'))
     await waitFor(() => expect(screen.getByTestId('out')).toHaveTextContent('Gamma'))
+  })
+
+  it('re-reads the session so re-read managed projects reach the UI', async () => {
+    // The refresh also re-reads the caller's managed projects server-side;
+    // without this the screens keep the login-time set until a page reload.
+    function Managed() {
+      const { session } = useSession()
+      return <span data-testid="managed">{(session?.managed_projects ?? []).join('|')}</span>
+    }
+    const before = { ...SESSION, managed_projects: [] }
+    const after = { ...SESSION, managed_projects: ['Alpha'] }
+    fetchMock.mockImplementation(async (url: string) =>
+      url === '/admin/api/projects/refresh'
+        ? ok(PROJECTS)
+        : ok(fetchMock.mock.calls.some((c) => c[0] === '/admin/api/projects/refresh') ? after : before),
+    )
+    render(
+      <Wrapper>
+        <SessionProvider>
+          <Managed />
+          <Probe />
+        </SessionProvider>
+      </Wrapper>,
+    )
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith('/admin/api/session', expect.anything()))
+    expect(screen.getByTestId('managed')).toHaveTextContent('')
+    await userEvent.click(screen.getByRole('button'))
+    await waitFor(() => expect(screen.getByTestId('managed')).toHaveTextContent('Alpha'))
   })
 })
 

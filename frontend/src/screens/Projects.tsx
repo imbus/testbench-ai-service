@@ -19,7 +19,7 @@ import { useConfig, useProjects } from '../api/queries'
 import type { ConfigIssue } from '../api/types'
 import { AgentSwitch } from '../components/AgentSwitch'
 import { useTranslation } from 'react-i18next'
-import { canEditScope } from '../state/access'
+import { canEditScope, canRefreshProjects } from '../state/access'
 import { useDraft } from '../state/draft'
 import { LANGUAGES } from './agentFields'
 import { valueAt } from './fields'
@@ -39,11 +39,14 @@ function issueFor(issues: ConfigIssue[], key: string): string | undefined {
 export function Projects({
   isAdmin,
   managedProjects = [],
+  roles = [],
   issues = [],
 }: {
   isAdmin: boolean
   /** Projects a project admin may edit; every other card is read-only for them. */
   managedProjects?: string[]
+  /** The session's global TestBench roles; decide whether the refresh is offered. */
+  roles?: string[]
   issues?: ConfigIssue[]
 }) {
   const { t } = useTranslation()
@@ -101,9 +104,10 @@ export function Projects({
             {t('fetchedAt')} {new Date(projects.data.fetched_at).toLocaleString()}
           </span>
         )}
-        {/* Admin only: the refresh spends the stored TestBench credential on an
-            outbound call, and the route is admin-gated to match. */}
-        {isAdmin && (
+        {/* Admins and ProjectAdministrators only: the refresh spends the stored
+            TestBench credential on an outbound call, and the route is gated to
+            match. A project admin needs it even while managing nothing yet. */}
+        {canRefreshProjects(isAdmin, roles) && (
           <Button
             type="button"
             text

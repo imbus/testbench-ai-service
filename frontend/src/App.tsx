@@ -170,6 +170,7 @@ export function App() {
                   <Projects
                     isAdmin={session.is_admin}
                     managedProjects={session.managed_projects}
+                    roles={session.roles}
                     issues={issues}
                   />
                 }

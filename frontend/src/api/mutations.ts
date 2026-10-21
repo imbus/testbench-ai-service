@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { Edits } from '../state/draft'
+import { useReloadSession } from '../state/session'
 import { apiFetch } from './client'
 import type {
   ApplyResponse,
@@ -66,9 +67,15 @@ export function useApply() {
  */
 export function useRefreshProjects() {
   const queries = useQueryClient()
+  const reloadSession = useReloadSession()
   return useMutation({
     mutationFn: () => apiFetch<ProjectsResponse>('/projects/refresh', { method: 'POST' }),
-    onSuccess: (data) => queries.setQueryData(['projects'], data),
+    onSuccess: (data) => {
+      queries.setQueryData(['projects'], data)
+      // The route also re-read the caller's managed projects; the session
+      // carries them, so re-read it or the screens keep the login-time set.
+      void reloadSession()
+    },
   })
 }
 

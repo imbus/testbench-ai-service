@@ -291,3 +291,59 @@ def test_failed_membership_reread_keeps_the_managed_projects(
     response = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
     assert response.status_code == 200
     assert client.get("/admin/api/session").json()["managed_projects"] == ["Alpha"]
+
+
+def _answer_memberships(tb_connection, managed: list[str]) -> None:
+    """Make the next membership read report TestManager in exactly *managed*."""
+    original_get = tb_connection.session.get.side_effect
+
+    def _get(url, *args, **kwargs):
+        if url.endswith("2/users/self/projectRoles"):
+            response = MagicMock()
+            response.json.return_value = [
+                {
+                    "userKey": "u-1",
+                    "userLogin": "a.mueller",
+                    "userName": "A. Mueller",
+                    "projectKey": f"key-{name}",
+                    "projectName": name,
+                    "roles": ["TestManager"],
+                }
+                for name in managed
+            ]
+            return response
+        return original_get(url, *args, **kwargs)
+
+    tb_connection.session.get.side_effect = _get
+
+
+def test_project_admin_managing_nothing_yet_can_refresh(client, login_project_admin, tb_connection):
+    """The refresh exists for exactly this user: a ProjectAdministrator whose
+    login read failed, or who became TestManager after signing in."""
+    csrf = login_project_admin(managed=[]).cookies[CSRF_COOKIE]
+    assert client.get("/admin/api/session").json()["managed_projects"] == []
+    _answer_memberships(tb_connection, ["Alpha"])
+    response = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
+    assert response.status_code == 200
+    assert client.get("/admin/api/session").json()["managed_projects"] == ["Alpha"]
+
+
+def test_project_admin_refresh_still_requires_csrf(client, login_project_admin):
+    login_project_admin(managed=[])
+    assert client.post("/admin/api/projects/refresh").status_code == 403
+
+
+def test_refresh_that_drops_a_project_revokes_access_to_it(
+    client, login_project_admin, tb_connection
+):
+    csrf = login_project_admin(managed=["Alpha"]).cookies[CSRF_COOKIE]
+    render = {
+        "messages": [{"role": "user", "source": "inline", "file": None, "content": "hi"}],
+        "project": "Alpha",
+    }
+    headers = {CSRF_HEADER: csrf}
+    assert client.post("/admin/api/prompts/render", json=render, headers=headers).status_code == 200
+    _answer_memberships(tb_connection, [])
+    client.post("/admin/api/projects/refresh", headers=headers)
+    response = client.post("/admin/api/prompts/render", json=render, headers=headers)
+    assert response.status_code == 403
