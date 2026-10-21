@@ -674,6 +674,7 @@ class TestProjectAdminForks:
             headers=csrf(client),
         )
         assert response.status_code == 403
+        assert response.json()["detail"] == "Not allowed to act on this project"
         assert not (prompt_tree / "de/explainer__beta").exists()
 
     def test_project_admin_fork_with_directory_without_marker_is_403(
@@ -686,6 +687,7 @@ class TestProjectAdminForks:
             headers=csrf(client),
         )
         assert response.status_code == 403
+        assert response.json()["detail"] == "A fork directory must contain '__'"
         assert not (prompt_tree / "de/mine").exists()
 
     def test_project_admin_saves_own_fork(self, client, login_project_admin, own_fork):
@@ -704,6 +706,7 @@ class TestProjectAdminForks:
             "/admin/api/prompts/de/explainer", json=self._body(), headers=csrf(client)
         )
         assert response.status_code == 403
+        assert response.json()["detail"] == "Not allowed to change this prompt"
         assert shared.read_text(encoding="utf-8") == before
 
     def test_project_admin_cannot_save_template_outside_fork(
@@ -713,16 +716,20 @@ class TestProjectAdminForks:
         would rewrite that template for every prompt that uses it."""
         shared = prompt_tree / "de/explainer/system.jinja"
         document = (own_fork / "prompt.yaml").read_text(encoding="utf-8")
-        (own_fork / "prompt.yaml").write_text(
-            document.replace('file: "system.jinja"', 'file: "../explainer/system.jinja"'),
-            encoding="utf-8",
-        )
+        # The on-disk document must already reference the shared template, or
+        # build_write_set refuses the save (409, a file it never referenced)
+        # before require_within is reached.
+        pointed = document.replace('file: "system.jinja"', 'file: "../explainer/system.jinja"')
+        assert pointed != document
+        (own_fork / "prompt.yaml").write_text(pointed, encoding="utf-8")
         login_project_admin(managed=["Alpha"])
         before = shared.read_text(encoding="utf-8")
         response = client.put(
             self.FORK, json=self._body(file="../explainer/system.jinja"), headers=csrf(client)
         )
         assert response.status_code == 403
+        # require_within's refusal, not the ownership check's.
+        assert response.json()["detail"] == "Not allowed to change files outside this prompt"
         assert shared.read_text(encoding="utf-8") == before
         assert not (own_fork / "system.jinja.bak").exists()
 
@@ -732,6 +739,31 @@ class TestProjectAdminForks:
             "/admin/api/prompts/de/explainer/plan", json=self._body(), headers=csrf(client)
         )
         assert response.status_code == 403
+        assert response.json()["detail"] == "Not allowed to change this prompt"
+
+    @pytest.mark.parametrize("route", ["put", "plan"])
+    def test_ownership_is_checked_before_orphaned_variants(
+        self, client, login_project_admin, own_fork, config_path, route
+    ):
+        """A non-owner gets the 403, not a 409 naming the variants that other
+        projects still reference."""
+        config_path.write_text(
+            config_path.read_text(encoding="utf-8")
+            + '\n[testbench-ai-service.projects."Gamma".agents.explainer.prompt]\n'
+            + 'file = "de/explainer/prompt.yaml"\nvariant = "Legacy"\n',
+            encoding="utf-8",
+        )
+        login_project_admin(managed=["Alpha"])
+        if route == "put":
+            response = client.put(
+                "/admin/api/prompts/de/explainer", json=self._body(), headers=csrf(client)
+            )
+        else:
+            response = client.post(
+                "/admin/api/prompts/de/explainer/plan", json=self._body(), headers=csrf(client)
+            )
+        assert response.status_code == 403
+        assert response.json()["detail"] == "Not allowed to change this prompt"
 
     def test_tree_marks_only_owned_forks_editable(self, client, login_project_admin, own_fork):
         login_project_admin(managed=["Alpha"])

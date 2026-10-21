@@ -105,6 +105,13 @@ _OWN = frozenset({"Alpha", "Release 2.0"})
         {'projects."Alpha".agents.r.prompt': {"file": "/etc/x.yaml"}},
         {'projects."Alpha".agents.r': {"prompt": {"file": "../x.yaml"}}},
         {'projects."Alpha"': {"agents": {"r": {"prompt": {"file": "/etc/x.yaml"}}}}},
+        # The projects table itself, as one segment: it would name every project.
+        {"projects": {"Alpha": {"language": "en"}}},
+        {"projects": {}},
+        # llm_config is held to the allow-list wherever it appears below a
+        # project, also under an agent (where the model would ignore it today).
+        {'projects."Alpha".agents.x.llm_config.class_path': "x.Y"},
+        {'projects."Alpha".agents.x': {"llm_config": {"class_path": "x.Y"}}},
     ],
 )
 def test_project_admin_edit_is_refused(edits):

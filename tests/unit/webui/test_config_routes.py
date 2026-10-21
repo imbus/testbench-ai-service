@@ -825,6 +825,24 @@ def test_project_admin_can_apply_own_project(file_client, login_project_admin_on
     assert 'language = "en"' in config_file.read_text(encoding="utf-8")
 
 
+def test_project_admin_malformed_path_is_400_before_the_policy(
+    file_client, login_project_admin_on_file, config_file
+):
+    """validate_edit_paths runs first: a malformed path is a 400 for everyone,
+    never a 403 the policy computed from a path it could not split."""
+    login_project_admin_on_file(managed=["Alpha"])
+    before = config_file.read_bytes()
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {'projects."Alpha': "en"}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 400
+    assert config_file.read_bytes() == before
+
+
 def test_project_admin_mixed_apply_writes_nothing(
     file_client, login_project_admin_on_file, config_file
 ):
@@ -838,6 +856,7 @@ def test_project_admin_mixed_apply_writes_nothing(
     )
 
     assert response.status_code == 403
+    assert response.json()["detail"] == "Not allowed to change 'projects.\"Beta\".language'"
     assert config_file.read_bytes() == before
 
 
@@ -849,6 +868,7 @@ def test_project_admin_preview_of_global_key_is_403(file_client, login_project_a
     )
 
     assert response.status_code == 403
+    assert response.json()["detail"] == "Not allowed to change 'port'"
 
 
 def test_reader_without_projects_still_gets_403(file_client, login_project_admin_on_file):
@@ -859,3 +879,4 @@ def test_reader_without_projects_still_gets_403(file_client, login_project_admin
     )
 
     assert response.status_code == 403
+    assert "project administration rights" in response.json()["detail"]

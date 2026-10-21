@@ -151,9 +151,10 @@ def check_config_edits(session: Session, edits: dict[str, Any]) -> None:
     """Refuse (403) edits a non-admin may not make; the admin is never checked.
 
     A project admin may only touch ``projects."<name>"`` for a project they
-    manage, and only the allowed ``llm_config`` fields and safe ``prompt.file`` values. The whole batch is
-    checked before anything is planned, so one forbidden path refuses all of it.
-    Paths must already be well formed (``validate_edit_paths``).
+    manage, and there only the allowed ``llm_config`` fields and safe
+    ``prompt.file`` values. The whole batch is checked before anything is
+    planned, so one forbidden path refuses all of it. Paths must already be
+    well formed (``validate_edit_paths``).
     """
     if session.is_admin:
         return

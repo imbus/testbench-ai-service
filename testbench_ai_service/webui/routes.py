@@ -855,8 +855,10 @@ def plan_prompt_save(
     """
     prompts_dir = _require_prompts_dir(config)
     path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
-    _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
+    # Ownership first: a non-owner gets a 403 without learning which
+    # variants other projects still reference (the 409 names them).
     _require_owned(session, request, path, prompts_dir)
+    _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
 
     plan = build_write_set(body, path, prompts_dir)
     if not session.is_admin:
@@ -884,11 +886,13 @@ def save_prompt(
     prompts_dir = _require_prompts_dir(config)
     path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
 
+    # Ownership first, as in the plan: a non-owner gets a 403, not a 409
+    # naming the variants other projects still reference.
+    _require_owned(session, request, path, prompts_dir)
+
     # There is no `get_config_path` dependency: routes.py reads the path off
     # app.state, the way `read_config` and `read_prompt_metadata` already do.
     _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
-
-    _require_owned(session, request, path, prompts_dir)
 
     plan = build_write_set(body, path, prompts_dir)
     if not session.is_admin:
@@ -933,8 +937,10 @@ async def fork_prompt(
     check and the ``mkdir(exist_ok=True)`` below: if another process creates
     and populates that same directory in the interval, this request's rollback
     (on a later failure) removes files it did not create, plus their
-    ``.bak`` siblings. Admin-only and extremely narrow -- documented here
-    rather than locked against.
+    ``.bak`` siblings. Extremely narrow, but no longer admin-only: project
+    admins reach this route too (forking into a ``__`` directory for a project
+    they manage), so the race is open to them as well. Documented here rather
+    than locked against.
     """
     prompts_dir = _require_prompts_dir(config)
 
