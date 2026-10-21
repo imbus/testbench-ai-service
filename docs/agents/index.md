@@ -33,6 +33,7 @@ Opt-in (not part of the default agents, enable it in the `config.toml`):
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | [`test_planner`](test-planner.md)     | Plans the most diverse test selection of a cycle via embeddings: sets the selected test cases to Planned and logs the result. |
 | [`coverage_checker`](coverage-checker.md) | Checks whether the tests linked to a requirement prove all its aspects. Results are added to the review comment of every linked test case set. |
+| [`link_finder`](link-finder.md) | Finds test case sets that test a requirement but are not linked to it. Every candidate gets a hint in its review comment; links are never set. |
 
 ---
 
