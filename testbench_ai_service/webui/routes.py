@@ -15,6 +15,7 @@ from testbench_ai_service.models.logging import LogLevel
 from testbench_ai_service.usage import UsageRecordingClient, UsageStore, get_usage_store
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
+from testbench_ai_service.webui.access import check_config_edits
 from testbench_ai_service.webui.activity import MAX_LIMIT, read_activity
 from testbench_ai_service.webui.agent_context import agent_context_sample
 from testbench_ai_service.webui.atomic import write_atomic
@@ -27,6 +28,7 @@ from testbench_ai_service.webui.auth import (
     is_admin_role,
     require_admin,
     require_csrf,
+    require_editor,
     set_session_cookies,
 )
 from testbench_ai_service.webui.catalogue import PROVIDER_KEY_NAMES, build_catalogue
@@ -430,7 +432,7 @@ async def preview_config(
     request: Request,
     config: AppConfig = Depends(get_app_config),
     registry: TaskRegistry = Depends(get_task_registry),
-    _: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     __: None = Depends(require_csrf),
 ) -> PreviewResponse:
     """What applying the operator's edits would do -- diff, validity, restart need.
@@ -438,8 +440,11 @@ async def preview_config(
     Mutating-route guards despite reading nothing: it carries a body of
     operator edits and is only meaningful to someone who could apply them, so
     it is gated exactly like ``apply`` rather than becoming a way for a
-    non-admin to explore the config surface.
+    non-admin to explore the config surface. A project admin passes the gate
+    but ``check_config_edits`` limits them to their own projects.
     """
+    validate_edit_paths(body.edits)
+    check_config_edits(session, body.edits)
     preview, _text, _has_write = _plan_change(
         body.edits, Path(request.app.state.config_path), config
     )
@@ -453,7 +458,7 @@ async def apply_config(
     request: Request,
     config: AppConfig = Depends(get_app_config),
     registry: TaskRegistry = Depends(get_task_registry),
-    _: Session = Depends(require_admin),
+    session: Session = Depends(require_editor),
     __: None = Depends(require_csrf),
     _log: Session = Depends(bind_log_user),
 ) -> ApplyResponse:
@@ -485,6 +490,8 @@ async def apply_config(
     and that is reported through ``reload_detail`` on a normal 200, not
     raised -- the write already succeeded and the response must say so.
     """
+    validate_edit_paths(body.edits)
+    check_config_edits(session, body.edits)
     config_path = Path(request.app.state.config_path)
     preview, proposed_text, has_write = _plan_change(body.edits, config_path, config)
 

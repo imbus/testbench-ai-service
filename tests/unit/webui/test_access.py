@@ -1,10 +1,13 @@
 from unittest.mock import MagicMock
 
+import pytest
 import requests
+from fastapi import HTTPException
 
 from testbench_ai_service.models.testbench import ProjectMember
 from testbench_ai_service.webui.access import (
     can_manage,
+    check_config_edits,
     managed_projects_from,
     read_managed_projects,
 )
@@ -60,3 +63,56 @@ def test_can_manage():
     assert can_manage(project_admin, "Alpha") is True
     assert can_manage(project_admin, "Beta") is False
     assert can_manage(project_admin, None) is False
+
+
+_OWN = frozenset({"Alpha", "Release 2.0"})
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        {"language": "en"},
+        {'projects."Beta".language': "en"},
+        # One allowed path must not carry a forbidden one along.
+        {'projects."Alpha".language': "en", 'projects."Beta".language': "en"},
+        {'projects."Alpha".llm_config.class_path': "x.Y"},
+        {'projects."Alpha".llm_config.azure_endpoint': "https://evil"},
+        {'projects."Alpha".llm_config.auth_method': "azure_ad"},
+        {'projects."Alpha".llm_config.provider': "custom"},
+        # A table written as a value is held to the same rules as its leaves.
+        {'projects."Alpha".llm_config': {"provider": "custom"}},
+        {'projects."Alpha"': {"llm_config": {"class_path": "x.Y"}}},
+    ],
+)
+def test_project_admin_edit_is_refused(edits):
+    with pytest.raises(HTTPException) as exc:
+        check_config_edits(_session(False, _OWN), edits)
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        {'projects."Alpha".language': "en"},
+        {'projects."Release 2.0".agents.test_case_set_reviewer.enabled': False},
+        {'projects."Alpha".llm_config.model': "gpt-4o"},
+        {'projects."Alpha".llm_config.provider': "anthropic"},
+        {'projects."Alpha"': None},
+    ],
+)
+def test_project_admin_edit_is_allowed(edits):
+    check_config_edits(_session(False, _OWN), edits)
+
+
+def test_admin_is_never_checked():
+    edits = {"language": "en", 'projects."Beta".llm_config.class_path': "x"}
+    check_config_edits(_session(True), edits)
+
+
+def test_refusal_names_the_first_offending_path():
+    with pytest.raises(HTTPException) as exc:
+        check_config_edits(
+            _session(False, _OWN),
+            {'projects."Alpha".language': "en", 'projects."Beta".language': "en"},
+        )
+    assert "Beta" in exc.value.detail

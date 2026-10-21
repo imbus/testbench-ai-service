@@ -162,6 +162,23 @@ def require_admin(session: Session = Depends(current_session)) -> Session:
     return session
 
 
+def require_editor(session: Session = Depends(current_session)) -> Session:
+    """Guard the config edit routes: an admin or a project admin with projects.
+
+    Which paths the latter may change is decided per request by
+    ``access.check_config_edits``; this only keeps everyone else out early.
+    """
+    if not (session.is_admin or session.managed_projects):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "This action requires the TestBench Administrator role "
+                "or project administration rights"
+            ),
+        )
+    return session
+
+
 def require_csrf(
     session: Session = Depends(current_session),
     token: str | None = Header(default=None, alias=CSRF_HEADER),

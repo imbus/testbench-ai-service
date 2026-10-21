@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from testbench_ai_service.webui.config_io import REDACTED_SENTINEL, read_config_file
 from testbench_ai_service.webui.routes import _plan_change
+from tests.unit.webui.conftest import _membership
 
 COMMENTED = """\
 [testbench-ai-service]
@@ -782,3 +783,79 @@ def test_status_survives_an_invalid_file_on_disk(file_client, admin, config_file
 
     assert response.status_code == 200
     assert response.json()["restart_required"] == []
+
+
+@pytest.fixture
+def login_project_admin_on_file(file_client, tb_connection):
+    """A project-admin login against the file-backed app of this module."""
+
+    def _login(managed: list[str], other: list[str] | None = None, roles=None):
+        memberships = [_membership(p, "TestManager") for p in managed] + [
+            _membership(p, "Tester") for p in other or []
+        ]
+
+        def _get(url, *args, **kwargs):
+            response = MagicMock()
+            if url.endswith("2/users/self/projectRoles"):
+                response.json.return_value = memberships
+            else:
+                response.json.return_value = {"key": "u-1"}
+            return response
+
+        tb_connection.session.get.side_effect = _get
+        tb_connection.read_user_roles.return_value = roles or ["ProjectAdministrator"]
+        with patch("testbench_ai_service.webui.tb_link.TBConnection", return_value=tb_connection):
+            return file_client.post(
+                "/admin/api/session", json={"username": "a.mueller", "password": "pw"}
+            )
+
+    return _login
+
+
+def test_project_admin_can_apply_own_project(file_client, login_project_admin_on_file, config_file):
+    login_project_admin_on_file(managed=["Alpha"])
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {'projects."Alpha".language': "en"}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 200
+    assert 'language = "en"' in config_file.read_text(encoding="utf-8")
+
+
+def test_project_admin_mixed_apply_writes_nothing(
+    file_client, login_project_admin_on_file, config_file
+):
+    login_project_admin_on_file(managed=["Alpha"], other=["Beta"])
+    before = config_file.read_bytes()
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {'projects."Alpha".language': "en", 'projects."Beta".language': "en"}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 403
+    assert config_file.read_bytes() == before
+
+
+def test_project_admin_preview_of_global_key_is_403(file_client, login_project_admin_on_file):
+    login_project_admin_on_file(managed=["Alpha"])
+
+    response = file_client.post(
+        "/admin/api/config/preview", json={"edits": {"port": 9999}}, headers=csrf(file_client)
+    )
+
+    assert response.status_code == 403
+
+
+def test_reader_without_projects_still_gets_403(file_client, login_project_admin_on_file):
+    login_project_admin_on_file(managed=[], roles=["Tester"])
+
+    response = file_client.post(
+        "/admin/api/config/preview", json={"edits": {}}, headers=csrf(file_client)
+    )
+
+    assert response.status_code == 403
