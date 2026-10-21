@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
@@ -8,6 +8,7 @@ import { de } from '../i18n/de'
 // these tests asserting against a key nothing writes.
 import { DRAFT_STORAGE_KEY, DraftProvider } from '../state/draft'
 import { ConfigSection } from './ConfigSection'
+import { openDropdown } from '../test/prime'
 
 // Correction 1: the brief's fixture included `in_sync: true`. The backend
 // model and ConfigResponse (src/api/types.ts) carry no such field — only
@@ -518,4 +519,49 @@ test('a project admin reads the global scope and a project they do not manage', 
   })
   await screen.findByRole('tab', { name: 'Alpha' })
   expect(screen.queryByLabelText('model')).not.toBeInTheDocument()
+})
+
+test('a project admin can start an LLM override on a managed project only', async () => {
+  // Beta and Gamma are configured but neither overrides llm_config yet, so
+  // both are candidates for the add picker -- only the managed one may be
+  // offered, since the server refuses the other with a 403 anyway.
+  const running = {
+    ...PROJECT_CONFIG.running,
+    projects: {
+      ...PROJECT_CONFIG.running.projects,
+      Beta: { language: 'en', llm_config: null, agents: null },
+      Gamma: { language: 'en', llm_config: null, agents: null },
+    },
+  }
+  renderSection({
+    section: 'llm',
+    isAdmin: false,
+    managedProjects: ['Beta'],
+    running,
+    disk: PROJECT_CONFIG.disk,
+  })
+  await screen.findByRole('tab', { name: 'Alpha' })
+  const user = userEvent.setup()
+  const picker = await openDropdown(user, screen.getByLabelText(de.addProjectOverride))
+  expect(within(picker).getByRole('option', { name: 'Beta', hidden: true })).toBeInTheDocument()
+  expect(
+    within(picker).queryByRole('option', { name: 'Gamma', hidden: true }),
+  ).not.toBeInTheDocument()
+
+  // Picking it opens the project scope with the allow-listed fields editable.
+  await user.click(within(picker).getByRole('option', { name: 'Beta', hidden: true }))
+  expect(await screen.findByRole('tab', { name: 'Beta' })).toHaveAttribute('aria-selected', 'true')
+  expect(screen.getByLabelText('timeout')).toBeInTheDocument()
+})
+
+test('a project admin managing nothing gets no add-override picker', async () => {
+  renderSection({
+    section: 'llm',
+    isAdmin: false,
+    managedProjects: [],
+    running: PROJECT_CONFIG.running,
+    disk: PROJECT_CONFIG.disk,
+  })
+  await screen.findByRole('tab', { name: 'Alpha' })
+  expect(screen.queryByLabelText(de.addProjectOverride)).not.toBeInTheDocument()
 })
