@@ -5,6 +5,8 @@ may edit only the projects in which they are also TestManager -- that
 combination is what TestBench itself treats as "manages this project".
 """
 
+import re
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any
 
 from fastapi import HTTPException, status
@@ -19,10 +21,17 @@ from testbench_ai_service.webui.session import Session
 PROJECT_ADMIN_ROLE = "ProjectAdministrator"
 PROJECT_MANAGER_ROLE = "TestManager"
 
-# llm_config fields a project admin may not set. They decide which code the
-# service imports or which endpoint receives the credentials, so they stay with
-# the global administrator -- as does selecting the "custom" provider.
-BLOCKED_LLM_FIELDS = frozenset({"class_path", "azure_endpoint", "auth_method"})
+# agents.<key>.prompt.file below a project: four segments.
+_PROMPT_FILE_DEPTH = 4
+
+# The only llm_config fields a project admin may set. An allow-list, because
+# LLMConfig accepts arbitrary extras and any of them could steer which code is
+# imported or where credentials are sent (class_path, azure_endpoint,
+# auth_method, deployment_mapping, ...). Selecting the "custom" provider is
+# refused separately.
+ALLOWED_LLM_FIELDS = frozenset(
+    {"provider", "model", "timeout", "max_retries", "api_version", "extra_models"}
+)
 
 
 def managed_projects_from(
@@ -66,40 +75,45 @@ def can_manage(session: Session, project: str | None) -> bool:
     return project in session.managed_projects
 
 
-def _llm_violation(rest: list[str], value: Any) -> bool:
-    """Whether setting ``llm_config.<rest>`` to *value* touches a blocked field.
+def _safe_prompt_file(value: Any) -> bool:
+    """Whether *value* is a relative path without ``..`` on any platform.
 
-    ``rest`` is what follows ``llm_config`` in the path; empty means the whole
-    table is being written, in which case *value* is its content.
+    ``resolve_prompt_file_path`` accepts absolute and ``..`` paths, which would
+    let a project admin probe files outside the prompt directory. Both POSIX and
+    Windows spellings are checked, whatever OS the service runs on.
     """
-    if not rest:
-        return isinstance(value, dict) and (
-            bool(BLOCKED_LLM_FIELDS & value.keys()) or value.get("provider") == "custom"
-        )
-    if rest[0] in BLOCKED_LLM_FIELDS:
-        return True
-    return rest == ["provider"] and value == "custom"
-
-
-def _value_violation(value: Any) -> bool:
-    """Whether a table written as a value carries a forbidden ``llm_config``.
-
-    A path may stop above ``llm_config`` and hand over a nested dict instead,
-    so the same rules must hold for every ``llm_config`` inside it.
-    """
-    if not isinstance(value, dict):
+    if not isinstance(value, str) or not value:
         return False
-    return any(
-        _llm_violation([], v) if k == "llm_config" else _value_violation(v)
-        for k, v in value.items()
-    )
+    if value[0] in "/\\" or PureWindowsPath(value).anchor or PurePosixPath(value).is_absolute():
+        return False
+    return ".." not in re.split(r"[/\\]", value)
+
+
+def _violates(rel: list[str], value: Any) -> bool:
+    """Whether writing *value* at *rel* (the path below a project) is forbidden.
+
+    A dict value stands for every path beneath it, so it is walked with the
+    same rules as the equivalent leaf paths. Keys are checked before the walk,
+    so an empty dict cannot smuggle a forbidden key in.
+    """
+    if "llm_config" in rel:
+        rest = rel[rel.index("llm_config") + 1 :]
+        if rest and rest[0] not in ALLOWED_LLM_FIELDS:
+            return True
+        if rest == ["provider"] and value == "custom":
+            return True
+    if len(rel) == _PROMPT_FILE_DEPTH and rel[0] == "agents" and rel[2:] == ["prompt", "file"]:
+        return value is not None and not _safe_prompt_file(value)
+    if isinstance(value, dict):
+        return any(_violates([*rel, key], item) for key, item in value.items())
+    return False
 
 
 def check_config_edits(session: Session, edits: dict[str, Any]) -> None:
     """Refuse (403) edits a non-admin may not make; the admin is never checked.
 
     A project admin may only touch ``projects."<name>"`` for a project they
-    manage, and never the blocked ``llm_config`` fields. The whole batch is
+    manage, and only the allowed ``llm_config`` fields and safe ``prompt.file`` values. The whole batch is
     checked before anything is planned, so one forbidden path refuses all of it.
     Paths must already be well formed (``validate_edit_paths``).
     """
@@ -111,11 +125,7 @@ def check_config_edits(session: Session, edits: dict[str, Any]) -> None:
             segments[0] == "projects" and len(segments) > 1 and can_manage(session, segments[1])
         )
         if allowed:
-            tail = segments[2:]
-            if "llm_config" in tail:
-                allowed = not _llm_violation(tail[tail.index("llm_config") + 1 :], value)
-            else:
-                allowed = not _value_violation(value)
+            allowed = not _violates(segments[2:], value)
         if not allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

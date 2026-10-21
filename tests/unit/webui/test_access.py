@@ -82,6 +82,25 @@ _OWN = frozenset({"Alpha", "Release 2.0"})
         # A table written as a value is held to the same rules as its leaves.
         {'projects."Alpha".llm_config': {"provider": "custom"}},
         {'projects."Alpha"': {"llm_config": {"class_path": "x.Y"}}},
+        # Only the projects table is theirs, even if a name matches a managed project.
+        {'agents."Alpha".class_path': "x.Y"},
+        {'llm_config."Alpha".model': "x"},
+        # llm_config is an allow-list: unknown extras are refused too.
+        {'projects."Alpha".llm_config.deployment_mapping': {"a": "b"}},
+        {'projects."Alpha".llm_config._strict_response_validation': True},
+        {'projects."Alpha".llm_config.class_path': {}},
+        {'projects."Alpha".llm_config': {"model": "x", "deployment_mapping": {"a": "b"}}},
+        {'projects."Alpha"': {"llm_config": {"model": "x", "deployment_mapping": {}}}},
+        # prompt.file must stay a relative path inside the prompt directory.
+        {'projects."Alpha".agents.r.prompt.file': "/etc/x.yaml"},
+        {'projects."Alpha".agents.r.prompt.file': r"C:\x\prompt.yaml"},
+        {'projects."Alpha".agents.r.prompt.file': r"\\server\share\p.yaml"},
+        {'projects."Alpha".agents.r.prompt.file': r"../../x/prompt.yaml"},
+        {'projects."Alpha".agents.r.prompt.file': r"de\..\..\x.yaml"},
+        {'projects."Alpha".agents.r.prompt.file': 5},
+        {'projects."Alpha".agents.r.prompt': {"file": "/etc/x.yaml"}},
+        {'projects."Alpha".agents.r': {"prompt": {"file": "../x.yaml"}}},
+        {'projects."Alpha"': {"agents": {"r": {"prompt": {"file": "/etc/x.yaml"}}}}},
     ],
 )
 def test_project_admin_edit_is_refused(edits):
@@ -98,6 +117,19 @@ def test_project_admin_edit_is_refused(edits):
         {'projects."Alpha".llm_config.model': "gpt-4o"},
         {'projects."Alpha".llm_config.provider': "anthropic"},
         {'projects."Alpha"': None},
+        {
+            'projects."Alpha".llm_config': {
+                "provider": "azure",
+                "model": "m",
+                "timeout": 30,
+                "max_retries": 2,
+                "api_version": "v1",
+                "extra_models": {"a": "b"},
+            }
+        },
+        {'projects."Alpha".agents.r.prompt.file': "de/reviewer__alpha/prompt.yaml"},
+        {'projects."Alpha".agents.r.prompt.file': None},
+        {'projects."Alpha".agents.r.prompt': {"file": "de/p.yaml"}},
     ],
 )
 def test_project_admin_edit_is_allowed(edits):
