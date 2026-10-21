@@ -1,9 +1,12 @@
+import logging
+import os
 from pathlib import Path
 
 import pytest
 
 from testbench_ai_service.models.config import PromptConfig
-from testbench_ai_service.utils.build_prompt_utils import build_prompt
+from testbench_ai_service.models.prompt import MessageTemplate
+from testbench_ai_service.utils.build_prompt_utils import build_messages, build_prompt
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 
 _DATA_DIR = Path(__file__).parent / "data"
@@ -83,3 +86,31 @@ class TestBuildPrompt:
     def test_missing_prompt_file_raises_file_not_found(self):
         with pytest.raises(FileNotFoundError):
             get_prompt_definition("nonexistent.yaml")
+
+
+class TestBuildMessagesSandbox:
+    """Runtime rendering is sandboxed: project admins can save fork templates,
+    so a template must never reach Python internals through dunder traversal."""
+
+    _PAYLOAD = "{{ cycler.__init__.__globals__.os.getpid() }}"
+
+    def test_dunder_traversal_in_inline_template_does_not_execute(self, caplog):
+        template = MessageTemplate(role="user", text=self._PAYLOAD)
+        with caplog.at_level(logging.ERROR):
+            messages = build_messages([template], {}, {}, Path())
+        assert str(os.getpid()) not in messages[0].content
+        # Same failure path as a broken template: the raw text, not a render.
+        assert messages[0].content == self._PAYLOAD
+        assert any("unsafe" in r.getMessage() for r in caplog.records)
+
+    def test_dunder_traversal_in_file_template_does_not_execute(self, tmp_path):
+        (tmp_path / "evil.jinja").write_text(self._PAYLOAD, encoding="utf-8")
+        template = MessageTemplate(role="user", file="evil.jinja")
+        messages = build_messages([template], {}, {}, tmp_path)
+        assert str(os.getpid()) not in messages[0].content
+        assert messages[0].content == ""
+
+    def test_mutating_builtin_methods_are_refused(self):
+        template = MessageTemplate(role="user", text="{% set x = [] %}{{ x.append(1) }}{{ x }}")
+        messages = build_messages([template], {}, {}, Path())
+        assert "[1]" not in messages[0].content

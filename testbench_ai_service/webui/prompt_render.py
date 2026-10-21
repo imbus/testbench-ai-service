@@ -5,16 +5,20 @@ text taken from the request body. Jinja2's default ``Environment`` permits
 attribute traversal, so ``{{ ''.__class__.__mro__[1].__subclasses__() }}``
 reaches Python internals and from there the process's own globals -- an
 unsandboxed render endpoint is remote code execution against the service.
-``SandboxedEnvironment`` refuses that traversal. Real templates use
-``agent.*`` and ``vars.*`` and nothing else, so the preview still matches what
-the agent sends. The route is admin-only on top of this (design D3).
+``ImmutableSandboxedEnvironment`` refuses that traversal (and mutating
+builtins such as ``list.append``). Real templates use ``agent.*`` and
+``vars.*`` and nothing else, so the preview still matches what the agent
+sends. The route is open to admins and to project admins (for their managed
+projects), so the role check narrows *who* may render; only the sandbox stops
+what a template can reach.
 
 Lint uses a plain environment because ``parse()`` builds an AST and evaluates
 nothing.
 
 Both environments carry ``trim_blocks``/``lstrip_blocks`` to match
-``utils/build_prompt_utils.py:34``. Whitespace control changes what a template
-*emits*, so different flags would make the preview disagree with the runtime.
+``utils/build_prompt_utils.py::build_messages``, which renders in the same
+sandbox at runtime. Whitespace control changes what a template *emits*, so
+different flags would make the preview disagree with the runtime.
 """
 
 from collections.abc import Iterable
@@ -22,7 +26,7 @@ from typing import Any
 
 from jinja2 import Environment, StrictUndefined, TemplateSyntaxError, nodes
 from jinja2.exceptions import SecurityError, UndefinedError
-from jinja2.sandbox import SandboxedEnvironment
+from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.webui.models import (
@@ -42,20 +46,20 @@ _MIN_AGENT_PATH_LENGTH = 2
 
 
 def _lint_env() -> Environment:
-    # trim_blocks/lstrip_blocks match utils/build_prompt_utils.py:34 (and
+    # trim_blocks/lstrip_blocks match build_prompt_utils.build_messages (and
     # _render_env, below) -- keep all three in sync if either changes, or the
     # lint pane will disagree with what the runtime actually emits. Prompts
     # are rendered as plain text, never HTML, so autoescape is off.
     return Environment(autoescape=False, trim_blocks=True, lstrip_blocks=True)
 
 
-def _render_env() -> SandboxedEnvironment:
+def _render_env() -> ImmutableSandboxedEnvironment:
     # StrictUndefined so a typo in a variable name is reported rather than
     # rendering as an empty string the operator would never notice.
-    return SandboxedEnvironment(
+    return ImmutableSandboxedEnvironment(
         autoescape=False,  # Prompts are plain text, never HTML.
         undefined=StrictUndefined,
-        # trim_blocks/lstrip_blocks match utils/build_prompt_utils.py:34 (and
+        # trim_blocks/lstrip_blocks match build_prompt_utils.build_messages (and
         # _lint_env, above) -- keep all three in sync if either changes, or
         # the preview will disagree with what the agent actually receives.
         trim_blocks=True,

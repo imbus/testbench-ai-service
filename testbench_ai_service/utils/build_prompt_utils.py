@@ -1,7 +1,9 @@
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, TemplateSyntaxError, UndefinedError
+from jinja2 import TemplateSyntaxError, UndefinedError
+from jinja2.exceptions import SecurityError
+from jinja2.sandbox import ImmutableSandboxedEnvironment
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData
@@ -31,7 +33,12 @@ def build_messages(
     Returns:
         List of ``Message`` objects ready to be sent to an LLM.
     """
-    env = Environment(trim_blocks=True, lstrip_blocks=True)
+    # Sandboxed because project admins can save fork templates: a plain
+    # Environment lets ``{{ cycler.__init__.__globals__.os }}`` reach the
+    # service process. Immutable additionally refuses ``list.append`` and
+    # friends -- real prompts only read ``agent.*``/``vars.*``. Whitespace
+    # flags match webui/prompt_render.py so the preview stays faithful.
+    env = ImmutableSandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
     messages: list[Message] = []
 
     for msg_template in templates:
@@ -44,6 +51,9 @@ def build_messages(
         except TemplateSyntaxError as e:
             text = (msg_template.text or "").strip()
             logger.error(f"Invalid Jinja2 syntax in message template: {e}")
+        except SecurityError as e:
+            text = (msg_template.text or "").strip()
+            logger.error(f"Refused unsafe operation in message template: {e}")
         except FileNotFoundError as e:
             text = (msg_template.text or "").strip()
             logger.error(f"Template file not found: {e}")
