@@ -103,7 +103,7 @@ async def trigger_agent_execution(
     app_config: AppConfig,
     auth_info: AuthInfo,
     registry: TaskRegistry,
-    usage_store: UsageStore | None = None,
+    usage_store: UsageStore,
 ) -> TriggerAgentResponse:
     """Execute the trigger flow shared by all agent endpoints.
 
