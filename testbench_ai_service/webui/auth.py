@@ -10,6 +10,7 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import log_user_key, log_username, logger
 from testbench_ai_service.models.testbench import GlobalHumanRole
 from testbench_ai_service.utils.testbench import get_user_key
+from testbench_ai_service.webui.access import read_managed_projects
 from testbench_ai_service.webui.projects import ProjectFetch, fetch_projects
 from testbench_ai_service.webui.session import (
     CSRF_COOKIE,
@@ -54,6 +55,8 @@ class LoginResult:
     projects: ProjectFetch
     link: TestBenchLink
     user_key: str | None = None
+    # Projects a ProjectAdministrator may edit; empty for everyone else.
+    managed_projects: frozenset[str] = frozenset()
 
 
 def _read_user_key(conn: TBConnection) -> str | None:
@@ -76,13 +79,14 @@ def authenticate(config: AppConfig, username: str, password: str) -> LoginResult
             a reason other than the credentials themselves.
     """
     conn, roles = open_connection(config, username, password)
-    # fetch_projects and _read_user_key never raise, so nothing past this point
+    # fetch_projects, _read_user_key and read_managed_projects never raise, so nothing past this point
     # can leave the open connection without an owner.
     return LoginResult(
         roles=roles,
         projects=fetch_projects(conn),
         link=TestBenchLink(config, username, password, conn),
         user_key=_read_user_key(conn),
+        managed_projects=read_managed_projects(conn, roles),
     )
 
 

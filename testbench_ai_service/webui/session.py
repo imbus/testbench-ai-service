@@ -65,6 +65,10 @@ class Session:
     projects_fetched_at: datetime | None = None
     projects_error: str | None = None
 
+    # Projects a ProjectAdministrator may edit (see webui.access); empty for
+    # a global admin, who needs no list, and for everyone else.
+    managed_projects: frozenset[str] = frozenset()
+
 
 class SessionStore:
     """In-memory sessions with an idle timeout and an absolute cap."""
@@ -87,6 +91,7 @@ class SessionStore:
         is_admin: bool,
         tb_link: TestBenchLink | None = None,
         user_key: str | None = None,
+        managed_projects: frozenset[str] = frozenset(),
     ) -> Session:
         moment = self._now()
         self._sweep(moment)
@@ -100,6 +105,7 @@ class SessionStore:
             created_at=moment,
             last_seen=moment,
             user_key=user_key,
+            managed_projects=managed_projects,
         )
         self._sessions[session.sid] = session
         return session

@@ -232,3 +232,22 @@ def test_login_ignores_a_non_string_user_key(client, login, tb_connection):
     assert login().status_code == 200
     (session,) = client.app.state.webui_sessions._sessions.values()
     assert session.user_key is None
+
+
+def test_project_admin_login_reports_managed_projects(login_project_admin):
+    body = login_project_admin(managed=["Release 2.0"], other=["Beta"]).json()
+    assert body["managed_projects"] == ["Release 2.0"]
+    assert body["is_admin"] is False
+
+
+def test_unreadable_project_roles_still_sign_in(login, tb_connection):
+    tb_connection.session.get.side_effect = requests.exceptions.HTTPError("404")
+    response = login(roles=["ProjectAdministrator"])
+    assert response.status_code == 200
+    assert response.json()["managed_projects"] == []
+
+
+def test_get_session_reports_managed_projects(client, login_project_admin):
+    login_project_admin(managed=["Beta", "Alpha"])
+    response = client.get("/admin/api/session")
+    assert response.json()["managed_projects"] == ["Alpha", "Beta"]

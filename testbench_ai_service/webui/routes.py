@@ -215,6 +215,7 @@ def sign_in(
         is_admin=is_admin_role(login.roles),
         tb_link=login.link,
         user_key=login.user_key,
+        managed_projects=login.managed_projects,
     )
     record_projects(session, login.projects)
     set_session_cookies(response, session, config)
@@ -222,6 +223,7 @@ def sign_in(
         username=session.username,
         roles=session.roles,
         is_admin=session.is_admin,
+        managed_projects=sorted(session.managed_projects),
         tb_server_url=config.tb_server_url,
     )
 
@@ -236,6 +238,7 @@ async def read_session(
         username=session.username,
         roles=session.roles,
         is_admin=session.is_admin,
+        managed_projects=sorted(session.managed_projects),
         tb_server_url=config.tb_server_url,
     )
 

@@ -19,6 +19,7 @@ class SessionResponse(BaseModel):
     username: str
     roles: list[str]
     is_admin: bool
+    managed_projects: list[str]
     tb_server_url: str
 
 

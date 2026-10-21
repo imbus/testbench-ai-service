@@ -118,3 +118,42 @@ def capture():
     yield handler
     service_logger.removeHandler(handler)
     service_logger.setLevel(previous)
+
+
+def _membership(project: str, role: str) -> dict:
+    return {
+        "userKey": "u-1",
+        "userLogin": "a.mueller",
+        "userName": "A. Mueller",
+        "projectKey": f"key-{project}",
+        "projectName": project,
+        "roles": [role],
+    }
+
+
+@pytest.fixture
+def login_project_admin(login, tb_connection):
+    """Log in as a ProjectAdministrator who is TestManager in *managed*.
+
+    ``conn.session.get`` answers by URL here: the plain ``tb_connection`` returns
+    the same user payload for every GET, which cannot stand in for the
+    ``projectRoles`` list.
+    """
+
+    def _login(managed: list[str], other: list[str] | None = None):
+        memberships = [_membership(p, "TestManager") for p in managed] + [
+            _membership(p, "Tester") for p in other or []
+        ]
+
+        def _get(url, *args, **kwargs):
+            response = MagicMock()
+            if url.endswith("2/users/self/projectRoles"):
+                response.json.return_value = memberships
+            else:
+                response.json.return_value = {"key": "u-1"}
+            return response
+
+        tb_connection.session.get.side_effect = _get
+        return login(roles=["ProjectAdministrator"])
+
+    return _login
