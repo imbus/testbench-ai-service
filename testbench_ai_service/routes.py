@@ -31,6 +31,7 @@ from testbench_ai_service.models.agent import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.prompt import PromptDetailsResponse, PromptVariantResponse
+from testbench_ai_service.usage import UsageStore, get_usage_store
 from testbench_ai_service.utils.config import get_agent_config, get_prompt_config
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 from testbench_ai_service.utils.testbench import get_project_name
@@ -199,6 +200,7 @@ async def trigger_agent(
     app_config: AppConfig = Depends(get_app_config),
     auth_info: AuthInfo = Depends(validate_auth_token),
     registry: TaskRegistry = Depends(get_task_registry),
+    usage_store: UsageStore = Depends(get_usage_store),
 ) -> TriggerAgentResponse:
     return await trigger_agent_execution(
         agent_key=agent_key,
@@ -209,4 +211,5 @@ async def trigger_agent(
         app_config=app_config,
         auth_info=auth_info,
         registry=registry,
+        usage_store=usage_store,
     )
