@@ -103,8 +103,13 @@ class Requirement(BaseModel):
         cls, assignment: RequirementAssignment, extended: "ExtendedRequirement"
     ) -> "Requirement":
         """Merge a requirement's TOV assignment with its extended data."""
+        return cls.from_rm(assignment.key, extended)
+
+    @classmethod
+    def from_rm(cls, key: str, extended: "ExtendedRequirement") -> "Requirement":
+        """A requirement from its extended data, referenced by ``key`` in TestBench."""
         return cls(
-            key=assignment.key,
+            key=key,
             version=extended.key.version,
             title=extended.name,
             description=extended.description,
@@ -253,6 +258,115 @@ def _baselines_by_repository(baselines: list[dict], tov_key: str) -> dict[str, l
                 [_baseline_name(baseline) for baseline in repo_baselines],
             )
     return baselines_by_repo
+
+
+async def find_rm_requirement(
+    conn: TBConnection, rm_service: RmServiceArgs, tov_key: str, ids: list[str]
+) -> ExtendedRequirement | None:
+    """Look a requirement up in the RM service by its ID alone.
+
+    For a requirement that is not assigned in the TOV, TestBench names neither its
+    repository nor its version. So each candidate ID is asked for its versions in the
+    TOV's baselines (or, when TestBench cannot name them, in the RM service's
+    baselines) in turn, and the latest version of the first hit is read. Loading whole
+    requirement trees instead takes minutes on large baselines.
+
+    Args:
+        conn: The active TestBench connection.
+        rm_service: The agent args holding the RM service URL, credentials and projects.
+        tov_key: Key of the TOV whose baselines are searched.
+        ids: The values the requirement may be known by, from the trigger.
+
+    Returns:
+        The requirement's extended data, or ``None`` when no RM service is configured,
+        it cannot be reached, or no baseline knows a requirement with one of ``ids``.
+    """
+    if rm_service.rm_service_url is None or not ids:
+        return None
+    rm_service_url = rm_service.rm_service_url
+    tov_baselines = await _load_tov_baselines(conn, tov_key)
+    with _rm_session(rm_service) as session:
+        if tov_baselines is None:
+            baselines = await asyncio.to_thread(
+                discover_rm_baselines, session, rm_service_url, rm_service.rm_projects
+            )
+        else:
+            baselines = tov_baselines
+        for baseline in baselines:
+            for requirement_id in ids:
+                version = await asyncio.to_thread(
+                    get_latest_requirement_version,
+                    session,
+                    rm_service_url,
+                    baseline["reqProjectName"],
+                    baseline["name"],
+                    requirement_id,
+                )
+                if version is None:
+                    continue
+                logger.debug(
+                    "Requirement '%s' found in baseline '%s' with version '%s'",
+                    requirement_id,
+                    _baseline_name(baseline),
+                    version,
+                )
+                return await asyncio.to_thread(
+                    get_extended_requirement,
+                    session,
+                    rm_service_url,
+                    baseline["reqProjectName"],
+                    baseline["name"],
+                    requirement_id,
+                    version,
+                )
+    logger.warning("Requirement %s was not found in any RM baseline of TOV '%s'", ids, tov_key)
+    return None
+
+
+#: Placeholder version for asking a requirement's versions: the RM service requires
+#: one in the key, but every reader looks the versions up by the ID alone.
+_ANY_VERSION = "*"
+
+
+def get_latest_requirement_version(
+    session: requests.Session,
+    rm_service_url: str,
+    req_project: str,
+    baseline: str,
+    requirement_id: str,
+) -> str | None:
+    """The name of a requirement's latest version in a baseline of the RM service.
+
+    Never raises, like ``get_extended_requirement``: an unknown requirement, an
+    unreachable RM service or an unexpected body all count as a miss.
+
+    Returns:
+        The version name, or ``None`` when the baseline does not know the requirement.
+    """
+    url = f"{rm_service_url}projects/{req_project}/baselines/{baseline}/requirement-versions"
+    try:
+        response = session.post(url, json={"id": requirement_id, "version": _ANY_VERSION})
+    except requests.exceptions.RequestException as e:
+        logger.warning("Could not reach RM service at '%s': %s", url, e)
+        return None
+    if response.status_code in (HTTPStatus.BAD_REQUEST, HTTPStatus.NOT_FOUND):
+        logger.debug(
+            "Requirement '%s' not found in project '%s', baseline '%s': %s",
+            requirement_id,
+            req_project,
+            baseline,
+            response.status_code,
+        )
+        return None
+    try:
+        response.raise_for_status()
+        versions = response.json()
+        return max(versions, key=lambda version: version["date"])["name"] if versions else None
+    except (requests.exceptions.HTTPError, *RM_LISTING_ERRORS) as e:
+        logger.warning(
+            "Could not read the versions of requirement '%s' at '%s': %s", requirement_id, url, e
+        )
+        return None
 
 
 def discover_rm_baselines(
