@@ -68,6 +68,11 @@ every other setting there is shown read-only. Every route that changes
 something checks this again regardless of what the browser sends, and refuses
 what the role does not allow.
 
+Which projects you manage is read at sign-in and again on every project-list
+**Refresh** (see below), which any `ProjectAdministrator` may use: a
+`TestManager` membership granted — or removed — in TestBench takes effect
+without signing in again.
+
 ---
 
 ## Changing configuration
