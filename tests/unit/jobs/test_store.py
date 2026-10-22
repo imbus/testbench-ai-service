@@ -1,3 +1,5 @@
+import asyncio
+import sys
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -144,3 +146,36 @@ def test_shares_file_with_usage_store(tmp_path):
 async def test_run_executes_in_thread(store):
     await store.run(_create, store)  # type: ignore[arg-type]
     assert store.get("j1", "u1") is not None
+
+
+async def test_concurrent_warnings_are_all_kept(store):
+    _create(store, "j1", "u1")
+    await asyncio.gather(*(store.run(store.add_warning, "j1", f"w{i}") for i in range(30)))
+    warnings = store.get("j1", "u1").warnings
+    assert sorted(warnings) == sorted(["w", *(f"w{i}" for i in range(30))])
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), {"a": [float("-inf")]}])
+def test_set_report_with_nan_or_infinity_is_dropped(store, bad):
+    _create(store, "j1", "u1")
+    store.set_report("j1", "t", bad)
+    job = store.get("j1", "u1")
+    assert job.report is None
+    assert job.report_type is None
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param(
+            "a?b", marks=pytest.mark.skipif(sys.platform == "win32", reason="? is not a file name")
+        ),
+        "c#d",
+        "e%20f",
+    ],
+)
+def test_database_path_with_url_special_characters(tmp_path, name):
+    store = JobStore(tmp_path / name / "usage.sqlite")
+    _create(store, "j1", "u1")
+    assert store.get("j1", "u1") is not None
+    assert (tmp_path / name / "usage.sqlite").exists()

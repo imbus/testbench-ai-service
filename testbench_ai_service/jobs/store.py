@@ -17,7 +17,7 @@ from typing import Any, Literal, TypeVar
 
 import sqlalchemy as sa
 from fastapi import Request
-from sqlalchemy.engine import Engine, Row
+from sqlalchemy.engine import URL, Engine, Row
 from sqlalchemy.exc import SQLAlchemyError
 
 from testbench_ai_service.jobs.models import JobDetail, JobProgress, JobStatus, JobSummary
@@ -99,7 +99,9 @@ class JobStore:
         with self._lock:
             if self._engine is None:
                 self.path.parent.mkdir(parents=True, exist_ok=True)
-                engine = sa.create_engine(f"sqlite:///{self.path}", connect_args={"timeout": 5.0})
+                engine = sa.create_engine(
+                    URL.create("sqlite", database=str(self.path)), connect_args={"timeout": 5.0}
+                )
                 try:
                     _metadata.create_all(engine)
                 except Exception:
@@ -166,15 +168,15 @@ class JobStore:
         """Append *message* to the job's warnings."""
 
         def work(engine: Engine) -> None:
+            # One statement, so concurrent warnings cannot overwrite each other.
             with engine.begin() as conn:
-                row = conn.execute(sa.select(_jobs.c.warnings).where(_jobs.c.id == job_id)).first()
-                if row is None:
-                    return
-                current = row.warnings
                 conn.execute(
                     _jobs.update()
                     .where(_jobs.c.id == job_id)
-                    .values(warnings=[*current, message], updated_at=_iso(_now()))
+                    .values(
+                        warnings=sa.func.json_insert(_jobs.c.warnings, "$[#]", message),
+                        updated_at=_iso(_now()),
+                    )
                 )
 
         self._write("add a warning to", job_id, work)
@@ -183,7 +185,7 @@ class JobStore:
         """Store the job's report; a value that is not JSON is logged and dropped."""
 
         def work(engine: Engine) -> None:
-            json.dumps(report)  # fail here, not half-way into the statement
+            json.dumps(report, allow_nan=False)  # fail here, not half-way into the statement
             self._update(engine, job_id, report_type=report_type, report=report)
 
         self._write("store the report of", job_id, work)
