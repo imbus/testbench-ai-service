@@ -88,5 +88,6 @@
     "test_planner.precheck.missing_durations": "{missing} of {total} test cases have no planned duration; they count as 0 minutes.",
     "test_planner.run.seeds_exceed_count": "The mandatory and already planned test cases are already more than {count}; all of them were kept.",
     "test_planner.run.seeds_exceed_budget": "The mandatory and already planned test cases already exceed the budget of {budget} minutes; all of them were kept.",
-    "test_planner.run.no_requirements_fallback": "No test case has requirement links; the selection was cut at the knee of the curve instead."
+    "test_planner.run.no_requirements_fallback": "No test case has requirement links; the selection was cut at the knee of the curve instead.",
+    "jobs.aborted_by_restart": "Aborted by a service restart"
 }

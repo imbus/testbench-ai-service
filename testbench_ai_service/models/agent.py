@@ -73,6 +73,7 @@ class TriggerAgentRequest(BaseModel):
 class TriggerAgentResponse(BaseModel):
     status: str
     warnings: list[str] | None = None
+    job_id: str
 
 
 class ExecutionContext(BaseModel):

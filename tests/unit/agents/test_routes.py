@@ -1,4 +1,5 @@
 import json as _json
+import re
 import tempfile
 import zipfile
 from types import SimpleNamespace
@@ -16,6 +17,7 @@ from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSet
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config, get_llm_factory, get_tb_connection
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.main import create_app
 from testbench_ai_service.models.agent import (
     ExecutionContext,
@@ -43,8 +45,10 @@ class TestTriggerTestCaseSetReviews:
     """HTTP-level tests for POST /test-case-set-reviews."""
 
     @pytest.fixture(autouse=True, scope="class")
-    def class_setup(self, request):
+    def class_setup(self, request, tmp_path_factory):
+        # Class-scoped, so the per-test usage-file patch is not active yet.
         app_config = _make_app_config()
+        app_config.usage_file = tmp_path_factory.mktemp("usage") / "usage.sqlite"
         with patch("testbench_ai_service.main.LLMFactory") as mock_factory_cls:
             mock_factory = MagicMock()
             mock_factory.init_clients = MagicMock()
@@ -131,17 +135,68 @@ class TestTriggerTestCaseSetReviews:
 
     def test_valid_request_returns_202_accepted(self):
         payload = self.valid_request.model_dump()
-        with patch("fastapi.BackgroundTasks.add_task") as mock_add_task:
+        with (
+            patch("fastapi.BackgroundTasks.add_task") as mock_add_task,
+            patch("testbench_ai_service.agents.routes.validate_template_and_agent_vars"),
+        ):
             response = self.client.post("/test-case-set-reviews", json=payload)
 
         assert response.status_code == 202
-        assert response.json() == {"status": "accepted", "warnings": []}
+        body = response.json()
+        assert body["status"] == "accepted"
+        assert body["warnings"] == []
+        assert re.fullmatch(r"[0-9a-f]{32}", body["job_id"])
         mock_add_task.assert_called_once()
         call_kwargs = mock_add_task.call_args.kwargs
         assert call_kwargs["agent"] is self.mock_reviewer
         assert call_kwargs["conn"] is self.mock_tb_connection
         assert call_kwargs["llm_factory"] is self.mock_llm_factory
         assert isinstance(call_kwargs["context"], ExecutionContext)
+
+    def test_trigger_creates_running_job_for_caller(self):
+        with (
+            patch("fastapi.BackgroundTasks.add_task"),
+            patch("testbench_ai_service.agents.routes.validate_template_and_agent_vars"),
+        ):
+            response = self.client.post(
+                "/test-case-set-reviews", json=self.valid_request.model_dump()
+            )
+
+        job = self.app.state.job_store.get(response.json()["job_id"], "1")
+        assert job is not None
+        assert job.status in ("running", "succeeded")
+        assert job.agent_key == "test_case_set_reviewer"
+
+    def test_failed_precheck_creates_no_job(self):
+        self.mock_reviewer.precheck.return_value = PrecheckResult(passed=False, warnings=["no"])
+        before = len(self.app.state.job_store.list_for_user("1"))
+
+        with patch("testbench_ai_service.agents.routes.validate_template_and_agent_vars"):
+            response = self.client.post(
+                "/test-case-set-reviews", json=self.valid_request.model_dump()
+            )
+
+        assert response.status_code == 409
+        assert len(self.app.state.job_store.list_for_user("1")) == before
+
+    def test_trigger_still_202_when_job_store_unwritable(self, tmp_path):
+        blocker = tmp_path / "file"
+        blocker.write_text("x")
+        original = self.app.state.job_store
+        self.app.state.job_store = JobStore(blocker / "x.sqlite")
+        try:
+            with (
+                patch("fastapi.BackgroundTasks.add_task"),
+                patch("testbench_ai_service.agents.routes.validate_template_and_agent_vars"),
+            ):
+                response = self.client.post(
+                    "/test-case-set-reviews", json=self.valid_request.model_dump()
+                )
+        finally:
+            self.app.state.job_store = original
+
+        assert response.status_code == 202
+        assert response.json()["job_id"]
 
     def test_logs_precheck_completion_and_duration(self):
         with (

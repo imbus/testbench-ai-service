@@ -1,10 +1,14 @@
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import sqlalchemy as sa
 from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from testbench_ai_service import __version__
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.jobs.store import JobStore, _iso
 from testbench_ai_service.main import (
     close_services,
     create_app,
@@ -13,6 +17,7 @@ from testbench_ai_service.main import (
     lifespan,
 )
 from testbench_ai_service.middlewares import LoggingMiddleware, RequestScopeMiddleware
+from testbench_ai_service.models.language import LanguageOption
 
 
 def _make_app_config():
@@ -187,3 +192,42 @@ class TestLifespan:
                 pass
 
         mock_close.assert_awaited_once_with(app)
+
+
+class TestStartupJobCleanup:
+    def test_startup_aborts_running_jobs_and_purges_old(self, tmp_path):
+        path = tmp_path / "jobs.sqlite"
+        store = JobStore(path)
+        kwargs = {
+            "agent_key": "a",
+            "user_key": "1",
+            "project_key": "p",
+            "project_name": "P",
+            "root_key": None,
+            "item_ids": [],
+            "warnings": [],
+        }
+        store.create("running1", **kwargs)
+        store.create("old1", **kwargs)
+        old = datetime.now(timezone.utc) - timedelta(days=91)
+        with store._get_engine().begin() as conn:
+            conn.execute(
+                sa.text("UPDATE agent_jobs SET status='succeeded', created_at=:c WHERE id=:i"),
+                {"c": _iso(old), "i": "old1"},
+            )
+
+        config = _make_app_config()
+        config.language = LanguageOption.ENGLISH
+        with (
+            patch("testbench_ai_service.main.resolve_usage_file", return_value=path),
+            patch("testbench_ai_service.main.LLMFactory") as factory_cls,
+        ):
+            factory_cls.return_value.close_clients = AsyncMock()
+            with TestClient(create_app(config)):
+                pass
+
+        job = store.get("running1", "1")
+        assert job is not None
+        assert job.status == "failed"
+        assert job.error == "Aborted by a service restart"
+        assert store.get("old1", "1") is None

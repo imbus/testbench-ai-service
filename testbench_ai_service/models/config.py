@@ -186,6 +186,12 @@ class ProjectPromptConfig(BaseModel):
     vars: dict[str, PromptVarValue] | None = None
 
 
+class JobsConfig(BaseModel):
+    retention_days: int = Field(
+        default=90, gt=0, description="Delete jobs older than this many days at startup."
+    )
+
+
 class AgentConfig(BaseModel):
     enabled: bool
     endpoint_path: str

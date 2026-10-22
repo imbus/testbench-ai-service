@@ -544,3 +544,12 @@ def test_logging_activity_defaults_when_section_is_missing():
     assert cfg.activity.log_level.value == "INFO"
     assert cfg.activity.max_bytes == 5 * 1024 * 1024
     assert cfg.activity.backup_count == 3
+
+
+class TestJobsConfig:
+    def test_retention_defaults_to_90_days(self):
+        assert _make_app_config().jobs.retention_days == 90
+
+    def test_retention_must_be_positive(self):
+        with pytest.raises(ValidationError):
+            _make_app_config(jobs={"retention_days": 0})

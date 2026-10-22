@@ -88,5 +88,6 @@
     "test_planner.precheck.missing_durations": "{missing} von {total} Testfällen haben keine geplante Dauer; sie zählen mit 0 Minuten.",
     "test_planner.run.seeds_exceed_count": "Die Pflicht- und bereits geplanten Testfälle sind schon mehr als {count}; alle wurden übernommen.",
     "test_planner.run.seeds_exceed_budget": "Die Pflicht- und bereits geplanten Testfälle überschreiten schon das Budget von {budget} Minuten; alle wurden übernommen.",
-    "test_planner.run.no_requirements_fallback": "Kein Testfall hat Requirement-Links; es wurde automatisch am Knie der Kurve abgeschnitten."
+    "test_planner.run.no_requirements_fallback": "Kein Testfall hat Requirement-Links; es wurde automatisch am Knie der Kurve abgeschnitten.",
+    "jobs.aborted_by_restart": "Durch Neustart des Service abgebrochen"
 }

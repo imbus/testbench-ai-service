@@ -1,5 +1,6 @@
 import time
 from typing import get_type_hints
+from uuid import uuid4
 
 import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
@@ -19,6 +20,7 @@ from testbench_ai_service.exceptions import (
     handle_requests_http_error,
     handle_requests_transport_error,
 )
+from testbench_ai_service.jobs.store import JobStore, get_job_store
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
@@ -112,6 +114,7 @@ async def trigger_agent_execution(
     auth_info: AuthInfo,
     registry: TaskRegistry,
     usage_store: UsageStore,
+    job_store: JobStore,
 ) -> TriggerAgentResponse:
     """Execute the trigger flow shared by all agent endpoints.
 
@@ -129,9 +132,11 @@ async def trigger_agent_execution(
         auth_info:        Validated authentication context for this request.
         registry:         The console's in-flight task registry.
         usage_store:      Where the run's token usage is counted.
+        job_store:        Where the run is recorded as a job.
 
     Returns:
-        ``TriggerAgentResponse`` with ``status="accepted"`` and any precheck warnings.
+        ``TriggerAgentResponse`` with ``status="accepted"``, any precheck warnings and
+        the ID of the job that tracks the run.
 
     Raises:
         HTTPException 404: If the agent is disabled for the resolved project.
@@ -207,6 +212,19 @@ async def trigger_agent_execution(
             detail=detail,
         )
 
+    job_id = uuid4().hex
+    await job_store.run(
+        job_store.create,
+        job_id,
+        agent_key=agent_key,
+        user_key=context.user_key,
+        project_key=context.project_key,
+        project_name=context.project_name,
+        root_key=context.root_key,
+        item_ids=precheck_result.items,
+        warnings=precheck_result.warnings,
+    )
+
     background_tasks.add_task(
         _tracked_run_agent,
         registry,
@@ -217,10 +235,12 @@ async def trigger_agent_execution(
         llm_factory=llm_factory,
         item_ids=precheck_result.items,
         usage_store=usage_store,
+        job_id=job_id,
+        job_store=job_store,
     )
     logger.debug("Scheduled background task for agent '%s'", agent_key)
 
-    return TriggerAgentResponse(status="accepted", warnings=precheck_result.warnings)
+    return TriggerAgentResponse(status="accepted", warnings=precheck_result.warnings, job_id=job_id)
 
 
 async def _tracked_run_agent(registry: TaskRegistry, agent_key: str, **kwargs) -> None:
@@ -305,6 +325,7 @@ def create_agent_router(
         auth_info: AuthInfo = Depends(validate_auth_token),
         registry: TaskRegistry = Depends(get_task_registry),
         usage_store: UsageStore = Depends(get_usage_store),
+        job_store: JobStore = Depends(get_job_store),
     ) -> TriggerAgentResponse:
         return await trigger_agent_execution(
             agent_key=agent_key,
@@ -316,6 +337,7 @@ def create_agent_router(
             auth_info=auth_info,
             registry=registry,
             usage_store=usage_store,
+            job_store=job_store,
         )
 
     return router

@@ -23,6 +23,7 @@ from testbench_ai_service.exceptions import (
     handle_requests_http_error,
     handle_requests_transport_error,
 )
+from testbench_ai_service.jobs.store import JobStore, get_job_store
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.models.agent import (
     AgentDetailsResponse,
@@ -201,6 +202,7 @@ async def trigger_agent(
     auth_info: AuthInfo = Depends(validate_auth_token),
     registry: TaskRegistry = Depends(get_task_registry),
     usage_store: UsageStore = Depends(get_usage_store),
+    job_store: JobStore = Depends(get_job_store),
 ) -> TriggerAgentResponse:
     return await trigger_agent_execution(
         agent_key=agent_key,
@@ -212,4 +214,5 @@ async def trigger_agent(
         auth_info=auth_info,
         registry=registry,
         usage_store=usage_store,
+        job_store=job_store,
     )

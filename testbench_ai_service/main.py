@@ -2,6 +2,7 @@
 This module serves as the API controller for the system.
 """
 
+import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,6 +14,7 @@ from testbench_ai_service import __version__
 from testbench_ai_service.agents.routes import get_agent_routers
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import http_exception_handler
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.middlewares import (
@@ -23,7 +25,7 @@ from testbench_ai_service.middlewares import (
 from testbench_ai_service.routes import router
 from testbench_ai_service.usage import UsageStore, resolve_usage_file
 from testbench_ai_service.utils.config import load_config_from_file
-from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.utils.i18n import get_translation, load_translations
 from testbench_ai_service.webui.inflight import TaskRegistry
 from testbench_ai_service.webui.prompt_test import SingleFlight
 from testbench_ai_service.webui.routes import router as webui_router
@@ -112,10 +114,24 @@ def init_middlewares(app: FastAPI):
     OutboundRequestLoggingMiddleware.install(app.state.config.tb_server_url)
 
 
+async def cleanup_jobs(app: FastAPI):
+    """Fail the jobs a restart interrupted and delete the ones past retention."""
+    config = app.state.config
+    store = app.state.job_store
+    message = get_translation("jobs.aborted_by_restart", config.language)
+    aborted = await asyncio.to_thread(store.abort_running, message)
+    if aborted:
+        logger.info("Marked %d interrupted job(s) as failed", aborted)
+    purged = await asyncio.to_thread(store.purge_older_than, config.jobs.retention_days)
+    if purged:
+        logger.info("Deleted %d job(s) older than %d days", purged, config.jobs.retention_days)
+
+
 # Define startup and shutdown procedure
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    await cleanup_jobs(app)
     yield  # App runs here
     # Shutdown
     await close_services(app)
@@ -142,6 +158,9 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     # Created here rather than in init_services: it outlives every reload,
     # while the LLM factory is rebuilt by each one.
     app.state.usage_store = UsageStore(resolve_usage_file(config.usage_file, app.state.config_path))
+
+    # Same file as the usage counts, so there is still only one to back up.
+    app.state.job_store = JobStore(resolve_usage_file(config.usage_file, app.state.config_path))
 
     init_routers(app)
     init_webui(app)
