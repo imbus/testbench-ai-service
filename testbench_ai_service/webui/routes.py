@@ -7,6 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
+from testbench_ai_service.jobs.models import JobDetail, JobStatus, JobSummary
+from testbench_ai_service.jobs.store import JobStore, get_job_store
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import get_log_level_int, log_context, logger
@@ -420,6 +422,44 @@ def read_activity_log(
         min_level=get_log_level_int(level.value),
         limit=limit,
     )
+
+
+@router.get("/jobs", response_model=list[JobSummary])
+def list_jobs(
+    agent: str | None = Query(default=None),
+    status: JobStatus | None = Query(default=None),
+    limit: int = Query(default=50, ge=1, le=200),
+    session: Session = Depends(current_session),
+    job_store: JobStore = Depends(get_job_store),
+) -> list[JobSummary]:
+    """The signed-in user's own agent jobs, newest first, without reports.
+
+    Never another user's jobs, for admins neither, and no parameter asks for
+    them (design D6). A session without a user key owns no jobs and the store
+    is not asked.
+
+    A sync ``def``: the read hits SQLite, so it belongs in the threadpool.
+    """
+    if not session.user_key:
+        return []
+    return job_store.list_for_user(session.user_key, agent_key=agent, status=status, limit=limit)
+
+
+@router.get("/jobs/{job_id}", response_model=JobDetail)
+def read_job(
+    job_id: str,
+    session: Session = Depends(current_session),
+    job_store: JobStore = Depends(get_job_store),
+) -> JobDetail:
+    """One of the signed-in user's own jobs, with its report.
+
+    A job of someone else is answered like an unknown one (404), for admins
+    as well (design D6).
+    """
+    job = job_store.get(job_id, session.user_key) if session.user_key else None
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+    return job
 
 
 @router.post("/config/preview", response_model=PreviewResponse)
