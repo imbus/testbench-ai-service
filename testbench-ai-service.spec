@@ -16,6 +16,7 @@ from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_sub
 # have data files / lazy-loaded sub-packages.
 uvicorn_datas, uvicorn_binaries, uvicorn_hiddenimports = collect_all("uvicorn")
 fastapi_datas, fastapi_binaries, fastapi_hiddenimports = collect_all("fastapi")
+sqlalchemy_datas, sqlalchemy_binaries, sqlalchemy_hiddenimports = collect_all("sqlalchemy")
 
 # Package data files (prompts YAML/schema, locale JSON files)
 pkg_datas = collect_data_files("testbench_ai_service")
@@ -24,11 +25,13 @@ datas = (
     pkg_datas
     + uvicorn_datas
     + fastapi_datas
+    + sqlalchemy_datas
 )
-binaries = uvicorn_binaries + fastapi_binaries
+binaries = uvicorn_binaries + fastapi_binaries + sqlalchemy_binaries
 hiddenimports = (
     uvicorn_hiddenimports
     + fastapi_hiddenimports
+    + sqlalchemy_hiddenimports
     + collect_submodules("testbench_ai_service")
     + collect_submodules("testbench_cli_reporter")
     + collect_submodules("testbench2robotframework")
