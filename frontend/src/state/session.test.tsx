@@ -18,6 +18,7 @@ const session = {
   roles: ['test_manager'],
   is_admin: false,
   tb_server_url: 'https://tb.example.com:9443/api/',
+  has_user_key: true,
 }
 
 beforeEach(() => {

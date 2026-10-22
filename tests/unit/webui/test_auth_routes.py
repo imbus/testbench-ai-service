@@ -236,3 +236,14 @@ def test_login_ignores_a_non_string_user_key(client, login, tb_connection):
     assert login().status_code == 200
     (session,) = client.app.state.webui_sessions._sessions.values()
     assert session.user_key is None
+
+
+def test_session_reports_whether_the_user_has_a_key(client, login, tb_connection):
+    assert login().json()["has_user_key"] is True
+    assert client.get("/admin/api/session").json()["has_user_key"] is True
+
+
+def test_session_without_user_key_says_so(client, login, tb_connection):
+    tb_connection.session.get.return_value.json.return_value = {}
+    assert login().json()["has_user_key"] is False
+    assert client.get("/admin/api/session").json()["has_user_key"] is False

@@ -226,6 +226,7 @@ def sign_in(
         roles=session.roles,
         is_admin=session.is_admin,
         tb_server_url=config.tb_server_url,
+        has_user_key=bool(session.user_key),
     )
 
 
@@ -240,6 +241,7 @@ async def read_session(
         roles=session.roles,
         is_admin=session.is_admin,
         tb_server_url=config.tb_server_url,
+        has_user_key=bool(session.user_key),
     )
 
 

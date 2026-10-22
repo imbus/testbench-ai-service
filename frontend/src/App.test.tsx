@@ -46,6 +46,7 @@ const renderApp = ({
     roles: isAdmin ? ['Administrator'] : ['Test Manager'],
     is_admin: isAdmin,
     tb_server_url: 'https://tb:9443/api/',
+    has_user_key: true,
   })
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const router = createMemoryRouter([{ path: '*', element: <App /> }], { initialEntries: [route] })
@@ -386,12 +387,14 @@ it('clears the marker when the session ends', async () => {
     roles: ['Administrator'],
     is_admin: true,
     tb_server_url: 'https://tb:9443/api/',
+    has_user_key: true,
   }
   const ADMIN_B = {
     username: 'b.schmidt',
     roles: ['Administrator'],
     is_admin: true,
     tb_server_url: 'https://tb:9443/api/',
+    has_user_key: true,
   }
 
   function useStatefulSession() {

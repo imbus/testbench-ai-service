@@ -9,6 +9,7 @@ import { useTranslation } from 'react-i18next'
 import { useJob, useJobs } from '../api/queries'
 import type { CoverageResult, JobDetail, JobStatus, JobSummary } from '../api/types'
 import { type Lang, type Translations, useLang } from '../i18n'
+import { useSession } from '../state/session'
 import { formatActivityTime } from './Status'
 import { CoverageReport } from './jobs/CoverageReport'
 
@@ -26,6 +27,11 @@ const STATUS_LABELS: Record<JobStatus, keyof Translations> = {
 
 const STATUSES: JobStatus[] = ['running', 'succeeded', 'failed']
 const LOCALES: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
+
+/** The requirement or item a job is for: its root key, else the first item. */
+function itemLabel(job: JobSummary): string | null {
+  return job.root_key ?? job.item_ids[0] ?? null
+}
 
 function StatusLabel({ job }: { job: JobSummary }) {
   const { t } = useTranslation()
@@ -76,6 +82,8 @@ function JobPane({ jobId }: { jobId: string }) {
   if (job.isError) return <Message severity="error" text={t('jobsError')} />
   const data = job.data
   if (!data) return null
+  // The root key leads; the items follow without repeating it.
+  const items = [...new Set([data.root_key, ...data.item_ids].filter((id): id is string => !!id))]
   const when = (iso: string) => formatActivityTime(iso, undefined, LOCALES[lang])
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -83,7 +91,7 @@ function JobPane({ jobId }: { jobId: string }) {
         <h3 style={{ margin: 0 }}>{data.agent_key}</h3>
         <div className="text-muted">
           {t('jobProject')}: {data.project_name} ({data.project_key})
-          {data.item_ids.length > 0 && ` · ${data.item_ids.join(', ')}`}
+          {items.length > 0 && ` · ${items.join(', ')}`}
         </div>
         <div className="text-muted" style={{ fontSize: 13 }}>
           {t('jobStarted')}: {when(data.created_at)}
@@ -120,6 +128,7 @@ export function Jobs() {
   const { t } = useTranslation()
   const lang = useLang()
   const navigate = useNavigate()
+  const { session } = useSession()
   const { jobId } = useParams()
   const [agent, setAgent] = useState<string | undefined>()
   const [status, setStatus] = useState<JobStatus | undefined>()
@@ -159,7 +168,9 @@ export function Jobs() {
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
         <div style={{ flex: '2 1 320px', minWidth: 0 }}>
           {jobs.isSuccess && rows.length === 0 && (
-            <div className="text-muted">{t('jobsEmpty')}</div>
+            <div className="text-muted">
+              {t(session?.has_user_key === false ? 'jobsNoUserKey' : 'jobsEmpty')}
+            </div>
           )}
           {rows.length > 0 && (
             <DataTable
@@ -179,6 +190,7 @@ export function Jobs() {
                 body={(job: JobSummary) => (
                   <div>
                     <div>{job.agent_key}</div>
+                    {itemLabel(job) && <div style={{ fontSize: 13 }}>{itemLabel(job)}</div>}
                     <div className="text-muted" style={{ fontSize: 12 }}>
                       {job.project_name} ·{' '}
                       {formatActivityTime(job.created_at, undefined, LOCALES[lang])}

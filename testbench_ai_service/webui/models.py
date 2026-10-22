@@ -20,6 +20,7 @@ class SessionResponse(BaseModel):
     roles: list[str]
     is_admin: bool
     tb_server_url: str
+    has_user_key: bool = False
 
 
 class MetaResponse(BaseModel):

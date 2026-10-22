@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { Jobs } from './Jobs'
 import type { JobDetail, JobSummary } from '../api/types'
+import * as sessionState from '../state/session'
 
 const base = {
   agent_key: 'coverage_checker',
@@ -71,7 +72,13 @@ function renderJobs(path = '/admin/jobs') {
   )
 }
 
+let hasUserKey: boolean
+
 beforeEach(() => {
+  hasUserKey = true
+  vi.spyOn(sessionState, 'useSession').mockImplementation(
+    () => ({ session: { has_user_key: hasUserKey } }) as never,
+  )
   list = [RUNNING, FAILED]
   details = { j1: detail(RUNNING), j2: detail(FAILED) }
   fetchMock.mockClear()
@@ -137,4 +144,39 @@ test('an empty list shows the hint', async () => {
   list = []
   renderJobs()
   await waitFor(() => expect(screen.getByText('Noch keine Jobs.')).toBeInTheDocument())
+})
+
+test('a session without a TestBench user key explains why there are no jobs', async () => {
+  list = []
+  hasUserKey = false
+  renderJobs()
+  await waitFor(() =>
+    expect(
+      screen.getByText(
+        'Diese Sitzung hat keinen TestBench-Benutzerschlüssel, daher gibt es keine Jobs.',
+      ),
+    ).toBeInTheDocument(),
+  )
+  expect(screen.queryByText('Noch keine Jobs.')).not.toBeInTheDocument()
+})
+
+test('a list row names the requirement the job is for', async () => {
+  list = [
+    { ...RUNNING, root_key: 'REQ-ROOT', item_ids: ['x'] },
+    { ...FAILED, root_key: null, item_ids: ['REQ-ITEM', 'REQ-2'] },
+    { ...FAILED, job_id: 'j3', root_key: null, item_ids: [] },
+  ]
+  renderJobs()
+  expect(await screen.findByText('REQ-ROOT')).toBeInTheDocument()
+  expect(screen.getByText('REQ-ITEM')).toBeInTheDocument()
+  expect(screen.queryByText('REQ-2')).not.toBeInTheDocument()
+})
+
+test('the detail header names the root key before the items', async () => {
+  const job = { ...RUNNING, root_key: 'REQ-ROOT', item_ids: ['REQ-1'] }
+  list = [job]
+  details = { j1: detail(job) }
+  renderJobs('/admin/jobs/j1')
+  const pane = await screen.findByTestId('job-detail')
+  await waitFor(() => expect(pane).toHaveTextContent('REQ-ROOT, REQ-1'))
 })

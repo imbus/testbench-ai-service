@@ -3,6 +3,7 @@ export interface SessionInfo {
   roles: string[]
   is_admin: boolean
   tb_server_url: string
+  has_user_key: boolean
 }
 
 export interface ServiceStatus {

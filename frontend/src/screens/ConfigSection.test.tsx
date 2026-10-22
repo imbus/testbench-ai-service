@@ -16,6 +16,7 @@ import { ConfigSection } from './ConfigSection'
 const CONFIG = {
   running: {
     tb_server_url: 'https://tb.example.com:9443/api/',
+    has_user_key: true,
     host: '127.0.0.1',
     port: 8010,
     debug: false,
