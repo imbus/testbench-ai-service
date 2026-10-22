@@ -96,5 +96,7 @@
     "test_planner.run.seeds_exceed_count": "Die Pflicht- und bereits geplanten Testfälle sind schon mehr als {count}; alle wurden übernommen.",
     "test_planner.run.seeds_exceed_budget": "Die Pflicht- und bereits geplanten Testfälle überschreiten schon das Budget von {budget} Minuten; alle wurden übernommen.",
     "test_planner.run.no_requirements_fallback": "Kein Testfall hat Requirement-Links; es wurde automatisch am Knie der Kurve abgeschnitten.",
-    "jobs.aborted_by_restart": "Durch Neustart des Service abgebrochen"
+    "jobs.aborted_by_restart": "Durch Neustart des Service abgebrochen",
+    "jobs.item_failed": "{item}: Verarbeitung fehlgeschlagen ({error})",
+    "jobs.all_items_failed": "Keines der {count} Elemente konnte verarbeitet werden."
 }

@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import Awaitable
 
 import requests
 from testbench2robotframework.json_reader import TestCaseSet
@@ -11,6 +12,7 @@ from testbench_ai_service.agents.test_case_set_reviewer.utils import (
     patch_review_started_for_test_structure_element,
 )
 from testbench_ai_service.exceptions import handle_requests_http_error
+from testbench_ai_service.jobs.items import gather_items
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
@@ -140,17 +142,17 @@ class TestCaseSetReviewer(Agent):
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
 
-        tasks = []
+        tasks: list[tuple[str, Awaitable[None]]] = []
         for tcs in test_case_set_catalog.values():
             if tcs.details.uniqueID in item_ids:
                 task = asyncio.create_task(
                     self._review_test_case_set(tcs, context, conn, llm_client)
                 )
                 logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-                tasks.append(task)
+                tasks.append((tcs.details.uniqueID, task))
 
         logger.debug("Awaiting completion of %d test case set review task(s)", len(tasks))
-        await asyncio.gather(*tasks)
+        await gather_items(tasks, context.language)
 
     async def _review_test_case_set(
         self,

@@ -4,6 +4,8 @@ import pytest
 import requests
 
 from testbench_ai_service.agents.defect_explainer.agent import DefectExplainer
+from testbench_ai_service.jobs.handle import JobHandle, job_scope
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
@@ -19,6 +21,7 @@ from testbench_ai_service.models.testbench import (
 )
 from testbench_ai_service.utils.agent import MIN_TESTBENCH_VERSION
 from testbench_ai_service.utils.i18n import load_translations
+from tests.unit.jobs.test_store import _create
 
 
 def _make_context(**overrides):
@@ -243,6 +246,48 @@ class TestDefectExplainerRun:
             await self.service.run(context, conn, llm_client, ["TCS1"])
 
         mock_handler.assert_called_once()
+
+    async def test_one_failing_item_keeps_job_running_with_warning(self, tmp_path):
+        store = JobStore(tmp_path / "jobs.sqlite")
+        _create(store)
+        mock = AsyncMock(side_effect=[RuntimeError("kaputt"), None])
+
+        with (
+            job_scope(JobHandle("j1", store)),
+            patch(
+                f"{_AGENT_MODULE}.get_test_case_set_catalog",
+                return_value={"TCS1": _make_tcs(uid="TCS1"), "TCS2": _make_tcs(uid="TCS2")},
+            ),
+            patch.object(self.service, "_generate_defect_explanations", mock),
+        ):
+            await self.service.run(_make_context(), MagicMock(), MagicMock(), ["TCS1", "TCS2"])
+
+        job = store.get("j1", "u1")
+        assert job.status == "running"  # run_agent marks it succeeded afterwards
+        assert any("TCS1" in w and "kaputt" in w for w in job.warnings)
+        assert mock.await_count == 2
+
+    async def test_all_items_failing_fails_the_job(self, tmp_path):
+        store = JobStore(tmp_path / "jobs.sqlite")
+        _create(store)
+
+        with (
+            job_scope(JobHandle("j1", store)),
+            patch(
+                f"{_AGENT_MODULE}.get_test_case_set_catalog",
+                return_value={"TCS1": _make_tcs(uid="TCS1"), "TCS2": _make_tcs(uid="TCS2")},
+            ),
+            patch.object(
+                self.service,
+                "_generate_defect_explanations",
+                AsyncMock(side_effect=RuntimeError("kaputt")),
+            ),
+        ):
+            await self.service.run(_make_context(), MagicMock(), MagicMock(), ["TCS1", "TCS2"])
+
+        job = store.get("j1", "u1")
+        assert job.status == "failed"
+        assert job.error == "None of the 2 items could be processed."
 
 
 class TestBuildAgentData:

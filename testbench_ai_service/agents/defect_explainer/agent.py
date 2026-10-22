@@ -1,7 +1,7 @@
 import asyncio
+from collections.abc import Awaitable
 
 import requests
-from jwt import warnings
 from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -15,6 +15,7 @@ from testbench_ai_service.agents.defect_explainer.utils import (
     update_description,
 )
 from testbench_ai_service.exceptions import handle_requests_http_error
+from testbench_ai_service.jobs.items import gather_items
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
@@ -72,7 +73,7 @@ class DefectExplainer(Agent):
         """
         Precheck to determine which test case sets the agent should explain defects for, based on the user's permissions and roles.
         """
-        warnings = []  # noqa: F811
+        warnings = []
         if unsupported_version := check_min_testbench_version(context, conn):
             return unsupported_version
 
@@ -171,17 +172,17 @@ class DefectExplainer(Agent):
         except requests.exceptions.HTTPError as e:
             handle_requests_http_error(e)
 
-        tasks = []
+        tasks: list[tuple[str, Awaitable[None]]] = []
         for tcs in test_case_set_catalog.values():
             if tcs.details.uniqueID in item_ids:
                 task = asyncio.create_task(
                     self._generate_defect_explanations(tcs, context, conn, llm_client)
                 )
                 logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-                tasks.append(task)
+                tasks.append((tcs.details.uniqueID, task))
 
         logger.debug("Awaiting completion of %d defect explanation generation task(s)", len(tasks))
-        await asyncio.gather(*tasks)
+        await gather_items(tasks, context.language)
 
     async def _generate_defect_explanations(
         self,
