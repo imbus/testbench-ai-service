@@ -303,3 +303,84 @@ export interface ExtraModelEntry {
   provider: string
   routing: RoutingFamily
 }
+
+export type JobStatus = 'running' | 'succeeded' | 'failed'
+
+export interface JobProgress {
+  done: number
+  total: number
+  text: string | null
+}
+
+/** A job without its report, as `GET /jobs` lists it. Datetimes are ISO strings. */
+export interface JobSummary {
+  job_id: string
+  agent_key: string
+  project_key: string
+  project_name: string
+  root_key: string | null
+  item_ids: string[]
+  status: JobStatus
+  progress: JobProgress | null
+  error: string | null
+  warnings: string[]
+  report_type: string | null
+  created_at: string
+  updated_at: string
+  finished_at: string | null
+}
+
+/** `report` is stored as the agent returned it; its shape depends on `report_type`. */
+export interface JobDetail extends JobSummary {
+  report: unknown
+}
+
+export type AspectKind = 'happy_path' | 'negative' | 'boundary' | 'non_functional'
+export type EvidenceStrength = 'full' | 'partial'
+export type CoverageStatus = 'covered' | 'weak' | 'missing'
+export type WeakReason = 'only_partial' | 'set_not_released'
+export type NoEvidenceReason = 'no_test_cases' | 'no_matching_aspect' | 'interpretation_failed'
+
+export interface Aspect {
+  id: string
+  statement: string
+  kind: AspectKind
+  source_quote: string
+}
+
+export interface CoverageEvidence {
+  set_key: string
+  test_case_key: string
+  strength: EvidenceStrength
+  evidence: string
+}
+
+export interface SuggestedTest {
+  title: string
+  description: string
+}
+
+export interface AspectCoverage {
+  aspect: Aspect
+  status: CoverageStatus
+  weak_reason: WeakReason | null
+  evidence: CoverageEvidence[]
+  gap_reason: string | null
+  suggested_test: SuggestedTest | null
+}
+
+export interface SetWithoutEvidence {
+  set_key: string
+  reason: NoEvidenceReason
+}
+
+/** Report of the `coverage_checker` agent (`report_type === 'coverage_checker'`). */
+export interface CoverageResult {
+  requirement_key: string
+  aspects: AspectCoverage[]
+  sets_without_evidence: SetWithoutEvidence[]
+  skipped_comments: string[]
+  reduced_mode: boolean
+  incomplete: boolean
+  set_paths: Record<string, string>
+}

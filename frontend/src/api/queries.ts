@@ -4,6 +4,9 @@ import type {
   ActivityEntry,
   ActivityScope,
   ConfigResponse,
+  JobDetail,
+  JobStatus,
+  JobSummary,
   ModelCatalogue,
   ProjectsResponse,
   PromptDocument,
@@ -29,6 +32,29 @@ export function useActivity({
     queryKey: ['activity', limit, scope],
     queryFn: () => apiFetch<ActivityEntry[]>(`/activity?limit=${limit}&scope=${scope}`),
     refetchInterval: 15_000,
+  })
+}
+
+export function useJobs(filters: { agent?: string; status?: JobStatus } = {}, limit = 50) {
+  const params = new URLSearchParams()
+  if (filters.agent) params.set('agent', filters.agent)
+  if (filters.status) params.set('status', filters.status)
+  params.set('limit', String(limit))
+  return useQuery({
+    queryKey: ['jobs', filters.agent ?? null, filters.status ?? null, limit],
+    queryFn: () => apiFetch<JobSummary[]>(`/jobs?${params}`),
+    // Poll only while something is in progress.
+    refetchInterval: (query) =>
+      query.state.data?.some((job) => job.status === 'running') ? 3_000 : false,
+  })
+}
+
+export function useJob(jobId: string | null) {
+  return useQuery({
+    queryKey: ['job', jobId],
+    queryFn: () => apiFetch<JobDetail>(`/jobs/${encodeURIComponent(jobId ?? '')}`),
+    enabled: jobId !== null,
+    refetchInterval: (query) => (query.state.data?.status === 'running' ? 3_000 : false),
   })
 }
 

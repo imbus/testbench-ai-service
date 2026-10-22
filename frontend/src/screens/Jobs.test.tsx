@@ -1,0 +1,140 @@
+import { render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
+import { Jobs } from './Jobs'
+import type { JobDetail, JobSummary } from '../api/types'
+
+const base = {
+  agent_key: 'coverage_checker',
+  project_key: 'p-1',
+  project_name: 'Shop',
+  root_key: null,
+  item_ids: ['REQ-1'],
+  warnings: [],
+  report_type: null,
+  created_at: '2026-10-13T10:00:00+00:00',
+  updated_at: '2026-10-13T10:01:00+00:00',
+}
+
+const RUNNING: JobSummary = {
+  ...base,
+  job_id: 'j1',
+  status: 'running',
+  progress: { done: 3, total: 7, text: 'Interpreting sets' },
+  error: null,
+  finished_at: null,
+}
+const FAILED: JobSummary = {
+  ...base,
+  agent_key: 'link_finder',
+  job_id: 'j2',
+  status: 'failed',
+  progress: null,
+  error: 'TestBench unreachable',
+  finished_at: '2026-10-13T10:02:00+00:00',
+}
+
+function detail(summary: JobSummary, extra: Partial<JobDetail> = {}): JobDetail {
+  return { ...summary, report: null, ...extra }
+}
+
+let list: JobSummary[]
+let details: Record<string, JobDetail>
+const fetchMock = vi.fn((url: string) => {
+  const match = /\/jobs\/(\w+)$/.exec(url)
+  const body = match ? details[match[1]] : list
+  return Promise.resolve(
+    new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  )
+})
+
+function Where() {
+  return <div data-testid="where">{useLocation().pathname}</div>
+}
+
+function renderJobs(path = '/admin/jobs') {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/admin/jobs" element={<Jobs />} />
+          <Route path="/admin/jobs/:jobId" element={<Jobs />} />
+        </Routes>
+        <Where />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
+
+beforeEach(() => {
+  list = [RUNNING, FAILED]
+  details = { j1: detail(RUNNING), j2: detail(FAILED) }
+  fetchMock.mockClear()
+  vi.stubGlobal('fetch', fetchMock)
+})
+
+afterEach(() => vi.restoreAllMocks())
+
+test('lists jobs with agent, status and progress', async () => {
+  renderJobs()
+  await waitFor(() => expect(screen.getByText('coverage_checker')).toBeInTheDocument())
+  expect(screen.getByText('link_finder')).toBeInTheDocument()
+  expect(screen.getByText('3/7')).toBeInTheDocument()
+  expect(screen.getByText('Läuft')).toBeInTheDocument()
+  expect(screen.getByText('Fehlgeschlagen')).toBeInTheDocument()
+})
+
+test('selecting a job loads its detail and puts the id in the URL', async () => {
+  renderJobs()
+  await userEvent.click(await screen.findByText('link_finder'))
+  await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/admin/jobs/j2'))
+  const pane = await screen.findByTestId('job-detail')
+  expect(within(pane).getByText('TestBench unreachable')).toBeInTheDocument()
+})
+
+test('opens the job named in the URL', async () => {
+  renderJobs('/admin/jobs/j2')
+  const pane = await screen.findByTestId('job-detail')
+  await waitFor(() => expect(within(pane).getByText('TestBench unreachable')).toBeInTheDocument())
+})
+
+test('filtering by status asks the backend', async () => {
+  renderJobs()
+  await screen.findByText('link_finder')
+  await userEvent.click(screen.getByRole('button', { name: 'Status' }))
+  await userEvent.click(await screen.findByRole('option', { name: 'Fehlgeschlagen', hidden: true }))
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/jobs?status=failed&limit=50'))).toBe(
+      true,
+    ),
+  )
+})
+
+test('an unknown report type is shown as JSON', async () => {
+  const job = { ...FAILED, status: 'succeeded' as const, error: null, report_type: 'mystery' }
+  list = [job]
+  details = { j2: detail(job, { report: { answer: 42 } }) }
+  renderJobs('/admin/jobs/j2')
+  const pane = await screen.findByTestId('job-detail')
+  await waitFor(() => expect(within(pane).getByText(/"answer": 42/)).toBeInTheDocument())
+  expect(pane.querySelector('pre')).not.toBeNull()
+})
+
+test('shows warnings of a job', async () => {
+  const job = { ...RUNNING, status: 'succeeded' as const, progress: null, warnings: ['Set S-7 locked'] }
+  list = [job]
+  details = { j1: detail(job) }
+  renderJobs('/admin/jobs/j1')
+  await waitFor(() => expect(screen.getByText('Set S-7 locked')).toBeInTheDocument())
+})
+
+test('an empty list shows the hint', async () => {
+  list = []
+  renderJobs()
+  await waitFor(() => expect(screen.getByText('Noch keine Jobs.')).toBeInTheDocument())
+})

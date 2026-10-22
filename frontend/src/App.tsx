@@ -8,6 +8,7 @@ import { TopBar } from './components/TopBar'
 import { AgentDetail } from './screens/AgentDetail'
 import { Agents } from './screens/Agents'
 import { ConfigSection } from './screens/ConfigSection'
+import { Jobs } from './screens/Jobs'
 import { Login } from './screens/Login'
 import { Projects } from './screens/Projects'
 import { PromptEditor } from './screens/PromptEditor'
@@ -113,6 +114,8 @@ export function App() {
               <Route path="/admin" element={<Navigate to="/admin/status" replace />} />
               <Route path="/" element={<Navigate to="/admin/status" replace />} />
               <Route path="/admin/status" element={<Status isAdmin={session.is_admin} />} />
+              <Route path="/admin/jobs" element={<Jobs />} />
+              <Route path="/admin/jobs/:jobId" element={<Jobs />} />
               <Route
                 path="/admin/service"
                 element={

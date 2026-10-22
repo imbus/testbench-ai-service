@@ -123,3 +123,10 @@ it('orders agents and projects after the config sections and before the raw file
     labels.findIndex((l) => l.includes('config.toml')),
   )
 })
+
+it('offers Jobs right after Status, also to a non-admin', () => {
+  renderNav(false)
+  const links = screen.getAllByRole('link')
+  expect(links[1]).toHaveAttribute('href', '/admin/jobs')
+  expect(links[1]).not.toHaveAttribute('aria-disabled', 'true')
+})

@@ -24,6 +24,14 @@ export const NAV_ITEMS: NavItem[] = [
     adminOnly: false,
   },
   {
+    key: 'jobs',
+    path: '/admin/jobs',
+    labelKey: 'jobs',
+    icon: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
+    // Each user sees only their own jobs, so there is nothing to gate.
+    adminOnly: false,
+  },
+  {
     key: 'service',
     path: '/admin/service',
     labelKey: 'service',
