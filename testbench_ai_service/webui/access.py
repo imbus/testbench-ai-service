@@ -40,6 +40,15 @@ ALLOWED_LLM_FIELDS = frozenset(
 )
 
 
+def is_project_admin_role(global_roles: list[str]) -> bool:
+    """True when *global_roles* holds the ProjectAdministrator role.
+
+    TestBench 4.2 spells it ``"Project Administrator"``, with a space, so the
+    spaces are ignored when comparing.
+    """
+    return any(role.replace(" ", "") == PROJECT_ADMIN_ROLE for role in global_roles)
+
+
 def managed_projects_from(
     global_roles: list[str], memberships: list[ProjectMember]
 ) -> frozenset[str]:
@@ -49,7 +58,7 @@ def managed_projects_from(
     blocks by project name. Without the global role a TestManager membership
     grants nothing here.
     """
-    if PROJECT_ADMIN_ROLE not in global_roles:
+    if not is_project_admin_role(global_roles):
         return frozenset()
     return frozenset(
         m.projectName for m in memberships if PROJECT_MANAGER_ROLE in [r.value for r in m.roles]
@@ -62,7 +71,7 @@ def read_managed_projects(conn: TBConnection, global_roles: list[str]) -> frozen
     Like the project list and user key, this must not be able to fail the
     login: the user then simply manages nothing.
     """
-    if PROJECT_ADMIN_ROLE not in global_roles:
+    if not is_project_admin_role(global_roles):
         return frozenset()
     try:
         memberships = get_own_project_memberships(conn)

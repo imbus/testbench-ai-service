@@ -328,6 +328,16 @@ def test_project_admin_managing_nothing_yet_can_refresh(client, login_project_ad
     assert client.get("/admin/api/session").json()["managed_projects"] == ["Alpha"]
 
 
+def test_project_admin_role_spelled_with_a_space_manages_and_refreshes(
+    client, login_project_admin, tb_connection
+):
+    """TestBench 4.2 reports "Project Administrator"; it must grant the same rights."""
+    csrf = login_project_admin(managed=["Alpha"], role="Project Administrator").cookies[CSRF_COOKIE]
+    assert client.get("/admin/api/session").json()["managed_projects"] == ["Alpha"]
+    response = client.post("/admin/api/projects/refresh", headers={CSRF_HEADER: csrf})
+    assert response.status_code == 200
+
+
 def test_project_admin_refresh_still_requires_csrf(client, login_project_admin):
     login_project_admin(managed=[])
     assert client.post("/admin/api/projects/refresh").status_code == 403

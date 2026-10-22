@@ -34,6 +34,12 @@ def test_project_admin_manages_only_testmanager_projects():
     assert managed_projects_from(["ProjectAdministrator"], members) == frozenset({"Alpha"})
 
 
+def test_project_admin_role_spelled_with_a_space_counts():
+    """TestBench 4.2 reports the global role as "Project Administrator"."""
+    members = [_member("Alpha", ["TestManager"])]
+    assert managed_projects_from(["Project Administrator"], members) == frozenset({"Alpha"})
+
+
 def test_testmanager_without_global_project_admin_role_manages_nothing():
     assert (
         managed_projects_from(["ProjectUser"], [_member("Alpha", ["TestManager"])]) == frozenset()

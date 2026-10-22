@@ -10,7 +10,7 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import log_user_key, log_username, logger
 from testbench_ai_service.models.testbench import GlobalHumanRole
 from testbench_ai_service.utils.testbench import get_user_key
-from testbench_ai_service.webui.access import PROJECT_ADMIN_ROLE, read_managed_projects
+from testbench_ai_service.webui.access import is_project_admin_role, read_managed_projects
 from testbench_ai_service.webui.projects import ProjectFetch, fetch_projects
 from testbench_ai_service.webui.session import (
     CSRF_COOKIE,
@@ -187,7 +187,7 @@ def require_refresher(session: Session = Depends(current_session)) -> Session:
     TestManager membership came later) picks up their projects. Gating it on
     a non-empty set would lock out exactly the users it exists for.
     """
-    if not (session.is_admin or PROJECT_ADMIN_ROLE in session.roles):
+    if not (session.is_admin or is_project_admin_role(session.roles)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(

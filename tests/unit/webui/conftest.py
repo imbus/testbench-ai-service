@@ -140,7 +140,11 @@ def login_project_admin(login, tb_connection):
     ``projectRoles`` list.
     """
 
-    def _login(managed: list[str], other: list[str] | None = None):
+    def _login(
+        managed: list[str],
+        other: list[str] | None = None,
+        role: str = "ProjectAdministrator",
+    ):
         memberships = [_membership(p, "TestManager") for p in managed] + [
             _membership(p, "Tester") for p in other or []
         ]
@@ -154,6 +158,6 @@ def login_project_admin(login, tb_connection):
             return response
 
         tb_connection.session.get.side_effect = _get
-        return login(roles=["ProjectAdministrator"])
+        return login(roles=[role])
 
     return _login

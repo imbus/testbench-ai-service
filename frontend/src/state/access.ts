@@ -29,10 +29,11 @@ export const PROJECT_ADMIN_ROLE = 'ProjectAdministrator'
 /**
  * Whether the project refresh is offered: admins, and every ProjectAdministrator
  * -- also one who manages nothing yet, since the refresh is how they get any.
- * Mirrors `require_refresher` on the server.
+ * Mirrors `require_refresher` on the server, including its tolerance for
+ * TestBench 4.2's "Project Administrator" spelling.
  */
 export function canRefreshProjects(isAdmin: boolean, roles: readonly string[]): boolean {
-  return isAdmin || roles.includes(PROJECT_ADMIN_ROLE)
+  return isAdmin || roles.some((role) => role.replaceAll(' ', '') === PROJECT_ADMIN_ROLE)
 }
 
 /** Whether this session can edit anything at all (so the read-only notice is wrong). */

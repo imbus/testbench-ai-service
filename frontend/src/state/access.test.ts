@@ -1,5 +1,5 @@
 import type { SessionInfo } from '../api/types'
-import { canEditProject, isEditor } from './access'
+import { canEditProject, canRefreshProjects, isEditor } from './access'
 
 const session = (is_admin: boolean, managed_projects: string[]): SessionInfo => ({
   username: 'u',
@@ -23,4 +23,10 @@ test('isEditor is true for admin or any managed project', () => {
   expect(isEditor(session(true, []))).toBe(true)
   expect(isEditor(session(false, ['Alpha']))).toBe(true)
   expect(isEditor(session(false, []))).toBe(false)
+})
+
+test('refresh is offered for either spelling of the project admin role', () => {
+  expect(canRefreshProjects(false, ['ProjectAdministrator'])).toBe(true)
+  expect(canRefreshProjects(false, ['Project User', 'Project Administrator'])).toBe(true)
+  expect(canRefreshProjects(false, ['Project User'])).toBe(false)
 })
