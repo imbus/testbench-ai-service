@@ -9,12 +9,15 @@ from testbench_ai_service.agents.coverage_checker import agent as agent_module
 from testbench_ai_service.agents.coverage_checker.agent import CoverageChecker
 from testbench_ai_service.agents.coverage_checker.model import (
     CoverageCheckerArgs,
+    CoverageResult,
     GapExplanation,
     GapList,
     SuggestedTest,
 )
+from testbench_ai_service.jobs.handle import JobHandle, job_scope
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.models.language import LanguageOption
-from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.utils.i18n import get_translation, load_translations
 from testbench_ai_service.utils.rm_service import Requirement
 from testbench_ai_service.utils.structured_output import StructuredOutputError
 from testbench_ai_service.utils.traceability.models import (
@@ -294,3 +297,105 @@ async def test_run_without_precheck_loads_the_catalog_itself(world):
     await CoverageChecker().check_coverage(_context(), None, None, ["s1"])
 
     assert world.load_kwargs["catalog"] is None
+
+
+class TestJobReporting:
+    @pytest.fixture
+    def job(self, tmp_path):
+        store = JobStore(tmp_path / "usage.sqlite")
+        store.create(
+            "j1",
+            agent_key="coverage_checker",
+            user_key="me",
+            project_key="7",
+            project_name="P",
+            root_key="473",
+            item_ids=["s1", "s2", "s3"],
+            warnings=[],
+        )
+        return SimpleNamespace(store=store, handle=JobHandle("j1", store))
+
+    @staticmethod
+    def _text(key, **values):
+        return get_translation(f"coverage_checker.job.{key}", LanguageOption.ENGLISH, **values)
+
+    async def _run(self, job, item_ids=("s1", "s2", "s3")):
+        with job_scope(job.handle):
+            await CoverageChecker().run(_context(), None, None, list(item_ids))
+        return job.store.get("j1", "me")
+
+    async def test_successful_check_stores_full_result_as_report(self, world, job):
+        detail = await self._run(job)
+
+        assert detail.report_type == "coverage_checker"
+        assert CoverageResult.model_validate(detail.report).requirement_key == "REQ-42"
+        assert job.handle.failed is False
+
+    async def test_progress_counts_interpreted_sets(self, world, job):
+        world.loaded = _loaded(_set("s1"), _set("s2"))
+
+        detail = await self._run(job, ["s1", "s2"])
+
+        assert (detail.progress.done, detail.progress.total) == (2, 2)
+        assert detail.progress.text == self._text("progress.gaps")
+
+    async def test_sets_progress_text_is_reported_while_interpreting(self, world, job, monkeypatch):
+        seen = []
+        original = job.handle.progress
+
+        async def _spy(done, total, text=None):
+            seen.append((done, total, text))
+            await original(done, total, text)
+
+        monkeypatch.setattr(job.handle, "progress", _spy)
+
+        await self._run(job)
+
+        assert seen[0] == (0, 3, self._text("progress.aspects"))
+        assert (2, 3, self._text("progress.sets")) in seen
+        assert seen[-1] == (3, 3, self._text("progress.gaps"))
+
+    @pytest.mark.parametrize(
+        ("case", "key", "requirement"),
+        [
+            ("no_items", "nothing_to_check", None),
+            ("load_raises", "load_failed", "473"),
+            ("no_sets", "no_sets_loaded", "REQ-42"),
+            ("decompose_raises", "decompose_failed", "REQ-42"),
+        ],
+    )
+    async def test_early_stop_fails_job_with_reason(
+        self, case, key, requirement, world, job, monkeypatch
+    ):
+        item_ids = ["s1", "s2", "s3"]
+        if case == "no_items":
+            item_ids = []
+        elif case == "load_raises":
+
+            async def _boom(*args, **kwargs):
+                raise RuntimeError("down")
+
+            monkeypatch.setattr(agent_module, "load_requirement_context", _boom)
+        elif case == "no_sets":
+            world.loaded = _loaded()
+        else:
+            world.aspects = StructuredOutputError("bad", raw_response="?")
+
+        detail = await self._run(job, item_ids)
+
+        values = {"requirement": requirement} if requirement else {}
+        assert detail.error == self._text(key, **values)
+        assert detail.status == "failed"
+        assert detail.report is None
+        assert job.handle.failed is True
+
+    async def test_incomplete_result_is_still_a_report_not_a_failure(self, world, job):
+        world.interpretations["s2"] = StructuredOutputError("bad", raw_response="?")
+
+        detail = await self._run(job)
+
+        assert detail.report["incomplete"] is True
+        assert job.handle.failed is False
+
+    async def test_without_job_scope_run_is_unchanged(self, world):
+        await CoverageChecker().run(_context(), None, None, ["s1", "s2", "s3"])

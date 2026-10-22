@@ -28,6 +28,7 @@ from testbench_ai_service.agents.coverage_checker.model import (
     CoverageResult,
     resolve_run_options,
 )
+from testbench_ai_service.jobs.handle import current_job
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
@@ -211,6 +212,7 @@ class CoverageChecker(Agent):
         if result is None:
             return
         logger.info("%s\n%s", render_report(result), result.model_dump_json(indent=2))
+        await current_job().set_report("coverage_checker", result)
 
     async def check_coverage(
         self,
@@ -226,6 +228,7 @@ class CoverageChecker(Agent):
         """
         if not item_ids or not context.tov_key:
             logger.info("No linked test case sets to check; nothing to do")
+            await self._fail_job(context, "nothing_to_check")
             return None
         options = resolve_run_options(context.prompt_config.vars, self.args)
 
@@ -247,6 +250,9 @@ class CoverageChecker(Agent):
                 context.tov_key,
                 error,
             )
+            await self._fail_job(
+                context, "load_failed", requirement=context.root_key or context.root_uid
+            )
             return None
 
         if not loaded.linked_sets:
@@ -256,9 +262,12 @@ class CoverageChecker(Agent):
                 item_ids,
                 loaded.requirement_ref,
             )
+            await self._fail_job(context, "no_sets_loaded", requirement=loaded.requirement_ref)
             return None
 
         ask = self._ask(context, llm_client)
+        n_sets = len(loaded.linked_sets)
+        await current_job().progress(0, n_sets, self._job_text(context, "progress.aspects"))
         try:
             aspects = await decompose(ask, loaded.requirement, self.args.max_aspects)
         except Exception as error:
@@ -267,10 +276,12 @@ class CoverageChecker(Agent):
                 loaded.requirement_ref,
                 error,
             )
+            await self._fail_job(context, "decompose_failed", requirement=loaded.requirement_ref)
             return None
 
-        set_results = await self._interpret_sets(ask, loaded, aspects)
+        set_results = await self._interpret_sets(ask, loaded, aspects, context)
         coverages, without = build_matrix(aspects, set_results, options.counting_spec_status)
+        await current_job().progress(n_sets, n_sets, self._job_text(context, "progress.gaps"))
         try:
             coverages = await explain_gaps(
                 ask,
@@ -299,6 +310,14 @@ class CoverageChecker(Agent):
             result = result.model_copy(update={"skipped_comments": skipped})
         return result
 
+    @staticmethod
+    def _job_text(context: ExecutionContext, key: str, **values: str | None) -> str:
+        text: str = get_translation(f"coverage_checker.job.{key}", context.language, **values)
+        return text
+
+    async def _fail_job(self, context: ExecutionContext, key: str, **values: str | None) -> None:
+        await current_job().fail(self._job_text(context, key, **values))
+
     def _ask(self, context: ExecutionContext, llm_client: LLMClient) -> AskStep:
         async def ask(step: str, schema: type[T], agent_data: AgentData) -> T:
             return await self.get_structured_ai_response(
@@ -313,11 +332,18 @@ class CoverageChecker(Agent):
         return ask
 
     async def _interpret_sets(
-        self, ask: AskStep, loaded: RequirementContext, aspects: list[Aspect]
+        self,
+        ask: AskStep,
+        loaded: RequirementContext,
+        aspects: list[Aspect],
+        context: ExecutionContext,
     ) -> list[SetResult]:
         """Interpret the linked sets in parallel; a failing set does not stop the others."""
         semaphore = asyncio.Semaphore(self.args.max_parallel_sets)
         requirement = render_requirement(loaded.requirement)
+        total = len(loaded.linked_sets)
+        text = self._job_text(context, "progress.sets")
+        interpreted = 0
 
         async def interpret(linked_set: LinkedSet) -> SetResult:
             async with semaphore:
@@ -330,6 +356,9 @@ class CoverageChecker(Agent):
                         "Interpreting test case set '%s' failed: %r", linked_set.path, error
                     )
                     evidence = None
+            nonlocal interpreted
+            interpreted += 1
+            await current_job().progress(interpreted, total, text)
             return SetResult(
                 set_key=linked_set.key,
                 spec_status=linked_set.spec_status,
