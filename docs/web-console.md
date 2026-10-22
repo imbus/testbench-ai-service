@@ -160,6 +160,10 @@ when the logging path itself is the problem: a reason logged to a file that
 cannot be written has nowhere to go, so the reason must be shown in the console
 instead.
 
+## Jobs
+
+The **Jobs** screen lists the agent runs you triggered, newest first, with their status and progress. Select one to see its detail on the right: project, element, warnings, the error of a failed run and, if the agent stores one, its report. The list refreshes while a job runs. You only ever see your own jobs, administrators included. Jobs are deleted after `retention_days` (see [Configuration](configuration.md#jobs)).
+
 ## Agents
 
 The **Agents** screen lists every agent the service knows about, with a switch

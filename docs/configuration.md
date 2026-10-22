@@ -217,6 +217,26 @@ trusted_proxies = ["10.0.0.1"]
 
 ---
 
+## Jobs
+
+**`[testbench-ai-service.jobs]`**
+
+| Option           | Type    | Description                                                                                                                                    | Default |
+| ---------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `retention_days` | Integer | Jobs older than this many days are deleted when the service starts. Must be greater than 0. Jobs live in the `usage_file` SQLite file. | `90`    |
+
+At startup, jobs still `running` are also marked `failed`, because a restart ended their runs. See [Jobs](agents/index.md#jobs).
+
+**Example:**
+
+```toml
+# config.toml
+[testbench-ai-service.jobs]
+retention_days = 30
+```
+
+---
+
 ## LLM provider
 
 :::tip[Provider setup guides]

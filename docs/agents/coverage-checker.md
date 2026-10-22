@@ -25,11 +25,27 @@ For JWT tokens the following API token permissions are required: `ReadOwnUserDet
 3. **Interpretation**: for each linked set the model reads the test cases (keyword calls with arguments, `[check]` calls marked) against the aspects and names `full` or `partial` evidence. Large sets are read in batches of `max_test_cases_per_call`.
 4. **Matrix** (code, not model): an aspect is `covered` by `full` evidence from a set whose specification status counts; `weak` if there is only `partial` evidence or the proving set is not released yet; `missing` otherwise.
 5. **Gaps**: one more model call explains each weak or missing aspect and sketches a test that would close it.
-6. **Write-back**: every linked set gets a block **AI Coverage &lt;requirement&gt;** on top of its review comment. A rerun replaces only this block; blocks of other requirements and of the reviewer agent stay. Each open aspect lists the reason for the gap and a sketch of the missing test. Sets locked by another user are skipped. Two runs for different requirements at the same time on the same set can lose one block; a rerun restores it. The full result is written to the service log.
+6. **Write-back**: every linked set gets a block **AI Coverage &lt;requirement&gt;** on top of its review comment. A rerun replaces only this block; blocks of other requirements and of the reviewer agent stay. Each open aspect lists the reason for the gap and a sketch of the missing test. Sets locked by another user are skipped. Two runs for different requirements at the same time on the same set can lose one block; a rerun restores it. The full result is stored as the job's [report](#report) and written to the service log.
 
 Without an RM service the requirement description is unknown; the aspects then rest on the title alone and the blocks say so.
 
 The RM lookup works as in the [requirement agent](generate-test-ideas.md): the baselines of the TOV are searched for the requirement. TestBench lists them only on its legacy API, which a JWT cannot use; with a JWT (or if that lookup fails) the baselines of the RM projects in `rm_projects`, or of every RM project, are searched instead, the `CURRENT` baseline of each project first.
+
+## Report
+
+The trigger's `202` response carries a `job_id`. [`GET /jobs/{job_id}`](index.md#jobs) shows the progress (interpreted sets of all linked sets) and, when the run ends, the full result as `report` with `report_type` `coverage_checker`. The report is the `CoverageResult` as JSON:
+
+| Field                   | Description                                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------- |
+| `requirement_key`       | The checked requirement.                                                                            |
+| `aspects`               | Per aspect: `aspect`, `status` (`covered`, `weak`, `missing`), `weak_reason`, `evidence`, `gap_reason`, `suggested_test`. |
+| `sets_without_evidence` | Linked sets that prove no aspect, each with a `reason`.                                             |
+| `skipped_comments`      | Sets whose review comment was not written (locked by someone else, or the write failed).            |
+| `reduced_mode`          | The requirement description was unknown; the aspects rest on the title alone.                       |
+| `incomplete`            | At least one linked set could not be interpreted.                                                   |
+| `set_paths`             | Set key to its path in the test structure.                                                          |
+
+The job is marked `failed` with the reason in `error` when the run stops early, for example when the requirement cannot be loaded or splitting it into aspects fails. Nothing is written to TestBench then. The schema is a contract with the plugin: changing it is a breaking change.
 
 ## Variables
 

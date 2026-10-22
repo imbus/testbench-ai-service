@@ -10,6 +10,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Agent jobs. Every agent trigger now returns a `job_id` in its `202` response, and
+  `GET /jobs/{job_id}` reports the run's status (`running`, `succeeded`, `failed`), progress,
+  warnings, error and report, for the user who triggered it only. Other users' and unknown jobs
+  answer `404`. The coverage checker stores its full `CoverageResult` as the report and fails the
+  job with the reason when it stops early. Jobs are kept in the `usage_file` SQLite file;
+  `[testbench-ai-service.jobs] retention_days` (default 90) deletes older ones at startup, where
+  jobs still running are marked failed. A new **Jobs** screen in the web console shows your own
+  jobs and reports. Documented in `docs/agents/index.md`.
+
 - Token usage per model on the web console's Status screen. Every LLM call -- agent runs and
   prompt test runs alike -- adds its input and output tokens to a running total per provider and
   model, kept in a SQLite file that survives restarts. Only the totals are stored, never the

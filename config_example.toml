@@ -146,6 +146,11 @@ enabled = false
 file = "CarConfigurator_reviews_prompt.yaml"
 name = "TestCaseSetReviewer"
 
+# Agent jobs are kept in the usage_file SQLite file. At startup, jobs older than
+# this many days are deleted (must be greater than 0).
+# [testbench-ai-service.jobs]
+# retention_days = 90
+
 # Browser console served at /admin
 [testbench-ai-service.admin_ui]
 enabled = true

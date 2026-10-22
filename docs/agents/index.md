@@ -124,9 +124,12 @@ On success, `202 Accepted`:
 ```json
 {
   "status": "accepted",
+  "job_id": "7f3a9c1e5b2d4e8f9a0b1c2d3e4f5a6b",
   "warnings": ["Optional list of per-item warnings from the precheck"]
 }
 ```
+
+`job_id` identifies this run. Use it with [`GET /jobs/{job_id}`](#jobs) to follow the run and to fetch its report. It is also the `run_id` in the service log.
 
 ### Error responses
 
@@ -138,6 +141,73 @@ On success, `202 Accepted`:
 | `409` | Precheck failed. No items passed validation.                                                |
 | `422` | Invalid request body. The request failed schema validation.                                 |
 | `502` | The service could not reach the TestBench REST API server.                                  |
+
+---
+
+## Jobs
+
+Every accepted trigger starts a **job**. The `202` response carries its `job_id`; the TestBench plugin polls the job to show progress and, once it is done, the agent's report.
+
+```
+GET /jobs/{job_id}
+```
+
+The request needs the same `Authorization` header as the agent endpoints. Example response for a running job:
+
+```json
+{
+  "job_id": "7f3a9c1e5b2d4e8f9a0b1c2d3e4f5a6b",
+  "agent_key": "coverage_checker",
+  "project_key": "PRJ-1",
+  "project_name": "Dream Car",
+  "root_key": "REQ-12",
+  "item_ids": [],
+  "status": "running",
+  "progress": {"done": 3, "total": 7, "text": "Interpreting test case sets"},
+  "error": null,
+  "warnings": [],
+  "report_type": null,
+  "report": null,
+  "created_at": "2026-10-22T09:14:03Z",
+  "updated_at": "2026-10-22T09:14:21Z",
+  "finished_at": null
+}
+```
+
+| Field                              | Description                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `status`                           | `running`, `succeeded` or `failed`. These are the only values.                                               |
+| `progress`                         | `done` of `total` steps plus an optional `text`; `null` while the agent reports none.                        |
+| `error`                            | Why the job `failed`, in the language of the run. `null` otherwise.                                          |
+| `warnings`                         | Per-item warnings from the precheck.                                                                         |
+| `report_type`, `report`            | Set once the agent has stored a report, otherwise `null`. See [Reports](#reports).                           |
+| `created_at`, `updated_at`, `finished_at` | Timestamps. `finished_at` is `null` while the job runs.                                               |
+
+Poll every 2 to 3 seconds until `status` is `succeeded` or `failed`.
+
+| Status | Meaning                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------ |
+| `404`  | No such job, or it belongs to another user. Both look the same, and administrators are no exception.     |
+| `401`  | Missing or invalid authorization token.                                                                |
+| `503`  | The job store could not be read. Try again later.                                                      |
+
+### Reports
+
+`report_type` names the schema of `report`; the service stores the report as JSON and returns it unchanged. It renders nothing, the plugin does.
+
+| `report_type`      | `report`                                                                                                  |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `coverage_checker` | The [Coverage Checker](coverage-checker.md#report)'s `CoverageResult`.                                    |
+
+:::caution
+The report schemas are a contract with the plugin. A change to one, for example to `CoverageResult`, is a breaking change.
+:::
+
+Agents without a report type still have a job with status and progress, but `report_type` and `report` stay `null`.
+
+### Retention
+
+Jobs are kept in the same SQLite file as the [token usage](../configuration.md#service-settings) (`usage_file`). At startup, jobs older than `[testbench-ai-service.jobs] retention_days` (default 90) are deleted, and jobs still `running` become `failed` with the error "Aborted by a service restart", since a restart ends their runs. See [Configuration](../configuration.md#jobs).
 
 ---
 
