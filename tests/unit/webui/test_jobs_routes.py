@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy.exc import OperationalError
 
 
 @pytest.fixture
@@ -83,3 +84,28 @@ def test_session_without_user_key_sees_nothing(client, login, store, tb_connecti
 def test_requires_session(client):
     assert client.get("/admin/api/jobs").status_code == 401
     assert client.get("/admin/api/jobs/j1").status_code == 401
+
+
+def test_store_read_errors_are_503(client, login, store, monkeypatch):
+    login()
+
+    def broken(*args, **kwargs):
+        raise OperationalError("select", {}, Exception("disk I/O error"))
+
+    monkeypatch.setattr(store, "list_for_user", broken)
+    monkeypatch.setattr(store, "get", broken)
+    listed = client.get("/admin/api/jobs")
+    read = client.get("/admin/api/jobs/j1")
+    assert listed.status_code == 503
+    assert read.status_code == 503
+    assert "disk I/O" not in listed.text + read.text
+
+
+def test_os_error_is_503(client, login, store, monkeypatch):
+    login()
+
+    def broken(*args, **kwargs):
+        raise OSError("gone")
+
+    monkeypatch.setattr(store, "list_for_user", broken)
+    assert client.get("/admin/api/jobs").status_code == 503

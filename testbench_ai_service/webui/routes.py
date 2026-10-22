@@ -4,6 +4,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy.exc import SQLAlchemyError
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
@@ -424,10 +425,16 @@ def read_activity_log(
     )
 
 
+def _jobs_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Jobs are temporarily unavailable"
+    )
+
+
 @router.get("/jobs", response_model=list[JobSummary])
 def list_jobs(
     agent: str | None = Query(default=None),
-    status: JobStatus | None = Query(default=None),
+    job_status: JobStatus | None = Query(default=None, alias="status"),
     limit: int = Query(default=50, ge=1, le=200),
     session: Session = Depends(current_session),
     job_store: JobStore = Depends(get_job_store),
@@ -442,7 +449,13 @@ def list_jobs(
     """
     if not session.user_key:
         return []
-    return job_store.list_for_user(session.user_key, agent_key=agent, status=status, limit=limit)
+    try:
+        return job_store.list_for_user(
+            session.user_key, agent_key=agent, status=job_status, limit=limit
+        )
+    except (SQLAlchemyError, OSError) as e:
+        logger.warning("Could not list jobs: %r", e)
+        raise _jobs_unavailable() from e
 
 
 @router.get("/jobs/{job_id}", response_model=JobDetail)
@@ -456,7 +469,13 @@ def read_job(
     A job of someone else is answered like an unknown one (404), for admins
     as well (design D6).
     """
-    job = job_store.get(job_id, session.user_key) if session.user_key else None
+    job = None
+    if session.user_key:
+        try:
+            job = job_store.get(job_id, session.user_key)
+        except (SQLAlchemyError, OSError) as e:
+            logger.warning("Could not read job '%s': %r", job_id, e)
+            raise _jobs_unavailable() from e
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
     return job
