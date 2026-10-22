@@ -12,8 +12,10 @@ from testbench2robotframework.json_reader import TestBenchJsonReader
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
 from testbench_ai_service.config import DEFAULT_AGENTS, AppConfig
+from testbench_ai_service.jobs.handle import current_job
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.llm.base import LLMClient, NoLLMClient
-from testbench_ai_service.log import LogContextFilter
+from testbench_ai_service.log import LogContextFilter, log_run_id
 from testbench_ai_service.log import logger as service_logger
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
@@ -453,3 +455,97 @@ class TestRunAgentWithoutLLM:
     async def test_no_llm_client_refuses_queries(self):
         with pytest.raises(RuntimeError, match="does not use an LLM"):
             await NoLLMClient().query_llm("m", [])
+
+
+class TestRunAgentJobLifecycle:
+    """run_agent ends the job it was given and exposes it to the agent."""
+
+    @pytest.fixture
+    def store(self, tmp_path):
+        store = JobStore(tmp_path / "jobs.sqlite")
+        store.create(
+            "j1",
+            agent_key="a",
+            user_key="u1",
+            project_key="p",
+            project_name="P",
+            root_key=None,
+            item_ids=["i"],
+            warnings=[],
+        )
+        return store
+
+    @pytest.fixture
+    def agent(self):
+        agent = MagicMock()
+        agent.USES_LLM = False
+        agent.run = AsyncMock()
+        return agent
+
+    @pytest.fixture
+    def ctx(self):
+        return MagicMock(project_name="P", user_key="u1", project_key="p")
+
+    async def _run(self, agent, ctx, store):
+        await run_agent(
+            "a", agent, ctx, MagicMock(), MagicMock(), ["i"], job_id="j1", job_store=store
+        )
+
+    async def test_successful_run_marks_succeeded(self, agent, ctx, store):
+        await self._run(agent, ctx, store)
+        job = store.get("j1", "u1")
+        assert job.status == "succeeded"
+        assert job.error is None
+
+    async def test_exception_marks_failed_with_repr(self, agent, ctx, store):
+        agent.run.side_effect = RuntimeError("boom")
+        await self._run(agent, ctx, store)
+        job = store.get("j1", "u1")
+        assert job.status == "failed"
+        assert "boom" in job.error
+
+    async def test_long_error_is_truncated(self, agent, ctx, store):
+        agent.run.side_effect = RuntimeError("x" * 2000)
+        await self._run(agent, ctx, store)
+        assert len(store.get("j1", "u1").error) <= 500
+
+    async def test_agent_fail_then_normal_return_stays_failed(self, agent, ctx, store):
+        async def run(**_):
+            await current_job().fail("no requirement")
+
+        agent.run.side_effect = run
+        await self._run(agent, ctx, store)
+        job = store.get("j1", "u1")
+        assert (job.status, job.error) == ("failed", "no requirement")
+
+    async def test_agent_fail_then_raise_keeps_fail_message(self, agent, ctx, store):
+        async def run(**_):
+            await current_job().fail("first")
+            raise RuntimeError("second")
+
+        agent.run.side_effect = run
+        await self._run(agent, ctx, store)
+        job = store.get("j1", "u1")
+        assert (job.status, job.error) == ("failed", "first")
+
+    async def test_job_id_is_the_log_run_id(self, agent, ctx, store, caplog):
+        run_ids = []
+
+        class Spy(logging.Filter):
+            def filter(self, record):
+                if record.getMessage().startswith("Agent started"):
+                    run_ids.append(log_run_id.get())
+                return True
+
+        spy = Spy()
+        service_logger.addFilter(spy)
+        try:
+            with caplog.at_level(logging.INFO):
+                await self._run(agent, ctx, store)
+        finally:
+            service_logger.removeFilter(spy)
+        assert run_ids == ["j1"]
+
+    async def test_without_job_store_behaves_as_before(self, agent, ctx):
+        await run_agent("a", agent, ctx, MagicMock(), MagicMock(), ["i"])
+        agent.run.assert_awaited_once()
