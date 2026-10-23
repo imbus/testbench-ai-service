@@ -132,6 +132,45 @@ Collect per-item warnings in `PrecheckResult.warnings`. They are surfaced in the
 
 Receives only the item IDs that passed precheck. Process items concurrently with `asyncio.gather`. This mirrors how all built-in agents work and keeps response times short.
 
+If `run()` raises, the [job](index.md#jobs) of the run ends as `failed`. If it returns normally, the job ends as `succeeded`, unless the agent has called `fail()` (see below).
+
+#### Reporting to the job
+
+Every accepted trigger starts a [job](index.md#jobs), which the TestBench plugin and the web console poll. Inside `run()`, `current_job()` returns the handle of that job:
+
+```python
+from testbench_ai_service.jobs.handle import current_job
+
+await current_job().progress(done, total, "Assessing test case sets")
+```
+
+| Method | Effect |
+|---|---|
+| `progress(done, total, text=None)` | Sets the progress shown in the plugin, for example `3` of `10` items. `text` describes the current step. |
+| `warn(message)` | Adds a warning to the job. The job keeps its status. |
+| `set_report(report_type, report)` | Stores the agent's result, a Pydantic model or a `dict`. `report_type` names its schema, see [Reports](index.md#reports). |
+| `fail(message)` | Ends the job as `failed` with `message` as its error. It stays `failed` even if `run()` returns normally afterwards. |
+
+All methods are coroutines. Write messages and texts in `context.language`; the plugin shows them as they are.
+
+- **No job, no effect.** Outside a job, for example in a unit test, `current_job()` returns a handle whose methods do nothing. Your agent never has to check whether a job exists.
+- **Errors are not raised.** If the job store cannot be written, the service logs the error and the call returns normally. A broken job never fails the run.
+- **Reports must be plain JSON.** A report holding `NaN` or `Infinity`, or a value that is not JSON at all, is logged and dropped. Round or replace such floats before calling `set_report`.
+- **Report types are a contract.** The plugin renders only the report types it knows. Use `set_report` only with a type agreed on with the plugin, otherwise leave `report_type` unset; the job still shows status, progress and warnings.
+
+**If one item fails, warn; if all fail, fail.** An agent that processes several items should keep the job `succeeded` when single items fail, and report each failure as a warning. Only when every item failed should the job end as `failed`. The built-in agents follow this rule through `gather_items`, which you can use as well:
+
+```python
+from testbench_ai_service.jobs.items import gather_items
+
+await gather_items(
+    [(node.base.name, self._process(node, context, conn)) for node in nodes],
+    context.language,
+)
+```
+
+`gather_items` takes `(label, awaitable)` pairs and runs them concurrently. Each failed item adds a localized warning naming `label`; if all items failed, it calls `fail()`. It returns normally in both cases, so log the details of a failure inside the awaitable.
+
 #### `AgentData`
 
 `AgentData` is a `TypedDict` that declares the variables your agent puts into the `{{ agent.* }}` namespace in prompt templates. Declare a key for each variable your prompt references.

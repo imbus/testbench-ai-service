@@ -225,7 +225,7 @@ trusted_proxies = ["10.0.0.1"]
 | ---------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `retention_days` | Integer | Jobs older than this many days are deleted when the service starts. Must be greater than 0. Jobs live in the `usage_file` SQLite file. | `90`    |
 
-At startup, jobs still `running` are also marked `failed`, because a restart ended their runs. See [Jobs](agents/index.md#jobs).
+At startup, jobs still `running` are also marked `failed`, because a restart ended their runs. Their error message is in the default `language` of the [service settings](#service-settings). See [Jobs](agents/index.md#jobs).
 
 **Example:**
 

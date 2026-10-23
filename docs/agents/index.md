@@ -207,7 +207,7 @@ Agents without a report type still have a job with status and progress, but `rep
 
 ### Retention
 
-Jobs are kept in the same SQLite file as the [token usage](../configuration.md#service-settings) (`usage_file`). At startup, jobs older than `[testbench-ai-service.jobs] retention_days` (default 90) are deleted, and jobs still `running` become `failed` with the error "Aborted by a service restart", since a restart ends their runs. See [Configuration](../configuration.md#jobs).
+Jobs are kept in the same SQLite file as the [token usage](../configuration.md#service-settings) (`usage_file`). At startup, jobs older than `[testbench-ai-service.jobs] retention_days` (default 90) are deleted, and jobs still `running` become `failed` with the error "Aborted by a service restart", since a restart ends their runs. The error is written in the service's default `language`, so a German service writes "Durch Neustart des Service abgebrochen". See [Configuration](../configuration.md#jobs).
 
 ---
 
