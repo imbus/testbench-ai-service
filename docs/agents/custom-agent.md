@@ -130,7 +130,7 @@ Collect per-item warnings in `PrecheckResult.warnings`. They are surfaced in the
 
 #### `run()`
 
-Receives only the item IDs that passed precheck. Process items concurrently with `asyncio.gather`. This mirrors how all built-in agents work and keeps response times short.
+Receives only the item IDs that passed precheck. Process items concurrently, as all built-in agents do, to keep response times short. Use `gather_items` (see [Reporting to the job](#reporting-to-the-job)) rather than a plain `asyncio.gather`, so that one failing item does not fail the whole job.
 
 If `run()` raises, the [job](index.md#jobs) of the run ends as `failed`. If it returns normally, the job ends as `succeeded`, unless the agent has called `fail()` (see below).
 
@@ -156,7 +156,7 @@ All methods are coroutines. Write messages and texts in `context.language`; the 
 - **No job, no effect.** Outside a job, for example in a unit test, `current_job()` returns a handle whose methods do nothing. Your agent never has to check whether a job exists.
 - **Errors are not raised.** If the job store cannot be written, the service logs the error and the call returns normally. A broken job never fails the run.
 - **Reports must be plain JSON.** A report holding `NaN` or `Infinity`, or a value that is not JSON at all, is logged and dropped. Round or replace such floats before calling `set_report`.
-- **Report types are a contract.** The plugin renders only the report types it knows. Use `set_report` only with a type agreed on with the plugin, otherwise leave `report_type` unset; the job still shows status, progress and warnings.
+- **Report types are a contract.** The plugin renders only the report types it knows. Call `set_report` only with a type agreed on with the plugin, otherwise do not call it; the job still shows status, progress and warnings.
 
 **If one item fails, warn; if all fail, fail.** An agent that processes several items should keep the job `succeeded` when single items fail, and report each failure as a warning. Only when every item failed should the job end as `failed`. The built-in agents follow this rule through `gather_items`, which you can use as well:
 
@@ -164,12 +164,12 @@ All methods are coroutines. Write messages and texts in `context.language`; the 
 from testbench_ai_service.jobs.items import gather_items
 
 await gather_items(
-    [(node.base.name, self._process(node, context, conn)) for node in nodes],
+    [(tcs.details.key, self._process(tcs, context, conn)) for tcs in test_case_sets],
     context.language,
 )
 ```
 
-`gather_items` takes `(label, awaitable)` pairs and runs them concurrently. Each failed item adds a localized warning naming `label`; if all items failed, it calls `fail()`. It returns normally in both cases, so log the details of a failure inside the awaitable.
+`gather_items` takes `(label, awaitable)` pairs and runs them concurrently. Each failed item adds a localized warning naming `label`, so use a name the user knows, such as the test case set's key; if all items failed, it calls `fail()`. It returns normally in both cases, so log the details of a failure inside the awaitable.
 
 #### `AgentData`
 
