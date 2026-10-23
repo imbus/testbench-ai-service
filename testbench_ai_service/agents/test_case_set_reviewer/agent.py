@@ -149,7 +149,7 @@ class TestCaseSetReviewer(Agent):
                     self._review_test_case_set(tcs, context, conn, llm_client)
                 )
                 logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-                tasks.append((tcs.details.uniqueID, task))
+                tasks.append((tcs.details.key, task))
 
         logger.debug("Awaiting completion of %d test case set review task(s)", len(tasks))
         await gather_items(tasks, context.language)

@@ -4,7 +4,7 @@ from uuid import uuid4
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
-from testbench_ai_service.jobs.handle import JobHandle, job_scope
+from testbench_ai_service.jobs.handle import JobHandle, current_job, job_scope
 from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.llm.base import LLMClient, NoLLMClient
 from testbench_ai_service.llm.factory import LLMFactory
@@ -109,7 +109,8 @@ async def _run_agent(
 
         duration = time.time() - start_time
         logger.info(
-            "Agent completed | agent='%s' | project='%s' | duration=%.2fs",
+            "Agent completed%s | agent='%s' | project='%s' | duration=%.2fs",
+            ", job failed" if current_job().failed else "",
             agent_key,
             context.project_name,
             duration,

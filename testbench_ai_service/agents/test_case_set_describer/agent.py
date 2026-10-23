@@ -144,7 +144,7 @@ class TestCaseSetDescriber(Agent):
                     self._generate_test_case_set_description(tcs, context, conn, llm_client)
                 )
                 logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-                tasks.append((tcs.details.uniqueID, task))
+                tasks.append((tcs.details.key, task))
 
         logger.debug("Awaiting completion of %d description generation task(s)", len(tasks))
         await gather_items(tasks, context.language)

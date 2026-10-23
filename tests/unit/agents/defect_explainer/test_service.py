@@ -256,7 +256,10 @@ class TestDefectExplainerRun:
             job_scope(JobHandle("j1", store)),
             patch(
                 f"{_AGENT_MODULE}.get_test_case_set_catalog",
-                return_value={"TCS1": _make_tcs(uid="TCS1"), "TCS2": _make_tcs(uid="TCS2")},
+                return_value={
+                    "TCS1": _make_tcs(uid="TCS1", key="K1"),
+                    "TCS2": _make_tcs(uid="TCS2", key="K2"),
+                },
             ),
             patch.object(self.service, "_generate_defect_explanations", mock),
         ):
@@ -264,7 +267,7 @@ class TestDefectExplainerRun:
 
         job = store.get("j1", "u1")
         assert job.status == "running"  # run_agent marks it succeeded afterwards
-        assert any("TCS1" in w and "kaputt" in w for w in job.warnings)
+        assert any(w.startswith("K1:") and "kaputt" in w for w in job.warnings)
         assert mock.await_count == 2
 
     async def test_all_items_failing_fails_the_job(self, tmp_path):
@@ -275,7 +278,10 @@ class TestDefectExplainerRun:
             job_scope(JobHandle("j1", store)),
             patch(
                 f"{_AGENT_MODULE}.get_test_case_set_catalog",
-                return_value={"TCS1": _make_tcs(uid="TCS1"), "TCS2": _make_tcs(uid="TCS2")},
+                return_value={
+                    "TCS1": _make_tcs(uid="TCS1", key="K1"),
+                    "TCS2": _make_tcs(uid="TCS2", key="K2"),
+                },
             ),
             patch.object(
                 self.service,

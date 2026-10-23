@@ -179,7 +179,7 @@ class DefectExplainer(Agent):
                     self._generate_defect_explanations(tcs, context, conn, llm_client)
                 )
                 logger.debug("Scheduled task for test_case_set '%s'", tcs.details.uniqueID)
-                tasks.append((tcs.details.uniqueID, task))
+                tasks.append((tcs.details.key, task))
 
         logger.debug("Awaiting completion of %d defect explanation generation task(s)", len(tasks))
         await gather_items(tasks, context.language)
