@@ -83,6 +83,24 @@ file = "defect_explainer/prompt.yaml"
 # cache_dir = "data/embedding_cache"
 # batch_size = 256
 
+# Test idea generator (opt-in): generates test ideas for the requirements assigned below a test
+# theme and writes them into the theme's description.
+# [testbench-ai-service.agents.requirement]
+# enabled = true
+# endpoint_path = "/requirement-test-ideas"
+# class_path = "testbench_ai_service.agents.generate_test_idears.agent.RequirementAgent"
+
+# [testbench-ai-service.agents.requirement.prompt]
+# file = "generate_test_idears/prompt.yaml"
+
+# [testbench-ai-service.agents.requirement.args]
+# max_requirements = 20
+# max_ideas_per_theme = 30
+# rm_service_url = "https://rm.example.com/api/"   # unset: requirements without description
+# rm_username = "rm-user"
+# rm_password = "rm-password"
+# rm_projects = ["Dream Car"]                   # searched with a JWT; unset: every RM project
+
 # Coverage checker (opt-in): checks whether the tests linked to a requirement prove all its
 # aspects and adds the result to the review comment of every linked test case set.
 # TestBench must offer the plugin on requirements (register it as a requirement plugin).
