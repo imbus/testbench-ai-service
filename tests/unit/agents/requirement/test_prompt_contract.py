@@ -20,7 +20,7 @@ PROMPTS = Path(__file__).parents[4] / "testbench_ai_service" / "prompts"
 def test_every_template_variable_is_declared_by_the_agent_data_class(language):
     context = SimpleNamespace(
         prompt_config=SimpleNamespace(
-            file=PROMPTS / language / "requirement" / "prompt.yaml",
+            file=PROMPTS / language / "generate_test_idears" / "prompt.yaml",
             variant=None,
         )
     )
