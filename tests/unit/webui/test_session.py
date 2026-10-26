@@ -143,3 +143,31 @@ def test_create_defaults_user_key_to_none():
     store = SessionStore()
     session = store.create(username="a", roles=[], is_admin=False, tb_session_token="t")
     assert session.user_key is None
+
+
+def test_an_abandoned_expired_session_is_dropped_on_the_next_login(
+    store: SessionStore, clock: Clock
+):
+    """Never asked for again, it would otherwise hold its TestBench token until a restart."""
+    abandoned = _create(store)
+    clock.advance(IDLE_TIMEOUT + timedelta(seconds=1))
+    _create(store)
+    assert abandoned.sid not in store._sessions
+
+
+class _RacingDict(dict):
+    """A dict whose entry another thread removes right after this one reads it."""
+
+    def get(self, key, default=None):
+        value = super().get(key, default)
+        self.pop(key, None)
+        return value
+
+
+def test_expiring_a_session_another_request_already_dropped_is_not_an_error(
+    store: SessionStore, clock: Clock
+):
+    session = _create(store)
+    clock.advance(IDLE_TIMEOUT + timedelta(seconds=1))
+    store._sessions = _RacingDict(store._sessions)
+    assert store.get(session.sid) is None

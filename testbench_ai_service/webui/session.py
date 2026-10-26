@@ -82,6 +82,10 @@ class SessionStore:
         user_key: str | None = None,
     ) -> Session:
         moment = self._now()
+        # Sweep here, because get() only ever drops the sid it is asked for:
+        # a session nobody asks for again would keep its TestBench token --
+        # on TestBench 3 the plaintext password -- until the next restart.
+        self._drop_expired(moment)
         session = Session(
             sid=secrets.token_urlsafe(32),
             csrf_token=secrets.token_urlsafe(32),
@@ -108,11 +112,10 @@ class SessionStore:
             return None
 
         moment = self._now()
-        if (
-            moment - session.last_seen > self._idle_timeout
-            or moment - session.created_at > self._absolute_timeout
-        ):
-            del self._sessions[sid]
+        if self._expired(session, moment):
+            # pop, not del: sync dependencies run in the threadpool, and a
+            # parallel request with the same sid may have dropped it already.
+            self._sessions.pop(sid, None)
             return None
 
         session.last_seen = moment
@@ -120,3 +123,15 @@ class SessionStore:
 
     def revoke(self, sid: str) -> None:
         self._sessions.pop(sid, None)
+
+    def _expired(self, session: Session, moment: datetime) -> bool:
+        return (
+            moment - session.last_seen > self._idle_timeout
+            or moment - session.created_at > self._absolute_timeout
+        )
+
+    def _drop_expired(self, moment: datetime) -> None:
+        # list(): another thread may add or drop a session while this runs.
+        for sid, session in list(self._sessions.items()):
+            if self._expired(session, moment):
+                self._sessions.pop(sid, None)
