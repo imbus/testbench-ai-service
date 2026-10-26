@@ -67,7 +67,7 @@ Genau **ein Satz**, Klartext:
 - Fachlich verständliche Sprache für nicht-technische Leser
 - Keine technischen Begriffe, keine Spekulation
 
-{% if vars.validate_output %}
+{% if vars.validate_output in [true, "true"] %}
 # Selbstprüfung vor Ausgabe
 Vor der Ausgabe prüfen:
 1. Ist die Ausgabe genau ein Satz?
