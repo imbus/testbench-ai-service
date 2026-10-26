@@ -44,20 +44,23 @@ GENERATED_IDEAS_BLOCK = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
-HTML_HEADER = re.compile(r"<head\b[^>]*>.*?</head\s*>", re.DOTALL | re.IGNORECASE)
+#: A ``<head>`` or ``<header>`` element with its content. A requirement's description
+#: may open with a ``<header>`` banner (title, version) that says nothing about what to test.
+HTML_HEADER = re.compile(r"<(head|header)\b[^>]*>.*?</\1\s*>", re.DOTALL | re.IGNORECASE)
 
 
 def strip_html_header(html: str) -> str:
-    """Remove every ``<head>`` element, content included, from an HTML string."""
+    """Remove every ``<head>`` and ``<header>`` element, content included, from an HTML string."""
     return HTML_HEADER.sub("", html)
 
 
 def html_text(html: str) -> str:
     """Return the visible text of an HTML document or fragment, whitespace collapsed.
 
-    A ``<head>`` is left out, so shortening the text keeps the description proper.
+    ``<head>`` and ``<header>`` are left out, so shortening the text keeps the
+    description proper.
     """
-    return visible_text(html)
+    return visible_text(strip_html_header(html))
 
 
 def strip_generated_ideas(html: str) -> str:
