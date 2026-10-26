@@ -551,6 +551,11 @@ async def apply_config(
     raised -- the write already succeeded and the response must say so.
     """
     config_path = Path(request.app.state.config_path)
+    # No await between this read of config.toml and write_atomic below, and
+    # the same holds in fork_prompt: on the event loop that makes read, merge
+    # and write one step, so two applies cannot interleave and lose an edit.
+    # Turning this route into a sync def, or adding an await in between,
+    # needs a real lock shared with fork_prompt.
     preview, proposed_text, has_write = _plan_change(body.edits, config_path, config)
 
     if not preview.valid:
