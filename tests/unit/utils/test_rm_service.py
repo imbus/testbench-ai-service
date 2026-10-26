@@ -165,6 +165,36 @@ def test_the_latest_version_is_the_newest_by_date():
     ]
 
 
+def test_names_are_quoted_as_one_path_segment_each():
+    # A '/' would split the segment and a '#' would cut the path off.
+    session = _Session(_Response(200, []))
+
+    rm_service.get_latest_requirement_version(
+        session, "http://rm/", "Dream Car (DCS)", "v1/2#rc", "R-1"
+    )
+    rm_service.get_extended_requirement(
+        session, "http://rm/", "Dream Car (DCS)", "v1/2#rc", "R-1", "1.0"
+    )
+
+    assert [url for url, _body in session.posted] == [
+        "http://rm/projects/Dream%20Car%20%28DCS%29/baselines/v1%2F2%23rc/requirement-versions",
+        "http://rm/projects/Dream%20Car%20%28DCS%29/baselines/v1%2F2%23rc/extended-requirement",
+    ]
+
+
+def test_a_project_name_is_quoted_when_its_baselines_are_listed():
+    requested = []
+
+    class _ListingSession:
+        def get(self, url):
+            requested.append(url)
+            return _Response(200, [])
+
+    rm_service.discover_rm_baselines(_ListingSession(), "http://rm/", ["A/B"])
+
+    assert requested == ["http://rm/projects/A%2FB/baselines"]
+
+
 @pytest.mark.parametrize(
     "response",
     [

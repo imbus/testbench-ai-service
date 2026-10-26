@@ -14,6 +14,7 @@ import asyncio
 from collections import defaultdict
 from http import HTTPStatus
 from typing import Any, Self
+from urllib.parse import quote
 
 import requests
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -343,7 +344,7 @@ def get_latest_requirement_version(
     Returns:
         The version name, or ``None`` when the baseline does not know the requirement.
     """
-    url = f"{rm_service_url}projects/{req_project}/baselines/{baseline}/requirement-versions"
+    url = _baseline_url(rm_service_url, req_project, baseline, "requirement-versions")
     try:
         response = session.post(url, json={"id": requirement_id, "version": _ANY_VERSION})
     except requests.exceptions.RequestException as e:
@@ -398,7 +399,7 @@ def discover_rm_baselines(
 
     baselines: list[dict] = []
     for project in rm_projects:
-        url = f"{rm_service_url}projects/{project}/baselines"
+        url = f"{rm_service_url}projects/{_segment(project)}/baselines"
         try:
             project_baselines = [
                 {"name": baseline["name"], "reqProjectName": project, "type": baseline.get("type")}
@@ -418,6 +419,16 @@ def discover_rm_baselines(
         [_baseline_name(baseline) for baseline in baselines],
     )
     return baselines
+
+
+def _segment(name: str) -> str:
+    """Quote a project or baseline name as one URL path segment, ``/`` and ``#`` included."""
+    return quote(name, safe="")
+
+
+def _baseline_url(rm_service_url: str, req_project: str, baseline: str, leaf: str) -> str:
+    """The URL of ``leaf`` in a baseline of an RM project."""
+    return f"{rm_service_url}projects/{_segment(req_project)}/baselines/{_segment(baseline)}/{leaf}"
 
 
 def _get_json(session: requests.Session, url: str) -> Any:
@@ -522,7 +533,7 @@ def get_extended_requirement(
         unknown baseline or requirement), the RM service is unreachable, answers with
         any other error status, or returns a body that is not an extended requirement.
     """
-    url = f"{rm_service_url}projects/{req_project}/baselines/{baseline}/extended-requirement"
+    url = _baseline_url(rm_service_url, req_project, baseline, "extended-requirement")
     body = {"id": requirement_id, "version": version}
     try:
         response = session.post(url, json=body)

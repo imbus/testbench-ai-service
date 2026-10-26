@@ -238,7 +238,7 @@ class TestBaselineDiscovery:
         await fetch_requirement_details(_jwt_conn(), RM_ARGS, TOV, [_assignment()])
 
         assert [url for url, _ in rm.posted] == [
-            _rm_url("Current Baseline"),
+            _rm_url("Current%20Baseline"),
             _rm_url("Old"),
             _rm_url("Draft"),
         ]
