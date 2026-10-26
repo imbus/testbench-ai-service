@@ -522,6 +522,14 @@ change that, so keep the hop between proxy and service on a trusted network.
 See [HTTPS / TLS](configuration.md#https--tls) and
 [Reverse proxy](configuration.md#reverse-proxy).
 
+Without TLS anywhere on the way, the sign-in form sends the TestBench user name
+and password in clear text. Expose the console beyond loopback only over HTTPS.
+
+Signing in with the TestBench *Administrator* role lets a user change what the
+service runs: `config.toml`, including log file paths, the TestBench server URL
+and agent class paths, and every prompt template. Treat that role as equivalent
+to operator access to the service host.
+
 ---
 
 ## Troubleshooting
