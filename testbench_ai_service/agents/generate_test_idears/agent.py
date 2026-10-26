@@ -303,7 +303,6 @@ class RequirementAgent(Agent):
                 context=context,
                 llm_client=llm_client,
             )
-            print(test_ideas.model_dump_json())
             await patch_generated_test_ideas(
                 conn=conn,
                 project_key=context.project_key,
