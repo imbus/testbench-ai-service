@@ -42,7 +42,7 @@ class TestPlannerAgentData(AgentData, total=False):
 
 
 class TestPlannerAgent(Agent):
-    """Plans the most diverse test selection of a cycle and logs it."""
+    """Plans the most diverse test selection of a cycle and sets it to planned in TestBench."""
 
     __test__ = False  # not a pytest test class
 
