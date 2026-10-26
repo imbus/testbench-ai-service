@@ -42,6 +42,7 @@ from testbench_ai_service.agents.link_finder.scoring import (
     covered_aspect_ids,
     rank_key,
 )
+from testbench_ai_service.jobs.handle import current_job
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
@@ -292,6 +293,7 @@ class LinkFinder(Agent):
         if result is None:
             return
         logger.info("%s\n%s", render_report(result), result.model_dump_json(indent=2))
+        await current_job().set_report("link_finder", result)
 
     async def find_links(
         self,
@@ -310,11 +312,15 @@ class LinkFinder(Agent):
         """
         if not item_ids or not context.tov_key:
             logger.info("No unlinked test case sets to search; nothing to do")
+            await self._fail_job(context, "nothing_to_search")
             return None
         options = resolve_run_options(context.prompt_config.vars, self.args)
 
         loaded = await self._load_search_space(context, conn)
         if loaded is None:
+            await self._fail_job(
+                context, "load_failed", requirement=context.root_key or context.root_uid
+            )
             return None
         requirement, assignments, catalog = loaded
         ref = requirement.external_ref or requirement.key
@@ -325,9 +331,11 @@ class LinkFinder(Agent):
                 item_ids,
                 ref,
             )
+            await self._fail_job(context, "no_sets_loaded", requirement=ref)
             return None
 
         ask = self._ask(context, llm_client)
+        await current_job().progress(0, 3, self._job_text(context, "progress.aspects"))
         try:
             aspects = await decompose(ask, requirement, self.args.max_aspects)
         except Exception as error:
@@ -336,9 +344,11 @@ class LinkFinder(Agent):
                 ref,
                 error,
             )
+            await self._fail_job(context, "decompose_failed", requirement=ref)
             return None
 
         rendered = render_requirement(requirement)
+        await current_job().progress(1, 3, self._job_text(context, "progress.prefilter"))
         prefilter = LlmPrefilter(
             ask,
             self.args.prefilter_batch_size,
@@ -348,6 +358,7 @@ class LinkFinder(Agent):
         screened = await prefilter.run(rendered, aspects, summaries)
         by_key = {tcs.details.key: tcs for tcs in catalog.values()}
         details = [test_case_set_detail(by_key[hit.set_key]) for hit in screened.hits]
+        await current_job().progress(2, 3, self._job_text(context, "progress.candidates"))
         interpreted = await self._interpret_candidates(ask, rendered, aspects, details)
 
         refs = {
@@ -369,6 +380,7 @@ class LinkFinder(Agent):
             incomplete=screened.incomplete or bool(failed_sets),
             set_paths={detail.key: detail.path for detail in details},
         )
+        await current_job().progress(3, 3, self._job_text(context, "progress.comments"))
         if options.write_review_comments:
             # This run says nothing about these sets, so their blocks are not outdated.
             not_evaluated = {*screened.unscreened, *failed_sets}
@@ -422,6 +434,14 @@ class LinkFinder(Agent):
             )
             return None
         return requirement, assignments, catalog
+
+    @staticmethod
+    def _job_text(context: ExecutionContext, key: str, **values: str | None) -> str:
+        text: str = get_translation(f"link_finder.job.{key}", context.language, **values)
+        return text
+
+    async def _fail_job(self, context: ExecutionContext, key: str, **values: str | None) -> None:
+        await current_job().fail(self._job_text(context, key, **values))
 
     def _ask(self, context: ExecutionContext, llm_client: LLMClient) -> AskStep:
         async def ask(step: str, schema: type[T], agent_data: AgentData) -> T:

@@ -12,9 +12,11 @@ from testbench_ai_service.agents.link_finder.model import (
     PrefilterAnswer,
     PrefilterHit,
 )
+from testbench_ai_service.jobs.handle import JobHandle, job_scope
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import RequirementAssignment
-from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.utils.i18n import get_translation, load_translations
 from testbench_ai_service.utils.rm_service import Requirement
 from testbench_ai_service.utils.structured_output import StructuredOutputError
 from testbench_ai_service.utils.traceability.context import RequirementNotFoundError
@@ -368,3 +370,98 @@ async def test_a_requirement_nobody_knows_stops_the_run(world, monkeypatch):
 
     assert await _find(world) is None
     assert world.steps == []
+
+
+class TestJobReporting:
+    @pytest.fixture
+    def job(self, tmp_path):
+        store = JobStore(tmp_path / "usage.sqlite")
+        store.create(
+            "j1",
+            agent_key="link_finder",
+            user_key="me",
+            project_key="7",
+            project_name="P",
+            root_key=REQ,
+            item_ids=ITEMS,
+            warnings=[],
+        )
+        return SimpleNamespace(store=store, handle=JobHandle("j1", store))
+
+    @staticmethod
+    def _text(key, **values):
+        return get_translation(f"link_finder.job.{key}", LanguageOption.ENGLISH, **values)
+
+    async def _run(self, world, job, items=ITEMS):
+        agent = LinkFinder()
+        agent._catalog = world.catalog
+        with job_scope(job.handle):
+            await agent.run(_context(), None, None, list(items))
+        return job.store.get("j1", "me")
+
+    async def test_a_finished_search_stores_the_result_as_report(self, world, job):
+        detail = await self._run(world, job)
+
+        assert detail.report_type == "link_finder"
+        assert detail.report["requirement_key"] == "REQ-42"
+        assert job.handle.failed is False
+
+    async def test_progress_follows_the_phases(self, world, job, monkeypatch):
+        seen = []
+        original = job.handle.progress
+
+        async def _spy(done, total, text=None):
+            seen.append((done, total, text))
+            await original(done, total, text)
+
+        monkeypatch.setattr(job.handle, "progress", _spy)
+
+        await self._run(world, job)
+
+        assert seen == [
+            (0, 3, self._text("progress.aspects")),
+            (1, 3, self._text("progress.prefilter")),
+            (2, 3, self._text("progress.candidates")),
+            (3, 3, self._text("progress.comments")),
+        ]
+
+    @pytest.mark.parametrize(
+        ("case", "key", "requirement"),
+        [
+            ("no_items", "nothing_to_search", None),
+            ("load_raises", "load_failed", REQ),
+            ("no_sets", "no_sets_loaded", "REQ-42"),
+            ("decompose_raises", "decompose_failed", "REQ-42"),
+        ],
+    )
+    async def test_an_early_stop_fails_the_job_with_its_reason(
+        self, case, key, requirement, world, job, monkeypatch
+    ):
+        items = ITEMS
+        if case == "no_items":
+            items = []
+        elif case == "load_raises":
+
+            async def _boom(*args):
+                raise RuntimeError("down")
+
+            monkeypatch.setattr(agent_module, "load_requirement", _boom)
+        elif case == "no_sets":
+            items = ["unknown"]
+        else:
+            world.aspects = StructuredOutputError("bad", raw_response="?")
+
+        detail = await self._run(world, job, items)
+
+        values = {"requirement": requirement} if requirement else {}
+        assert detail.error == self._text(key, **values)
+        assert detail.status == "failed"
+        assert detail.report is None
+
+    async def test_an_incomplete_search_is_still_a_report(self, world, job):
+        world.hits = StructuredOutputError("bad", raw_response="?")
+
+        detail = await self._run(world, job)
+
+        assert detail.report["incomplete"] is True
+        assert job.handle.failed is False
