@@ -109,6 +109,8 @@ class PrefilterResult(BaseModel):
     sets_screened: int
     #: At least one batch could not be screened; its sets were never looked at.
     incomplete: bool = False
+    #: Keys of the sets in the batches that could not be screened.
+    unscreened: list[str] = []
 
 
 class LinkCandidate(BaseModel):

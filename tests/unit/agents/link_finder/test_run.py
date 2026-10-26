@@ -290,6 +290,29 @@ async def test_outdated_blocks_of_this_requirement_are_removed(world):
     assert "lock" in world.writes
 
 
+async def test_a_set_the_prefilter_could_not_screen_keeps_its_block(world):
+    # Its hint from an earlier run is not outdated: this run never looked at the set.
+    world.catalog["report"].details.spec.reviewComment = render_block(
+        "AI Link Candidate", "REQ-42", "old", "d", "t0"
+    )
+    world.hits = StructuredOutputError("bad", raw_response="?")
+
+    await _find(world)
+
+    assert world.removed == []
+
+
+async def test_a_candidate_whose_interpretation_failed_keeps_its_block(world):
+    world.catalog["login"].details.spec.reviewComment = render_block(
+        "AI Link Candidate", "REQ-42", "old", "d", "t0"
+    )
+    world.interpretations["login"] = RuntimeError("model down")
+
+    await _find(world)
+
+    assert "login" not in world.removed
+
+
 async def test_run_logs_the_report(world, monkeypatch):
     logger = MagicMock()
     monkeypatch.setattr(agent_module, "logger", logger)

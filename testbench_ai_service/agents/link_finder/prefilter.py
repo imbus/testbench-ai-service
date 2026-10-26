@@ -137,10 +137,18 @@ class LlmPrefilter:
                     return None
             return answer.hits
 
-        answers = await asyncio.gather(*(screen(b) for b in batches(sets, self.batch_size)))
+        chunks = batches(sets, self.batch_size)
+        answers = await asyncio.gather(*(screen(chunk) for chunk in chunks))
         hits = [hit for answer in answers if answer for hit in answer]
+        unscreened = [
+            summary.key
+            for chunk, answer in zip(chunks, answers, strict=True)
+            if answer is None
+            for summary in chunk
+        ]
         return PrefilterResult(
             hits=validate_hits(hits, sets, self.max_candidates),
             sets_screened=len(sets),
-            incomplete=any(answer is None for answer in answers),
+            incomplete=bool(unscreened),
+            unscreened=unscreened,
         )

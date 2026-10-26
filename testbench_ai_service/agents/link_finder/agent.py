@@ -344,7 +344,11 @@ class LinkFinder(Agent):
             set_paths={detail.key: detail.path for detail in details},
         )
         if options.write_review_comments:
-            skipped = await self._write_comments(context, conn, catalog, details, result, options)
+            # This run says nothing about these sets, so their blocks are not outdated.
+            not_evaluated = {*screened.unscreened, *failed_sets}
+            skipped = await self._write_comments(
+                context, conn, catalog, details, result, options, not_evaluated
+            )
             result = result.model_copy(update={"skipped_comments": skipped})
         return result
 
@@ -481,9 +485,10 @@ class LinkFinder(Agent):
         details: list[TestCaseSetDetail],
         result: LinkFinderResult,
         options: LinkFinderRunOptions,
+        not_evaluated: set[str],
     ) -> list[str]:
         """Write the blocks of the commented candidates and remove this requirement's
-        stale blocks everywhere else.
+        stale blocks everywhere else, except in the sets in *not_evaluated*.
 
         Returns:
             The keys of the candidates whose block was not written.
@@ -540,6 +545,7 @@ class LinkFinder(Agent):
             tcs
             for tcs in catalog.values()
             if tcs.details.key not in commented_keys
+            and tcs.details.key not in not_evaluated
             and pattern.search(tcs.details.spec.reviewComment or "")
         ]
         outcomes, _ = await asyncio.gather(
