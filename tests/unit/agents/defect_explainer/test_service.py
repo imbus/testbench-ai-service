@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -92,6 +93,33 @@ def _make_tcs(uid="TCS1", key="K1", spec_key="SK1", exec_key="EK1"):
 
 
 _AGENT_MODULE = "testbench_ai_service.agents.defect_explainer.agent"
+
+
+class TestDefectExplainerPrecheckOffLoop:
+    async def test_asks_testbench_off_the_event_loop(self):
+        # On the loop thread each of these requests would stall every other request.
+        calls = []
+
+        def _record(name, result):
+            def _call(*_args, **_kwargs):
+                try:
+                    asyncio.get_running_loop()
+                    calls.append((name, "loop"))
+                except RuntimeError:
+                    calls.append((name, "worker"))
+                return result
+
+            return _call
+
+        module = "testbench_ai_service.agents.defect_explainer.agent"
+        with (
+            patch(f"{module}.get_tov_details", _record("tov", MagicMock())),
+            patch(f"{module}.is_json_based_tov", _record("format", True)),
+            patch(f"{module}.get_test_case_set_nodes", _record("nodes", [])),
+        ):
+            await DefectExplainer().precheck(_make_context(), _make_conn())
+
+        assert calls == [("tov", "worker"), ("format", "worker"), ("nodes", "worker")]
 
 
 class TestDefectExplainerPrecheck:

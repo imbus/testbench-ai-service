@@ -77,8 +77,13 @@ class DefectExplainer(Agent):
         if unsupported_version := check_min_testbench_version(context, conn):
             return unsupported_version
 
-        fetch_test_object_versions = get_tov_details(conn, context.project_key, context.tov_key)
-        if not is_json_based_tov(conn, context.project_key, context.tov_key):
+        # Each of these asks TestBench; off the loop so other requests are not stalled.
+        fetch_test_object_versions = await asyncio.to_thread(
+            get_tov_details, conn, context.project_key, context.tov_key
+        )
+        if not await asyncio.to_thread(
+            is_json_based_tov, conn, context.project_key, context.tov_key
+        ):
             msg = get_translation(
                 "defect_explainer.precheck.unsupported_tov_format",
                 context.language,
@@ -92,7 +97,7 @@ class DefectExplainer(Agent):
             warnings.append(msg)
             return PrecheckResult(passed=False, warnings=warnings)
 
-        tcs_nodes = get_test_case_set_nodes(conn, context)
+        tcs_nodes = await asyncio.to_thread(get_test_case_set_nodes, conn, context)
 
         items = []
         for node in tcs_nodes:
