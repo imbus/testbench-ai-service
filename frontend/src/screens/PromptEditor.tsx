@@ -91,9 +91,9 @@ function normalizeDocument(doc: PromptDocument, lang: string, agent: string): Pr
  * prompts.
  *
  * An OPTIONAL var with no default is sent as the value it effectively has at
- * runtime: `build_prompt_utils` renders with a lenient `Environment`, where a
- * missing var is falsy and renders empty, so `false` for a boolean and `""`
- * otherwise. Without this, the preview's `StrictUndefined` fails a plain
+ * runtime: `build_prompt_utils` renders with the default (lenient)
+ * `Undefined`, where a missing var is falsy and renders empty, so `false`
+ * for a boolean and `""` otherwise. Without this, the preview's `StrictUndefined` fails a plain
  * `{% if vars.validate_output %}` that the agent renders fine.
  *
  * A REQUIRED var with no default is OMITTED, so `StrictUndefined` reports it

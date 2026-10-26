@@ -10,8 +10,7 @@ import { useTranslation } from 'react-i18next'
  * §5.6, Task 6). Copied verbatim from `PromptEditor.tsx`'s `Header` helper
  * and its default-variant `<select>` block -- same ids, same
  * `aria-invalid`/`aria-describedby` logic -- so this pane's own tests pin
- * exactly the behaviour the old screen already had. `PromptEditor.tsx` keeps
- * its own copies until Task 8 rewires it to render this instead.
+ * exactly the behaviour the old screen already had.
  */
 function Header({
   label,

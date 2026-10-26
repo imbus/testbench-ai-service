@@ -12,8 +12,6 @@ import { useTranslation } from 'react-i18next'
  * is copied verbatim from `PromptEditor.tsx`'s `isAdmin && selectedVariantObj`
  * block -- same ids, same `data-testid="variant-actions"` -- so this pane's
  * own tests pin exactly the behaviour the old screen already had.
- * `PromptEditor.tsx` keeps its own copy until Task 8 rewires it to render
- * this instead.
  */
 export function VariantPane({
   variant,
