@@ -217,6 +217,12 @@ describe('MessagePane', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/sys\.jinja/)
   })
 
+  it('keeps the editor of an unreadable template read-only', () => {
+    // Saving it is refused (409), so typing into the empty stand-in is lost.
+    setup({ message: { role: 'system', source: 'file', file: 'sys.jinja', content: '', readable: false } })
+    expect(screen.getByRole('textbox', { name: /sys\.jinja/ })).toHaveAttribute('readonly')
+  })
+
   it('leaves the source toggle enabled for a readable message', () => {
     setup({ message: { role: 'system', source: 'file', file: 'sys.jinja', content: 'S', readable: true } })
     expect(screen.getByLabelText(/source/i)).toBeEnabled()

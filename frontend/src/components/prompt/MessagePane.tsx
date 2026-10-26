@@ -223,7 +223,7 @@ export function MessagePane({
           value={message.content}
           onChange={onContent}
           diagnostics={diagnostics}
-          readOnly={readOnly}
+          readOnly={!editable}
           ariaLabel={editorLabel(message)}
           completion={completion}
           modelKey={modelKey}
