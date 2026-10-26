@@ -195,6 +195,51 @@ class TestPlanTestCases:
         assert planned == 0
         action.assert_not_called()
 
+    async def test_waits_until_testbench_has_finished_the_import(self):
+        catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.NotPlanned})}
+        importer = MagicMock()
+        importer.trigger.return_value = True
+        importer.poll.side_effect = [False, False, True]
+
+        with (
+            patch(f"{_MODULE}.write_import_zip"),
+            patch(f"{_MODULE}.ImportJSONExecutionResults", return_value=importer),
+            patch(f"{_MODULE}.IMPORT_POLL_INTERVAL_SEC", 0),
+        ):
+            planned = await plan_test_cases(MagicMock(), _context(), catalog, ["TC-1"])
+
+        assert planned == 1
+        assert importer.poll.call_count == 3
+
+    async def test_an_import_testbench_refuses_raises(self):
+        # TestBench reports a failed import job as an AssertionError carrying its reason.
+        catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.NotPlanned})}
+        importer = MagicMock()
+        importer.trigger.return_value = True
+        importer.poll.side_effect = AssertionError("Execution is locked")
+
+        with (
+            patch(f"{_MODULE}.write_import_zip"),
+            patch(f"{_MODULE}.ImportJSONExecutionResults", return_value=importer),
+            pytest.raises(RuntimeError, match="Execution is locked"),
+        ):
+            await plan_test_cases(MagicMock(), _context(), catalog, ["TC-1"])
+
+    async def test_an_import_that_never_finishes_times_out(self):
+        catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.NotPlanned})}
+        importer = MagicMock()
+        importer.trigger.return_value = True
+        importer.poll.return_value = False
+
+        with (
+            patch(f"{_MODULE}.write_import_zip"),
+            patch(f"{_MODULE}.ImportJSONExecutionResults", return_value=importer),
+            patch(f"{_MODULE}.IMPORT_POLL_INTERVAL_SEC", 0),
+            patch(f"{_MODULE}.IMPORT_TIMEOUT_SEC", 0),
+            pytest.raises(TimeoutError, match="cycle 'C'"),
+        ):
+            await plan_test_cases(MagicMock(), _context(), catalog, ["TC-1"])
+
     async def test_failed_trigger_raises(self):
         catalog = {"S1": _set("S1", {"TC-1": ActivityStatus.NotPlanned})}
         importer = MagicMock()

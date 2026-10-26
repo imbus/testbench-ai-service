@@ -10,6 +10,7 @@ from copy import deepcopy
 from dataclasses import asdict
 from enum import Enum
 from pathlib import Path
+from time import monotonic
 from typing import NamedTuple
 
 from testbench2robotframework.json_reader import TestCaseSet
@@ -30,6 +31,10 @@ from testbench_cli_reporter.util import TYPICAL_JSON_IMPORT_CONFIG
 from testbench_ai_service.agents.test_planner.model import EXECUTED_STATUSES, PLANNED_STATUSES
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext
+
+#: How long TestBench may take to run the planning import, and how often to ask.
+IMPORT_TIMEOUT_SEC = 300
+IMPORT_POLL_INTERVAL_SEC = 1.0
 
 _PLANNED = frozenset(status.value for status in PLANNED_STATUSES)
 _EXECUTED = frozenset(status.value for status in EXECUTED_STATUSES)
@@ -57,7 +62,9 @@ async def plan_test_cases(
         The number of test cases whose status was changed.
 
     Raises:
-        RuntimeError: If the import job could not be triggered.
+        RuntimeError: If the import job could not be triggered, or TestBench
+            reports that it failed.
+        TimeoutError: If TestBench has not finished the import in time.
     """
     planning = build_planning_import(catalog, unique_ids)
     if planning.skipped:
@@ -201,9 +208,29 @@ async def _import(conn: TBConnection, context: ExecutionContext, path: Path) -> 
     )
     importer = ImportJSONExecutionResults(parameters=parameters)
 
-    triggered = await asyncio.to_thread(importer.trigger, connection.active_connection)
+    active = connection.active_connection
+    triggered = await asyncio.to_thread(importer.trigger, active)
     if not triggered:
         raise RuntimeError(
             f"Failed to trigger the import that plans the test cases in cycle '{context.cycle_key}'."
         )
     logger.debug("Triggered the planning import in cycle '%s'", context.cycle_key)
+
+    # Not importer.wait(): it polls without a time limit and prints a progress bar.
+    deadline = monotonic() + IMPORT_TIMEOUT_SEC
+    while True:
+        try:
+            finished = await asyncio.to_thread(importer.poll, active)
+        except AssertionError as e:
+            # How testbench_cli_reporter reports a job that TestBench ended with a failure.
+            raise RuntimeError(
+                f"TestBench could not plan the test cases in cycle '{context.cycle_key}': {e}"
+            ) from e
+        if finished:
+            return
+        if monotonic() >= deadline:
+            raise TimeoutError(
+                f"The planning import in cycle '{context.cycle_key}' did not finish "
+                f"within {IMPORT_TIMEOUT_SEC} seconds."
+            )
+        await asyncio.sleep(IMPORT_POLL_INTERVAL_SEC)
