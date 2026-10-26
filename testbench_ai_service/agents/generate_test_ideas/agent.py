@@ -35,6 +35,7 @@ from testbench_ai_service.agents.generate_test_ideas.utils import (
     patch_generation_started,
     render_test_ideas,
 )
+from testbench_ai_service.jobs.handle import current_job
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
@@ -162,6 +163,7 @@ class RequirementAgent(Agent):
             spec = await get_theme_spec(conn, context.project_key, theme)
         except Exception as error:
             logger.error("Could not read test theme '%s': %r", theme.base.name, error)
+            await _fail_job(context, "theme_unreadable", theme=theme.base.name)
             return
 
         try:
@@ -181,6 +183,8 @@ class RequirementAgent(Agent):
                 [assignment.extendedId for assignment in assignments],
                 error,
             )
+            # The theme shows the failure notice; the job must not report success.
+            await _fail_job(context, "generation_failed", theme=theme.base.name)
 
     def _check_requirements(
         self, theme_name: str, assignments: list[RequirementAssignment], language: LanguageOption
@@ -377,3 +381,8 @@ def _refused(language: LanguageOption, key: str, **kwargs: object) -> PrecheckRe
     message = get_translation(key, language, **kwargs)
     logger.info("Test idea generation refused: %s", message)
     return PrecheckResult(passed=False, warnings=[message])
+
+
+async def _fail_job(context: ExecutionContext, key: str, **values: str) -> None:
+    """End the run's job as failed, with the translation of ``requirement.job.<key>``."""
+    await current_job().fail(get_translation(f"requirement.job.{key}", context.language, **values))

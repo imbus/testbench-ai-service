@@ -17,6 +17,8 @@ from testbench_ai_service.agents.generate_test_ideas.model import (
     TestIdea,
     TestIdeaResult,
 )
+from testbench_ai_service.jobs.handle import JobHandle, job_scope
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
@@ -26,7 +28,7 @@ from testbench_ai_service.models.testbench import (
     TestThemeNode,
 )
 from testbench_ai_service.utils.agent import MIN_TESTBENCH_VERSION
-from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.utils.i18n import get_translation, load_translations
 from testbench_ai_service.utils.structured_output import StructuredOutputError
 
 
@@ -539,3 +541,53 @@ class TestFailureHandling:
         await _run()
 
         assert wired.recorder.calls == ["started", "failed"]
+
+
+class TestJobReporting:
+    """A run that writes no ideas fails its job, so the job matches what TestBench shows."""
+
+    @pytest.fixture
+    def job(self, tmp_path):
+        store = JobStore(tmp_path / "usage.sqlite")
+        store.create(
+            "j1",
+            agent_key="requirement",
+            user_key="u1",
+            project_key="10004",
+            project_name="VSR-Dreamcar",
+            root_key="TT-1",
+            item_ids=["TT-1"],
+            warnings=[],
+        )
+        return SimpleNamespace(store=store, handle=JobHandle("j1", store))
+
+    async def _run(self, job):
+        with job_scope(job.handle):
+            await _run()
+        return job.store.get("j1", "u1")
+
+    async def test_a_written_result_leaves_the_job_alone(self, wired, job):
+        await self._run(job)
+
+        assert job.handle.failed is False
+
+    async def test_an_unreadable_theme_fails_the_job(self, wired, job):
+        wired.theme_error = RuntimeError("403")
+
+        detail = await self._run(job)
+
+        assert detail.status == "failed"
+        assert detail.error == get_translation(
+            "requirement.job.theme_unreadable", LanguageOption.ENGLISH, theme="Discounts"
+        )
+
+    async def test_a_failed_generation_fails_the_job(self, wired, job):
+        wired.ai_error = RuntimeError("upstream refused")
+
+        detail = await self._run(job)
+
+        assert wired.recorder.calls == ["started", "failed"]
+        assert detail.status == "failed"
+        assert detail.error == get_translation(
+            "requirement.job.generation_failed", LanguageOption.ENGLISH, theme="Discounts"
+        )

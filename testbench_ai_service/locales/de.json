@@ -23,6 +23,8 @@
     "requirement.precheck.locked": "Das Testthema '{theme}' ist von einem anderen Benutzer gesperrt.",
     "requirement.precheck.no_requirements": "Unterhalb des Testthemas '{theme}' sind keine Anforderungen zugeordnet.",
     "requirement.precheck.too_many_requirements": "Das Testthema '{theme}' hat {count} Anforderungen, erlaubt sind höchstens {max}.",
+    "requirement.job.theme_unreadable": "Das Testthema '{theme}' konnte nicht gelesen werden.",
+    "requirement.job.generation_failed": "Die Testideen für das Testthema '{theme}' konnten nicht erzeugt werden.",
     "coverage_checker.block.heading": "KI-Abdeckung",
     "coverage_checker.block.proves": "Weist für {requirement} nach: {aspects}.",
     "coverage_checker.block.proves_nothing": "Mit {requirement} verlinkt, prüft aber keinen ihrer Aspekte ({reason}). Link prüfen oder Anforderung ergänzen.",

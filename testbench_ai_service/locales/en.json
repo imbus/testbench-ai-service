@@ -23,6 +23,8 @@
     "requirement.precheck.locked": "Test theme '{theme}' is locked by another user.",
     "requirement.precheck.no_requirements": "No requirements are assigned below test theme '{theme}'.",
     "requirement.precheck.too_many_requirements": "Test theme '{theme}' has {count} requirements, more than the {max} allowed.",
+    "requirement.job.theme_unreadable": "Could not read test theme '{theme}'.",
+    "requirement.job.generation_failed": "Generating test ideas for test theme '{theme}' failed.",
     "coverage_checker.block.heading": "AI Coverage",
     "coverage_checker.block.proves": "Proves for {requirement}: {aspects}.",
     "coverage_checker.block.proves_nothing": "Linked to {requirement}, but tests none of its aspects ({reason}). Check the link or extend the requirement.",
