@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, TemplateSyntaxError, UndefinedError
+from jinja2 import TemplateSyntaxError, UndefinedError
+from jinja2.sandbox import SandboxedEnvironment
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData
@@ -31,7 +32,11 @@ def build_messages(
     Returns:
         List of ``Message`` objects ready to be sent to an LLM.
     """
-    env = Environment(trim_blocks=True, lstrip_blocks=True)
+    # Sandboxed because the web console lets a TestBench administrator edit
+    # templates: an unsandboxed environment would let a template reach Python
+    # internals and run code in the service process. Must match the console's
+    # preview environment in webui/prompt_render.py.
+    env = SandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
     messages: list[Message] = []
 
     for msg_template in templates:
