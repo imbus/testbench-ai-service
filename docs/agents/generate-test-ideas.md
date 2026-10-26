@@ -103,10 +103,10 @@ When the agent runs again on the same theme, earlier test idea blocks are remove
 [testbench-ai-service.agents.requirement]
 enabled = true
 endpoint_path = "/requirement-test-ideas"
-class_path = "testbench_ai_service.agents.generate_test_idears.agent.RequirementAgent"
+class_path = "testbench_ai_service.agents.generate_test_ideas.agent.RequirementAgent"
 
 [testbench-ai-service.agents.requirement.prompt]
-file = "generate_test_idears/prompt.yaml"
+file = "generate_test_ideas/prompt.yaml"
 
 [testbench-ai-service.agents.requirement.args]
 max_requirements = 20
@@ -158,7 +158,7 @@ rm_password = "other-password"
 
 ## Prompt variants
 
-The built-in prompt file (`generate_test_idears/prompt.yaml`) ships with the following variant:
+The built-in prompt file (`generate_test_ideas/prompt.yaml`) ships with the following variant:
 
 | Variant                  | Model       | Description                                                                                                                                                                                     |
 | ------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

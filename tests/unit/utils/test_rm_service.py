@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from testbench_ai_service.agents.generate_test_idears import model as generator_model
+from testbench_ai_service.agents.generate_test_ideas import model as generator_model
 from testbench_ai_service.models.testbench import RequirementAssignment
 from testbench_ai_service.utils import rm_service
 

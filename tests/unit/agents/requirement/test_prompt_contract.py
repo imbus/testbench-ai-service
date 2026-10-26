@@ -10,7 +10,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from testbench_ai_service.agents.generate_test_idears.agent import RequirementAgent
+from testbench_ai_service.agents.generate_test_ideas.agent import RequirementAgent
 from testbench_ai_service.agents.routes import validate_template_and_agent_vars
 
 PROMPTS = Path(__file__).parents[4] / "testbench_ai_service" / "prompts"
@@ -20,7 +20,7 @@ PROMPTS = Path(__file__).parents[4] / "testbench_ai_service" / "prompts"
 def test_every_template_variable_is_declared_by_the_agent_data_class(language):
     context = SimpleNamespace(
         prompt_config=SimpleNamespace(
-            file=PROMPTS / language / "generate_test_idears" / "prompt.yaml",
+            file=PROMPTS / language / "generate_test_ideas" / "prompt.yaml",
             variant=None,
         )
     )

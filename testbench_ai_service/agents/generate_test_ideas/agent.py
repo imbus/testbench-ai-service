@@ -15,18 +15,18 @@ import asyncio
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
-from testbench_ai_service.agents.generate_test_idears.context import (
+from testbench_ai_service.agents.generate_test_ideas.context import (
     RequirementAgentData,
     assemble_context,
 )
-from testbench_ai_service.agents.generate_test_idears.model import (
+from testbench_ai_service.agents.generate_test_ideas.model import (
     Requirement,
     RequirementAgentArgs,
     TestIdeaResult,
     ThemeContext,
     apply_guardrails,
 )
-from testbench_ai_service.agents.generate_test_idears.utils import (
+from testbench_ai_service.agents.generate_test_ideas.utils import (
     get_test_theme,
     get_theme_spec,
     load_requirements,

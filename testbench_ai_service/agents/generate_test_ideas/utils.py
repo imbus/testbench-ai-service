@@ -3,8 +3,8 @@ from pathlib import Path
 
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
-from testbench_ai_service.agents.generate_test_idears.context import html_text
-from testbench_ai_service.agents.generate_test_idears.model import (
+from testbench_ai_service.agents.generate_test_ideas.context import html_text
+from testbench_ai_service.agents.generate_test_ideas.model import (
     ExistingTestCaseSet,
     Requirement,
     TestIdea,

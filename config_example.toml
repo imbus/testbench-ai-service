@@ -88,10 +88,10 @@ file = "defect_explainer/prompt.yaml"
 # [testbench-ai-service.agents.requirement]
 # enabled = true
 # endpoint_path = "/requirement-test-ideas"
-# class_path = "testbench_ai_service.agents.generate_test_idears.agent.RequirementAgent"
+# class_path = "testbench_ai_service.agents.generate_test_ideas.agent.RequirementAgent"
 
 # [testbench-ai-service.agents.requirement.prompt]
-# file = "generate_test_idears/prompt.yaml"
+# file = "generate_test_ideas/prompt.yaml"
 
 # [testbench-ai-service.agents.requirement.args]
 # max_requirements = 20

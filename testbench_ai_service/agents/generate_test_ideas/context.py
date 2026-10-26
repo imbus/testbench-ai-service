@@ -8,7 +8,7 @@ is rendered in full, followed by what the theme already contains.
 import re
 from collections.abc import Callable
 
-from testbench_ai_service.agents.generate_test_idears.model import Requirement, ThemeContext
+from testbench_ai_service.agents.generate_test_ideas.model import Requirement, ThemeContext
 from testbench_ai_service.models.agent import AgentData
 from testbench_ai_service.utils.html_utils import visible_text
 
