@@ -8,12 +8,26 @@ alongside as ``.bak`` before the replace.
 """
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
 
 from fastapi import HTTPException, status
 
 from testbench_ai_service.log import logger
+
+
+def copy_mode(source: Path, destination: Path) -> None:
+    """Give *destination* the permission bits of *source*, on POSIX.
+
+    ``mkstemp`` creates its file 0600 and a ``.bak`` is created with the
+    umask, so without this a save would tighten the target to 0600 and leave
+    a backup of a 0600 file -- possibly holding a secret -- readable by
+    everyone. On Windows the only bit ``copymode`` carries is read-only,
+    which would make the next ``.bak`` unwritable, so it is skipped there.
+    """
+    if os.name != "nt":
+        shutil.copymode(source, destination)
 
 
 def write_atomic(path: Path, text: str) -> Path | None:
@@ -62,6 +76,8 @@ def write_atomic(path: Path, text: str) -> Path | None:
         if target.exists():
             backup = target.with_name(f"{target.name}.bak")
             backup.write_bytes(target.read_bytes())
+            copy_mode(target, backup)
+            copy_mode(target, temp_path)
 
         # The only state-mutating call on the target is last. If this raises,
         # the target is unchanged and the exception signals that to the caller --

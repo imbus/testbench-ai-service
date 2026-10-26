@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -210,3 +211,18 @@ def test_a_failure_during_delete_restores_what_was_already_deleted(tmp_path, mon
         write_all({}, deletes=[first, second])
 
     assert first.read_text(encoding="utf-8") == "one", "the first delete was not rolled back"
+
+
+_POSIX_ONLY = pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits")
+
+
+@_POSIX_ONLY
+def test_a_replaced_file_and_its_backup_keep_the_original_mode(tmp_path):
+    target = tmp_path / "prompt.yaml"
+    target.write_text("old\n", encoding="utf-8")
+    target.chmod(0o640)
+
+    result = write_all({target: "new\n"})
+
+    assert target.stat().st_mode & 0o777 == 0o640
+    assert result.backups[target].stat().st_mode & 0o777 == 0o640

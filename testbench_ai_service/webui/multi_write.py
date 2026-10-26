@@ -28,6 +28,7 @@ from fastapi import HTTPException, status
 from pydantic import BaseModel
 
 from testbench_ai_service.log import logger
+from testbench_ai_service.webui.atomic import copy_mode
 
 
 class MultiWriteResult(BaseModel):
@@ -57,6 +58,8 @@ def _stage(target: Path, content: str | bytes) -> Path:
     handle, temp_name = tempfile.mkstemp(
         dir=str(directory), prefix=f".{target.name}.", suffix=".tmp"
     )
+    if target.exists():
+        copy_mode(target, Path(temp_name))
     if isinstance(content, bytes):
         # A byte copy is exactly that: no decode, no newline translation. This
         # is what lets a fork copy a latin-1 or CRLF template faithfully.
@@ -80,6 +83,7 @@ def _backup_existing(paths: Sequence[Path], result: MultiWriteResult) -> None:
         if target.exists():
             backup = target.with_name(f"{target.name}.bak")
             backup.write_bytes(target.read_bytes())
+            copy_mode(target, backup)
             result.backups[target] = backup
 
 

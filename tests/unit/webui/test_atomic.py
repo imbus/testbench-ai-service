@@ -145,3 +145,30 @@ def test_a_failed_backup_write_leaves_the_original_intact_and_raises_400(
     assert exc.value.status_code == 400
     assert target.read_text(encoding="utf-8") == "port = 1\n"
     assert not any(entry.name.endswith(".tmp") for entry in tmp_path.iterdir())
+
+
+_POSIX_ONLY = pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits")
+
+
+@_POSIX_ONLY
+def test_the_written_file_keeps_the_original_mode(tmp_path: Path):
+    target = tmp_path / "config.toml"
+    target.write_text("old\n", encoding="utf-8")
+    target.chmod(0o640)
+
+    write_atomic(target, "new\n")
+
+    assert target.stat().st_mode & 0o777 == 0o640
+
+
+@_POSIX_ONLY
+def test_the_backup_is_no_more_readable_than_the_original(tmp_path: Path):
+    """A config holding a secret at 0600 must not leave a world-readable .bak."""
+    target = tmp_path / "config.toml"
+    target.write_text("old\n", encoding="utf-8")
+    target.chmod(0o600)
+
+    backup = write_atomic(target, "new\n")
+
+    assert backup is not None
+    assert backup.stat().st_mode & 0o777 == 0o600
