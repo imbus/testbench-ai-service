@@ -141,12 +141,13 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
 AGENT_KEY = "test_case_set_translator"
 ```
 
-… **and** the section in `config_example.toml` and in every `config.toml` you run with. A
-`[testbench-ai-service.agents.*]` table in `config.toml` **replaces**
-`DEFAULT_AGENTS` as a whole, and `testbench-ai-service init` writes all defaults into the file,
-so a new default never shows up in an existing installation by itself. A global agent table
-must be complete (`enabled`, `endpoint_path`, `class_path`, `prompt`); only project overrides
-can change a single field:
+… **and** the section in `config_example.toml`. A `[testbench-ai-service.agents.<key>]` table in
+`config.toml` is **merged onto** the built-in of the same key, recursively: `enabled = false`
+alone switches a built-in off, and `[agents.<key>.prompt] variant = "…"` keeps its `file`.
+Built-ins a `config.toml` does not mention stay active, so a new default shows up in an existing
+installation by itself (an unchanged built-in whose prompt file is missing is dropped with a
+warning). A key that names no built-in (a custom or opt-in agent) has nothing to inherit from
+and must be declared in full (`enabled`, `endpoint_path`, `class_path`, `prompt`):
 
 ```toml
 [testbench-ai-service.agents.test_case_set_translator]
@@ -188,7 +189,7 @@ class ReleaseNotesAgent(Agent):
 ```
 
 ```toml
-# Keep the built-in agents' sections in this file, otherwise they disappear (see above).
+# Only this agent's section is needed: the built-in agents stay active (merged, see above).
 [testbench-ai-service.agents.release_notes]
 enabled = true
 endpoint_path = "/release-notes"
@@ -220,8 +221,9 @@ variant = "Quick Translation"
 What happens at startup: `AppConfig` imports every `class_path` (import error → service does
 not start), resolves `prompt.file` under `prompts_dir/<language>/` (missing → does not start),
 validates that YAML against `prompt.schema.json` and checks its `agent.*` variables against
-`AGENT_DATA_CLASS` (mismatch → does not start). This applies to **disabled agents too**, and only
-to the configured language's default prompt: project overrides, the other language and a
+`AGENT_DATA_CLASS` (mismatch → does not start). This applies to **enabled agents only** (a
+disabled agent is neither imported nor validated), and only to the configured language's
+default prompt: project overrides, the other language and a
 request `prompt_config.file` are checked at trigger time (422) or not at all. An agent with
 `enabled = false` gets no dedicated `endpoint_path` route, and `/agents/<key>/trigger` answers
 `404` (also when disabled only for the project). Verify with `GET /agents` and
