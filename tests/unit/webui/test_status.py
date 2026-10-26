@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -44,6 +45,25 @@ def test_unreachable_testbench_is_reported_not_raised(client, login):
         response = _status(client)
     assert response.status_code == 200
     assert response.json()["testbench"]["reachable"] is False
+
+
+def test_testbench_probe_runs_off_the_event_loop(client, login):
+    """A slow TestBench must not stall every other request while /status waits."""
+    login()
+    probed_on_loop: list[bool] = []
+
+    def fake_get(*_args, **_kwargs):
+        try:
+            asyncio.get_running_loop()
+            probed_on_loop.append(True)
+        except RuntimeError:
+            probed_on_loop.append(False)
+        return MagicMock(status_code=200)
+
+    with patch("testbench_ai_service.webui.status.requests.get", side_effect=fake_get):
+        _status(client)
+
+    assert probed_on_loop == [False]
 
 
 def test_api_keys_report_presence_only(client, login, monkeypatch):

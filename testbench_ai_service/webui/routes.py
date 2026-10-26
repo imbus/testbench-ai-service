@@ -1,3 +1,4 @@
+import asyncio
 import os
 from pathlib import Path
 from typing import Any, Literal
@@ -318,12 +319,17 @@ async def read_status(
     """
     on_disk, _issues = validate_config_dict(read_config_file(Path(request.app.state.config_path)))
     pending = restart_required(config, on_disk) if on_disk is not None else []
-    return build_status(
+    token_usage = await read_token_usage(usage_store)
+    # In a thread: build_status probes TestBench with a blocking request, and
+    # an unreachable server would otherwise stall every other request,
+    # agent calls included, for the length of the probe timeout.
+    return await asyncio.to_thread(
+        build_status,
         config,
         request.app.state.started_at,
         registry.count,
         pending,
-        await read_token_usage(usage_store),
+        token_usage,
     )
 
 
