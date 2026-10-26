@@ -292,8 +292,9 @@ class LinkFinder(Agent):
         result = await self.find_links(context, conn, llm_client, item_ids)
         if result is None:
             return
+        # No set_report: report types are a contract with the plugin, and none is
+        # agreed on for the link finder yet (docs/agents/index.md#reports).
         logger.info("%s\n%s", render_report(result), result.model_dump_json(indent=2))
-        await current_job().set_report("link_finder", result)
 
     async def find_links(
         self,

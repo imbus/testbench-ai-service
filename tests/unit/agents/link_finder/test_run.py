@@ -399,11 +399,12 @@ class TestJobReporting:
             await agent.run(_context(), None, None, list(items))
         return job.store.get("j1", "me")
 
-    async def test_a_finished_search_stores_the_result_as_report(self, world, job):
+    async def test_a_finished_search_succeeds_without_a_report(self, world, job):
+        # Report types are a contract with the plugin, and none is agreed on for
+        # the link finder yet (docs/agents/index.md#reports).
         detail = await self._run(world, job)
 
-        assert detail.report_type == "link_finder"
-        assert detail.report["requirement_key"] == "REQ-42"
+        assert (detail.report_type, detail.report) == (None, None)
         assert job.handle.failed is False
 
     async def test_progress_follows_the_phases(self, world, job, monkeypatch):
@@ -458,10 +459,9 @@ class TestJobReporting:
         assert detail.status == "failed"
         assert detail.report is None
 
-    async def test_an_incomplete_search_is_still_a_report(self, world, job):
+    async def test_an_incomplete_search_does_not_fail_the_job(self, world, job):
         world.hits = StructuredOutputError("bad", raw_response="?")
 
-        detail = await self._run(world, job)
+        await self._run(world, job)
 
-        assert detail.report["incomplete"] is True
         assert job.handle.failed is False
