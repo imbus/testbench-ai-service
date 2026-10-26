@@ -301,6 +301,36 @@ The service automatically routes each request to the correct client based on the
 
 For example, if `provider = "openai"` is configured globally but a prompt variant specifies `model: "claude-sonnet-4-6"`, the service automatically uses the Anthropic client for that variant. The corresponding API key (`ANTHROPIC_API_KEY`) must be set in the environment.
 
+### Adding a model the service does not know yet
+
+The clients know a fixed set of models and how to request each one. A newer model is still sent, but as a plain fallback request: without reasoning effort or thinking, and with a warning in the log. To use such a model properly, add it to `extra_models` with its provider and the request shape (`routing`) its client should use. No code change is needed, and the web console offers the model in its model lists.
+
+**`[testbench-ai-service.llm_config.extra_models."<model name>"]`**
+
+| Option     | Type   | Description                                       |
+| ---------- | ------ | ------------------------------------------------- |
+| `provider` | String | `openai`, `azure_openai`, `anthropic` or `custom` |
+| `routing`  | String | The request shape, see below                      |
+
+| `routing`   | Providers                     | Request                                                       |
+| ----------- | ----------------------------- | ------------------------------------------------------------- |
+| `chat`      | `openai`, `azure_openai`      | Chat model, temperature 0                                     |
+| `reasoning` | `openai`, `azure_openai`      | Reasoning model with a reasoning effort                       |
+| `adaptive`  | `anthropic`                   | Adaptive thinking with an effort                              |
+| `budget`    | `anthropic`                   | Extended thinking with a token budget derived from the effort |
+| `fallback`  | all (the only one for `custom`) | Plain request, as for an unknown model                      |
+
+Any other combination is refused when the configuration is loaded, and so is an entry for a model the clients already know: such a model is offered automatically.
+
+**Example:**
+
+```toml
+# config.toml
+[testbench-ai-service.llm_config.extra_models."gpt-6"]
+provider = "openai"
+routing = "reasoning"
+```
+
 ### Setting the API key
 
 API keys are loaded from environment variables using the pattern `{PROVIDER}_API_KEY`:
@@ -552,6 +582,31 @@ log_format = "%(levelname)s: %(message)s"
 file_name = "testbench-ai-service.log"
 log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
+```
+
+### Activity log
+
+**`[testbench-ai-service.logging.activity]`**
+
+A separate JSON Lines file that feeds the activity view of the [web console](web-console.md): what each user's agent runs did, and, for administrators, what the service itself did. Credentials found in the environment are masked in this file only.
+
+| Option         | Type    | Description                                                                   | Default                                  |
+| -------------- | ------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
+| `enabled`      | Boolean | Write the activity log. When `false`, the activity view stays empty.          | `true`                                   |
+| `file_name`    | String  | Path to the file. Relative paths are resolved from the working directory.     | `"testbench-ai-service.activity.jsonl"` |
+| `log_level`    | String  | Minimum log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`.    | `"INFO"`                                 |
+| `max_bytes`    | Integer | Size at which the file is rotated.                                            | `5242880` (5 MB)                         |
+| `backup_count` | Integer | Rotated files to keep. The activity view reads them too.                      | `3`                                      |
+
+**Example:**
+
+```toml
+# config.toml
+[testbench-ai-service.logging.activity]
+enabled = true
+file_name = "testbench-ai-service.activity.jsonl"
+max_bytes = 5242880
+backup_count = 3
 ```
 
 ---
