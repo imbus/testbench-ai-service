@@ -140,6 +140,23 @@ class TestPrecheck:
         assert not result.passed
         assert "cycle" in result.warnings[0]
 
+    async def test_checks_the_tov_format_off_the_event_loop(self):
+        # The check asks TestBench; on the loop thread it would stall every request.
+        on_loop = []
+
+        def _is_json(*_args):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
+            return False
+
+        with patch(f"{_MODULE}.is_json_based_tov", _is_json):
+            await TestPlannerAgent().precheck(_context(), _conn())
+
+        assert on_loop == [False]
+
     async def test_xml_tov_fails(self):
         with patch(f"{_MODULE}.is_json_based_tov", return_value=False):
             result = await TestPlannerAgent().precheck(_context(), _conn())

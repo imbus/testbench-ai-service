@@ -76,7 +76,7 @@ class TestPlannerAgent(Agent):
         self._warnings: list[str] = []
 
     async def precheck(self, context: ExecutionContext, conn: TBConnection) -> PrecheckResult:
-        if failure := _check_scope(context, conn):
+        if failure := await _check_scope(context, conn):
             return failure
         params = _parse_params(context)
         if isinstance(params, PrecheckResult):
@@ -172,7 +172,7 @@ def _failed(message: str) -> PrecheckResult:
     return PrecheckResult(passed=False, warnings=[message])
 
 
-def _check_scope(context: ExecutionContext, conn: TBConnection) -> PrecheckResult | None:
+async def _check_scope(context: ExecutionContext, conn: TBConnection) -> PrecheckResult | None:
     """A failed result if server version, TOV or cycle do not fit, else ``None``."""
     if unsupported_version := check_min_testbench_version(context, conn):
         return unsupported_version
@@ -181,7 +181,7 @@ def _check_scope(context: ExecutionContext, conn: TBConnection) -> PrecheckResul
         return _failed(get_translation("shared.precheck.missing_tov_key", language))
     if not context.cycle_key:
         return _failed(get_translation("shared.precheck.missing_cycle_key", language))
-    if not is_json_based_tov(conn, context.project_key, context.tov_key):
+    if not await asyncio.to_thread(is_json_based_tov, conn, context.project_key, context.tov_key):
         return _failed(get_translation("test_planner.precheck.unsupported_tov_format", language))
     return None
 
