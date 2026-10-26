@@ -126,7 +126,7 @@ class LLMFactory:
         """
         if prompt_model is not None:
             if self._is_openai_model(prompt_model):
-                if config.provider in (LLMProvider.AZURE_OPENAI):
+                if config.provider == LLMProvider.AZURE_OPENAI:
                     return config.provider
                 return LLMProvider.OPENAI
             if prompt_model.startswith("claude-"):

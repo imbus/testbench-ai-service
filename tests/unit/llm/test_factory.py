@@ -199,6 +199,14 @@ class TestLLMFactoryResolveProvider:
         config = self._make_config(LLMProvider.ANTHROPIC)
         assert factory._resolve_provider(config, "gpt-4o") == LLMProvider.OPENAI
 
+    @pytest.mark.parametrize("provider", [LLMProvider.CUSTOM, "azure", "openai_compat"])
+    def test_only_azure_openai_keeps_an_openai_model(self, provider):
+        # A membership test against a bare string would accept any substring
+        # of "azure_openai", so a provider named "azure" would keep the model.
+        factory = LLMFactory()
+        config = self._make_config(provider)
+        assert factory._resolve_provider(config, "gpt-4o") == LLMProvider.OPENAI
+
     @pytest.mark.parametrize("model", ["ollama-llama3", "openhermes"])
     def test_non_openai_model_names_not_matched_as_openai(self, model):
         factory = LLMFactory()
