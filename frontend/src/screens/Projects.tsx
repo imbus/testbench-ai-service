@@ -191,7 +191,8 @@ export function Projects({
             <ProjectCard
               key={name}
               name={name}
-              inTestBench={fromTestBench.includes(name)}
+              // Unknown, not absent, while the list could not be fetched.
+              inTestBench={unavailable ? null : fromTestBench.includes(name)}
               agentKeys={keys}
               disk={disk}
               running={running}
@@ -218,7 +219,8 @@ function ProjectCard({
   isAdmin,
 }: {
   name: string
-  inTestBench: boolean
+  /** `null` when the console could not ask TestBench. */
+  inTestBench: boolean | null
   agentKeys: string[]
   disk: Record<string, unknown>
   running: Record<string, unknown>
@@ -286,7 +288,7 @@ function ProjectCard({
             {name}
           </h3>
           <div style={{ flex: 1 }} />
-          {!inTestBench && (
+          {inTestBench === false && (
             <span style={{ fontSize: 11, color: '#a33a2b' }}>⚠ {t('notInTestBench')}</span>
           )}
           {overrideCount > 0 ? (

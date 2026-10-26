@@ -311,6 +311,12 @@ describe('when TestBench could not be asked', () => {
     await waitFor(() => expect(screen.getByTestId('project-Legacy')).toBeInTheDocument())
   })
 
+  it('does not claim a project is missing from TestBench it could not ask', async () => {
+    renderProjects()
+    await waitFor(() => expect(screen.getByTestId('project-Legacy')).toBeInTheDocument())
+    expect(screen.getByTestId('project-Legacy').textContent).not.toMatch(/not in TestBench/i)
+  })
+
   it('offers a free-text project name, warning that it must match exactly', async () => {
     renderProjects()
     await waitFor(() => expect(screen.getByTestId('add-by-name')).toBeInTheDocument())
