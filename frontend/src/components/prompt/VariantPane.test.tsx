@@ -66,7 +66,7 @@ describe('VariantPane', () => {
       onEditVar: vi.fn(),
       onRemoveVar: vi.fn(),
     }
-    render(<VariantPane variant={V} readOnly={false} canRemove {...props} />)
+    render(<VariantPane otherNames={[]} variant={V} readOnly={false} canRemove {...props} />)
     await userEvent.type(screen.getByLabelText('Variant name'), 'X')
     expect(props.onRename).toHaveBeenLastCalledWith('ThoroughX')
     await userEvent.type(screen.getByLabelText('Variant model'), 'g')
@@ -82,6 +82,7 @@ describe('VariantPane', () => {
     const onModel = vi.fn()
     render(
       <VariantPane
+        otherNames={[]}
         variant={{ ...V, model: 'm' }}
         readOnly={false}
         canRemove
@@ -102,6 +103,7 @@ describe('VariantPane', () => {
     // there could only be a silent no-op.
     render(
       <VariantPane
+        otherNames={[]}
         variant={V}
         readOnly={false}
         canRemove={false}
@@ -120,6 +122,7 @@ describe('VariantPane', () => {
   it('shows only the declarations for a non-admin', () => {
     render(
       <VariantPane
+        otherNames={[]}
         variant={V}
         readOnly
         canRemove
@@ -133,6 +136,53 @@ describe('VariantPane', () => {
     )
     expect(screen.queryByLabelText('Variant name')).not.toBeInTheDocument()
     expect(screen.getAllByTestId('var-row')).toHaveLength(1)
+  })
+})
+
+describe('VariantPane rename', () => {
+  // The reducer finds variants by name, so a name passing through another
+  // variant's would make the next keystroke rename both.
+  function renderNamed(onRename = vi.fn()) {
+    render(
+      <VariantPane
+        otherNames={['Thorough2']}
+        variant={V}
+        readOnly={false}
+        canRemove
+        onRename={onRename}
+        onModel={vi.fn()}
+        onRemove={vi.fn()}
+        onAddVar={vi.fn()}
+        onEditVar={vi.fn()}
+        onRemoveVar={vi.fn()}
+      />,
+    )
+    return onRename
+  }
+
+  it('holds back a name another variant has and says why', async () => {
+    const onRename = renderNamed()
+    await userEvent.type(screen.getByLabelText('Variant name'), '2')
+    expect(onRename).not.toHaveBeenCalled()
+    expect(screen.getByText('Another variant already has this name.')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Variant name'), '3')
+    expect(onRename).toHaveBeenLastCalledWith('Thorough23')
+    expect(screen.queryByText('Another variant already has this name.')).not.toBeInTheDocument()
+  })
+
+  it('holds back an empty name', async () => {
+    const onRename = renderNamed()
+    await userEvent.clear(screen.getByLabelText('Variant name'))
+    expect(onRename).not.toHaveBeenCalled()
+    expect(screen.getByText('A variant needs a name.')).toBeInTheDocument()
+  })
+
+  it('puts the saved name back when the field is left invalid', async () => {
+    renderNamed()
+    await userEvent.clear(screen.getByLabelText('Variant name'))
+    await userEvent.tab()
+    expect(screen.getByLabelText('Variant name')).toHaveValue('Thorough')
   })
 })
 
@@ -154,6 +204,7 @@ describe('VariantPane steps', () => {
   const renderPane = (variant: PromptVariantDoc) =>
     render(
       <VariantPane
+        otherNames={[]}
         variant={variant}
         readOnly={false}
         canRemove={false}

@@ -230,6 +230,8 @@ export const en = {
   defaultVariant: 'Default variant',
   variants: 'Variants',
   variantName: 'Variant name',
+  variantNameEmpty: 'A variant needs a name.',
+  variantNameTaken: 'Another variant already has this name.',
   variantModel: 'Variant model',
   openEditors: 'Open editors',
   closeTab: 'Close {{name}}',

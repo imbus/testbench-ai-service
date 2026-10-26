@@ -64,6 +64,14 @@ describe('variants', () => {
   it('renames a variant', () => {
     expect(reduce(base, { type: 'renameVariant', from: 'A', to: 'Z' }).variants[0].name).toBe('Z')
   })
+  it("refuses a rename onto another variant's name", () => {
+    // Variants are found by name: two of one name would be renamed together.
+    const two = reduce(base, { type: 'addVariant', name: 'B', uid: 'n1' })
+    expect(reduce(two, { type: 'renameVariant', from: 'B', to: 'A' })).toBe(two)
+  })
+  it('refuses an empty name', () => {
+    expect(reduce(base, { type: 'renameVariant', from: 'A', to: ' ' })).toBe(base)
+  })
   it('repoints default_variant when the default is renamed', () => {
     expect(reduce(base, { type: 'renameVariant', from: 'A', to: 'Z' }).default_variant).toBe('Z')
   })

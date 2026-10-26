@@ -866,6 +866,22 @@ describe('variant controls', () => {
     expect(dropdownValue('Default variant')).toBe('Thorough')
   })
 
+  it("keeps two variants apart when a rename passes through the other's name", async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Quick' }))
+    await openVariantSettings('Quick')
+    await userEvent.clear(screen.getByLabelText('Variant name'))
+    // Spelled out, the field holds 'Thorough' for one keystroke.
+    await userEvent.type(screen.getByLabelText('Variant name'), 'Thorough2')
+
+    expect(screen.getByRole('button', { name: 'Thorough2' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Thorough' })).toBeInTheDocument()
+    await openMeta()
+    expect(dropdownValue('Default variant')).toBe('Thorough')
+  })
+
   it('sets the selected variant model', async () => {
     renderEditor({ lang: 'en' })
     await ready()

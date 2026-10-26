@@ -56,6 +56,25 @@ class TestPromptDefinition:
         with pytest.raises(ValidationError):
             PromptDefinition(name="p", default_model="gpt-4o", default_variant="v1", variants=[])
 
+    def test_duplicate_variant_names_are_rejected(self):
+        # At runtime the first variant of a name wins, the other is dead.
+        with pytest.raises(ValidationError, match="Duplicate variant names: v1"):
+            PromptDefinition(
+                name="p",
+                default_model="gpt-4o",
+                default_variant="v1",
+                variants=[self._make_variant("v1"), self._make_variant("v1")],
+            )
+
+    def test_blank_variant_name_is_rejected(self):
+        with pytest.raises(ValidationError, match="Variant names must not be empty"):
+            PromptDefinition(
+                name="p",
+                default_model="gpt-4o",
+                default_variant="v1",
+                variants=[self._make_variant("v1"), self._make_variant(" ")],
+            )
+
     def test_description_defaults_to_none(self):
         defn = PromptDefinition(
             name="p", default_model="gpt-4o", default_variant="v1", variants=[self._make_variant()]

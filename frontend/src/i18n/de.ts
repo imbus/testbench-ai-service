@@ -226,6 +226,8 @@ export const de = {
   defaultVariant: 'Standardvariante',
   variants: 'Varianten',
   variantName: 'Variantenname',
+  variantNameEmpty: 'Eine Variante braucht einen Namen.',
+  variantNameTaken: 'Eine andere Variante heißt bereits so.',
   variantModel: 'Varianten-Modell',
   openEditors: 'Geöffnete Editoren',
   closeTab: '{{name}} schließen',

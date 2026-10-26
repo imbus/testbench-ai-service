@@ -113,6 +113,13 @@ class PromptDefinition(BaseModel):
     def validate_variants(cls, v: list[PromptVariant]) -> list[PromptVariant]:
         if not v:
             raise ValueError("At least one variant is required")
+        names = [variant.name for variant in v]
+        if any(not name.strip() for name in names):
+            raise ValueError("Variant names must not be empty")
+        # Variants are looked up by name, so a second one of the same name is dead.
+        duplicates = sorted({name for name in names if names.count(name) > 1})
+        if duplicates:
+            raise ValueError(f"Duplicate variant names: {', '.join(duplicates)}")
         return v
 
 

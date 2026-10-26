@@ -437,6 +437,21 @@ def test_the_plan_route_reports_a_refusal_the_way_the_save_would(admin_client):
     assert response.status_code == 422
 
 
+def test_a_save_with_two_variants_of_one_name_is_refused(admin_client, prompt_tree):
+    variant = SAVE_BODY_WITH_BAD_DEFAULT_VARIANT["variants"][0]
+    body = {
+        **SAVE_BODY_WITH_BAD_DEFAULT_VARIANT,
+        "default_variant": "A",
+        "variants": [variant, variant],
+    }
+    before = (prompt_tree / "de/explainer/prompt.yaml").read_bytes()
+
+    response = admin_client.put("/admin/api/prompts/de/explainer", json=body)
+
+    assert response.status_code == 422
+    assert (prompt_tree / "de/explainer/prompt.yaml").read_bytes() == before
+
+
 def test_the_plan_route_refuses_a_missing_csrf_header(client, login):
     login(roles=["Administrator"])
     response = client.post("/admin/api/prompts/de/explainer/plan", json={})

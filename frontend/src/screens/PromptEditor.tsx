@@ -763,6 +763,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           )}
           <VariantPane
             variant={selectedVariantObj}
+            otherNames={draft.variants.filter((v) => v !== selectedVariantObj).map((v) => v.name)}
             readOnly={!isAdmin}
             canRemove={draft.variants.length > 1}
             onRename={(to) => {

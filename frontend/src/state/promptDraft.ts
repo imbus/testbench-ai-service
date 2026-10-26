@@ -89,6 +89,10 @@ export function promptDraftReducer(
     }
 
     case 'renameVariant': {
+      // Variants are found by name, so two of one name would from then on be
+      // renamed together; PromptDefinition refuses both cases on save.
+      if (!action.to.trim()) return state
+      if (action.to !== action.from && state.variants.some((v) => v.name === action.to)) return state
       const renamed = mapVariant(state, action.from, (v) => ({ ...v, name: action.to }))
       // A rename that left default_variant behind would fail validation on save.
       return state.default_variant === action.from

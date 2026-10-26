@@ -1,5 +1,7 @@
+import { useEffect, useState } from 'react'
 import { Button } from 'primereact/button'
 import { InputText } from 'primereact/inputtext'
+import { Message } from 'primereact/message'
 import type { PromptVarDecl, PromptVariantDoc } from '../../api/types'
 import { VarDeclTable } from '../../components/VarDeclTable'
 import { useTranslation } from 'react-i18next'
@@ -15,6 +17,7 @@ import { useTranslation } from 'react-i18next'
  */
 export function VariantPane({
   variant,
+  otherNames,
   readOnly,
   canRemove,
   onRename,
@@ -25,6 +28,9 @@ export function VariantPane({
   onRemoveVar,
 }: {
   variant: PromptVariantDoc
+  /** The document's other variant names. The reducer finds a variant by
+   * name, so a rename may never pass through one of these. */
+  otherNames: string[]
   readOnly: boolean
   /** False on a document's only variant: the reducer keeps the last one
    * (a prompt needs a variant), so Remove there could only be a no-op. */
@@ -37,6 +43,16 @@ export function VariantPane({
   onRemoveVar: (key: string) => void
 }) {
   const { t } = useTranslation()
+  // The field may hold a name the draft must not take (empty, or another
+  // variant's). Only a valid one is sent; leaving the field puts the
+  // variant's real name back.
+  const [name, setName] = useState(variant.name)
+  useEffect(() => setName(variant.name), [variant.name])
+  const nameError = !name.trim()
+    ? t('variantNameEmpty')
+    : otherNames.includes(name)
+      ? t('variantNameTaken')
+      : null
 
   return (
     <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'auto' }}>
@@ -55,9 +71,25 @@ export function VariantPane({
             </label>
             <InputText
               id="variant-name"
-              value={variant.name}
-              onChange={(event) => onRename(event.target.value)}
+              value={name}
+              invalid={nameError !== null}
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? 'variant-name-error' : undefined}
+              onChange={(event) => {
+                const to = event.target.value
+                setName(to)
+                if (to.trim() && !otherNames.includes(to)) onRename(to)
+              }}
+              onBlur={() => setName(variant.name)}
             />
+            {nameError && (
+              <Message
+                id="variant-name-error"
+                severity="error"
+                text={nameError}
+                style={{ fontSize: 11, alignSelf: 'flex-start' }}
+              />
+            )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <label htmlFor="variant-model" style={{ fontSize: 12 }}>
