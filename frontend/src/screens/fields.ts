@@ -107,7 +107,7 @@ const LLM_SETTINGS: Omit<FieldSpec, 'key'>[] = [
     setting: 'provider',
     type: 'select',
     options: ['openai', 'azure_openai', 'anthropic', 'custom'],
-    hint: 'gpt-*/o-series route to OpenAI, claude-* to Anthropic, regardless of this setting',
+    hint: 'For gpt-*/o-series models only openai or azure_openai apply (anything else routes to OpenAI); claude-* always routes to Anthropic',
   },
   {
     setting: 'model',
