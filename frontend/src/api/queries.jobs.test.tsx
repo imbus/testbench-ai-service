@@ -48,7 +48,7 @@ describe.each([
 ] as const)('%s polling', (_name, useHook, payload) => {
   it('polls every 3 seconds while a job is running', async () => {
     fetchMock.mockResolvedValue(payload('running') as never)
-    const { result } = renderHook(useHook, { wrapper })
+    const { result } = renderHook(() => useHook(), { wrapper })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
@@ -60,7 +60,7 @@ describe.each([
 
   it.each(['succeeded', 'failed'] as const)('stops once the job is %s', async (status) => {
     fetchMock.mockResolvedValue(payload(status) as never)
-    const { result } = renderHook(useHook, { wrapper })
+    const { result } = renderHook(() => useHook(), { wrapper })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     await advance(10_000)
@@ -71,7 +71,7 @@ describe.each([
     fetchMock
       .mockResolvedValueOnce(payload('running') as never)
       .mockResolvedValue(payload('succeeded') as never)
-    const { result } = renderHook(useHook, { wrapper })
+    const { result } = renderHook(() => useHook(), { wrapper })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     await advance(3_100)
