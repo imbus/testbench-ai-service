@@ -416,3 +416,9 @@ class TestCreateFileHandler:
         handler = log.create_file_handler(filename=tmp_path / "app.log")
         assert isinstance(handler, logging.NullHandler)
         assert not (tmp_path / "app.log").exists()
+
+    def test_activity_handler_is_a_null_handler_in_reloader(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(log, "is_reloader_process", True)
+        handler = log.build_activity_handler(str(tmp_path / "activity.jsonl"), 1024, 1)
+        assert isinstance(handler, logging.NullHandler)
+        assert not (tmp_path / "activity.jsonl").exists()
