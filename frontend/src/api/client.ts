@@ -14,6 +14,19 @@ export class ApiError extends Error {
   }
 }
 
+let unauthorizedListener: (() => void) | null = null
+
+/**
+ * Be told when a request comes back 401, i.e. the console session has expired
+ * or was revoked. The session state uses this to fall back to the login
+ * screen instead of leaving every screen failing with "Not signed in".
+ * `/session` itself is exempt: a 401 there is a failed sign-in or "not signed
+ * in yet", which the session state handles on its own.
+ */
+export function setUnauthorizedListener(listener: (() => void) | null): void {
+  unauthorizedListener = listener
+}
+
 function readCookie(name: string): string | null {
   const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`))
   return match ? decodeURIComponent(match[1]) : null
@@ -51,6 +64,8 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       0,
     )
   }
+
+  if (response.status === 401 && path !== '/session') unauthorizedListener?.()
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`

@@ -11,6 +11,8 @@ import { splitPath } from '../api/paths'
 import { valueAt } from '../screens/fields'
 
 export const DRAFT_STORAGE_KEY = 'tbai_admin_draft'
+/** Who queued the stored draft, so another operator never inherits it. */
+export const DRAFT_OWNER_STORAGE_KEY = 'tbai_admin_draft_owner'
 
 /**
  * The operator's uncommitted edits: dotted config path to new value.
@@ -210,5 +212,26 @@ export function clearStoredDraft(): void {
     window.localStorage.removeItem(DRAFT_STORAGE_KEY)
   } catch {
     // Errors accessing storage should not break logout.
+  }
+}
+
+/**
+ * Make *username* the owner of the stored draft, dropping it first when it was
+ * queued by someone else.
+ *
+ * Called by session.tsx on every sign-in. signOut already clears the draft,
+ * but an expired session never signs out, so without this the next operator
+ * on the same browser would see -- and, as an admin, could apply -- the
+ * previous one's unapplied edits. The same operator signing in again after an
+ * expiry keeps theirs.
+ */
+export function claimStoredDraft(username: string): void {
+  try {
+    if (window.localStorage.getItem(DRAFT_OWNER_STORAGE_KEY) !== username) {
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY)
+    }
+    window.localStorage.setItem(DRAFT_OWNER_STORAGE_KEY, username)
+  } catch {
+    // Errors accessing storage should not break sign-in.
   }
 }

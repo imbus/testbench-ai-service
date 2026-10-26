@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
-import { DRAFT_STORAGE_KEY } from './draft'
+import { apiFetch } from '../api/client'
+import { DRAFT_OWNER_STORAGE_KEY, DRAFT_STORAGE_KEY } from './draft'
 import { SessionProvider, useSession } from './session'
 
 const jsonResponse = (body: unknown, status = 200) =>
@@ -144,4 +145,62 @@ test('signing out clears the stored draft so another operator does not see queue
 
   // Operator A has signed out; the draft must be gone so Operator B cannot see it.
   expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull()
+})
+
+test('a 401 on any later request means the session has expired', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(session))
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Not signed in' }, 401)),
+  )
+  const { result } = renderHook(() => useSession(), { wrapper })
+  await waitFor(() => expect(result.current.session).toEqual(session))
+
+  await act(async () => {
+    await apiFetch('/config').catch(() => {})
+  })
+
+  expect(result.current.session).toBeNull()
+})
+
+test('signing in as another operator drops the draft left by the previous one', async () => {
+  window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: 9999 }))
+  window.localStorage.setItem(DRAFT_OWNER_STORAGE_KEY, 'b.schmidt')
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Not signed in' }, 401))
+      .mockResolvedValueOnce(jsonResponse(session)),
+  )
+  const { result } = renderHook(() => useSession(), { wrapper })
+  await waitFor(() => expect(result.current.loading).toBe(false))
+
+  await act(async () => {
+    await result.current.signIn('a.mueller', 'secret')
+  })
+
+  expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull()
+})
+
+test('signing in again as the same operator keeps their draft', async () => {
+  window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify({ port: 9999 }))
+  window.localStorage.setItem(DRAFT_OWNER_STORAGE_KEY, 'a.mueller')
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ detail: 'Not signed in' }, 401))
+      .mockResolvedValueOnce(jsonResponse(session)),
+  )
+  const { result } = renderHook(() => useSession(), { wrapper })
+  await waitFor(() => expect(result.current.loading).toBe(false))
+
+  await act(async () => {
+    await result.current.signIn('a.mueller', 'secret')
+  })
+
+  expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).not.toBeNull()
 })

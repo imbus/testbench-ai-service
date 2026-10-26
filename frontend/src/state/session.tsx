@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { ApiError, apiFetch } from '../api/client'
+import { ApiError, apiFetch, setUnauthorizedListener } from '../api/client'
 import type { SessionInfo } from '../api/types'
-import { clearStoredDraft } from './draft'
+import { claimStoredDraft, clearStoredDraft } from './draft'
 
 interface SessionState {
   session: SessionInfo | null
@@ -28,16 +28,23 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoading(false))
   }, [])
 
+  // Any later 401 means the session expired or was revoked on the server:
+  // back to the login screen rather than a shell whose every request fails.
+  useEffect(() => {
+    setUnauthorizedListener(() => setSession(null))
+    return () => setUnauthorizedListener(null)
+  }, [])
+
   const signIn = useCallback(async (username: string, password: string) => {
     setBusy(true)
     setError(null)
     try {
-      setSession(
-        await apiFetch<SessionInfo>('/session', {
-          method: 'POST',
-          body: JSON.stringify({ username, password }),
-        }),
-      )
+      const signedIn = await apiFetch<SessionInfo>('/session', {
+        method: 'POST',
+        body: JSON.stringify({ username, password }),
+      })
+      claimStoredDraft(signedIn.username)
+      setSession(signedIn)
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : 'Sign-in failed')
       throw cause
