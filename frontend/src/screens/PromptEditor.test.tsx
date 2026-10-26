@@ -1142,6 +1142,37 @@ describe('linting', () => {
       expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
     })
 
+    it('drops a Lint run that was still out when the variant changed', async () => {
+      // Results are keyed by index, so a late answer for 'Thorough' would
+      // flag 'Quick's message at the same index and block Save.
+      const quick = DOC.variants[1]
+      docBody = {
+        ...DOC,
+        variants: [DOC.variants[0], { ...quick, messages: [...quick.messages, { ...quick.messages[0], content: 'Quick two' }] }],
+      }
+      lintResponder = (content) =>
+        content.includes('Explain')
+          ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
+          : { ok: true, errors: [] }
+      const gate = deferredResponse()
+      const answer = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url.startsWith('/admin/api/prompts/lint')) await gate.promise
+        return answer(url, init)
+      })
+      renderEditor({ lang: 'en' })
+      await ready()
+
+      await openMessage(/Explain/)
+      await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
+      await userEvent.click(screen.getByRole('button', { name: 'Quick' }))
+      gate.resolve(ok({}))
+      await waitFor(() => expect(screen.getByRole('button', { name: /^lint$/i })).not.toBeDisabled())
+
+      expect(treeMessages().map((b) => b.getAttribute('aria-invalid'))).toEqual([null, null])
+      expect(screen.queryByTestId('save-blocked-jinja')).not.toBeInTheDocument()
+    })
+
     it('does not keep a stale "no syntax errors" result after an edit', async () => {
       renderEditor({ lang: 'en' })
       await ready()

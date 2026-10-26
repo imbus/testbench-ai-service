@@ -233,6 +233,10 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // open message even when neither its text nor its index changed (a save's
   // reload, a reorder that kept it in place).
   const [lintEpoch, setLintEpoch] = useState(0)
+  // The same count, readable after an `await`: a Lint run checks it to drop
+  // results that arrive after an invalidation (the state above would still
+  // hold the value of the render the run started in).
+  const lintEpochRef = useRef(0)
   // Why the last lint run produced no results: a 403, a 500, a dropped
   // connection. Without it a failed request just stopped the spinner and said
   // nothing, unlike every other action on this screen.
@@ -248,6 +252,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     setChecked(new Set())
     setLintError(null)
     setLintEpoch((epoch) => epoch + 1)
+    lintEpochRef.current += 1
   }
 
   /** Only the edited message's own result is invalid -- the operator changed
@@ -545,11 +550,15 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
    * so a read-only operator must still be able to run it.
    */
   const runLint = async () => {
+    const epoch = lintEpochRef.current
     setLinting(true)
     setChecked(new Set())
     setLintError(null)
     try {
       const results = await Promise.all(messages.map((message) => lint.mutateAsync(message.content)))
+      // Keyed by index: after a variant switch or a reorder they would mark
+      // the wrong messages.
+      if (lintEpochRef.current !== epoch) return
       const next: Record<number, LintError[]> = {}
       results.forEach((result, index) => {
         if (result.errors.length > 0) next[index] = result.errors
@@ -557,6 +566,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
       setDiagnosticsMap(next)
       setChecked(new Set(messages.map((_, index) => index)))
     } catch (error) {
+      if (lintEpochRef.current !== epoch) return
       // A 403, a 500 or a dropped connection. Surfaced the way
       // `RenderPreview` surfaces its own mutation error -- the message from
       // the failure itself, not a generic one. Any partial result is dropped:
