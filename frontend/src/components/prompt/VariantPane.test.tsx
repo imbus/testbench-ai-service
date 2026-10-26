@@ -157,7 +157,6 @@ describe('VariantPane steps', () => {
         variant={variant}
         readOnly={false}
         canRemove={false}
-        lang="en"
         onRename={vi.fn()}
         onModel={vi.fn()}
         onRemove={vi.fn()}
