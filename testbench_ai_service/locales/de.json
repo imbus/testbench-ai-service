@@ -72,6 +72,8 @@
     "link_finder.precheck.load_failed": "Die Anforderung und die Tests der Testobjektversion konnten nicht aus TestBench geladen werden.",
     "link_finder.precheck.requirement_not_found": "Die Anforderung {requirement} wurde weder in der Testobjektversion noch im RM-Service gefunden. Eine Anforderung, mit der noch kein Test verknüpft ist, kann nur aus dem RM-Service gelesen werden: Prüfen Sie, ob er konfiguriert ist und läuft.",
     "link_finder.precheck.nothing_to_search": "Alle TestCaseSets der Testobjektversion sind bereits mit der Anforderung {requirement} verlinkt; es gibt nichts zu suchen.",
+    "link_finder.precheck.too_many_sets": "Für {requirement} müssten {count} nicht verlinkte Testfallsätze durchsucht werden, erlaubt sind höchstens {max} (max_sets_searched).",
+    "link_finder.precheck.search_size": "Für {requirement} werden {count} nicht verlinkte Testfallsätze nach Links durchsucht.",
     "link_finder.precheck.reduced_mode": "Kein RM-Service konfiguriert: Die Aspekte werden nur aus dem Titel der Anforderung abgeleitet (reduzierter Modus), jede Konfidenz wird um eine Stufe gesenkt.",
     "shared.run.disclaimer": "KI-generierte Antworten können ungenau sein.",
     "shared.run.error_message": "Bitte kontaktieren Sie den Systemadministrator für weitere Details.",

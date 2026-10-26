@@ -28,6 +28,11 @@ class LinkFinderArgs(RmServiceArgs):
     prefilter_batch_size: int = Field(
         default=40, gt=0, description="Test case sets the prefilter sends to the model in one call."
     )
+    max_sets_searched: int = Field(
+        default=1000,
+        gt=0,
+        description="Refuse a requirement with more unlinked sets than this; each costs prefilter tokens.",
+    )
     max_candidates: int = Field(
         default=15, gt=0, description="Most sets the prefilter passes on to the interpretation."
     )

@@ -141,6 +141,7 @@ file = "defect_explainer/prompt.yaml"
 # rm_password = "rm-password"
 # rm_projects = ["Dream Car"]                   # searched with a JWT; unset: every RM project
 # max_aspects = 12
+# max_sets_searched = 1000          # refuse a requirement with more unlinked sets (prefilter cost)
 # prefilter_batch_size = 40          # sets per prefilter call
 # max_candidates = 15                # sets whose test steps are read
 # high_confidence_ratio = 0.5        # share of aspects a candidate must touch for "high"

@@ -50,6 +50,7 @@ from testbench_ai_service.models.agent import (
     ExecutionContext,
     PrecheckResult,
 )
+from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     ProjectRole,
@@ -193,13 +194,38 @@ class LinkFinder(Agent):
             requirement_key = self._unassigned.key
             label = self._unassigned.external_ref or self._unassigned.key
         search_space = unlinked_set_keys(catalog, requirement_key)
-        if not search_space:
-            return _refused(language, "nothing_to_search", requirement=label)
+        if refusal := self._check_search_space(search_space, label, language):
+            return refusal
 
         warnings = []
         if self.args.rm_service_url is None:
             warnings.append(get_translation("link_finder.precheck.reduced_mode", language))
+        warnings.append(
+            get_translation(
+                "link_finder.precheck.search_size",
+                language,
+                requirement=label,
+                count=len(search_space),
+            )
+        )
         return PrecheckResult(passed=True, warnings=warnings, items=search_space)
+
+    def _check_search_space(
+        self, search_space: list[str], label: str, language: LanguageOption
+    ) -> PrecheckResult | None:
+        """Refuse an empty search space, or one larger than ``max_sets_searched``."""
+        if not search_space:
+            return _refused(language, "nothing_to_search", requirement=label)
+        # The prefilter reads every set of the search space, so its size sets the cost.
+        if len(search_space) > self.args.max_sets_searched:
+            return _refused(
+                language,
+                "too_many_sets",
+                requirement=label,
+                count=len(search_space),
+                max=self.args.max_sets_searched,
+            )
+        return None
 
     def _refuse_trigger(self, context: ExecutionContext) -> PrecheckResult | None:
         """Refuse a trigger that is not a requirement of a TOV or has invalid prompt vars."""

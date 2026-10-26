@@ -72,6 +72,8 @@
     "link_finder.precheck.load_failed": "The requirement and the tests of the test object version could not be loaded from TestBench.",
     "link_finder.precheck.requirement_not_found": "Requirement {requirement} was found neither in the test object version nor in the RM service. A requirement that no test is linked to yet can only be read from the RM service: check that it is configured and running.",
     "link_finder.precheck.nothing_to_search": "Every test case set of the test object version is already linked to requirement {requirement}; there is nothing to search.",
+    "link_finder.precheck.too_many_sets": "{count} unlinked test case sets would have to be searched for {requirement}, more than the {max} allowed (max_sets_searched).",
+    "link_finder.precheck.search_size": "{count} unlinked test case sets are searched for links to {requirement}.",
     "link_finder.precheck.reduced_mode": "No RM service is configured: the aspects are derived from the requirement title only (reduced mode), and every confidence is lowered by one level.",
     "shared.run.disclaimer": "AI-generated responses may be inaccurate.",
     "shared.run.error_message": "Please contact the system administrator for further details.",

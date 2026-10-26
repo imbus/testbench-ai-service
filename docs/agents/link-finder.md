@@ -22,7 +22,7 @@ For JWT tokens the following API token permissions are required: `ReadOwnUserDet
 
 1. **Precheck** (answers `409` with a reason otherwise): the trigger names a requirement of a TOV, the TOV is JSON-based, and at least one test case set is not linked to the requirement, neither as a whole nor through one of its test cases. A requirement without any links is the main use case. TestBench only lists the requirements of a TOV that are assigned to a test, so a requirement without any links is looked up in the RM service instead: by the ID from the trigger, in the TOV's baselines (or, with a JWT, in the baselines of `rm_projects`), in its latest version. Without an RM service, or if it does not know the requirement, the precheck refuses.
 2. **Aspects**: the model splits the requirement into testable aspects, exactly as in the coverage checker (each aspect must quote the requirement text; at most `max_aspects`).
-3. **Prefilter** (recall): the model screens all unlinked sets in batches of `prefilter_batch_size`, seeing only key, path, title and the start of the description. It is told to include a set when in doubt. At most `max_candidates` sets pass, the most relevant first.
+3. **Prefilter** (recall): the model screens all unlinked sets in batches of `prefilter_batch_size` (one model call per batch, so this is where a large TOV costs tokens; a requirement with more unlinked sets than `max_sets_searched` is refused, and the precheck tells the user how many sets are searched), seeing only key, path, title and the start of the description. It is told to include a set when in doubt. At most `max_candidates` sets pass, the most relevant first.
 4. **Interpretation** (precision): for each candidate the model reads all test cases (keyword calls with arguments, `[check]` calls marked) against the aspects and names `full` or `partial` evidence, as in the coverage checker.
 5. **Confidence** (code, not model):
 
@@ -62,6 +62,7 @@ file = "link_finder/prompt.yaml"
 # rm_password = "rm-password"
 # rm_projects = ["Dream Car"]                   # searched with a JWT; unset: every RM project
 max_aspects = 12
+max_sets_searched = 1000
 prefilter_batch_size = 40
 max_candidates = 15
 high_confidence_ratio = 0.5

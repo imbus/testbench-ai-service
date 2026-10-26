@@ -80,7 +80,21 @@ def testbench(monkeypatch):
 async def test_the_unlinked_sets_are_the_search_space(testbench):
     result = await LinkFinder(RM).precheck(_context(), None)
 
-    assert (result.passed, result.items, result.warnings) == (True, ["x", "y"], [])
+    assert (result.passed, result.items) == (True, ["x", "y"])
+    assert result.warnings == ["2 unlinked test case sets are searched for links to EXT-1."]
+
+
+async def test_a_search_space_over_the_limit_is_refused(testbench):
+    # Every searched set costs prefilter tokens; the operator caps that per run.
+    args = RM.model_copy(update={"max_sets_searched": 1})
+
+    result = await LinkFinder(args).precheck(_context(), None)
+
+    assert result.passed is False
+    assert result.warnings == [
+        "2 unlinked test case sets would have to be searched for EXT-1, more than the 1 "
+        "allowed (max_sets_searched)."
+    ]
 
 
 async def test_a_requirement_without_any_link_searches_everything(testbench):
