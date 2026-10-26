@@ -96,6 +96,13 @@ class TestRedactBody:
         assert out["edits"]["llm"]["model"] == "x"
         assert out["items"][0]["token"] == "<redacted>"
 
+    def test_key_spellings_of_credentials_are_masked(self):
+        body = json.dumps(
+            {"apiKey": "sk-1", "x-api-key": "sk-2", "credential": "c", "Authorization": "Bearer b"}
+        )
+        out = json.loads(redact_body("/x", body))
+        assert set(out.values()) == {"<redacted>"}
+
     def test_non_json_body_is_returned_unchanged(self):
         assert redact_body("/x", "plain text") == "plain text"
 

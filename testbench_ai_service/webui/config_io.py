@@ -17,6 +17,7 @@ from tomlkit.items import AoT, InlineTable, Table
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.utils.config import CONFIG_PREFIX
+from testbench_ai_service.utils.redaction import looks_like_credential_key
 from testbench_ai_service.webui.models import ConfigResponse
 
 if sys.version_info >= (3, 11):
@@ -25,23 +26,7 @@ else:
     import tomli as tomllib
 
 
-# Case-insensitive substring matches against key NAMES only -- never against
-# values. "api_key"/"apikey" are compound tokens deliberately: a bare "key"
-# pattern would wrongly catch `ssl_key`, which is a certificate file path, not
-# a secret, and the compound form leaves `api_version` alone. The key is
-# normalised before matching -- "-", "." and " " are folded to "_" -- so
-# separator variants of the same compound token ("api-key", "x-api-key",
-# "api.key", "api key") match exactly as "api_key" does. The bare-substring
-# patterns ("secret", "token", "credential", ...) do not need this: they match
-# regardless of what surrounds them either way.
-_REDACT_KEY_SUBSTRINGS = ("secret", "password", "token", "credential", "api_key", "apikey")
 REDACTED_SENTINEL = "***REDACTED***"
-_SEPARATOR_TRANSLATION = str.maketrans({"-": "_", ".": "_", " ": "_"})
-
-
-def _looks_like_credential_key(key: str) -> bool:
-    normalized = key.lower().translate(_SEPARATOR_TRANSLATION)
-    return any(pattern in normalized for pattern in _REDACT_KEY_SUBSTRINGS)
 
 
 def redact_credentials(data: dict[str, Any]) -> dict[str, Any]:
@@ -61,7 +46,7 @@ def redact_credentials(data: dict[str, Any]) -> dict[str, Any]:
     for key, value in data.items():
         if isinstance(value, dict):
             redacted[key] = redact_credentials(value)
-        elif _looks_like_credential_key(key):
+        elif looks_like_credential_key(key):
             redacted[key] = REDACTED_SENTINEL
         else:
             redacted[key] = value
@@ -94,7 +79,7 @@ def _redact_toml_node(node: Table | InlineTable | OutOfOrderTableProxy | AoT | d
         value = node[key]
         if isinstance(value, (Table, InlineTable, OutOfOrderTableProxy, AoT, dict)):
             _redact_toml_node(value)
-        elif _looks_like_credential_key(key):
+        elif looks_like_credential_key(key):
             node[key] = REDACTED_SENTINEL
 
 
@@ -104,7 +89,7 @@ def redact_toml_text(text: str) -> str:
     The console renders config.toml for display, and the rendered text must
     hide the same values ``redact_credentials`` hides in the JSON config --
     otherwise the Raw screen leaks what GET /config redacts. Matching reuses
-    ``_looks_like_credential_key``, so both endpoints agree by construction.
+    ``looks_like_credential_key``, so both endpoints agree by construction.
 
     Never pass the result to a writer: the sentinel would replace a real
     credential in the operator's file.

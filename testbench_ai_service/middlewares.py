@@ -11,6 +11,7 @@ from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from testbench_ai_service.log import log_in_request, logger
+from testbench_ai_service.utils.redaction import looks_like_credential_key
 
 
 class RequestScopeMiddleware:
@@ -97,16 +98,12 @@ class OutboundRequestLoggingMiddleware:
 _REDACTED = "<redacted>"
 #: Bodies of these paths carry credentials as a whole and are never logged.
 _NEVER_LOG_BODY = frozenset({"/admin/api/session"})
-#: A JSON key containing any of these (case-insensitive) has its value masked.
-_SENSITIVE_KEY_PARTS = ("password", "token", "api_key", "secret")
 
 
 def _mask(value):
     if isinstance(value, dict):
         return {
-            key: _REDACTED
-            if any(part in str(key).lower() for part in _SENSITIVE_KEY_PARTS)
-            else _mask(item)
+            key: _REDACTED if looks_like_credential_key(str(key)) else _mask(item)
             for key, item in value.items()
         }
     if isinstance(value, list):
