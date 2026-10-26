@@ -4,11 +4,13 @@ The trigger names a test theme -- ``ExecutionContext.root_uid`` in the test stru
 tree. The requirements assigned below that theme are loaded from the TOV (or cycle),
 and the ideas generated for them are written into the theme's description.
 
-``precheck`` deliberately gates nothing; every check lives in ``run``. That means the
-endpoint has already answered 202 by the time anything can fail, so each abort path
-below logs specifically enough to diagnose from the log alone. Moving these gates
-into ``precheck`` later, to get a 409 instead, touches no other module.
+``precheck`` refuses a trigger that cannot produce ideas (not a test theme, locked by
+someone else, no or too many requirements) with a translated warning, so the user
+sees why (409) instead of an accepted run that silently writes nothing. What it loaded
+is handed to ``run`` on the instance: ``load_agent`` builds one per request.
 """
+
+import asyncio
 
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
@@ -36,6 +38,7 @@ from testbench_ai_service.agents.generate_test_idears.utils import (
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import ExecutionContext, PrecheckResult
+from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
     PermissionWithCode,
     ProjectRole,
@@ -44,7 +47,9 @@ from testbench_ai_service.models.testbench import (
     TestThemeNode,
     TestThemeSpecification,
 )
+from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.html_utils import strip_html_body_tags
+from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.rm_service import fetch_requirement_details
 from testbench_ai_service.utils.testbench import (
     post_project_tov_structure,
@@ -60,6 +65,8 @@ class RequirementAgent(Agent):
             PermissionWithCode.ReadOwnUserDetails,
             PermissionWithCode.ReadProjectDetails,
             PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTovRequirements,
+            PermissionWithCode.ReadTestThemeDetails,
             PermissionWithCode.ReadTestCaseSetDetails,
             PermissionWithCode.ModifySpecifications,
             PermissionWithCode.ModifySpecManagementInfo,
@@ -72,23 +79,61 @@ class RequirementAgent(Agent):
         }
     )
 
+    def __init__(self, args: RequirementAgentArgs | None = None):
+        super().__init__(args)
+        # Loaded by precheck() and used by run(); see the module docstring.
+        self._tree: TestStructureTree | None = None
+        self._theme: TestThemeNode | None = None
+        self._assignments: list[RequirementAssignment] = []
+
     async def precheck(
         self,
         context: ExecutionContext,
         conn: TBConnection,
     ) -> PrecheckResult:
-        """Pass unconditionally; all validation happens in :meth:`run`.
+        """Check the triggered test theme can take test ideas, and load what ``run`` needs.
+
+        Read-only. A TestBench error while loading (e.g. a 403 for a missing
+        permission) is raised, so the route answers with TestBench's own status.
 
         Args:
-            context: The resolved execution context.
-            conn: TestBench connection, unused here.
+            context: The resolved execution context; ``root_uid`` names the test theme.
+            conn: TestBench connection.
 
         Returns:
-            A passing result with no items, so ``run`` works from
-            ``context.root_uid`` rather than from a precheck item list.
+            A passing result with the theme's UID as the only item, or a failed one
+            with the reason as a translated warning.
         """
-        # TODO: needs to be implemented
-        return PrecheckResult(passed=True)
+        if unsupported_version := check_min_testbench_version(context, conn):
+            return unsupported_version
+        language = context.language
+        if not context.tov_key or not context.root_uid:
+            return _refused(language, "requirement.precheck.not_a_test_theme")
+
+        tree = await asyncio.to_thread(
+            post_project_tov_structure,
+            conn=conn,
+            project_key=context.project_key,
+            tov_key=context.tov_key,
+            root_uid=context.root_uid,
+        )
+        theme = tree.root
+        if refusal := _check_theme(theme, context):
+            return refusal
+
+        assignments = await load_requirements(
+            conn,
+            context.project_key,
+            context.root_uid,
+            context.tov_key,
+            cycle_key=context.cycle_key,
+            filtering=context.filtering,
+        )
+        if refusal := self._check_requirements(theme.base.name, assignments, language):
+            return refusal
+
+        self._tree, self._theme, self._assignments = tree, theme, assignments
+        return PrecheckResult(passed=True, items=[context.root_uid])
 
     async def run(
         self,
@@ -104,42 +149,14 @@ class RequirementAgent(Agent):
                 test theme.
             conn: TestBench connection for reading and writing back.
             llm_client: Initialised LLM client.
-            item_ids: Unused -- ``precheck`` returns no items.
+            item_ids: The theme's UID, from :meth:`precheck`.
+
+        Raises:
+            RuntimeError: :meth:`precheck` has not passed on this instance.
         """
-        if not context.tov_key or not context.root_uid:
-            logger.error(
-                "Test ideas need a TOV and a test theme (tov_key=%r, root_uid=%r); nothing to do",
-                context.tov_key,
-                context.root_uid,
-            )
-            return
-
-        tov = post_project_tov_structure(
-            conn=conn,
-            project_key=context.project_key,
-            tov_key=context.tov_key,
-            root_uid=context.root_uid,
-        )
-        theme = tov.root
-        if not isinstance(theme, TestThemeNode):
-            logger.error(
-                "root_uid '%s' is not a test theme (got %s); nothing to do",
-                context.root_uid,
-                type(theme).__name__,
-            )
-            return
-
-        if theme.spec is None:
-            logger.warning("Theme '%s' has no specification to write into", theme.base.name)
-            return
-        locker = theme.spec.locker
-        if locker is not None and locker.key != context.user_key:
-            logger.warning("Theme '%s' is locked by another user; skipping it", theme.base.name)
-            return
-
-        assignments = await self._load_assignments(theme.base.name, context, conn)
-        if assignments is None:
-            return
+        tree, theme, assignments = self._tree, self._theme, self._assignments
+        if tree is None or theme is None:
+            raise RuntimeError("run() needs the data of a passed precheck()")
 
         try:
             spec = await get_theme_spec(conn, context.project_key, theme)
@@ -149,7 +166,7 @@ class RequirementAgent(Agent):
 
         try:
             await self._generate_for_theme(
-                tree=tov,
+                tree=tree,
                 theme=theme,
                 spec=spec,
                 assignments=assignments,
@@ -165,38 +182,22 @@ class RequirementAgent(Agent):
                 error,
             )
 
-    async def _load_assignments(
-        self, theme_name: str, context: ExecutionContext, conn: TBConnection
-    ) -> list[RequirementAssignment] | None:
-        """Load the theme's requirements from the TOV and check there are some to generate for.
-
-        Args:
-            theme_name: Name of the theme, for the log.
-            context: The resolved execution context.
-            conn: TestBench connection.
-
-        Returns:
-            The requirements to generate for, or ``None`` if generation should not go
-            ahead; the reason is logged then.
-        """
-        try:
-            assignments = await load_requirements(
-                conn,
-                context.project_key,
-                context.root_uid,
-                context.tov_key,
-                cycle_key=context.cycle_key,
-                filtering=context.filtering,
+    def _check_requirements(
+        self, theme_name: str, assignments: list[RequirementAssignment], language: LanguageOption
+    ) -> PrecheckResult | None:
+        """A failed result if the theme has no requirements or more than ``max_requirements``."""
+        if not assignments:
+            return _refused(language, "requirement.precheck.no_requirements", theme=theme_name)
+        max_requirements = self.args.max_requirements
+        if max_requirements is not None and len(assignments) > max_requirements:
+            return _refused(
+                language,
+                "requirement.precheck.too_many_requirements",
+                theme=theme_name,
+                count=len(assignments),
+                max=max_requirements,
             )
-        except Exception as error:
-            logger.error(
-                "Could not load the requirements of test theme '%s': %r", theme_name, error
-            )
-            return None
-
-        if not self._requirements_fit(theme_name, assignments):
-            return None
-        return assignments
+        return None
 
     async def _fetch_requirements(
         self,
@@ -219,32 +220,6 @@ class RequirementAgent(Agent):
             Requirement.from_details(assignment, extended)
             for assignment, extended in zip(assignments, details, strict=True)
         ]
-
-    def _requirements_fit(self, theme_name: str, requirements: list[RequirementAssignment]) -> bool:
-        """Whether a theme has requirements at all, and no more than ``max_requirements``.
-
-        Args:
-            theme_name: Name of the theme, for the log.
-            requirements: The requirements assigned below the theme.
-
-        Returns:
-            ``True`` if generation should go ahead; the reason is logged otherwise.
-        """
-        if not requirements:
-            logger.info(
-                "No requirements are assigned below test theme '%s'; nothing to do", theme_name
-            )
-            return False
-        max_requirements = self.args.max_requirements
-        if max_requirements is not None and len(requirements) > max_requirements:
-            logger.error(
-                "Test theme '%s' has %d requirements, more than max_requirements=%d; skipping it",
-                theme_name,
-                len(requirements),
-                max_requirements,
-            )
-            return False
-        return True
 
     async def _generate_for_theme(
         self,
@@ -381,3 +356,24 @@ class RequirementAgent(Agent):
             ideas.model_dump_json(),
         )
         return ideas
+
+
+def _check_theme(theme: object, context: ExecutionContext) -> PrecheckResult | None:
+    """A failed result if the root is no test theme, has no spec, or is locked by someone else."""
+    language = context.language
+    if not isinstance(theme, TestThemeNode):
+        return _refused(language, "requirement.precheck.not_a_test_theme")
+    name = theme.base.name
+    if theme.spec is None:
+        return _refused(language, "requirement.precheck.no_specification", theme=name)
+    locker = theme.spec.locker
+    if locker is not None and locker.key != context.user_key:
+        return _refused(language, "requirement.precheck.locked", theme=name)
+    return None
+
+
+def _refused(language: LanguageOption, key: str, **kwargs: object) -> PrecheckResult:
+    """A failed precheck whose only warning is the translation of ``key``."""
+    message = get_translation(key, language, **kwargs)
+    logger.info("Test idea generation refused: %s", message)
+    return PrecheckResult(passed=False, warnings=[message])

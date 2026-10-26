@@ -1,5 +1,6 @@
 """Tests for the requirement agent's orchestration and write-back sequence."""
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -18,13 +19,22 @@ from testbench_ai_service.agents.generate_test_idears.model import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
+    PermissionWithCode,
     Priority,
     RequirementAssignment,
     TestCaseSetNode,
     TestThemeNode,
 )
+from testbench_ai_service.utils.agent import MIN_TESTBENCH_VERSION
 from testbench_ai_service.utils.i18n import load_translations
 from testbench_ai_service.utils.structured_output import StructuredOutputError
+
+
+@pytest.fixture(autouse=True)
+def _translations():
+    # Warnings and the written ideas are translated; no test may rely on another
+    # having loaded them first.
+    load_translations()
 
 
 def _context(user_key: str = "u1") -> SimpleNamespace:
@@ -182,16 +192,85 @@ def wired(monkeypatch):
     return state
 
 
-async def _run(context=None):
-    await RequirementAgent().run(context or _context(), MagicMock(), MagicMock(), [])
+NOT_A_THEME = "Trigger the test idea generator on a test theme of a test object version."
+
+
+def _conn(server_version=MIN_TESTBENCH_VERSION) -> MagicMock:
+    conn = MagicMock()
+    conn.server_version = server_version
+    return conn
+
+
+async def _run(context=None, agent=None):
+    """Precheck, then run only if it passed -- the order the trigger route keeps."""
+    agent = agent or RequirementAgent()
+    context = context or _context()
+    conn = _conn()
+    result = await agent.precheck(context, conn)
+    if result.passed:
+        await agent.run(context, conn, MagicMock(), result.items)
+    return result
 
 
 class TestPrecheck:
-    async def test_passes_without_gating_anything(self):
-        result = await RequirementAgent().precheck(_context(), MagicMock())
+    async def test_passes_for_a_theme_with_requirements(self, wired):
+        result = await RequirementAgent().precheck(_context(), _conn())
 
         assert result.passed is True
-        assert result.items == []
+        assert result.items == ["TT-1"]
+        assert result.warnings == []
+
+    async def test_refuses_an_unsupported_testbench_version(self, wired):
+        result = await RequirementAgent().precheck(_context(), _conn(server_version=[4, 0]))
+
+        assert result.passed is False
+
+    async def test_refuses_a_trigger_without_a_test_theme(self, wired):
+        context = _context()
+        context.root_uid = None
+
+        result = await RequirementAgent().precheck(context, _conn())
+
+        assert result.passed is False
+        assert result.warnings == [NOT_A_THEME]
+
+    async def test_reads_the_structure_off_the_event_loop(self, wired, monkeypatch):
+        # A blocking TestBench call on the loop thread stalls every other request.
+        on_loop = []
+
+        def _structure(**_kwargs):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
+            return SimpleNamespace(root=wired.theme, nodes=wired.nodes)
+
+        monkeypatch.setattr(agent_module, "post_project_tov_structure", _structure)
+
+        await RequirementAgent().precheck(_context(), _conn())
+
+        assert on_loop == [False]
+
+    async def test_run_refuses_without_a_passed_precheck(self):
+        with pytest.raises(RuntimeError, match="passed precheck"):
+            await RequirementAgent().run(_context(), _conn(), MagicMock(), [])
+
+
+class TestPermissions:
+    def test_covers_every_endpoint_the_agent_calls(self):
+        # Structure, requirements, theme details, test case sets, and the spec
+        # PATCH including its locker and reviewer.
+        needed = {
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTovRequirements,
+            PermissionWithCode.ReadTestThemeDetails,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ModifySpecifications,
+            PermissionWithCode.ModifySpecManagementInfo,
+        }
+
+        assert needed <= RequirementAgent.REQUIRED_PERMISSIONS
 
 
 class TestHappyPath:
@@ -253,10 +332,6 @@ class TestHappyPath:
 
 
 class TestWrittenIdeas:
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        load_translations()
-
     async def test_writes_the_rendered_ideas(self, wired):
         await _run()
 
@@ -291,7 +366,7 @@ class TestWrittenIdeas:
         )
         agent = RequirementAgent(RequirementAgentArgs(max_ideas_per_theme=2))
 
-        await agent.run(_context(), MagicMock(), MagicMock(), [])
+        await _run(agent=agent)
 
         written = wired.recorder.kwargs["generated"]["test_ideas"]
         assert "Idea 1" in written
@@ -328,15 +403,18 @@ class TestNothingToDo:
     async def test_writes_nothing_when_the_root_is_not_a_test_theme(self, wired):
         wired.theme = SimpleNamespace(base=SimpleNamespace(key="k"))
 
-        await _run()
+        result = await _run()
 
+        assert result.warnings == [NOT_A_THEME]
         assert wired.recorder.calls == []
         assert wired.ai_calls == []
 
     async def test_writes_nothing_when_the_requirements_cannot_be_loaded(self, wired):
+        # Raised from precheck, so the route answers with TestBench's own status.
         wired.load_error = RuntimeError("404")
 
-        await _run()
+        with pytest.raises(RuntimeError, match="404"):
+            await _run()
 
         assert wired.recorder.calls == []
 
@@ -351,7 +429,9 @@ class TestNothingToDo:
     async def test_writes_nothing_when_no_requirements_are_assigned(self, wired):
         wired.requirements = []
 
-        await _run()
+        result = await _run()
+
+        assert result.warnings == ["No requirements are assigned below test theme 'Discounts'."]
 
         assert wired.recorder.calls == []
         assert wired.ai_calls == []
@@ -359,7 +439,9 @@ class TestNothingToDo:
     async def test_skips_a_theme_locked_by_another_user(self, wired):
         wired.theme = _theme_node(locker_key="someone-else")
 
-        await _run()
+        result = await _run()
+
+        assert result.warnings == ["Test theme 'Discounts' is locked by another user."]
 
         assert wired.recorder.calls == []
 
@@ -376,8 +458,11 @@ class TestMaxRequirements:
         wired.requirements = [_requirement("ER_1"), _requirement("ER_2"), _requirement("ER_3")]
         agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
 
-        await agent.run(_context(), MagicMock(), MagicMock(), [])
+        result = await _run(agent=agent)
 
+        assert result.warnings == [
+            "Test theme 'Discounts' has 3 requirements, more than the 2 allowed."
+        ]
         assert wired.recorder.calls == []
         assert wired.ai_calls == []
 
@@ -392,7 +477,7 @@ class TestMaxRequirements:
         wired.requirements = [_requirement("ER_1"), _requirement("ER_2"), _requirement("ER_3")]
         agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
 
-        await agent.run(_context(), MagicMock(), MagicMock(), [])
+        await _run(agent=agent)
 
         assert fetched == []
 
@@ -400,7 +485,7 @@ class TestMaxRequirements:
         wired.requirements = [_requirement("ER_1"), _requirement("ER_2")]
         agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
 
-        await agent.run(_context(), MagicMock(), MagicMock(), [])
+        await _run(agent=agent)
 
         assert wired.recorder.calls == ["started", "generated"]
 

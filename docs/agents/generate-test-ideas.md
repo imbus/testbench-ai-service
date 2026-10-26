@@ -29,7 +29,11 @@ When authenticating with a **JWT token**, the token must also grant all of the f
 | `ReadOwnUserDetails`       | Read the authenticated user's details.                         |
 | `ReadProjectDetails`       | Read project metadata.                                         |
 | `ReadTestThemeTree`        | Read the test theme tree.                                      |
+| `ReadTovRequirements`      | Read the requirements assigned in the test object version.     |
+| `ReadTestThemeDetails`     | Read the test theme's specification.                           |
 | `ReadTestCaseSetDetails`   | Read test case set details.                                    |
+
+Triggered on a test cycle, the agent reads the cycle's requirements instead, which needs `ReadCycleRequirements`. That one is not checked up front: without it, TestBench's own `403` is returned.
 | `ModifySpecifications`     | Modify specifications (required to write back the test ideas). |
 | `ModifySpecManagementInfo` | Modify specification management info (locker, reviewer).       |
 
@@ -38,7 +42,7 @@ When authenticating with a **JWT token**, the token must also grant all of the f
 ## How it works
 
 1. The request must contain a `tov_key` and a `root_uid`, and the `root_uid` must name a **test theme**. If a `cycle_key` is given, the requirements are loaded from that cycle instead of the TOV. The active TestBench UI `filtering` is applied too.
-2. The service loads the test structure below the theme and checks it:
+2. Before accepting the request, the service loads the test structure below the theme and checks it:
    - The theme has a specification to write into.
    - The theme is not locked by another user.
    - At least one requirement is assigned below the theme, and no more than `max_requirements` (if set).
@@ -51,7 +55,7 @@ When authenticating with a **JWT token**, the token must also grant all of the f
 7. If anything fails after step 3, the previous description is restored with a *"generation failed"* notice and the theme is unlocked.
 
 :::note
-The precheck of this agent currently accepts every request, so the endpoint always answers `202 Accepted`. All checks from step 1 and 2 happen in the background. If one fails, nothing is written to TestBench and the reason is only logged. Check the service log if no test ideas appear.
+If a check from step 1 or 2 fails, the endpoint answers `409 Conflict` and the reason is shown to the user; nothing is written to TestBench. Otherwise it answers `202 Accepted` and the rest runs in the background.
 :::
 
 ### Guardrails
