@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, status
 from sqlalchemy.exc import SQLAlchemyError
 
 from testbench_ai_service.config import AppConfig
@@ -1028,36 +1028,18 @@ async def fork_prompt(
         rollback_fork(result.written, plan.target_dir)
         raise
 
-    reloaded = False
-    reload_detail: str | None = None
-    try:
-        on_disk = read_config_file(config_path)
-    except HTTPException as e:
-        # The write already committed (write_atomic already returned). Same
-        # reasoning as apply_config: this is reported on the 200, never raised.
-        logger.error("Forked, but could not re-read %s: %s", config_path, e.detail)
-        reload_detail = (
-            f"Forked, but could not re-read the configuration to verify the reload: {e.detail}"
+    if preview.restart_required:
+        # Same gate as apply_config. The fork's own edit is hot-swappable, but
+        # a reload takes up the whole file, and a change already waiting on
+        # disk for a restart (a new port, say) would then be reported as
+        # running and its restart banner would disappear.
+        reloaded = False
+        reload_detail: str | None = (
+            "Forked, but the configuration on disk has changes that need a restart: "
+            + ", ".join(preview.restart_required)
         )
     else:
-        reloaded_config, issues = validate_config_dict(on_disk)
-        if reloaded_config is not None:
-            reloaded_config.loaded_from = config_path
-            reloaded = await hot_reload(request.app, reloaded_config)
-            if not reloaded:
-                reload_detail = (
-                    "Forked, but the in-process reload completed with degraded results; "
-                    "check the service log if it is currently writable."
-                )
-        else:
-            # Should be unreachable: the same dict validated moments ago inside
-            # _plan_change. If it happens, the file on disk is the one that is
-            # right and the operator needs to know the process did not follow.
-            logger.error("Forked and wrote %s but could not reload it: %s", config_path, issues)
-            reasons = "; ".join(issue.message for issue in issues)
-            reload_detail = (
-                f"Forked, but the configuration failed re-validation before reload: {reasons}"
-            )
+        reloaded, reload_detail = await _reload_after_fork(request.app, config_path)
 
     return PromptForkResponse(
         lang=lang,
@@ -1067,6 +1049,36 @@ async def fork_prompt(
         config_backup=str(backup) if backup is not None else None,
         reloaded=reloaded,
         reload_detail=reload_detail,
+    )
+
+
+async def _reload_after_fork(app: FastAPI, config_path: Path) -> tuple[bool, str | None]:
+    """Take up the config a fork just wrote: whether it reloaded, and why not."""
+    try:
+        on_disk = read_config_file(config_path)
+    except HTTPException as e:
+        # The write already committed (write_atomic already returned). Same
+        # reasoning as apply_config: this is reported on the 200, never raised.
+        logger.error("Forked, but could not re-read %s: %s", config_path, e.detail)
+        return False, (
+            f"Forked, but could not re-read the configuration to verify the reload: {e.detail}"
+        )
+
+    reloaded_config, issues = validate_config_dict(on_disk)
+    if reloaded_config is None:
+        # Should be unreachable: the same dict validated moments ago inside
+        # _plan_change. If it happens, the file on disk is the one that is
+        # right and the operator needs to know the process did not follow.
+        logger.error("Forked and wrote %s but could not reload it: %s", config_path, issues)
+        reasons = "; ".join(issue.message for issue in issues)
+        return False, f"Forked, but the configuration failed re-validation before reload: {reasons}"
+
+    reloaded_config.loaded_from = config_path
+    if await hot_reload(app, reloaded_config):
+        return True, None
+    return False, (
+        "Forked, but the in-process reload completed with degraded results; "
+        "check the service log if it is currently writable."
     )
 
 

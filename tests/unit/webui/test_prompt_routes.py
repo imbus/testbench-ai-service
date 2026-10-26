@@ -582,3 +582,20 @@ def test_a_fork_producing_an_unloadable_config_removes_what_it_created(
     response = admin_client.post("/admin/api/prompts/de/explainer/fork", json={"project": "Proj"})
     assert response.status_code == 422
     assert not (prompt_tree / "de/explainer__proj").exists()
+
+
+def test_a_fork_does_not_take_up_a_pending_restart_only_change(admin_client, app, config_path):
+    """A port change waiting on disk for a restart must not be reported as running."""
+    running_port = app.state.config.port
+    config_path.write_text(
+        config_path.read_text(encoding="utf-8").replace(
+            "[testbench-ai-service]\n", f"[testbench-ai-service]\nport = {running_port + 1}\n"
+        ),
+        encoding="utf-8",
+    )
+
+    response = admin_client.post("/admin/api/prompts/de/explainer/fork", json={"project": "Proj"})
+
+    assert response.status_code == 200
+    assert response.json()["reloaded"] is False
+    assert app.state.config.port == running_port
