@@ -155,6 +155,9 @@ def world(monkeypatch):
     return state
 
 
+RM_ARGS = CoverageCheckerArgs(rm_service_url="http://rm/", rm_username="u", rm_password="p")
+
+
 async def _check(prompt_vars=None, args=None):
     return await CoverageChecker(args or CoverageCheckerArgs()).check_coverage(
         _context(prompt_vars), None, None, ["s1", "s2", "s3"]
@@ -319,10 +322,43 @@ class TestJobReporting:
     def _text(key, **values):
         return get_translation(f"coverage_checker.job.{key}", LanguageOption.ENGLISH, **values)
 
-    async def _run(self, job, item_ids=("s1", "s2", "s3")):
+    async def _run(self, job, item_ids=("s1", "s2", "s3"), args=None):
         with job_scope(job.handle):
-            await CoverageChecker().run(_context(), None, None, list(item_ids))
+            await CoverageChecker(args or CoverageCheckerArgs()).run(
+                _context(), None, None, list(item_ids)
+            )
         return job.store.get("j1", "me")
+
+    @staticmethod
+    def _without_description(world):
+        world.loaded = _loaded(_set("s1"), _set("s2"), _set("s3", cases=()), description=None)
+        world.aspects = AspectList(
+            aspects=[Aspect(id="x", statement="Login", kind="happy_path", source_quote="Login")]
+        )
+
+    async def test_a_missing_rm_description_warns_on_the_job(self, world, job):
+        # The RM service is configured but did not deliver the description (down, or
+        # the requirement unknown there); the precheck could not foresee that.
+        self._without_description(world)
+
+        detail = await self._run(job, args=RM_ARGS)
+
+        assert job.handle.failed is False
+        assert detail.warnings == [self._text("reduced_mode", requirement="REQ-42")]
+
+    async def test_reduced_mode_without_an_rm_service_is_not_warned_twice(self, world, job):
+        # The precheck already warned that no RM service is configured.
+        self._without_description(world)
+
+        detail = await self._run(job)
+
+        assert job.handle.failed is False
+        assert detail.warnings == []
+
+    async def test_a_described_requirement_adds_no_warning(self, world, job):
+        detail = await self._run(job, args=RM_ARGS)
+
+        assert detail.warnings == []
 
     async def test_successful_check_stores_full_result_as_report(self, world, job):
         detail = await self._run(job)

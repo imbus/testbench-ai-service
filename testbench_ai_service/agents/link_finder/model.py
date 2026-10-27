@@ -120,6 +120,8 @@ class PrefilterResult(BaseModel):
 
 class LinkCandidate(BaseModel):
     set_key: str
+    #: The set's unique ID, by which a user finds it in TestBench.
+    set_unique_id: str
     set_title: str
     path: str
     spec_status: str

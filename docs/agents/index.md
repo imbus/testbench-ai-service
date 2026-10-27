@@ -198,6 +198,7 @@ Poll every 2 to 3 seconds until `status` is `succeeded` or `failed`.
 | `report_type`      | `report`                                                                                                  |
 | ------------------ | --------------------------------------------------------------------------------------------------------- |
 | `coverage_checker` | The [Coverage Checker](coverage-checker.md#report)'s `CoverageResult`.                                    |
+| `link_finder`      | The [Link Finder](link-finder.md#report)'s `LinkFinderResult`; not yet agreed on with the plugin.          |
 
 :::caution
 The report schemas are a contract with the plugin. A change to one, for example to `CoverageResult`, is a breaking change.

@@ -27,7 +27,7 @@ For JWT tokens the following API token permissions are required: `ReadOwnUserDet
 5. **Gaps**: one more model call explains each weak or missing aspect and sketches a test that would close it.
 6. **Write-back**: every linked set gets a block **AI Coverage &lt;requirement&gt;** on top of its review comment. A rerun replaces only this block; blocks of other requirements and of the reviewer agent stay. Each open aspect lists the reason for the gap and a sketch of the missing test. Sets locked by another user are skipped. Two runs for different requirements at the same time on the same set can lose one block; a rerun restores it. The full result is stored as the job's [report](#report) and written to the service log.
 
-Without an RM service the requirement description is unknown; the aspects then rest on the title alone and the blocks say so.
+Without an RM service the requirement description is unknown; the aspects then rest on the title alone and the blocks say so. If an RM service is configured but delivers no description (not reachable, the requirement unknown there, or its description empty), the job also gets a warning.
 
 The RM lookup works as in the [requirement agent](generate-test-ideas.md): the baselines of the TOV are searched for the requirement. TestBench lists them only on its legacy API, which a JWT cannot use; with a JWT (or if that lookup fails) the baselines of the RM projects in `rm_projects`, or of every RM project, are searched instead, the `CURRENT` baseline of each project first.
 

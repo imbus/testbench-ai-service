@@ -57,6 +57,7 @@ def test_summary():
     def candidate(level):
         return LinkCandidate(
             set_key=level,
+            set_unique_id=f"U-{level}",
             set_title="t",
             path="/p",
             spec_status="Released",

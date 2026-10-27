@@ -9,6 +9,7 @@ from testbench_ai_service.agents.link_finder import agent as agent_module
 from testbench_ai_service.agents.link_finder.agent import LinkFinder
 from testbench_ai_service.agents.link_finder.model import (
     LinkFinderArgs,
+    LinkFinderResult,
     PrefilterAnswer,
     PrefilterHit,
 )
@@ -173,6 +174,7 @@ def world(monkeypatch):
 
 
 ITEMS = ["empty", "lock", "login", "touch", "report"]
+RM_ARGS = LinkFinderArgs(rm_service_url="http://rm/", rm_username="u", rm_password="p")
 
 
 async def _find(world, prompt_vars=None, args=None, items=ITEMS):
@@ -196,6 +198,12 @@ async def test_candidates_are_ranked_and_every_one_commented(world):
     assert set(world.writes) == {"lock", "login", "touch"}  # low ones too
     assert "Already linked to REQ-7" in world.writes["lock"]
     assert world.steps.count("interpretation") == 3  # the empty set is not read
+
+
+async def test_a_candidate_names_its_set_by_unique_id(world):
+    result = await _find(world)
+
+    assert [c.set_unique_id for c in result.candidates] == ["U-lock", "U-login", "U-touch"]
     assert (result.incomplete, result.reduced_mode, result.skipped_comments) == (False, False, [])
 
 
@@ -392,20 +400,27 @@ class TestJobReporting:
     def _text(key, **values):
         return get_translation(f"link_finder.job.{key}", LanguageOption.ENGLISH, **values)
 
-    async def _run(self, world, job, items=ITEMS):
-        agent = LinkFinder()
+    async def _run(self, world, job, items=ITEMS, args=None):
+        agent = LinkFinder(args or LinkFinderArgs())
         agent._catalog = world.catalog
         with job_scope(job.handle):
             await agent.run(_context(), None, None, list(items))
         return job.store.get("j1", "me")
 
-    async def test_a_finished_search_succeeds_without_a_report(self, world, job):
-        # Report types are a contract with the plugin, and none is agreed on for
-        # the link finder yet (docs/agents/index.md#reports).
+    async def test_a_finished_search_stores_the_result_as_report(self, world, job):
         detail = await self._run(world, job)
 
-        assert (detail.report_type, detail.report) == (None, None)
+        assert detail.report_type == "link_finder"
+        assert LinkFinderResult.model_validate(detail.report).requirement_key == "REQ-42"
         assert job.handle.failed is False
+
+    async def test_a_search_without_candidates_is_still_a_report(self, world, job):
+        world.hits = []
+
+        detail = await self._run(world, job)
+
+        assert detail.report_type == "link_finder"
+        assert detail.report["candidates"] == []
 
     async def test_progress_follows_the_phases(self, world, job, monkeypatch):
         seen = []
@@ -458,6 +473,37 @@ class TestJobReporting:
         assert detail.error == self._text(key, **values)
         assert detail.status == "failed"
         assert detail.report is None
+
+    @staticmethod
+    def _without_description(world):
+        world.requirement = _requirement(description=None)
+        world.aspects = AspectList(
+            aspects=[Aspect(id="x", statement="Login", kind="happy_path", source_quote="Login")]
+        )
+
+    async def test_a_missing_rm_description_warns_on_the_job(self, world, job):
+        # The RM service is configured but did not deliver the description (down, or
+        # the requirement unknown there); the precheck could not foresee that.
+        self._without_description(world)
+
+        detail = await self._run(world, job, args=RM_ARGS)
+
+        assert job.handle.failed is False
+        assert detail.warnings == [self._text("reduced_mode", requirement="REQ-42")]
+
+    async def test_reduced_mode_without_an_rm_service_is_not_warned_twice(self, world, job):
+        # The precheck already warned that no RM service is configured.
+        self._without_description(world)
+
+        detail = await self._run(world, job)
+
+        assert job.handle.failed is False
+        assert detail.warnings == []
+
+    async def test_a_described_requirement_adds_no_warning(self, world, job):
+        detail = await self._run(world, job, args=RM_ARGS)
+
+        assert detail.warnings == []
 
     async def test_an_incomplete_search_does_not_fail_the_job(self, world, job):
         world.hits = StructuredOutputError("bad", raw_response="?")

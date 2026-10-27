@@ -265,6 +265,12 @@ class CoverageChecker(Agent):
             await self._fail_job(context, "no_sets_loaded", requirement=loaded.requirement_ref)
             return None
 
+        if loaded.reduced_mode and self.args.rm_service_url is not None:
+            # Without an RM service the precheck already warned; here the configured
+            # one delivered no description, which only the run can tell.
+            await current_job().warn(
+                self._job_text(context, "reduced_mode", requirement=loaded.requirement_ref)
+            )
         ask = self._ask(context, llm_client)
         n_sets = len(loaded.linked_sets)
         await current_job().progress(0, n_sets, self._job_text(context, "progress.aspects"))

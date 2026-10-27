@@ -292,9 +292,8 @@ class LinkFinder(Agent):
         result = await self.find_links(context, conn, llm_client, item_ids)
         if result is None:
             return
-        # No set_report: report types are a contract with the plugin, and none is
-        # agreed on for the link finder yet (docs/agents/index.md#reports).
         logger.info("%s\n%s", render_report(result), result.model_dump_json(indent=2))
+        await current_job().set_report("link_finder", result)
 
     async def find_links(
         self,
@@ -366,6 +365,10 @@ class LinkFinder(Agent):
             assignment.key: assignment.extendedId or assignment.key for assignment in assignments
         }
         reduced_mode = not has_visible_text(requirement.description or "")
+        if reduced_mode and self.args.rm_service_url is not None:
+            # Without an RM service the precheck already warned; here the configured
+            # one delivered no description, which only the run can tell.
+            await current_job().warn(self._job_text(context, "reduced_mode", requirement=ref))
         candidates, empty_sets, failed_sets = self._score(
             aspects, interpreted, by_key, requirement.key, refs, reduced_mode
         )
@@ -512,6 +515,7 @@ class LinkFinder(Agent):
             candidates.append(
                 LinkCandidate(
                     set_key=detail.key,
+                    set_unique_id=detail.unique_id,
                     set_title=detail.title,
                     path=detail.path,
                     spec_status=detail.spec_status,

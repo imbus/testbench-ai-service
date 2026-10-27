@@ -24,6 +24,7 @@ def _evidence(aspect_id, key, strength, text="e"):
 def _candidate(**overrides):
     values = {
         "set_key": "s1",
+        "set_unique_id": "U-s1",
         "set_title": "Lock",
         "path": "/Auth/Lock",
         "spec_status": "Released",
