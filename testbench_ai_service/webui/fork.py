@@ -108,10 +108,6 @@ def build_fork(
     else:
         slug = slugify_project(project)
         if not slug:
-            # design D5: a project name that slugs to nothing (no [a-z0-9._-]
-            # characters at all, e.g. a non-Latin script) must not silently fork
-            # every such project to the same "<agent>__" directory -- make the
-            # operator supply a directory explicitly instead.
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=(
@@ -131,7 +127,6 @@ def build_fork(
         )
 
     files: dict[Path, str | bytes] = {}
-    #: basename -> the source path it was copied from, for the collision check.
     copied: dict[str, Path] = {}
     document: dict[str, Any] = {
         "name": definition.name,
@@ -187,9 +182,6 @@ def _copy_templates(
         basename = source.name
         previous = copied.get(basename)
         if previous is not None and previous != source:
-            # previous.name == source.name == basename by construction -- that
-            # is why they collided -- so the full paths, not the basenames,
-            # are what tells the operator which two files to rename.
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=(
@@ -198,9 +190,6 @@ def _copy_templates(
                 ),
             )
         try:
-            # Bytes, not text: an undecodable or CRLF template copies exactly.
-            # Only a missing or unopenable file refuses the fork -- decodability
-            # is a different question, and not this one.
             files[target_dir / basename] = source.read_bytes()
         except OSError as e:
             raise HTTPException(

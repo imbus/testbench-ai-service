@@ -33,17 +33,8 @@ Errors are ``ValueError``. Turning them into an HTTP status is the caller's
 job -- ``webui/edits.py`` raises the 400.
 """
 
-# Characters a bare segment may never contain. '.' is the delimiter; '"'
-# introduces a quoted segment, so allowing it bare would make '"a"' ambiguous;
-# '\' is the escape character; NUL has no business in a config key.
 _BARE_FORBIDDEN = frozenset('."\\\x00')
 
-# What counts as whitespace at a segment's edge, spelled out rather than left
-# to ``str.strip()``. Python's default and JavaScript's ``trim()`` do not agree
-# -- Python strips \x1c-\x1f and \x85, JavaScript strips the BOM -- so a segment
-# ending in one of those would be quoted by one tokenizer and left bare by the
-# other. That is exactly the silent divergence the shared vectors exist to
-# prevent, so the set is the union of both and either side quotes it.
 _EDGE_WHITESPACE = frozenset(
     " \t\n\v\f\r"
     "\x1c\x1d\x1e\x1f\x85"
@@ -86,8 +77,6 @@ def split_path(path: str) -> list[str]:
 
         if index == length:
             return segments
-        # _read_quoted and _read_bare both stop on '.' or end of string, so
-        # this is the only possibility left.
         index += 1  # step over the delimiter
         if index == length:
             raise ValueError(f"Edit path {path!r} has an empty segment")
@@ -124,7 +113,6 @@ def _read_quoted(path: str, start: int) -> tuple[str, int]:
         char = path[index]
         if char == '"':
             index += 1
-            # A closing quote must end the segment: '"a"b' is not a segment.
             if index != length and path[index] != ".":
                 raise ValueError(
                     f"Edit path {path!r} has characters after a closing quote; "

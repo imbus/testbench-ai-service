@@ -204,9 +204,6 @@ class AppConfig(BaseModel):
         if not isinstance(agents, dict):
             return agents
 
-        # Start from every built-in, so an agent the operator did not mention
-        # survives. model_dump() builds a fresh dict every call, so the shared
-        # DEFAULT_AGENTS models are never touched.
         merged: dict[Any, Any] = {
             key: default.model_dump() for key, default in DEFAULT_AGENTS.items()
         }
@@ -323,11 +320,6 @@ class AppConfig(BaseModel):
                     continue
                 raise_field_validation_error(self, ("agents", agent_key, "prompt", "file"), e)
         for proj_key, project in self.projects.items():
-            # The project's own language when it declares one -- matching what
-            # utils.config.get_prompt_config does at runtime. Resolving against
-            # the global language here refused to boot a config the runtime
-            # would have served correctly. Inlined rather than delegated to
-            # get_language_from_config: utils/config.py imports this module.
             project_language = (
                 project.language.value if project.language is not None else self.language.value
             )
@@ -351,10 +343,6 @@ class AppConfig(BaseModel):
     @model_validator(mode="after")
     def validate_config(self):
         for _, agent in self.agents.items():
-            # A disabled agent gets no router, so nothing here can go wrong at
-            # runtime: importing its class and matching its template variables
-            # would only be able to refuse a boot over an agent that is
-            # switched off. Same reasoning as validate_prompt_paths.
             if not agent.enabled:
                 continue
 

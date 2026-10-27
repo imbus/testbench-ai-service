@@ -22,7 +22,6 @@ from testbench_ai_service.webui.models import (
     UsageSummary,
 )
 
-#: Provider credentials the service understands. Presence is reported, never values.
 API_KEY_NAMES = (
     "OPENAI_API_KEY",
     "ANTHROPIC_API_KEY",
@@ -65,7 +64,6 @@ def probe_testbench(config: AppConfig) -> TestBenchStatus:
     except requests.exceptions.RequestException as e:
         logger.debug("TestBench probe failed: %s", e)
         return TestBenchStatus(url=config.tb_server_url, reachable=False, detail=type(e).__name__)
-    # Any HTTP answer means the server is up; 401/404 are expected without credentials.
     return TestBenchStatus(
         url=config.tb_server_url,
         reachable=True,

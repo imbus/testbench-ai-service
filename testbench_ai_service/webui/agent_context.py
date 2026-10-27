@@ -23,12 +23,8 @@ from pydantic import BaseModel
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import AgentConfig
 
-#: Nested objects deeper than this are summarised as ``"<TypeName>"``. Deep
-#: enough for ``test_case_set_obj.details.spec.description``, shallow enough
-#: that a recursive model cannot flood the pane.
 MAX_DEPTH = 5
 
-#: The key placeholder for a ``dict[str, T]`` sample.
 DICT_KEY = "<key>"
 
 
@@ -111,8 +107,6 @@ def agent_data_sample(agent_data_class: type) -> dict[str, Any]:
 
 
 def _prompt_dir(agent: AgentConfig) -> str | None:
-    # Config files are written on Windows as often as not, so a backslash in
-    # ``prompt.file`` is a separator here no matter which OS reads it.
     parts = PurePath(str(agent.prompt.file).replace("\\", "/")).parts
     return parts[0] if len(parts) > 1 else None
 

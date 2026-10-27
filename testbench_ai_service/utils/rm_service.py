@@ -88,7 +88,6 @@ class RmServiceArgs(AgentArgs):
 class Requirement(BaseModel):
     """A requirement as the model sees it: its TOV assignment merged with its RM details."""
 
-    #: TestBench key, which test case sets reference the requirement by.
     key: str
     version: str
     title: str
@@ -324,8 +323,6 @@ async def find_rm_requirement(
     return None
 
 
-#: Placeholder version for asking a requirement's versions: the RM service requires
-#: one in the key, but every reader looks the versions up by the ID alone.
 _ANY_VERSION = "*"
 
 

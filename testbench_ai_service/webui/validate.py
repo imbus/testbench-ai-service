@@ -43,9 +43,6 @@ def _quote_key(segment: str) -> str:
     try:
         return tomlkit.key(segment).as_string()
     except Exception:
-        # If tomlkit fails on an exotic segment, the hint must not break the
-        # response. Fall back to just the segment unchanged; the hint becomes
-        # less helpful, but the validation result is still correct.
         return segment
 
 
@@ -74,8 +71,6 @@ def _issue_path(location: tuple[Any, ...]) -> str:
     and comes through unchanged.
     """
     parts = [str(part) for part in location]
-    # A model-level error carries no location at all; it stays the empty
-    # string the root-addressed issues already used.
     return join_path(parts) if parts else ""
 
 
@@ -162,17 +157,6 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
     """
     try:
         config = AppConfig(**data)
-        # AppConfig itself does not validate the log path -- see
-        # _log_file_writability_issues' docstring for why that check belongs
-        # here, in the console's validator, rather than tightening the model
-        # every CLI user also goes through. It runs inside this same guard,
-        # not after it: it touches the filesystem exactly like the model
-        # validators above it (prompt files, SSL files), and an unexpected
-        # OSError escaping it here would otherwise reproduce the raw-500
-        # pattern the except clause below exists to prevent -- one that,
-        # after a write has already committed, is exactly what FIX C
-        # (apply_config's post-write re-read) was built to stop happening a
-        # second way.
         log_issues = _log_file_writability_issues(config)
     except ValidationError as e:
         issues = [
@@ -186,17 +170,6 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
         logger.info("Rejected a console config draft with %d issue(s)", len(issues))
         return None, issues
     except (Exception, SystemExit) as e:
-        # AppConfig's model validators reach into the import system (agent
-        # class paths) and the filesystem (prompt files). A failure there can
-        # surface as something other than a ValidationError, and a 500 would
-        # tell the operator nothing, so it becomes a root-addressed issue.
-        # SystemExit is caught because this repo's own library code (in
-        # utils/config.py) calls sys.exit(), and a validator importing such
-        # code would otherwise propagate the exit. We do NOT catch bare
-        # BaseException, which would also swallow KeyboardInterrupt,
-        # GeneratorExit, and asyncio.CancelledError—turning Ctrl-C or a
-        # cancelled request into an HTTP 400 would be worse than the
-        # ImportError it catches.
         logger.exception("Unexpected failure validating a console config draft")
         return None, [ConfigIssue(path="", message=str(e), toml_section=f"[{CONFIG_PREFIX}]")]
 

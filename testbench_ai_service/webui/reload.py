@@ -34,7 +34,6 @@ from testbench_ai_service.log import logger, setup_logging
 from testbench_ai_service.utils.i18n import load_translations
 from testbench_ai_service.webui.paths import join_path
 
-# Fixed at boot by uvicorn or by the middleware stack.
 RESTART_FIELDS: tuple[str, ...] = (
     "host",
     "port",
@@ -42,16 +41,10 @@ RESTART_FIELDS: tuple[str, ...] = (
     "ssl_key",
     "ssl_ca_cert",
     "trusted_proxies",
-    # init_webui() mounts the console router and static files once, from
-    # create_app(), so switching the console off cannot take effect live.
-    # 'admin_ui.require_loopback' is deliberately NOT here: it is read per
-    # request through get_app_config and is genuinely hot-swappable.
     "admin_ui.enabled",
-    # The usage store is opened once, from create_app(), and outlives reloads.
     "usage_file",
 )
 
-# Consumed once by init_routers(); a change cannot reach the live router table.
 RESTART_AGENT_FIELDS: tuple[str, ...] = ("endpoint_path", "class_path")
 
 
@@ -84,9 +77,6 @@ def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
 
     old_keys = set(old.agents)
     new_keys = set(new.agents)
-    # An added or removed agent is reported as the agent itself rather than as
-    # its fields: there is no old (or new) value to name, and the operator's
-    # takeaway is the same either way.
     changed.extend(join_path(["agents", key]) for key in old_keys ^ new_keys)
 
     for key in sorted(old_keys & new_keys):
@@ -162,13 +152,6 @@ async def hot_reload(app: FastAPI, config: AppConfig) -> bool:
     try:
         await previous_factory.close_clients()
     except (Exception, asyncio.CancelledError) as e:
-        # Widened deliberately beyond Exception: asyncio.CancelledError is a
-        # BaseException (raised when the client disconnects mid-close), and by
-        # this point `app.state.config` has already been swapped to the new
-        # config above -- letting it escape here would leave that new config
-        # paired with the old, partly-closed factory, exactly the split state
-        # this function exists to prevent. Bare BaseException is NOT caught:
-        # KeyboardInterrupt must still propagate.
         succeeded = False
         logger.warning("Could not close the previous LLM clients during reload: %r", e)
 

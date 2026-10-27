@@ -35,15 +35,9 @@ class MultiWriteResult(BaseModel):
     """What a completed :func:`write_all` did."""
 
     written: list[Path] = []
-    #: The subset of *written* that did not exist before this call.
     created: list[Path] = []
-    #: Targets removed. Each one's previous contents are in its ``.bak``.
     deleted: list[Path] = []
-    #: target -> the ``.bak`` holding its previous contents. Absent for a file
-    #: that did not exist before.
     backups: dict[Path, Path] = {}
-    #: Targets restored after a mid-sequence failure. Only ever non-empty on
-    #: the error path, which raises -- surfaced for the log, not for a caller.
     rolled_back: list[Path] = []
 
 
@@ -61,15 +55,11 @@ def _stage(target: Path, content: str | bytes) -> Path:
     if target.exists():
         copy_mode(target, Path(temp_name))
     if isinstance(content, bytes):
-        # A byte copy is exactly that: no decode, no newline translation. This
-        # is what lets a fork copy a latin-1 or CRLF template faithfully.
         with os.fdopen(handle, "wb") as binary:
             binary.write(content)
             binary.flush()
             os.fsync(binary.fileno())
         return Path(temp_name)
-    # newline="" keeps the text exactly as rendered; the default would turn
-    # every "\n" into "\r\n" on Windows and rewrite every line of the file.
     with os.fdopen(handle, "w", encoding="utf-8", newline="") as file:
         file.write(content)
         file.flush()

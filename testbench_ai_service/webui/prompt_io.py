@@ -36,8 +36,6 @@ from typing import Any
 
 import yaml
 
-#: Wide enough that a long description stays on one line instead of being
-#: folded, which would churn the diff of every neighbouring line.
 _WIDTH = 4096
 
 SCHEMA_FILENAME = "prompt.schema.json"
@@ -47,9 +45,6 @@ class _PromptDumper(yaml.SafeDumper):
     """Emits multi-line strings as literal blocks and indents sequences."""
 
     def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
-        # PyYAML dedents sequence items by default; the repo's prompt files
-        # indent them under their key, and matching that keeps the first
-        # console save from re-indenting every list in the file.
         return super().increase_indent(flow, False)
 
 

@@ -168,8 +168,6 @@ class JobStore:
         """Append *message* to the job's warnings."""
 
         def work(engine: Engine) -> None:
-            # One statement, so concurrent warnings cannot overwrite each other.
-            # The end of the array is spelled out: "$[#]" needs SQLite 3.31.
             end = sa.func.printf("$[%d]", sa.func.json_array_length(_jobs.c.warnings))
             with engine.begin() as conn:
                 conn.execute(

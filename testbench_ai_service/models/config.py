@@ -7,10 +7,7 @@ from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider, RoutingF
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.validators import raise_field_validation_error, validate_class_path
 
-#: Which request shapes each provider's client can actually produce.
-#: AZURE_OPENAI shares OpenAI's two branches (it dispatches on the canonical
-#: name after deployment_mapping); CUSTOM implements its own dispatch, so
-#: "fallback" is the only honest answer for it.
+
 ALLOWED_ROUTING: dict[LLMProvider, frozenset[RoutingFamily]] = {
     LLMProvider.OPENAI: frozenset(
         {RoutingFamily.CHAT, RoutingFamily.REASONING, RoutingFamily.FALLBACK}
@@ -101,19 +98,11 @@ class LLMConfig(BaseModel):
                     ValueError("'api_version' must be set for provider 'azure_openai'."),
                 )
 
-        # Imported here rather than at module scope: llm.routing imports both
-        # client modules (and their SDKs), and models/config.py is imported by
-        # nearly everything. Keeping it function-local keeps that weight out of
-        # the common import path. Same pattern as 4b's template_refs import.
         from testbench_ai_service.llm.routing import builtin_routing  # noqa: PLC0415
 
         for name, entry in self.extra_models.items():
             allowed = ALLOWED_ROUTING[entry.provider]
             if entry.routing not in allowed:
-                # Full loc tuple, not the bare field name: the console renders a
-                # ConfigIssue against the offending ROW (design 5.3), which needs
-                # the model name and the field in the path. Same shape as
-                # config.py:336's ("projects", ..., "prompt", "file").
                 raise_field_validation_error(
                     self,
                     ("extra_models", name, "routing"),
@@ -164,11 +153,6 @@ def resolved_extra_models(config: LLMConfig) -> dict[str, ExtraModel]:
     return resolved
 
 
-# Prompt variables carry the value types PromptVariableDefinition declares
-# ('number' and 'boolean' as well as the string kinds), so the config that
-# supplies them has to be able to hold them. Order matters for pydantic's
-# smart union only in that every member is a distinct scalar type; bool is
-# listed before int deliberately, since bool is a subclass of int.
 PromptVarValue = str | bool | int | float
 
 

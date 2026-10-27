@@ -38,20 +38,10 @@ from testbench_ai_service.webui.static import STATIC_DIR, mount_spa
 def init_services(app: FastAPI):
     """Initialization of app singleton services"""
 
-    # Initialize a singleton instance of LLMFactory and add it to the application state
     app.state.llm_factory = LLMFactory()
     try:
         app.state.llm_factory.init_clients([app.state.config.llm_config])
     except Exception as e:
-        # Pre-initialising the clients is an optimisation, not a precondition:
-        # LLMFactory.get_client creates them on demand. Letting a missing
-        # credential abort startup makes the one configuration the console
-        # exists to repair the one the operator cannot start the console to
-        # repair. reload.py:173-186 already treats the same call this way
-        # after a config apply; this makes boot agree with reload.
-        #
-        # Exception, not BaseException: a KeyboardInterrupt during startup
-        # must still stop the process rather than being logged and ignored.
         logger.warning(
             "Could not pre-initialise the LLM clients at startup: %r. The clients will be "
             "created on demand; a missing provider credential will surface on the next agent "
@@ -110,8 +100,6 @@ def init_middlewares(app: FastAPI):
     """Initialization of app middlewares"""
 
     app.add_middleware(LoggingMiddleware)
-    # Added last so it is outermost: LoggingMiddleware's records must already be
-    # request-scoped (design 4.3).
     app.add_middleware(RequestScopeMiddleware)
     OutboundRequestLoggingMiddleware.install(app.state.config.tb_server_url)
 
@@ -150,18 +138,10 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.config = config
     app.state.config_path = Path(getattr(config, "loaded_from", None) or "config.toml")
     app.state.started_at = datetime.now(timezone.utc)
-    # Created unconditionally, not inside init_webui: the agent routes track
-    # into it whether or not the console is enabled, and a missing attribute
-    # would be an AttributeError on the request path.
     app.state.task_registry = TaskRegistry()
-    # Same reasoning as task_registry: created unconditionally so the route
-    # never hits a missing attribute if it is ever reached before init_webui.
     app.state.prompt_test_flight = SingleFlight()
-    # Created here rather than in init_services: it outlives every reload,
-    # while the LLM factory is rebuilt by each one.
     app.state.usage_store = UsageStore(resolve_usage_file(config.usage_file, app.state.config_path))
 
-    # Same file as the usage counts, so there is still only one to back up.
     app.state.job_store = JobStore(resolve_usage_file(config.usage_file, app.state.config_path))
 
     init_routers(app)

@@ -163,13 +163,10 @@ def create_file_handler(**kwargs) -> logging.Handler:
 def build_activity_handler(file_name: str, max_bytes: int, backup_count: int) -> logging.Handler:
     """The activity sink, filters and formatter attached (dictConfig factory)."""
     if is_reloader_process:
-        # Same reason as create_file_handler: two processes holding the file
-        # open break its rotation on Windows.
         return logging.NullHandler()
     handler = logging.handlers.RotatingFileHandler(
         file_name, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
     )
-    # Order matters: the scope is set by LogContextFilter and read by ActivityRecordFilter.
     handler.addFilter(LogContextFilter())
     handler.addFilter(ActivityRecordFilter())
     handler.setFormatter(JsonLineFormatter())

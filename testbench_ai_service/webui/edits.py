@@ -25,10 +25,6 @@ from testbench_ai_service.webui.paths import join_path, split_path
 
 ConfigEdits = dict[str, Any]
 
-# Bounds, not policy: they exist so a malformed or hostile payload cannot make
-# the server walk an unbounded structure. The real config is nowhere near
-# either limit -- the deepest legitimate path is
-# 'projects."<name>".agents.<key>.prompt.vars.<var>' at seven segments.
 MAX_EDITS = 500
 MAX_PATH_SEGMENTS = 8
 
@@ -97,10 +93,6 @@ def _validate_single_path(path: str, value: Any) -> list[str]:
     if len(segments) > MAX_PATH_SEGMENTS:
         _reject(f"Edit path {path!r} is nested deeper than {MAX_PATH_SEGMENTS} levels")
     if _contains_sentinel(value):
-        # The console shows credential-named values as REDACTED_SENTINEL.
-        # Writing that string back would replace a real secret with a
-        # placeholder, or plant the placeholder as a value. Neither is ever
-        # what the operator meant.
         _reject(
             f"Edit path {path!r} carries the redacted placeholder. "
             "Credential values cannot be set from the console."
@@ -118,8 +110,6 @@ def validate_edit_paths(edits: ConfigEdits) -> None:
     if len(edits) > MAX_EDITS:
         _reject(f"Too many edits in one request (limit {MAX_EDITS})")
 
-    # Per-path validation runs first: the collision check tokenizes every path,
-    # which is only meaningful once each one is known to be well formed.
     tokenized = {path: _validate_single_path(path, value) for path, value in edits.items()}
 
     _check_path_prefix_collisions(tokenized)

@@ -32,10 +32,6 @@ def build_messages(
     Returns:
         List of ``Message`` objects ready to be sent to an LLM.
     """
-    # Sandboxed because the web console lets a TestBench administrator edit
-    # templates: an unsandboxed environment would let a template reach Python
-    # internals and run code in the service process. Must match the console's
-    # preview environment in webui/prompt_render.py.
     env = SandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
     messages: list[Message] = []
 

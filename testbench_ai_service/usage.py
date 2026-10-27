@@ -38,8 +38,6 @@ CREATE TABLE IF NOT EXISTS model_usage (
 )
 """
 
-# One statement, so concurrent writers -- other coroutines' threads, or a
-# second worker process on the same file -- cannot lose an increment.
 _UPSERT = """
 INSERT INTO model_usage
     (provider, model, calls, input_tokens, output_tokens, reasoning_tokens, last_used)
@@ -68,7 +66,6 @@ class ModelUsage:
     calls: int
     input_tokens: int
     output_tokens: int
-    #: Part of ``output_tokens``, not on top of it.
     reasoning_tokens: int
     last_used: datetime
 
@@ -188,12 +185,8 @@ class UsageRecordingClient(LLMClient):
         """Nothing to release: the factory owns, caches and closes ``inner``."""
 
     def __getattr__(self, name: str) -> Any:
-        # Only reached for attributes the wrapper lacks. "inner" itself is
-        # refused, or a lookup before __init__ sets it would recurse forever.
         if name == "inner":
             raise AttributeError(name)
-        # A custom agent may reach for something its own custom client
-        # offers beyond the LLMClient interface; wrapping must not take it away.
         return getattr(self.inner, name)
 
 

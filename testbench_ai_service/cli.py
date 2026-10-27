@@ -141,7 +141,6 @@ def start_action(args):
     print_cli_banner()
 
     use_reload = config.debug and not getattr(sys, "frozen", False)
-    # The reloader only supervises; the spawned worker owns the log file.
     log.is_reloader_process = use_reload
 
     setup_logging(config.logging)

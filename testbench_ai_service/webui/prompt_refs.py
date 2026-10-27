@@ -26,7 +26,6 @@ class VariantRef(BaseModel):
     """One config key naming a prompt variant."""
 
     agent: str
-    #: ``None`` for the global agents table, otherwise the project's raw name.
     project: str | None = None
     variant: str
 

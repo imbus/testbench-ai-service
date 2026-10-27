@@ -32,32 +32,19 @@ from testbench_ai_service.webui.models import (
     RenderedMessage,
 )
 
-#: The namespace the render context pane fills in. ``vars`` comes from the
-#: variant's own declarations, so it is not part of the skeleton.
 AGENT_NAMESPACE = "agent"
 
-#: A ``Getattr`` chain rooted at ``agent`` needs at least this many segments
-#: (the ``agent`` name itself plus one attribute) to name a real field.
 _MIN_AGENT_PATH_LENGTH = 2
 
 
 def _lint_env() -> Environment:
-    # trim_blocks/lstrip_blocks match utils/build_prompt_utils.py:34 (and
-    # _render_env, below) -- keep all three in sync if either changes, or the
-    # lint pane will disagree with what the runtime actually emits. Prompts
-    # are rendered as plain text, never HTML, so autoescape is off.
     return Environment(autoescape=False, trim_blocks=True, lstrip_blocks=True)
 
 
 def _render_env() -> SandboxedEnvironment:
-    # StrictUndefined so a typo in a variable name is reported rather than
-    # rendering as an empty string the operator would never notice.
     return SandboxedEnvironment(
         autoescape=False,  # Prompts are plain text, never HTML.
         undefined=StrictUndefined,
-        # trim_blocks/lstrip_blocks match utils/build_prompt_utils.py:34 (and
-        # _lint_env, above) -- keep all three in sync if either changes, or
-        # the preview will disagree with what the agent actually receives.
         trim_blocks=True,
         lstrip_blocks=True,
     )
@@ -70,11 +57,6 @@ def lint_template(content: str) -> LintResponse:
     except TemplateSyntaxError as e:
         return LintResponse(
             ok=False,
-            # column=1 is a PLACEHOLDER, not data: Jinja's TemplateSyntaxError
-            # carries a line number and no column at all, so there is nothing
-            # truthful to put here. The field stays because the response shape
-            # is public (and an editor gutter wants the pair), but nothing
-            # should read this value as "the error is in the first column".
             errors=[LintError(line=e.lineno or 1, column=1, message=e.message or "Syntax error")],
         )
     return LintResponse(ok=True, errors=[])
@@ -113,8 +95,6 @@ def render_messages(
         except (TemplateSyntaxError, UndefinedError) as e:
             rendered.append(RenderedMessage(role=message.role, content="", error=str(e)))
         except Exception as e:
-            # A template can raise anything at all through a filter or a call,
-            # and a preview must never turn that into a 500.
             logger.warning("Prompt preview failed: %s", e)
             rendered.append(
                 RenderedMessage(role=message.role, content="", error=f"{type(e).__name__}: {e}")

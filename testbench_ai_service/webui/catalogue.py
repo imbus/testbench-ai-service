@@ -26,9 +26,6 @@ from testbench_ai_service.webui.models import (
 )
 from testbench_ai_service.webui.status import api_key_statuses
 
-#: The global credential each provider authenticates with. CUSTOM is None:
-#: LLMFactory._get_api_key deliberately does not demand a 'CUSTOM_API_KEY',
-#: so there is no variable whose absence would mean anything.
 PROVIDER_KEY_NAMES: dict[LLMProvider, str | None] = {
     LLMProvider.OPENAI: "OPENAI_API_KEY",
     LLMProvider.ANTHROPIC: "ANTHROPIC_API_KEY",
@@ -81,9 +78,6 @@ def build_catalogue(config: AppConfig, project: str | None = None) -> ModelCatal
     }
 
     for name, extra in resolved_extra_models(llm_config).items():
-        # setdefault, not assignment: LLMConfig refuses an entry that shadows a
-        # built-in, so this can only ever add. Belt and braces -- a built-in
-        # must never be displaceable by config.
         entries.setdefault(extra.provider, {}).setdefault(
             name, CatalogueModel(id=name, routing=extra.routing, source="config")
         )

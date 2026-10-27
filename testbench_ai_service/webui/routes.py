@@ -127,9 +127,6 @@ def _plan_change(
     candidate, issues = validate_config_dict(merged)
 
     if candidate is None:
-        # Nothing to approve and nothing that could be written, so no diff and
-        # no restart classification -- both would be claims about a config that
-        # cannot exist.
         return (
             PreviewResponse(
                 valid=False,
@@ -145,28 +142,12 @@ def _plan_change(
 
     apply_edits(document, edits)
     proposed_text = render_document(document)
-    # toml/diffs are DISPLAY-ONLY and go through redact_toml_text -- the Raw
-    # screen and the apply dialog's diff must hide the same credential values
-    # GET /config already hides. The tuple's second element (proposed_text)
-    # stays RAW: it is what apply (Task 12) writes to disk, and writing the
-    # redacted text would replace the operator's real credential with the
-    # literal sentinel string, destroying it.
     diff = file_diff(
         str(config_path.resolve()),
         redact_toml_text(current_text),
         redact_toml_text(proposed_text),
     )
 
-    # The DISPLAYED diff and the WRITE decision deliberately read different
-    # texts. `diff` above is computed from the redacted before/after, because
-    # that is what the operator is allowed to see. Whether there is anything
-    # to write is decided from the RAW before/after instead: an overlay that
-    # only changes a credential-named key (permitted -- LLMConfig declares
-    # extra="allow") redacts to an identical before/after and would produce no
-    # diff, which must not be read as "nothing to write" -- that would
-    # silently discard the operator's change. Comparing the raw texts here
-    # catches that case, and also the reverse: a mixed overlay must not be
-    # treated as empty just because its *displayed* diff happens to be.
     has_write = current_text != proposed_text
 
     return (
@@ -320,9 +301,6 @@ async def read_status(
     on_disk, _issues = validate_config_dict(read_config_file(Path(request.app.state.config_path)))
     pending = restart_required(config, on_disk) if on_disk is not None else []
     token_usage = await read_token_usage(usage_store)
-    # In a thread: build_status probes TestBench with a blocking request, and
-    # an unreachable server would otherwise stall every other request,
-    # agent calls included, for the length of the probe timeout.
     return await asyncio.to_thread(
         build_status,
         config,
@@ -382,9 +360,6 @@ def read_prompt_metadata(
     belongs in the threadpool.
     """
     if config.prompts_dir is None:
-        # There is no base directory to contain a request-supplied path
-        # against, so the endpoint refuses to look rather than reading a path
-        # relative to the process's working directory.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No prompts directory is configured, so prompt metadata cannot be read",
@@ -551,11 +526,6 @@ async def apply_config(
     raised -- the write already succeeded and the response must say so.
     """
     config_path = Path(request.app.state.config_path)
-    # No await between this read of config.toml and write_atomic below, and
-    # the same holds in fork_prompt: on the event loop that makes read, merge
-    # and write one step, so two applies cannot interleave and lose an edit.
-    # Turning this route into a sync def, or adding an await in between,
-    # needs a real lock shared with fork_prompt.
     preview, proposed_text, has_write = _plan_change(body.edits, config_path, config)
 
     if not preview.valid:
@@ -568,11 +538,6 @@ async def apply_config(
         )
 
     if not has_write:
-        # Nothing to do. Decided from the RAW texts (see `_plan_change`), not
-        # from `preview.diffs`: the displayed diff is redacted and can be
-        # empty while a credential-only change still needs writing. Writing
-        # anyway when there is truly nothing to write would churn the .bak and
-        # the mtime for an operator who changed their mind back.
         return ApplyResponse(
             written=[],
             backup=None,
@@ -581,28 +546,15 @@ async def apply_config(
             in_flight_tasks=registry.count,
         )
 
-    # proposed_text, never preview.toml: preview.toml is REDACTED for display
-    # (Task 11), so writing it would replace the operator's real credential
-    # with the literal "***REDACTED***" sentinel. proposed_text is the raw
-    # second element _plan_change returns specifically so apply can write it.
     backup = write_atomic(config_path, proposed_text)
 
     needs_restart = preview.restart_required
     reloaded = False
     reload_detail: str | None = None
     if not needs_restart:
-        # Re-read rather than reuse the candidate _plan_change built: what the
-        # process takes up must be what is now on disk, so a discrepancy
-        # between the document path and the dict path shows up here as a
-        # logged error instead of as a process quietly running something the
-        # file does not say.
         try:
             on_disk = read_config_file(config_path)
         except HTTPException as e:
-            # The write already committed (write_atomic already returned).
-            # Turning this into a raised 4xx would tell the operator the
-            # apply failed when the file on disk is exactly what they asked
-            # for; only the in-process verification could not complete.
             logger.error(
                 "Wrote %s but could not re-read it to verify the reload: %s",
                 config_path,
@@ -624,9 +576,6 @@ async def apply_config(
                         "currently writable."
                     )
             else:
-                # Should be unreachable: the same dict validated moments ago. If it
-                # happens, the file on disk is the one that is right and the
-                # operator needs to know the process did not follow.
                 logger.error("Wrote %s but could not reload it: %s", config_path, issues)
                 reasons = "; ".join(issue.message for issue in issues)
                 reload_detail = (
@@ -655,8 +604,6 @@ def read_prompt_tree(
     try:
         on_disk = read_config_file(Path(request.app.state.config_path))
     except HTTPException as e:
-        # `used_by` is a labelling nicety; the tree itself is how an operator
-        # reaches a broken prompt. An unreadable config must not cost them that.
         logger.warning("Listing prompts without usage labels: %s", e.detail)
         on_disk = {}
     return build_tree(config.prompts_dir, on_disk)
@@ -777,21 +724,9 @@ async def run_prompt_test(
             },
         )
 
-    # Resolution goes through the production helper, never a local re-merge:
-    # the project step is a merge, not a replacement, and re-implementing it
-    # would diverge silently for partial overrides (design 3.7).
     llm_config = get_llm_config(config, project_name=body.project)
     factory: LLMFactory = request.app.state.llm_factory
 
-    # Resolved BEFORE get_client, not after: `resolve_provider` is a pure
-    # function of (config, model) with no I/O, and the 400 below reports a
-    # credential-resolution failure whose message can name the variable it
-    # looked for. Computing `secrets` afterwards left that 400 as the one
-    # provider-sourced string on this route that was never scrubbed.
-    #
-    # Both candidates, not just the global one: a project run may have used the
-    # project variable, and scrubbing only the global key would leave exactly
-    # the credential this run used exposed (design D9).
     provider = factory.resolve_provider(llm_config, body.model)
     secrets = _credential_values(provider, body.project)
 
@@ -804,7 +739,6 @@ async def run_prompt_test(
             status_code=status.HTTP_400_BAD_REQUEST, detail=scrub_all(str(e), secrets)
         ) from e
 
-    # A test run is a paid call like any other, so it counts towards the totals.
     client = UsageRecordingClient(client, usage_store, str(provider))
 
     scope = "global"
@@ -907,8 +841,6 @@ def save_prompt(
     prompts_dir = _require_prompts_dir(config)
     path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
 
-    # There is no `get_config_path` dependency: routes.py reads the path off
-    # app.state, the way `read_config` and `read_prompt_metadata` already do.
     _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
 
     plan = build_write_set(body, path, prompts_dir)
@@ -957,15 +889,6 @@ async def fork_prompt(
     """
     prompts_dir = _require_prompts_dir(config)
 
-    # The config key this fork would write, validated up front, before
-    # build_fork or any existence check: join_path raises a bare ValueError
-    # for a segment containing a NUL, and body.project is the only
-    # unsanitised input that reaches it. Computing this AFTER mkdir/write_all
-    # (as it once was) meant that ValueError propagated as a 500 with the
-    # fork directory and its files already on disk and config.toml
-    # untouched -- outside the rollback every later failure in this function
-    # goes through. Checked before "is this project known" too: a malformed
-    # name is a 400 regardless of whether it happens to also be unknown.
     try:
         config_key = join_path(["projects", body.project, "agents", agent, "prompt", "file"])
     except ValueError as e:
@@ -973,14 +896,6 @@ async def fork_prompt(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid project name: {e}"
         ) from e
 
-    # design 5.3 step 1 / §6: a fork naming a project neither TestBench nor
-    # config.toml has ever heard of is a 404, not a config.toml write that
-    # invents a brand-new [projects.<name>] section out of a typo. Checked
-    # against the UNION of the session's cached TestBench project list and
-    # the on-disk config's projects table -- never against config.toml alone
-    # -- because a project's first-ever override is the common case, and
-    # requiring it to already have a [projects.<name>] block would make a
-    # fork impossible exactly when it is most wanted.
     known_projects = set(config.projects) | {ref.name for ref in session.projects}
     if body.project not in known_projects:
         raise HTTPException(
@@ -997,19 +912,10 @@ async def fork_prompt(
     plan = build_fork(prompts_dir, source, lang, agent, body.directory, body.project)
     edits = {config_key: plan.config_value}
 
-    # exist_ok=True: build_fork already refused an existing target_dir with a
-    # 409 one line above; a fork racing in between would otherwise turn that
-    # into an uncaught FileExistsError (500) instead of the same 409.
     plan.target_dir.mkdir(parents=True, exist_ok=True)
     try:
         result = write_all(dict(plan.files))
     except HTTPException:
-        # write_all rolls back the files it already staged/wrote, but the
-        # directory itself is its caller's to clean up -- exactly what
-        # rollback_fork's rmdir does. Without this, a write failure here
-        # (disk full, a locked file) leaves an empty directory behind that
-        # permanently blocks every future fork to this same target with a
-        # 409, since build_fork refuses to fork into a directory that exists.
         rollback_fork((), plan.target_dir)
         raise
 
@@ -1029,10 +935,6 @@ async def fork_prompt(
         raise
 
     if preview.restart_required:
-        # Same gate as apply_config. The fork's own edit is hot-swappable, but
-        # a reload takes up the whole file, and a change already waiting on
-        # disk for a restart (a new port, say) would then be reported as
-        # running and its restart banner would disappear.
         reloaded = False
         reload_detail: str | None = (
             "Forked, but the configuration on disk has changes that need a restart: "
@@ -1057,8 +959,6 @@ async def _reload_after_fork(app: FastAPI, config_path: Path) -> tuple[bool, str
     try:
         on_disk = read_config_file(config_path)
     except HTTPException as e:
-        # The write already committed (write_atomic already returned). Same
-        # reasoning as apply_config: this is reported on the 200, never raised.
         logger.error("Forked, but could not re-read %s: %s", config_path, e.detail)
         return False, (
             f"Forked, but could not re-read the configuration to verify the reload: {e.detail}"
@@ -1066,9 +966,6 @@ async def _reload_after_fork(app: FastAPI, config_path: Path) -> tuple[bool, str
 
     reloaded_config, issues = validate_config_dict(on_disk)
     if reloaded_config is None:
-        # Should be unreachable: the same dict validated moments ago inside
-        # _plan_change. If it happens, the file on disk is the one that is
-        # right and the operator needs to know the process did not follow.
         logger.error("Forked and wrote %s but could not reload it: %s", config_path, issues)
         reasons = "; ".join(issue.message for issue in issues)
         return False, f"Forked, but the configuration failed re-validation before reload: {reasons}"

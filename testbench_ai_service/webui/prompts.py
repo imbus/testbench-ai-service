@@ -51,9 +51,6 @@ from testbench_ai_service.webui.prompt_io import document_to_yaml, prune_none, s
 from testbench_ai_service.webui.prompt_render import context_skeleton, lint_template
 from testbench_ai_service.webui.security import require_single_segment, resolve_within
 
-#: Prompt metadata is YAML. ``prompts_dir`` also holds the Jinja templates the
-#: messages point at, and containment alone would let ``?file=`` read any of
-#: them; this narrows the endpoint to the files it actually parses.
 PROMPT_SUFFIXES = frozenset({".yaml", ".yml"})
 
 
@@ -117,10 +114,6 @@ def resolve_prompt_file(prompts_dir: Path, lang: str, file: str | Path) -> Path:
     """
     candidate = str(file)
     if not candidate.strip():
-        # Path("") is Path(".") and resolves to the base directory itself, so
-        # without this guard an empty ?file= would silently become "read the
-        # language directory". resolve_within's own empty check cannot see this
-        # case once the caller has joined the value onto a base path.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Empty path is not allowed"
         )
@@ -136,8 +129,6 @@ def resolve_prompt_file(prompts_dir: Path, lang: str, file: str | Path) -> Path:
             resolve_within(base, file_path),
         ]
 
-    # Every candidate is suffix-checked before any of them is stat'ed, so a
-    # refused extension is refused whether or not the file happens to exist.
     for path in candidates:
         _require_prompt_suffix(path)
     for path in candidates:
@@ -207,9 +198,6 @@ def _load_definition(path: Path, prompts_dir: Path | None) -> PromptDefinition:
             status_code=status.HTTP_404_NOT_FOUND, detail=f"No prompt file at {display}"
         ) from e
     except OSError as e:
-        # A directory where the file should be surfaces as PermissionError on
-        # Windows and IsADirectoryError on POSIX; anything else the filesystem
-        # raises is still "we could not read it", not a bug in the console.
         logger.warning("Could not read the prompt file at %s: %s", path, e)
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail=f"No prompt file at {display}"
@@ -261,8 +249,6 @@ def read_prompt_meta(path: Path, prompts_dir: Path | None = None) -> PromptMetaR
     )
 
 
-#: Message templates are Jinja. These are exactly the suffixes
-#: ``MessageTemplate``'s docstring names.
 TEMPLATE_SUFFIXES = frozenset({".jinja", ".j2", ".md"})
 
 
@@ -293,8 +279,6 @@ def resolve_template_file(prompts_dir: Path, prompt_path: Path, ref: str) -> Pat
         HTTPException 404: nothing readable is there.
     """
     if not ref.strip():
-        # Path("") is Path("."), which resolves to a directory rather than
-        # raising -- see security.py's module docstring.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Empty path is not allowed"
         )
@@ -307,8 +291,6 @@ def resolve_template_file(prompts_dir: Path, prompt_path: Path, ref: str) -> Pat
         else resolve_within(base, Path(prompt_path).parent / candidate)
     )
 
-    # Suffix-checked before it is stat'ed, so a refused extension is refused
-    # whether or not the file happens to exist.
     _require_template_suffix(target)
     if not target.is_file():
         logger.warning("No template file for %r under %s", ref, base)
@@ -444,22 +426,8 @@ def _plan_deletions(
             f"cannot tell which templates are still in use. Repair it, then save again."
         )
 
-    # prompt_path is resolved by every caller (resolve_prompt_file ->
-    # resolve_within -> Path.resolve()), but prompts_dir need not be --
-    # config.toml's prompts_dir only has to exist, not be absolute. Without
-    # resolving it here too, relative_to raises ValueError for a relative
-    # prompts_dir, turning an ordinary save into a 500 (see _display_name's
-    # sibling guard at line ~173, which the try/except pattern comes from --
-    # here it can't raise at all, so no try/except is needed instead of one
-    # around the resolve).
     own = Path(prompt_path).relative_to(Path(prompts_dir).resolve()).as_posix()
     deletes = []
-    #: Basenames of orphaned candidates kept on disk because their bytes could
-    #: not be confirmed readable (I3): a message can only flip from "file" to
-    #: "inline" once its `readable` guard is bypassed by that very switch, so
-    #: this is the last check standing between an unreadable template and
-    #: deletion, not a defense against something the request layer already
-    #: refuses.
     unreadable: list[str] = []
     for candidate in sorted(candidates, key=str):
         holders = [name for name in scan.references.get(candidate, []) if name != own]
@@ -606,14 +574,6 @@ def _usages(prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]) -> li
     becomes a lie the first time someone renames a directory by hand (D4).
     """
 
-    # prompt_path.resolve(), not prompt_path bare: resolve_prompt_file (below)
-    # always returns a resolved path (it goes through resolve_within ->
-    # Path.resolve()), but build_tree's own prompt_path is built from an
-    # UNRESOLVED prompts_dir -- config.toml's prompts_dir need only exist(),
-    # not be absolute or symlink-free. Comparing an unresolved prompt_path
-    # against a resolved candidate would silently never match under a
-    # relative or symlinked prompts_dir, dropping every used_by with no error
-    # (the same resolved-vs-unresolved class of bug Task 4 hit).
     resolved_prompt_path = prompt_path.resolve()
 
     def matches(lang: str, declared: Any) -> bool:
@@ -624,12 +584,6 @@ def _usages(prompt_path: Path, prompts_dir: Path, on_disk: dict[str, Any]) -> li
         except HTTPException:
             return False
 
-    # An absent `language` key is not "no language" -- it is AppConfig's own
-    # default (LanguageOption.GERMAN), the same value a config.toml that never
-    # mentions `language` boots with. Falling back to "" here would make
-    # resolve_prompt_file refuse `resolve_within(base, "")` outright (its own
-    # empty-path guard), so a bare "explainer/prompt.yaml" declaration -- the
-    # normal, unprefixed spelling -- would never match anything.
     language = str(on_disk.get("language") or LanguageOption.GERMAN.value)
     return _global_usages(on_disk.get("agents"), language, matches) + _project_usages(
         on_disk.get("projects"), language, matches
@@ -751,8 +705,6 @@ def _resolve_or_create_target(
     except HTTPException as e:
         if e.status_code != status.HTTP_404_NOT_FOUND:
             raise
-        # Not there yet: this is a creation. Confined to one segment in the
-        # prompt's own directory (D7).
         target = resolve_template_target(base, prompt_path, name)
         created.add(target)
 
@@ -777,10 +729,8 @@ class WritePlan(BaseModel):
     """
 
     writes: dict[Path, str] = {}
-    #: The subset of ``writes`` that does not exist yet.
     creates: set[Path] = set()
     deletes: list[Path] = []
-    #: Why no deletion was planned, when the tree scan could not be trusted.
     deletions_skipped: str | None = None
 
 
@@ -814,10 +764,6 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
     previous_refs = _previous_template_refs(prompt_path, base)
     disk_steps = _steps_on_disk(prompt_path)
     created: set[Path] = set()
-    #: Every file-backed body, before the unchanged ones are filtered out.
-    #: Kept separate from the final write set so the "one file, one body"
-    #: check below still sees a second message pointing at a template the
-    #: first one left unchanged.
     bodies: dict[Path, str] = {}
 
     document: dict[str, Any] = {
@@ -839,13 +785,6 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
                         detail="A file-backed message must name a file",
                     )
                 if not message.readable:
-                    # The loader substitutes content="" for a template it could
-                    # not read or decode (a latin-1 file, say). Writing that
-                    # back would truncate the real file to nothing -- silently,
-                    # because a save changing only the prompt's NAME still
-                    # carries every template body along with it. Design §5.1
-                    # sanctions surfacing a broken reference, not overwriting
-                    # it. Refuse, and name what the operator has to fix first.
                     raise HTTPException(
                         status_code=status.HTTP_409_CONFLICT,
                         detail=(

@@ -70,8 +70,6 @@ def parse_projects(payload: Any) -> list[ProjectRef]:
         name = entry.get("name")
         key = entry.get("key")
         if not isinstance(name, str) or not name or key is None:
-            # A project with no name cannot key a [projects."<name>"] block, so
-            # it is not addressable by anything the console can write.
             continue
         refs.append(ProjectRef(name=name, key=str(key)))
     return refs
@@ -114,19 +112,10 @@ def fetch_projects_with_token(config: AppConfig, token: str) -> ProjectFetch:
             connection_timeout_sec=math.ceil(DEFAULT_READ_TIMEOUT),
         )
     except ValueError as e:
-        # TBConnection validates the URL shape in its constructor, and only
-        # there. A misconfigured tb_server_url is the operator's problem to fix
-        # in the Service form -- it is not a reason to fail the request they
-        # actually made.
         logger.error("Cannot reach TestBench to list projects: %s", e)
         return ProjectFetch(projects=[], fetched_at=_now(), error=str(e))
 
     try:
-        # harden_connection reads conn.session, which is what completes the
-        # vendored client's lazy setup -- server version, authentication,
-        # heartbeat. An unreachable server or a token TestBench no longer
-        # accepts fails here, not in get_all_projects, so this needs the same
-        # catch fetch_projects has rather than propagating into a 500.
         harden_connection(
             conn,
             connect_timeout=DEFAULT_CONNECT_TIMEOUT,

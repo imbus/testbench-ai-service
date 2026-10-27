@@ -127,7 +127,6 @@ class ModelUsageEntry(BaseModel):
     calls: int
     input_tokens: int
     output_tokens: int
-    #: Part of ``output_tokens``, not on top of it.
     reasoning_tokens: int
     last_used: datetime
 
@@ -135,8 +134,6 @@ class ModelUsageEntry(BaseModel):
 class UsageSummary(BaseModel):
     """Token totals per model since the usage file was created."""
 
-    #: False when the usage file could not be read; ``models`` is then empty
-    #: for that reason, not because nothing was used.
     available: bool = True
     models: list[ModelUsageEntry] = []
 
@@ -223,8 +220,6 @@ class PreviewResponse(BaseModel):
     diffs: list[FileDiff]
     restart_required: list[str]
     in_flight_tasks: int
-    # The rendered config.toml the apply would write. Also what the Raw screen
-    # shows, which is why it is here rather than on a route of its own.
     toml: str
 
 
@@ -236,10 +231,6 @@ class ApplyResponse(BaseModel):
     restart_required: list[str]
     reloaded: bool
     in_flight_tasks: int
-    # Populated only when `reloaded` is False for a reason other than a
-    # required restart (`restart_required` already explains that case). If
-    # the failure is the log path itself, the service log may be exactly what
-    # cannot be written to -- this field is then the operator's only channel.
     reload_detail: str | None = None
 
 
@@ -252,11 +243,8 @@ class PromptMessageDoc(BaseModel):
 
     role: Literal["system", "user", "assistant"] = "user"
     source: Literal["inline", "file"] = "inline"
-    #: The reference as written in the YAML, when source is "file".
     file: str | None = None
     content: str = ""
-    #: False when source is "file" but the file could not be read. The document
-    #: still loads, so the operator can see and repair the broken reference.
     readable: bool = True
 
 
@@ -270,9 +258,6 @@ class LintError(BaseModel):
 
 class LintResponse(BaseModel):
     ok: bool
-    #: Jinja reports one TemplateSyntaxError at a time, so this holds zero or
-    #: one entry. It is a list because that is the shape an editor's diagnostic
-    #: API wants, and widening it later would be a breaking change.
     errors: list[LintError] = []
 
 
@@ -295,7 +280,6 @@ class PromptUsage(BaseModel):
     """
 
     agent: str
-    #: None for the global agents table, otherwise the project's raw name.
     project: str | None = None
 
 
@@ -303,17 +287,11 @@ class PromptTreeEntry(BaseModel):
     """One agent's prompt, as the tree screen lists it."""
 
     agent: str
-    #: Relative to prompts_dir -- the spelling an operator writes in config.toml.
     file: str
     name: str | None = None
     variants: list[str] = []
-    #: False when the file is there but did not parse. The entry is still
-    #: listed: an operator who cannot see a broken prompt cannot fix it either.
     ok: bool = True
     error: str | None = None
-    #: Which config keys resolve to this file. A labelling nicety, not part of
-    #: the tree's own identity -- an unreadable config.toml leaves this empty
-    #: rather than hiding the entry itself.
     used_by: list[PromptUsage] = []
 
 
@@ -332,8 +310,6 @@ class PromptVariantDoc(BaseModel):
     model: str | None = None
     vars: dict[str, PromptVariableDefinition] = {}
     messages: list[PromptMessageDoc] = []
-    #: Read-only in the console: shown, never written from a save request. A save
-    #: carries the steps over from the file on disk, by variant name.
     steps: dict[str, list[PromptMessageDoc]] = {}
 
 
@@ -347,11 +323,7 @@ class PromptDocumentResponse(BaseModel):
     default_model: str
     default_variant: str
     variants: list[PromptVariantDoc] = []
-    #: Nested skeleton of every agent.* path the templates reference, for the
-    #: render pane to prefill. Computed from the real Jinja AST server-side.
     agent_context_skeleton: dict[str, Any] = {}
-    #: Typed sample of every agent.* field the agent(s) using this prompt
-    #: provide, from their AGENT_DATA_CLASS. Leaves name their type ("<str>").
     agent_context_sample: dict[str, Any] = {}
 
 
@@ -365,9 +337,7 @@ class PromptSaveRequest(BaseModel):
 
 
 class PromptSaveResponse(BaseModel):
-    #: Every file written -- created and updated alike.
     written: list[str] = []
-    #: The subset of *written* that did not exist before.
     created: list[str] = []
     deleted: list[str] = []
     deletions_skipped: str | None = None
@@ -380,13 +350,11 @@ class PromptPlanResponse(BaseModel):
     created: list[str] = []
     updated: list[str] = []
     deleted: list[str] = []
-    #: Why nothing is being deleted, when the tree scan could not be trusted.
     deletions_skipped: str | None = None
 
 
 class PromptForkRequest(BaseModel):
     project: str = Field(min_length=1)
-    #: The operator's correction to the final path segment alone, never a path.
     directory: str | None = None
 
 
@@ -397,10 +365,6 @@ class PromptForkResponse(BaseModel):
     created: list[str] = []
     config_backup: str | None = None
     reloaded: bool = False
-    #: Populated only when `reloaded` is False for a reason other than success.
-    #: Mirrors ApplyResponse.reload_detail: the fork has already committed by
-    #: the time this is decided, so a re-read/re-validation/reload failure here
-    #: is reported on a normal 200, never raised.
     reload_detail: str | None = None
 
 
@@ -419,14 +383,11 @@ class CatalogueModel(BaseModel):
 
     id: str
     routing: RoutingFamily
-    #: "builtin" comes from a client's own routing set; "config" from
-    #: llm_config.extra_models, which is the only kind the console can remove.
     source: Literal["builtin", "config"]
 
 
 class CatalogueProvider(BaseModel):
     provider: LLMProvider
-    #: Whether a credential exists. Presence only, never a value.
     key_present: bool
     models: list[CatalogueModel]
 
@@ -450,15 +411,11 @@ class PromptTestRequest(RenderRequest):
 class ResolvedRoute(BaseModel):
     provider: LLMProvider
     model: str
-    #: Which credential the factory actually found. get_client falls back to
-    #: the global key silently, so without this a project test that used the
-    #: global key is indistinguishable from one that used the project's own.
     credential_scope: Literal["project", "global"]
 
 
 class PromptTestResponse(BaseModel):
     text: str
     latency_ms: int
-    #: Absent when the provider reported no usage; the run itself still counts.
     usage: TokenUsage | None = None
     resolved: ResolvedRoute

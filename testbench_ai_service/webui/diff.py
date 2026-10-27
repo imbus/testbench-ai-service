@@ -10,8 +10,6 @@ import difflib
 
 from testbench_ai_service.webui.models import FileDiff
 
-# Enough context to recognise which part of the file a change lands in, without
-# turning a one-key edit into a diff of the whole file.
 CONTEXT_LINES = 3
 
 
@@ -35,10 +33,6 @@ def file_diff(path: str, current: str, proposed: str) -> FileDiff | None:
         )
     )
 
-    # The first two lines are the '---'/'+++' file headers, which start with the
-    # same characters as real changes. Counting skips them by position rather
-    # than by a longer prefix test: a genuine removed line reading '--- note'
-    # is perfectly possible in a commented TOML file.
     body = lines[2:]
     added = sum(1 for line in body if line.startswith("+"))
     removed = sum(1 for line in body if line.startswith("-"))

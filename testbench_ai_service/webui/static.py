@@ -40,14 +40,8 @@ class _SpaStaticFiles(StaticFiles):
         except StarletteHTTPException as exc:
             if exc.status_code != _NOT_FOUND:
                 raise
-            # Anything with a file extension was meant to be a real file.
             if Path(path).suffix:
                 raise
-            # An unmatched API route must 404, not silently serve the SPA shell.
-            # `Path(path).parts` splits on the platform separator that
-            # StaticFiles used to build `path`, so this matches the `api`
-            # segment exactly rather than doing a prefix string test that
-            # would also swallow deep links like "apiary" or "api-docs".
             parts = Path(path).parts
             if parts and parts[0] == "api":
                 raise

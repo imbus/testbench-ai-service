@@ -28,9 +28,6 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.log import logger
 
-#: A segment made up entirely of dots -- ".", "..", "...", and so on. Windows
-#: also accepts three-or-more-dot spellings where POSIX would not, so this is
-#: checked regardless of platform rather than trusted to `.parts` collapsing.
 _ALL_DOTS = re.compile(r"^\.+$")
 
 
@@ -85,9 +82,6 @@ def resolve_within(base: Path, candidate: str | Path) -> Path:
             status_code=status.HTTP_400_BAD_REQUEST, detail="Empty path is not allowed"
         )
     if "\x00" in candidate_str:
-        # Path()/.resolve() pass a NUL through untouched; the eventual open()
-        # raises ValueError rather than HTTPException, which would surface as
-        # an unhandled 500 instead of the 400 this chokepoint promises.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Path contains a NUL byte"
         )
@@ -100,8 +94,6 @@ def resolve_within(base: Path, candidate: str | Path) -> Path:
         else (base_resolved / candidate_path).resolve()
     )
 
-    # relative_to on the resolved paths is what rejects both `..` traversal and a
-    # sibling directory that merely shares a name prefix.
     try:
         target.relative_to(base_resolved)
     except ValueError:
@@ -124,12 +116,6 @@ def is_loopback(host: str | None) -> bool:
         addr = ip_address(host)
     except ValueError:
         return False
-    # IPv4Address.is_loopback and (unmapped) IPv6Address.is_loopback are stable
-    # across Python versions. But whether IPv6Address.is_loopback itself
-    # follows IPv4-mapped addresses (e.g. "::ffff:127.0.0.1") depends on the
-    # interpreter: that delegation to `ipv4_mapped` postdates this project's
-    # Python floor. Handle the mapped case ourselves so a dual-stack bind
-    # ("::") does not 403 every legitimate local client on Python 3.10-3.12.
     mapped = getattr(addr, "ipv4_mapped", None)
     if mapped is not None:
         return bool(mapped.is_loopback)

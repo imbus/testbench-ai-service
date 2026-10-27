@@ -123,7 +123,6 @@ def escape_html(text: str) -> str:
     return escape(text).replace("\n", "<br/>")
 
 
-#: A ``<head>`` element with its content; its title and styles are not visible text.
 HTML_HEADER = re.compile(r"<head\b[^>]*>.*?</head\s*>", re.DOTALL | re.IGNORECASE)
 
 

@@ -17,19 +17,8 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
     headers = getattr(exc, "headers", None)
     if not is_body_allowed_for_status_code(exc.status_code):
         return Response(status_code=exc.status_code, headers=headers)
-    # Starlette's HTTPException types `detail` as `str | None`, but FastAPI's
-    # own constructor accepts `Any`, and POST /admin/api/config/apply raises
-    # one with a dict detail (the field-addressed validation issues). Read it
-    # through an `Any`-typed local so mypy does not treat the isinstance
-    # check below as unreachable against the (inaccurate, for this app)
-    # narrower base-class type.
     detail: Any = exc.detail
     if isinstance(detail, dict):
-        # A structured detail is passed through as-is rather than forced into
-        # HTTPError's `detail: str`, which would collapse it into an
-        # unparseable Python repr string. Every other caller still raises
-        # HTTPException with a plain string, so this only changes behaviour
-        # for the dict case.
         return JSONResponse({"detail": detail}, status_code=exc.status_code, headers=headers)
     error_response = HTTPError(detail=str(detail))
     return JSONResponse(error_response.model_dump(), status_code=exc.status_code, headers=headers)
@@ -60,10 +49,6 @@ def handle_requests_http_error(e: requests.exceptions.HTTPError):
     ) from e
 
 
-#: Transport-level failures of an outbound TestBench call: the server could not be
-#: reached, or it accepted the connection and then never answered.  ``ReadTimeout``
-#: derives from ``Timeout`` only - not from ``ConnectionError`` - so catching
-#: ``ConnectionError`` alone lets a stalled read escape as an unhandled 500.
 TRANSPORT_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 

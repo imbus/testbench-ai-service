@@ -87,10 +87,6 @@ def authenticate(config: AppConfig, username: str, password: str) -> LoginResult
             connection_timeout_sec=math.ceil(DEFAULT_READ_TIMEOUT),
         )
     except ValueError as e:
-        # TBConnection validates the URL shape here, and only here. A ValueError
-        # raised later (e.g. read_user_roles' "User key not found in checkLogin
-        # response" on the TestBench 3 path) is not a configuration problem and
-        # must not be caught by this branch -- hence the narrow try above.
         logger.error("Cannot log in to TestBench: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -106,17 +102,9 @@ def authenticate(config: AppConfig, username: str, password: str) -> LoginResult
         roles = conn.read_user_roles(conn.session)
         token = conn.session_token
         if not token:
-            # Defends against a real defect in the vendored library: on the
-            # TestBench 4 path, Connection.authenticate swallows an HTTPError
-            # that carries a response, so a wrong password can leave
-            # session_token as None and raise nothing at all.
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
             )
-        # Inside the try, before the finally closes the connection: the project
-        # list is the one thing the console needs that requires an outbound
-        # call, and this is the only place it can be had without spending the
-        # stored token a second time.
         return LoginResult(
             token=token,
             roles=list(roles),
@@ -130,9 +118,6 @@ def authenticate(config: AppConfig, username: str, password: str) -> LoginResult
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
             ) from e
-        # Any other status (a 503 while TestBench is starting up, a wrong but
-        # shape-valid URL path, ...) is not a credentials problem and must not
-        # be reported as one.
         logger.error("TestBench returned an error during console login: %s", e)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

@@ -25,7 +25,6 @@ from testbench_ai_service.llm.base import TokenUsage
 from testbench_ai_service.models.prompt import Message
 from testbench_ai_service.webui.models import RenderedMessage
 
-#: The console's own ceiling on a test run, in seconds.
 PROMPT_TEST_TIMEOUT: float = 60.0
 
 
@@ -35,7 +34,6 @@ class RunOutcome:
 
     text: str
     latency_ms: int
-    #: ``None`` when the provider -- or a custom client -- reported no usage.
     usage: TokenUsage | None = None
 
 
@@ -108,8 +106,6 @@ async def run_query(
         result = await asyncio.wait_for(
             client.query_llm_with_usage(model=model, messages=messages), timeout
         )
-    # asyncio.TimeoutError is only an alias of the builtin from 3.11 on, and
-    # pyproject declares support back to 3.10 -- catch both.
     except (asyncio.TimeoutError, TimeoutError) as e:
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,

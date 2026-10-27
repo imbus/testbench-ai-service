@@ -64,9 +64,6 @@ def write_atomic(path: Path, text: str) -> Path | None:
             dir=str(directory), prefix=f".{target.name}.", suffix=".tmp"
         )
         temp_path = Path(temp_name)
-        # newline="" keeps the text exactly as rendered: on Windows the default
-        # would translate every "\n" to "\r\n", which changes every line of the
-        # next diff and rewrites the whole file on a one-key edit.
         with os.fdopen(handle, "w", encoding="utf-8", newline="") as file:
             handle = None  # fdopen owns the descriptor now
             file.write(text)
@@ -79,9 +76,6 @@ def write_atomic(path: Path, text: str) -> Path | None:
             copy_mode(target, backup)
             copy_mode(target, temp_path)
 
-        # The only state-mutating call on the target is last. If this raises,
-        # the target is unchanged and the exception signals that to the caller --
-        # which Task 12's apply route depends on for hot-reload accuracy.
         os.replace(temp_path, target)  # noqa: PTH105
         temp_path = None
     except OSError as e:

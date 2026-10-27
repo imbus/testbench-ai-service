@@ -42,18 +42,8 @@ class Session:
     created_at: datetime
     last_seen: datetime
 
-    # The TestBench user key, the identity the activity view filters on
-    # (design D2). None when the login could not read it -- the user then
-    # sees no own entries rather than anyone else's.
     user_key: str | None = None
 
-    # The TestBench project list, fetched once inside the login connection and
-    # cached here for the life of the session (design D3): the token that would
-    # be needed to re-fetch it may be the operator's plaintext password, so it
-    # is used as rarely as the console can manage. ``projects_error`` records a
-    # failed fetch without failing the login (D4) -- editing service, LLM and
-    # logging settings must not depend on an unrelated TestBench endpoint.
-    # ``POST /projects/refresh`` replaces all three.
     projects: list[ProjectRef] = field(default_factory=list)
     projects_fetched_at: datetime | None = None
     projects_error: str | None = None
@@ -82,9 +72,6 @@ class SessionStore:
         user_key: str | None = None,
     ) -> Session:
         moment = self._now()
-        # Sweep here, because get() only ever drops the sid it is asked for:
-        # a session nobody asks for again would keep its TestBench token --
-        # on TestBench 3 the plaintext password -- until the next restart.
         self._drop_expired(moment)
         session = Session(
             sid=secrets.token_urlsafe(32),
@@ -113,8 +100,6 @@ class SessionStore:
 
         moment = self._now()
         if self._expired(session, moment):
-            # pop, not del: sync dependencies run in the threadpool, and a
-            # parallel request with the same sid may have dropped it already.
             self._sessions.pop(sid, None)
             return None
 
@@ -131,7 +116,6 @@ class SessionStore:
         )
 
     def _drop_expired(self, moment: datetime) -> None:
-        # list(): another thread may add or drop a session while this runs.
         for sid, session in list(self._sessions.items()):
             if self._expired(session, moment):
                 self._sessions.pop(sid, None)

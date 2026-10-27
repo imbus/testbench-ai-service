@@ -32,11 +32,7 @@ from testbench_ai_service.webui.prompts import resolve_template_file
 class TemplateScan(BaseModel):
     """Every template reference under a prompts directory."""
 
-    #: Resolved absolute template path -> the relative ``<lang>/<agent>/prompt.yaml``
-    #: spellings that reference it.
     references: dict[Path, list[str]] = {}
-    #: The first prompt file that failed to parse, relative to prompts_dir.
-    #: Non-None means no deletion may be performed anywhere.
     blocked_by: str | None = None
 
 
@@ -116,13 +112,6 @@ def _scan_one_prompt(prompt_path: Path, base: Path, scan: TemplateScan) -> None:
         _block(scan, relative)
         return
 
-    # A document that parses as YAML but is not even prompt-SHAPED (not a
-    # mapping, or "variants" is not a list -- a mapping, say, or absent
-    # entirely) is just as blind a spot as a parse failure: message_refs
-    # would silently answer [] for it, so whatever it actually references
-    # would look orphaned and get deleted. Block exactly like a parse
-    # failure rather than let a YAML-valid-but-wrong-shaped file slip
-    # through as "references nothing" (design 5.5).
     if not isinstance(document, dict) or not isinstance(document.get("variants"), list):
         logger.warning("Prompt %s is not prompt-shaped; blocking deletions", relative)
         _block(scan, relative)
@@ -132,8 +121,6 @@ def _scan_one_prompt(prompt_path: Path, base: Path, scan: TemplateScan) -> None:
         try:
             target = resolve_template_file(base, prompt_path, ref)
         except HTTPException:
-            # Escapes prompts_dir, disallowed suffix, or is not there. Nothing
-            # on disk to protect, so nothing to record.
             continue
         scan.references.setdefault(target, [])
         if relative not in scan.references[target]:
