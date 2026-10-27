@@ -310,6 +310,81 @@ const ACTIVITY = [
   },
 ]
 
+const JOB_BASE = {
+  project_key: 'KP',
+  project_name: 'Kundenportal',
+  root_key: null,
+  error: null,
+  warnings: [],
+  progress: null,
+  report_type: null,
+  report: null,
+}
+const JOBS = [
+  {
+    ...JOB_BASE,
+    job_id: 'j1',
+    agent_key: 'coverage_checker',
+    item_ids: ['REQ-42'],
+    status: 'succeeded',
+    warnings: ['Testfallset „Login › Passwort vergessen“ ist nicht freigegeben.'],
+    report_type: 'coverage_checker',
+    created_at: '2026-09-10T10:41:57+00:00',
+    updated_at: '2026-09-10T10:42:38+00:00',
+    finished_at: '2026-09-10T10:42:38+00:00',
+    report: {
+      requirement_key: 'REQ-42',
+      aspects: [
+        ['a1', 'covered', 'Ein falsches Passwort erhöht den Fehlerzähler.', 'TS-7', 'TC-12'],
+        ['a2', 'covered', 'Nach dem dritten Fehlversuch wird das Konto gesperrt.', 'TS-8', 'TC-14'],
+        ['a3', 'weak', 'Ein gesperrter Nutzer sieht einen Hinweis mit der Wartezeit.', 'TS-8', 'TC-15'],
+        ['a4', 'missing', 'Die Sperre hebt sich nach 15 Minuten von selbst auf.', null, null],
+      ].map(([id, status, statement, set, tc]) => ({
+        aspect: { id, statement, kind: 'happy_path', source_quote: statement },
+        status,
+        weak_reason: status === 'weak' ? 'only_partial' : null,
+        evidence: set
+          ? [{ set_key: set, test_case_key: tc, strength: 'full', evidence: 'Prüft genau das.' }]
+          : [],
+        gap_reason: status === 'missing' ? 'Kein Testfall prüft die Entsperrung.' : null,
+        suggested_test:
+          status === 'missing'
+            ? { title: 'Entsperrung nach 15 Minuten', description: 'Sperren, warten, anmelden.' }
+            : null,
+      })),
+      sets_without_evidence: [{ set_key: 'TS-9', reason: 'no_matching_aspect' }],
+      skipped_comments: ['TS-9'],
+      reduced_mode: false,
+      incomplete: false,
+      set_paths: { 'TS-7': 'Login / Anmeldung', 'TS-8': 'Login / Sperre', 'TS-9': 'Login / Passwort' },
+    },
+  },
+  {
+    ...JOB_BASE,
+    job_id: 'j2',
+    agent_key: 'coverage_checker',
+    item_ids: ['REQ-17'],
+    status: 'running',
+    progress: { done: 3, total: 7, text: 'Testfallset 2 von 3' },
+    created_at: '2026-09-10T10:40:12+00:00',
+    updated_at: '2026-09-10T10:40:50+00:00',
+    finished_at: null,
+  },
+  {
+    ...JOB_BASE,
+    job_id: 'j3',
+    agent_key: 'test_case_set_reviewer',
+    item_ids: ['TS-118'],
+    status: 'failed',
+    error: 'TestBench antwortete mit 403.',
+    created_at: '2026-09-09T09:12:30+00:00',
+    updated_at: '2026-09-09T09:12:41+00:00',
+    finished_at: '2026-09-09T09:12:41+00:00',
+  },
+]
+FIXTURES['/admin/api/jobs'] = JOBS.map(({ report: _report, ...summary }) => summary)
+for (const job of JOBS) FIXTURES[`/admin/api/jobs/${job.job_id}`] = job
+
 window.fetch = (async (input: RequestInfo | URL) => {
   const url = String(typeof input === 'string' ? input : (input as Request).url ?? input)
   const path = url.split('?')[0]

@@ -385,3 +385,40 @@ export interface CoverageResult {
   incomplete: boolean
   set_paths: Record<string, string>
 }
+
+export type Confidence = 'high' | 'medium' | 'low'
+
+export interface AspectEvidence {
+  aspect_id: string
+  test_case_key: string
+  strength: EvidenceStrength
+  evidence: string
+}
+
+export interface LinkCandidate {
+  set_key: string
+  /** Missing in reports stored before it was added. */
+  set_unique_id?: string
+  set_title: string
+  path: string
+  spec_status: string
+  confidence: Confidence
+  covered_aspect_ids: string[]
+  evidence: AspectEvidence[]
+  already_linked_to: string[]
+}
+
+/** Report of the `link_finder` agent (`report_type === 'link_finder'`). */
+export interface LinkFinderResult {
+  requirement_key: string
+  aspects: Record<string, string>
+  candidates: LinkCandidate[]
+  sets_screened: number
+  sets_detailed: number
+  empty_sets: string[]
+  failed_sets: string[]
+  skipped_comments: string[]
+  reduced_mode: boolean
+  incomplete: boolean
+  set_paths: Record<string, string>
+}

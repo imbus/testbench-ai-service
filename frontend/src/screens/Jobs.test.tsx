@@ -54,7 +54,8 @@ const fetchMock = vi.fn((url: string) => {
 })
 
 function Where() {
-  return <div data-testid="where">{useLocation().pathname}</div>
+  const location = useLocation()
+  return <div data-testid="where">{location.pathname + location.search}</div>
 }
 
 function renderJobs(path = '/admin/jobs') {
@@ -96,12 +97,63 @@ test('lists jobs with agent, status and progress', async () => {
   expect(screen.getByText('Fehlgeschlagen')).toBeInTheDocument()
 })
 
-test('selecting a job loads its detail and puts the id in the URL', async () => {
+test('the list shows item, project and start of each job', async () => {
+  renderJobs()
+  await screen.findByText('link_finder')
+  for (const name of ['Agent', 'Element', 'Projekt', 'Gestartet', 'Status']) {
+    expect(screen.getByRole('columnheader', { name })).toBeInTheDocument()
+  }
+  expect(screen.getAllByText('Shop')).toHaveLength(2)
+})
+
+test('selecting a job opens it on its own page without the list', async () => {
   renderJobs()
   await userEvent.click(await screen.findByText('link_finder'))
   await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/admin/jobs/j2'))
   const pane = await screen.findByTestId('job-detail')
-  expect(within(pane).getByText('TestBench unreachable')).toBeInTheDocument()
+  await waitFor(() => expect(within(pane).getByText('TestBench unreachable')).toBeInTheDocument())
+  expect(screen.queryByText('coverage_checker')).not.toBeInTheDocument()
+})
+
+test('a chosen filter is kept in the URL', async () => {
+  renderJobs()
+  await screen.findByText('link_finder')
+  await userEvent.click(screen.getByRole('button', { name: 'Status' }))
+  await userEvent.click(await screen.findByRole('option', { name: 'Fehlgeschlagen', hidden: true }))
+  await waitFor(() =>
+    expect(screen.getByTestId('where')).toHaveTextContent('/admin/jobs?status=failed'),
+  )
+})
+
+test('a filter in the URL is asked from the backend', async () => {
+  renderJobs('/admin/jobs?agent=link_finder')
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(([url]) => url.endsWith('/jobs?agent=link_finder&limit=50')),
+    ).toBe(true),
+  )
+})
+
+test('opening a job keeps the filters, and the back link returns to them', async () => {
+  list = [FAILED]
+  renderJobs('/admin/jobs?status=failed')
+  await userEvent.click(await screen.findByText('link_finder'))
+  await waitFor(() =>
+    expect(screen.getByTestId('where')).toHaveTextContent('/admin/jobs/j2?status=failed'),
+  )
+  await userEvent.click(screen.getByRole('link', { name: /Alle Jobs/ }))
+  expect(screen.getByTestId('where')).toHaveTextContent('/admin/jobs?status=failed')
+})
+
+test('newer and older step through the listed jobs', async () => {
+  renderJobs('/admin/jobs/j1')
+  const older = await screen.findByRole('button', { name: /Älterer Job/ })
+  expect(screen.getByRole('button', { name: /Neuerer Job/ })).toBeDisabled()
+  await waitFor(() => expect(older).toBeEnabled())
+  await userEvent.click(older)
+  await waitFor(() => expect(screen.getByTestId('where')).toHaveTextContent('/admin/jobs/j2'))
+  await waitFor(() => expect(screen.getByRole('button', { name: /Älterer Job/ })).toBeDisabled())
+  expect(screen.getByRole('button', { name: /Neuerer Job/ })).toBeEnabled()
 })
 
 test('opens the job named in the URL', async () => {
@@ -132,8 +184,36 @@ test('an unknown report type is shown as JSON', async () => {
   expect(pane.querySelector('pre')).not.toBeNull()
 })
 
+test('a link finder report gets its own view', async () => {
+  const job = { ...FAILED, status: 'succeeded' as const, error: null, report_type: 'link_finder' }
+  list = [job]
+  const report = {
+    requirement_key: 'REQ-1',
+    aspects: {},
+    candidates: [],
+    sets_screened: 18,
+    sets_detailed: 0,
+    empty_sets: [],
+    failed_sets: [],
+    skipped_comments: [],
+    reduced_mode: false,
+    incomplete: false,
+    set_paths: {},
+  }
+  details = { j2: detail(job, { report }) }
+  renderJobs('/admin/jobs/j2')
+  const pane = await screen.findByTestId('job-detail')
+  await waitFor(() => expect(within(pane).getByTestId('link-summary')).toBeInTheDocument())
+  expect(pane.querySelector('pre')).toBeNull()
+})
+
 test('shows warnings of a job', async () => {
-  const job = { ...RUNNING, status: 'succeeded' as const, progress: null, warnings: ['Set S-7 locked'] }
+  const job = {
+    ...RUNNING,
+    status: 'succeeded' as const,
+    progress: null,
+    warnings: ['Set S-7 locked'],
+  }
   list = [job]
   details = { j1: detail(job) }
   renderJobs('/admin/jobs/j1')

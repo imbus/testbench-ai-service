@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { CoverageReport } from './CoverageReport'
 import type { CoverageResult } from '../../api/types'
 
@@ -56,7 +57,33 @@ const REPORT: CoverageResult = {
 
 test('summarises covered, weak and missing', () => {
   render(<CoverageReport report={REPORT} />)
-  expect(screen.getByText('2 / 1 / 1')).toBeInTheDocument()
+  const summary = screen.getByTestId('coverage-summary')
+  expect(summary).toHaveTextContent('2 Abgedeckt')
+  expect(summary).toHaveTextContent('1 Schwach')
+  expect(summary).toHaveTextContent('1 Fehlt')
+  expect(summary).toHaveTextContent('REQ-1 · 4 Aspekte')
+})
+
+test('lists every aspect as a row with its status and evidence count', () => {
+  render(<CoverageReport report={REPORT} />)
+  const row = screen.getByText('Login works').closest('summary')
+  expect(row).not.toBeNull()
+  expect(within(row as HTMLElement).getByText('Abgedeckt')).toBeInTheDocument()
+  expect(within(row as HTMLElement).getByText('1')).toBeInTheDocument()
+})
+
+test('a missing aspect starts open, a covered one opens on click', async () => {
+  render(<CoverageReport report={REPORT} />)
+  expect(screen.getByText('Nothing tests the reset mail')).toBeVisible()
+  expect(screen.getByText(/logs in/)).not.toBeVisible()
+  await userEvent.click(screen.getByText('Login works'))
+  expect(screen.getByText(/logs in/)).toBeVisible()
+})
+
+test('names the weak reason in the row', () => {
+  render(<CoverageReport report={REPORT} />)
+  const row = screen.getByText('Lockout after 3 tries').closest('summary')
+  expect(row).toHaveTextContent('nur teilweise belegt')
 })
 
 test('shows the gap and the suggested test of a missing aspect', () => {
