@@ -8,7 +8,7 @@ from fastapi import status
 from testbench_ai_service.auth import validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.models.config import ProjectAgentConfig, ProjectConfig
-from testbench_ai_service.models.testbench import ProjectRole
+from testbench_ai_service.models.testbench import ProjectRole, UserReference
 from tests.integration.conftest import CYCLE_KEY, PROJECT_KEY, PROJECT_NAME, TOV_KEY
 from tests.integration.helpers import (
     build_locked_structure_tree,
@@ -25,6 +25,9 @@ _PATCH_GET_CATALOG = (
     "testbench_ai_service.agents.test_case_set_describer.agent.get_test_case_set_catalog"
 )
 _PATCH_GET_TREE = "testbench_ai_service.utils.testbench.get_test_structure_tree"
+_PATCH_GET_DETAILS = (
+    "testbench_ai_service.agents.test_case_set_describer.agent.get_test_case_set_details"
+)
 _PATCH_GET_PROJECT_ROLES = "testbench_ai_service.agents.routes.get_project_roles"
 _PATCH_PATCH_STARTED = "testbench_ai_service.agents.test_case_set_describer.agent.patch_description_generation_started_for_test_structure_element"
 _PATCH_PATCH_GENERATED = "testbench_ai_service.agents.test_case_set_describer.agent.patch_generated_description_for_test_structure_element"
@@ -99,6 +102,27 @@ class TestErrorPaths:
         patches.get_tree.return_value = build_locked_structure_tree("spec")
 
         assert post(_ENDPOINT, cycle_key=CYCLE_KEY).status_code == status.HTTP_409_CONFLICT
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("Jane Doe", "because Jane Doe is entered as the responsible person (UID: iTB-TC-66)"),
+            ("", "because someone else is entered as the responsible person (UID: iTB-TC-66)"),
+        ],
+    )
+    def test_responsible_other_user_returns_409(self, post, mocker, name, expected):
+        details = build_tcs_catalog()["iTB-TC-66"].details
+        details.spec.responsible = UserReference(key="99", name=name)
+        mocker.patch(_PATCH_GET_DETAILS, return_value=details)
+        mocker.patch(
+            "testbench_ai_service.agents.test_case_set_describer.agent.check_min_testbench_version",
+            return_value=None,
+        )
+
+        response = post(_ENDPOINT, cycle_key=CYCLE_KEY, language="en")
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert expected in response.json()["detail"]
 
     def test_insufficient_role_returns_403(self, post, patches):
         patches.get_project_roles.return_value = []

@@ -180,6 +180,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   the console's configuration screen. Now all credential-named keys, regardless of separator
   style, are redacted uniformly.
 
+## [1.3.0][1.3.0] - 2026-10-27
+
+Release for **TestBench 4.2**. The minimum TestBench version for the built-in agents stays at
+4.1.
+
+### Changed
+
+- Dependency raised to `testbench2robotframework>=2.1.0,<3.0.0`, the release that ships with
+  TestBench 4.2.
+- Documentation states that the service is tested against TestBench 4.2, describes the
+  responsible-person precheck and the lock handling of the Test Case Set Reviewer and Describer,
+  and lists the JSON-TOV check and the accepted `Fail` verdict of the Defect Explainer.
+
+## [1.2.2][1.2.2] - 2026-10-09
+
+### Added
+
+- The Test Case Set Reviewer and Describer skip a test case set when another user is entered as
+  responsible for its specification, with a localized precheck warning naming that user.
+
+### Fixed
+
+- A specification that was already locked before the run stays locked after the Test Case Set
+  Reviewer or Describer finishes instead of being unlocked.
+
 ## [1.2.1][1.2.1] - 2026-08-25
 
 ### Added
@@ -287,3 +312,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 [1.1.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.1.0
 [1.2.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.2.0
 [1.2.1]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.2.1
+[1.2.2]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.2.2
+[1.3.0]: https://github.com/imbus/testbench-ai-service/releases/tag/v1.3.0

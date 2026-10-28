@@ -7,11 +7,15 @@ from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import ElementType, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.testbench import SpecStatus, UserReference
 from testbench_ai_service.models.testbench import (  # aliased: pytest would try to collect Test* classes
     TestCaseSetNode as TCSNode,
 )
 from testbench_ai_service.models.testbench import (
     TestStructureItemBaseInformation as ItemBaseInfo,
+)
+from testbench_ai_service.models.testbench import (
+    TestStructureItemSpecification as ItemSpec,
 )
 from testbench_ai_service.models.testbench import (
     TestStructureTree as StructureTree,
@@ -21,6 +25,7 @@ from testbench_ai_service.models.testbench import (
 )
 from testbench_ai_service.utils import testbench as testbench_utils
 from testbench_ai_service.utils.testbench import (
+    get_locked_spec_uids,
     get_project_name,
     get_test_case_set_nodes,
     get_user_key,
@@ -177,3 +182,48 @@ class TestGetTestCaseSetNodes:
         result = get_test_case_set_nodes(MagicMock(), context)
 
         assert [node.base.uniqueID for node in result] == ["CarConfig-TC-7"]
+
+
+def _make_tcs_node_with_lock(unique_id: str, locker_key: str | None) -> TCSNode:
+    locker = UserReference(key=locker_key, name="Someone") if locker_key else None
+    return TCSNode(
+        base=_make_base(unique_id),
+        spec=ItemSpec(key=f"spec-{unique_id}", locker=locker, status=SpecStatus.InProgress),
+    )
+
+
+class TestGetLockedSpecUids:
+    """Tests for ``get_locked_spec_uids``."""
+
+    def test_returns_only_the_uids_whose_spec_is_locked(self, monkeypatch):
+        nodes = [
+            _make_tcs_node_with_lock("CarConfig-TC-7", "u1"),
+            _make_tcs_node_with_lock("CarConfig-TC-8", None),
+            _make_tcs_node_with_lock("CarConfig-TC-9", "u2"),
+        ]
+        monkeypatch.setattr(
+            testbench_utils,
+            "get_test_structure_tree",
+            lambda **_: StructureTree(root=None, nodes=nodes),
+        )
+        context = _make_execution_context(element_type=ElementType.TESTTHEME)
+
+        assert get_locked_spec_uids(MagicMock(), context) == {
+            "CarConfig-TC-7",
+            "CarConfig-TC-9",
+        }
+
+    def test_nodes_without_spec_are_treated_as_unlocked(self, monkeypatch):
+        nodes = [_make_tcs_node("CarConfig-TC-7")]
+        monkeypatch.setattr(
+            testbench_utils,
+            "get_test_structure_tree",
+            lambda **_: StructureTree(root=None, nodes=nodes),
+        )
+        context = _make_execution_context(element_type=ElementType.TESTTHEME)
+
+        assert get_locked_spec_uids(MagicMock(), context) == set()
+
+    def test_returns_empty_set_without_tov_key(self):
+        context = _make_execution_context(tov_key=None, element_type=ElementType.TESTTHEME)
+        assert get_locked_spec_uids(MagicMock(), context) == set()
