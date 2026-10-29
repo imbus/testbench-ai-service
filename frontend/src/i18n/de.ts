@@ -25,6 +25,8 @@ export const de = {
   coverageGap: 'Lücke',
   coverageSuggestedTest: 'Testvorschlag',
   coverageIncomplete: 'Der Bericht ist unvollständig: Nicht alle verknüpften Testfallsets konnten ausgewertet werden.',
+  coverageNoLinkedTests:
+    'Mit {{requirement}} ist kein Testfall verknüpft, es gibt nichts zu prüfen. Testfallsets verknüpfen oder zuerst Testideen generieren.',
   coverageReduced: 'Die Aspekte beruhen nur auf dem Titel, die Anforderung hat keine Beschreibung.',
   coverageSkippedComments: 'Review-Kommentar nicht geschrieben für',
   coverageSetsWithoutEvidence: 'Sets ohne Evidenz',

@@ -75,11 +75,6 @@ def linked_set_keys(catalog: Mapping[str, TestCaseSet], requirement_key: str) ->
     return [tcs.details.key for tcs in sorted(linked, key=lambda tcs: tcs.details.path)]
 
 
-def has_linked_test_case(catalog: Mapping[str, TestCaseSet], requirement_key: str) -> bool:
-    """Whether at least one test case anywhere counts as linked to the requirement."""
-    return any(linked_test_cases(tcs, requirement_key)[1] for tcs in catalog.values())
-
-
 def _test_case(test_case, set_details) -> TestCase:
     """A report test case as the model sees it; without own sequence it runs the set's."""
     sequence = test_case.testSequence or set_details.testSequence
@@ -184,10 +179,8 @@ async def load_requirement_context(
     tov_key: str,
     root_key: str | None,
     root_uid: str | None,
-    set_keys: list[str],
-    catalog: Mapping[str, TestCaseSet] | None = None,
 ) -> RequirementContext:
-    """Load the triggered requirement with its RM description and the given linked sets.
+    """Load the triggered requirement with its RM description and every set linked to it.
 
     Args:
         conn: TestBench connection.
@@ -196,19 +189,16 @@ async def load_requirement_context(
         tov_key: TOV the requirement and the tests belong to.
         root_key: Requirement key from the trigger, if any.
         root_uid: Requirement ID from the trigger, if any.
-        set_keys: Keys of the linked sets to load, as the precheck found them.
-        catalog: Test case set catalog the precheck already loaded; loaded here if absent.
 
     Raises:
         RequirementNotFoundError: The TOV has no such requirement.
     """
     requirement, _ = await load_requirement(conn, rm_args, project_key, tov_key, root_key, root_uid)
 
-    if catalog is None:
-        catalog = await asyncio.to_thread(
-            get_test_case_set_catalog, conn, project_key, tov_key, None, None, None
-        )
-    wanted = set(set_keys)
+    catalog = await asyncio.to_thread(
+        get_test_case_set_catalog, conn, project_key, tov_key, None, None, None
+    )
+    wanted = set(linked_set_keys(catalog, requirement.key))
     linked_sets = sorted(
         (
             _linked_set(tcs, requirement.key)

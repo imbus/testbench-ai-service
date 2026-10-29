@@ -9,7 +9,6 @@ from testbench_ai_service.utils.rm_service import ExtendedRequirement, RmService
 from testbench_ai_service.utils.traceability import context as context_module
 from testbench_ai_service.utils.traceability.context import (
     find_requirement,
-    has_linked_test_case,
     linked_set_keys,
     linked_test_cases,
     load_requirement_context,
@@ -70,11 +69,10 @@ class TestLinkedSetKeys:
 
         assert linked_set_keys(catalog, REQ) == ["a", "b"]
 
-    def test_an_empty_set_linked_as_a_whole_is_listed_but_links_no_test_case(self):
+    def test_an_empty_set_linked_as_a_whole_is_listed(self):
         catalog = {"e": test_case_set("e", "/E", links=[REQ])}
 
         assert linked_set_keys(catalog, REQ) == ["e"]
-        assert has_linked_test_case(catalog, REQ) is False
 
 
 class TestFindRequirement:
@@ -103,6 +101,7 @@ async def test_the_context_holds_the_linked_test_cases_with_their_calls(monkeypa
             "1", "/A", links=[REQ], cases=[case("TC-1", user="bob")], sequence=sequence
         ),
         "2": test_case_set("2", "/B", cases=[case("TC-2", links=["999"])]),
+        "3": test_case_set("3", "/C", cases=[case("TC-3", links=[REQ])]),
     }
     monkeypatch.setattr(context_module, "get_requirements", lambda *args: [_assignment()])
     monkeypatch.setattr(context_module, "get_test_case_set_catalog", lambda *args: catalog)
@@ -112,14 +111,13 @@ async def test_the_context_holds_the_linked_test_cases_with_their_calls(monkeypa
 
     monkeypatch.setattr(context_module, "fetch_requirement_details", _details)
 
-    loaded = await load_requirement_context(
-        SimpleNamespace(), RmServiceArgs(), "7", "42", REQ, None, ["1"]
-    )
+    loaded = await load_requirement_context(SimpleNamespace(), RmServiceArgs(), "7", "42", REQ, None)
 
     assert loaded.requirement.key == REQ
     assert loaded.requirement_ref == "EXT-1"
     assert loaded.reduced_mode is True
-    (linked,) = loaded.linked_sets
+    assert [linked_set.key for linked_set in loaded.linked_sets] == ["1", "3"]
+    linked = loaded.linked_sets[0]
     assert linked.key == "1"
     assert linked.spec_key == "spec-1"
     assert linked.description == "Checks the login"
@@ -138,7 +136,7 @@ async def test_an_unknown_requirement_raises(monkeypatch):
     monkeypatch.setattr(context_module, "get_requirements", lambda *args: [])
 
     with pytest.raises(context_module.RequirementNotFoundError, match="'x'"):
-        await load_requirement_context(SimpleNamespace(), RmServiceArgs(), "7", "42", "x", None, [])
+        await load_requirement_context(SimpleNamespace(), RmServiceArgs(), "7", "42", "x", None)
 
 
 def test_a_set_detail_has_all_test_cases_linked_or_not():

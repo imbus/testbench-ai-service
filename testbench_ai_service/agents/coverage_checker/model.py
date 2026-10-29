@@ -107,10 +107,14 @@ class CoverageResult(BaseModel):
     reduced_mode: bool
     #: At least one linked set could not be interpreted.
     incomplete: bool
+    #: No test case is linked to the requirement; nothing was checked or written.
+    no_linked_tests: bool = False
     #: Set key to its path in the test structure, so the logged result reads on its own.
     set_paths: dict[str, str] = {}
 
     def summary(self) -> str:
+        if self.no_linked_tests:
+            return "no linked test cases"
         counts = Counter(coverage.status for coverage in self.aspects)
         return (
             f"{len(self.aspects)} aspects: {counts['covered']} covered, "

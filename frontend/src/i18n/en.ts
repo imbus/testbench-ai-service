@@ -25,6 +25,8 @@ export const en = {
   coverageGap: 'Gap',
   coverageSuggestedTest: 'Suggested test',
   coverageIncomplete: 'The report is incomplete: not all linked test case sets could be interpreted.',
+  coverageNoLinkedTests:
+    'No test case is linked to {{requirement}}, so there is nothing to check. Link test case sets to it, or generate test ideas for it first.',
   coverageReduced: 'The aspects rest on the title only, the requirement has no description.',
   coverageSkippedComments: 'Review comment not written for',
   coverageSetsWithoutEvidence: 'Sets without evidence',
@@ -101,10 +103,7 @@ export const en = {
   language: 'Language',
   admin: 'Admin',
   testManager: 'Test manager',
-  // Deviation from the artboard's English ("Read only — Service, LLM and
-  // Logging require the Admin role."): our spec requires the Admin role for
-  // *all* writes, not just Service/LLM/Logging, matching the German copy's
-  // same deliberate deviation.
+
   readOnly: 'Read only — changes require the Admin role.',
   agentsOn: 'enabled',
   overrides: 'overrides',

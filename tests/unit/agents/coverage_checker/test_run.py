@@ -127,7 +127,6 @@ def world(monkeypatch):
     )
 
     async def _load(*args, **kwargs):
-        state.load_kwargs = kwargs
         return state.loaded
 
     async def _ai(self, llm_client, llm_config, prompt_config, schema, agent_data=None, step=None):
@@ -160,7 +159,7 @@ RM_ARGS = CoverageCheckerArgs(rm_service_url="http://rm/", rm_username="u", rm_p
 
 async def _check(prompt_vars=None, args=None):
     return await CoverageChecker(args or CoverageCheckerArgs()).check_coverage(
-        _context(prompt_vars), None, None, ["s1", "s2", "s3"]
+        _context(prompt_vars), None, None
     )
 
 
@@ -256,17 +255,38 @@ async def test_run_logs_the_report(world, monkeypatch):
     logger = MagicMock()
     monkeypatch.setattr(agent_module, "logger", logger)
 
-    await CoverageChecker().run(_context(), None, None, ["s1", "s2", "s3"])
+    await CoverageChecker().run(_context(), None, None, ["473"])
 
     message = logger.info.call_args.args[0] % logger.info.call_args.args[1:]
     assert "Coverage of REQ-42: 2 aspects: 1 covered, 0 weak, 1 missing" in message
     assert '"requirement_key": "REQ-42"' in message
 
 
-async def test_no_loadable_sets_stops_before_any_model_call(world):
+async def test_without_linked_sets_the_result_says_so_without_any_model_call(world):
     world.loaded = _loaded()
 
-    assert await _check() is None
+    result = await _check()
+
+    assert result.no_linked_tests is True
+    assert (result.requirement_key, result.aspects, result.sets_without_evidence) == (
+        "REQ-42",
+        [],
+        [],
+    )
+    assert world.steps == []
+    assert world.writes == {}
+
+
+async def test_sets_linked_without_test_cases_count_as_no_linked_tests(world):
+    world.loaded = _loaded(_set("e", cases=()))
+
+    result = await _check()
+
+    assert result.no_linked_tests is True
+    assert [(entry.set_key, entry.reason) for entry in result.sets_without_evidence] == [
+        ("e", "no_test_cases")
+    ]
+    assert result.set_paths == {"e": "/Auth/e"}
     assert world.steps == []
     assert world.writes == {}
 
@@ -287,21 +307,6 @@ async def test_a_failing_block_rendering_only_fails_that_set(world, monkeypatch)
     assert result.skipped_comments == ["s2"]
 
 
-async def test_run_reuses_the_catalog_the_precheck_loaded(world):
-    agent = CoverageChecker()
-    agent._catalog = {"cat": "alog"}
-
-    await agent.check_coverage(_context(), None, None, ["s1"])
-
-    assert world.load_kwargs["catalog"] == {"cat": "alog"}
-
-
-async def test_run_without_precheck_loads_the_catalog_itself(world):
-    await CoverageChecker().check_coverage(_context(), None, None, ["s1"])
-
-    assert world.load_kwargs["catalog"] is None
-
-
 class TestJobReporting:
     @pytest.fixture
     def job(self, tmp_path):
@@ -313,7 +318,7 @@ class TestJobReporting:
             project_key="7",
             project_name="P",
             root_key="473",
-            item_ids=["s1", "s2", "s3"],
+            item_ids=["473"],
             warnings=[],
         )
         return SimpleNamespace(store=store, handle=JobHandle("j1", store))
@@ -322,10 +327,10 @@ class TestJobReporting:
     def _text(key, **values):
         return get_translation(f"coverage_checker.job.{key}", LanguageOption.ENGLISH, **values)
 
-    async def _run(self, job, item_ids=("s1", "s2", "s3"), args=None):
+    async def _run(self, job, args=None):
         with job_scope(job.handle):
             await CoverageChecker(args or CoverageCheckerArgs()).run(
-                _context(), None, None, list(item_ids)
+                _context(), None, None, ["473"]
             )
         return job.store.get("j1", "me")
 
@@ -370,7 +375,7 @@ class TestJobReporting:
     async def test_progress_counts_interpreted_sets(self, world, job):
         world.loaded = _loaded(_set("s1"), _set("s2"))
 
-        detail = await self._run(job, ["s1", "s2"])
+        detail = await self._run(job)
 
         assert (detail.progress.done, detail.progress.total) == (2, 2)
         assert detail.progress.text == self._text("progress.gaps")
@@ -394,36 +399,39 @@ class TestJobReporting:
     @pytest.mark.parametrize(
         ("case", "key", "requirement"),
         [
-            ("no_items", "nothing_to_check", None),
             ("load_raises", "load_failed", "473"),
-            ("no_sets", "no_sets_loaded", "REQ-42"),
             ("decompose_raises", "decompose_failed", "REQ-42"),
         ],
     )
     async def test_early_stop_fails_job_with_reason(
         self, case, key, requirement, world, job, monkeypatch
     ):
-        item_ids = ["s1", "s2", "s3"]
-        if case == "no_items":
-            item_ids = []
-        elif case == "load_raises":
+        if case == "load_raises":
 
             async def _boom(*args, **kwargs):
                 raise RuntimeError("down")
 
             monkeypatch.setattr(agent_module, "load_requirement_context", _boom)
-        elif case == "no_sets":
-            world.loaded = _loaded()
         else:
             world.aspects = StructuredOutputError("bad", raw_response="?")
 
-        detail = await self._run(job, item_ids)
+        detail = await self._run(job)
 
         values = {"requirement": requirement} if requirement else {}
         assert detail.error == self._text(key, **values)
         assert detail.status == "failed"
         assert detail.report is None
         assert job.handle.failed is True
+
+    async def test_no_linked_tests_is_a_report_not_a_failure(self, world, job):
+        world.loaded = _loaded()
+
+        detail = await self._run(job)
+
+        assert detail.status != "failed"
+        assert detail.report_type == "coverage_checker"
+        assert detail.report["no_linked_tests"] is True
+        assert job.handle.failed is False
 
     async def test_incomplete_result_is_still_a_report_not_a_failure(self, world, job):
         world.interpretations["s2"] = StructuredOutputError("bad", raw_response="?")
@@ -434,4 +442,4 @@ class TestJobReporting:
         assert job.handle.failed is False
 
     async def test_without_job_scope_run_is_unchanged(self, world):
-        await CoverageChecker().run(_context(), None, None, ["s1", "s2", "s3"])
+        await CoverageChecker().run(_context(), None, None, ["473"])

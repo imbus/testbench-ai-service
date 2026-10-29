@@ -1,4 +1,4 @@
-"""The precheck answers 409 with a reason before anything runs, or passes the linked sets."""
+"""The precheck answers 409 with a reason before anything runs, or passes the requirement."""
 
 from types import SimpleNamespace
 
@@ -11,7 +11,6 @@ from testbench_ai_service.models.agent import ElementType
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import RequirementAssignment
 from testbench_ai_service.utils.i18n import load_translations
-from tests.unit.utils.traceability.fakes import case, test_case_set
 
 load_translations()
 
@@ -55,30 +54,24 @@ def testbench(monkeypatch):
     state = SimpleNamespace(
         json_tov=True,
         assignments=[_assignment()],
-        catalog={
-            "b": test_case_set("b", "/B", links=[REQ], cases=[case("TC-B")]),
-            "a": test_case_set("a", "/A", cases=[case("TC-A", links=[REQ])]),
-            "x": test_case_set("x", "/X", cases=[case("TC-X")]),
-        },
         error=None,
     )
 
-    def _catalog(*args):
+    def _requirements(*args):
         if state.error:
             raise state.error
-        return state.catalog
+        return state.assignments
 
     monkeypatch.setattr(agent_module, "check_min_testbench_version", lambda *args: None)
     monkeypatch.setattr(agent_module, "is_json_based_tov", lambda *args: state.json_tov)
-    monkeypatch.setattr(agent_module, "get_requirements", lambda *args: state.assignments)
-    monkeypatch.setattr(agent_module, "get_test_case_set_catalog", _catalog)
+    monkeypatch.setattr(agent_module, "get_requirements", _requirements)
     return state
 
 
-async def test_the_linked_sets_pass(testbench):
+async def test_a_known_requirement_passes_as_the_only_item(testbench):
     result = await CoverageChecker(RM).precheck(_context(), None)
 
-    assert (result.passed, result.items, result.warnings) == (True, ["a", "b"], [])
+    assert (result.passed, result.items, result.warnings) == (True, [REQ], [])
 
 
 async def test_without_rm_service_the_reduced_mode_is_announced(testbench):
@@ -122,7 +115,7 @@ async def test_an_xml_tov_is_refused(testbench):
 
 
 async def test_a_load_failure_is_refused(testbench):
-    testbench.error = RuntimeError("report job failed")
+    testbench.error = RuntimeError("TestBench down")
 
     result = await CoverageChecker(RM).precheck(_context(), None)
 
@@ -137,15 +130,6 @@ async def test_an_unknown_requirement_is_refused(testbench):
     assert result.warnings == ["Requirement 999 was not found in the test object version."]
 
 
-async def test_a_requirement_without_linked_test_cases_is_refused(testbench):
-    testbench.catalog = {"e": test_case_set("e", "/E", links=[REQ])}
-
-    result = await CoverageChecker(RM).precheck(_context(), None)
-
-    assert result.passed is False
-    assert result.warnings[0].startswith("No test case is linked to requirement EXT-1.")
-
-
 async def test_invalid_prompt_vars_are_refused(testbench):
     context = _context(prompt_config=SimpleNamespace(vars={"coverage_view": "everything"}))
 
@@ -153,12 +137,3 @@ async def test_invalid_prompt_vars_are_refused(testbench):
 
     assert result.passed is False
     assert result.warnings[0].startswith("Invalid prompt variables:")
-
-
-async def test_a_passed_precheck_keeps_the_catalog_for_the_run(testbench):
-    agent = CoverageChecker(RM)
-
-    result = await agent.precheck(_context(), None)
-
-    assert result.passed is True
-    assert agent._catalog is testbench.catalog

@@ -20,12 +20,13 @@ For JWT tokens the following API token permissions are required: `ReadOwnUserDet
 
 ## How it works
 
-1. **Precheck** (answers `409` with a reason otherwise): the trigger names a requirement of a TOV, the TOV is JSON-based, and at least one test case is linked to the requirement. A set linked as a whole contributes all its test cases, otherwise only the test cases linked one by one.
-2. **Aspects**: the model splits the requirement's title and description into testable aspects (`happy_path`, `negative`, `boundary`, `non_functional`). Each aspect must quote the requirement text; aspects that do not are dropped, as are duplicates. At most `max_aspects` are kept.
-3. **Interpretation**: for each linked set the model reads the test cases (keyword calls with arguments, `[check]` calls marked) against the aspects and names `full` or `partial` evidence. Large sets are read in batches of `max_test_cases_per_call`.
-4. **Matrix** (code, not model): an aspect is `covered` by `full` evidence from a set whose specification status counts; `weak` if there is only `partial` evidence or the proving set is not released yet; `missing` otherwise.
-5. **Gaps**: one more model call explains each weak or missing aspect and sketches a test that would close it.
-6. **Write-back**: every linked set gets a block **AI Coverage &lt;requirement&gt;** on top of its review comment. A rerun replaces only this block; blocks of other requirements and of the reviewer agent stay. Each open aspect lists the reason for the gap and a sketch of the missing test. Sets locked by another user are skipped. Two runs for different requirements at the same time on the same set can lose one block; a rerun restores it. The full result is stored as the job's [report](#report) and written to the service log.
+1. **Precheck** (answers `409` with a reason otherwise): the trigger names a requirement of a TOV, the TOV is JSON-based, and the requirement exists in it. The precheck does not load the tests, so it answers quickly.
+2. **Linked tests**: the run loads the TOV's JSON report and collects the test case sets linked to the requirement. A set linked as a whole contributes all its test cases, otherwise only the test cases linked one by one. If no test case is linked, the run stops here: the [report](#report) has `no_linked_tests` set, lists sets that are linked but empty, and nothing is written to TestBench.
+3. **Aspects**: the model splits the requirement's title and description into testable aspects (`happy_path`, `negative`, `boundary`, `non_functional`). Each aspect must quote the requirement text; aspects that do not are dropped, as are duplicates. At most `max_aspects` are kept.
+4. **Interpretation**: for each linked set the model reads the test cases (keyword calls with arguments, `[check]` calls marked) against the aspects and names `full` or `partial` evidence. Large sets are read in batches of `max_test_cases_per_call`.
+5. **Matrix** (code, not model): an aspect is `covered` by `full` evidence from a set whose specification status counts; `weak` if there is only `partial` evidence or the proving set is not released yet; `missing` otherwise.
+6. **Gaps**: one more model call explains each weak or missing aspect and sketches a test that would close it.
+7. **Write-back**: every linked set gets a block **AI Coverage &lt;requirement&gt;** on top of its review comment. A rerun replaces only this block; blocks of other requirements and of the reviewer agent stay. Each open aspect lists the reason for the gap and a sketch of the missing test. Sets locked by another user are skipped. Two runs for different requirements at the same time on the same set can lose one block; a rerun restores it. The full result is stored as the job's [report](#report) and written to the service log.
 
 Without an RM service the requirement description is unknown; the aspects then rest on the title alone and the blocks say so. If an RM service is configured but delivers no description (not reachable, the requirement unknown there, or its description empty), the job also gets a warning.
 
@@ -43,9 +44,10 @@ The trigger's `202` response carries a `job_id`. [`GET /jobs/{job_id}`](index.md
 | `skipped_comments`      | Sets whose review comment was not written (locked by someone else, or the write failed).            |
 | `reduced_mode`          | The requirement description was unknown; the aspects rest on the title alone.                       |
 | `incomplete`            | At least one linked set could not be interpreted.                                                   |
+| `no_linked_tests`       | No test case is linked to the requirement; `aspects` is empty and nothing was written.              |
 | `set_paths`             | Set key to its path in the test structure.                                                          |
 
-The job is marked `failed` with the reason in `error` when the run stops early, for example when the requirement cannot be loaded or splitting it into aspects fails. Nothing is written to TestBench then. The schema is a contract with the plugin: changing it is a breaking change.
+The job is marked `failed` with the reason in `error` when the run stops early, for example when the requirement cannot be loaded or splitting it into aspects fails. Nothing is written to TestBench then. A requirement without linked test cases is not a failure: the job succeeds with `no_linked_tests` set. The schema is a contract with the plugin: changing it is a breaking change.
 
 ## Variables
 

@@ -383,6 +383,7 @@ export interface CoverageResult {
   skipped_comments: string[]
   reduced_mode: boolean
   incomplete: boolean
+  no_linked_tests?: boolean
   set_paths: Record<string, string>
 }
 

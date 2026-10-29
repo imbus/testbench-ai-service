@@ -1,6 +1,7 @@
 """Checks whether the tests linked to a requirement prove all of its aspects.
 
-Triggered on a single requirement. The model splits the requirement into aspects,
+Triggered on a single requirement. The run finds the sets linked to it; without
+any linked test case it only reports that. Otherwise the model splits the requirement into aspects,
 reads each linked set against them and explains the gaps; the code builds the
 matrix and assigns each aspect its status. The result goes into a marked block in
 the review comment of every linked set and, in full, into the log. Links and test
@@ -11,7 +12,6 @@ import asyncio
 from typing import ClassVar
 
 from pydantic import ValidationError
-from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
@@ -26,6 +26,7 @@ from testbench_ai_service.agents.coverage_checker.model import (
     CoverageCheckerArgs,
     CoverageCheckerData,
     CoverageResult,
+    SetWithoutEvidence,
     resolve_run_options,
 )
 from testbench_ai_service.jobs.handle import current_job
@@ -46,7 +47,6 @@ from testbench_ai_service.utils.agent import check_min_testbench_version
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.testbench import (
     get_requirements,
-    get_test_case_set_catalog,
     is_json_based_tov,
 )
 from testbench_ai_service.utils.time_utils import current_time
@@ -57,8 +57,6 @@ from testbench_ai_service.utils.traceability.aspects import (
 )
 from testbench_ai_service.utils.traceability.context import (
     find_requirement,
-    has_linked_test_case,
-    linked_set_keys,
     load_requirement_context,
 )
 from testbench_ai_service.utils.traceability.interpretation import (
@@ -82,6 +80,26 @@ from testbench_ai_service.utils.traceability.review_writer import (
 def _refused(language, key: str, **values) -> PrecheckResult:
     message = get_translation(f"coverage_checker.precheck.{key}", language, **values)
     return PrecheckResult(passed=False, warnings=[message])
+
+
+def _without_linked_tests(loaded: RequirementContext) -> CoverageResult:
+    """The result for a requirement no test case is linked to.
+
+    Sets linked as a whole but empty are listed, so the report shows why they do
+    not count.
+    """
+    return CoverageResult(
+        requirement_key=loaded.requirement_ref,
+        aspects=[],
+        sets_without_evidence=[
+            SetWithoutEvidence(set_key=linked_set.key, reason="no_test_cases")
+            for linked_set in loaded.linked_sets
+        ],
+        reduced_mode=loaded.reduced_mode,
+        incomplete=False,
+        no_linked_tests=True,
+        set_paths={linked_set.key: linked_set.path for linked_set in loaded.linked_sets},
+    )
 
 
 class CoverageChecker(Agent):
@@ -108,15 +126,14 @@ class CoverageChecker(Agent):
     )
     ALLOWED_ROLES = frozenset({ProjectRole.TestManager, ProjectRole.TestDesigner})
 
-    # The route runs precheck and run on one instance per trigger, so the catalog the
-    # precheck loaded (a full-TOV JSON report) can be reused by the run.
-    _catalog: dict[str, TestCaseSet] | None = None
-
     async def precheck(self, context: ExecutionContext, conn: TBConnection) -> PrecheckResult:
-        """Refuse anything but a requirement of a TOV with linked test cases.
+        """Refuse anything but a requirement of a JSON-based TOV.
+
+        The linked tests are searched by the run: that needs the TOV's JSON report,
+        which is too slow for the request.
 
         Returns:
-            On success the keys of the linked sets as ``items``, and a warning when
+            On success the requirement's key as the only item, and a warning when
             no RM service is configured (the aspects then rest on the title alone).
         """
         if unsupported_version := check_min_testbench_version(context, conn):
@@ -124,28 +141,20 @@ class CoverageChecker(Agent):
         language = context.language
         if refusal := self._refuse_trigger(context):
             return refusal
-        loaded = await self._load_tov(context, conn)
-        if isinstance(loaded, PrecheckResult):
-            return loaded
-        assignments, catalog = loaded
-        self._catalog = catalog
+        assignments = await self._load_requirements(context, conn)
+        if isinstance(assignments, PrecheckResult):
+            return assignments
 
         assignment = find_requirement(assignments, context.root_key, context.root_uid)
         if assignment is None:
             return _refused(
                 language, "requirement_not_found", requirement=context.root_key or context.root_uid
             )
-        if not has_linked_test_case(catalog, assignment.key):
-            return _refused(
-                language, "no_linked_tests", requirement=assignment.extendedId or assignment.key
-            )
 
         warnings = []
         if self.args.rm_service_url is None:
             warnings.append(get_translation("coverage_checker.precheck.reduced_mode", language))
-        return PrecheckResult(
-            passed=True, warnings=warnings, items=linked_set_keys(catalog, assignment.key)
-        )
+        return PrecheckResult(passed=True, warnings=warnings, items=[assignment.key])
 
     def _refuse_trigger(self, context: ExecutionContext) -> PrecheckResult | None:
         """Refuse a trigger that is not a requirement of a TOV or has invalid prompt vars."""
@@ -172,10 +181,10 @@ class CoverageChecker(Agent):
             return _refused(language, "invalid_vars", details=details)
         return None
 
-    async def _load_tov(
+    async def _load_requirements(
         self, context: ExecutionContext, conn: TBConnection
-    ) -> PrecheckResult | tuple[list[RequirementAssignment], dict[str, TestCaseSet]]:
-        """Load requirements and test case set catalog, or the refusal if that is impossible."""
+    ) -> PrecheckResult | list[RequirementAssignment]:
+        """Load the TOV's requirements, or the refusal if that is impossible."""
         try:
             if not await asyncio.to_thread(
                 is_json_based_tov, conn, context.project_key, context.tov_key
@@ -184,21 +193,10 @@ class CoverageChecker(Agent):
             assignments = await asyncio.to_thread(
                 get_requirements, conn, context.project_key, None, context.tov_key
             )
-            catalog = await asyncio.to_thread(
-                get_test_case_set_catalog,
-                conn,
-                context.project_key,
-                context.tov_key,
-                None,
-                None,
-                None,
-            )
         except Exception as error:
-            logger.error(
-                "Could not load the requirements or tests of TOV '%s': %r", context.tov_key, error
-            )
+            logger.error("Could not load the requirements of TOV '%s': %r", context.tov_key, error)
             return _refused(context.language, "load_failed")
-        return assignments, catalog
+        return list(assignments)
 
     async def run(
         self,
@@ -207,8 +205,11 @@ class CoverageChecker(Agent):
         llm_client: LLMClient,
         item_ids: list[str],
     ) -> None:
-        """Check the coverage and log the report and the full result."""
-        result = await self.check_coverage(context, conn, llm_client, item_ids)
+        """Check the coverage and log the report and the full result.
+
+        ``item_ids`` holds only the requirement; the linked sets are found here.
+        """
+        result = await self.check_coverage(context, conn, llm_client)
         if result is None:
             return
         logger.info("%s\n%s", render_report(result), result.model_dump_json(indent=2))
@@ -219,16 +220,17 @@ class CoverageChecker(Agent):
         context: ExecutionContext,
         conn: TBConnection,
         llm_client: LLMClient,
-        item_ids: list[str],
     ) -> CoverageResult | None:
         """Build the coverage result and write it into the linked sets' review comments.
 
         Returns:
-            The result, or ``None`` if the check had to stop; the reason is logged.
+            The result, or ``None`` if the check had to stop; the reason is logged. A
+            requirement without linked test cases gives a result with
+            ``no_linked_tests`` set and writes nothing.
         """
-        if not item_ids or not context.tov_key:
-            logger.info("No linked test case sets to check; nothing to do")
-            await self._fail_job(context, "nothing_to_check")
+        if not context.tov_key:
+            logger.error("Coverage check without a TOV; nothing to do")
+            await self._fail_job(context, "load_failed", requirement=context.root_key)
             return None
         options = resolve_run_options(context.prompt_config.vars, self.args)
 
@@ -240,8 +242,6 @@ class CoverageChecker(Agent):
                 context.tov_key,
                 context.root_key,
                 context.root_uid,
-                item_ids,
-                catalog=self._catalog,
             )
         except Exception as error:
             logger.error(
@@ -255,15 +255,12 @@ class CoverageChecker(Agent):
             )
             return None
 
-        if not loaded.linked_sets:
-            logger.warning(
-                "None of the linked test case sets %s could be loaded for requirement '%s'; "
-                "nothing to check or write",
-                item_ids,
+        if not any(linked_set.test_cases for linked_set in loaded.linked_sets):
+            logger.info(
+                "No test case is linked to requirement '%s'; nothing to check or write",
                 loaded.requirement_ref,
             )
-            await self._fail_job(context, "no_sets_loaded", requirement=loaded.requirement_ref)
-            return None
+            return _without_linked_tests(loaded)
 
         if loaded.reduced_mode and self.args.rm_service_url is not None:
             # Without an RM service the precheck already warned; here the configured

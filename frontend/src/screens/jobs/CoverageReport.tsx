@@ -43,6 +43,17 @@ export function CoverageReport({ report }: { report: CoverageResult }) {
   // The path reads on its own; the key is all there is for a set the run never saw.
   const setName = (key: string) => report.set_paths[key] ?? key
 
+  if (report.no_linked_tests) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div role="status" style={{ color: STATUS_COLORS.missing }}>
+          {t('coverageNoLinkedTests', { requirement: report.requirement_key })}
+        </div>
+        <SetsWithoutEvidence report={report} setName={setName} />
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Summary report={report} count={count} />
@@ -78,24 +89,37 @@ export function CoverageReport({ report }: { report: CoverageResult }) {
           <AspectRow key={entry.aspect.id} entry={entry} setName={setName} />
         ))}
       </div>
-      {report.sets_without_evidence.length > 0 && (
-        <div>
-          <div className="card-kicker">{t('coverageSetsWithoutEvidence')}</div>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {report.sets_without_evidence.map((entry) => (
-              <li key={entry.set_key}>
-                {setName(entry.set_key)}{' '}
-                <span className="text-muted">({t(NO_EVIDENCE_LABELS[entry.reason])})</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <SetsWithoutEvidence report={report} setName={setName} />
       {report.skipped_comments.length > 0 && (
         <div className="text-muted">
           {t('coverageSkippedComments')}: {report.skipped_comments.map(setName).join(', ')}
         </div>
       )}
+    </div>
+  )
+}
+
+/** The linked sets that prove no aspect, each with the reason. */
+function SetsWithoutEvidence({
+  report,
+  setName,
+}: {
+  report: CoverageResult
+  setName: (key: string) => string
+}) {
+  const { t } = useTranslation()
+  if (report.sets_without_evidence.length === 0) return null
+  return (
+    <div>
+      <div className="card-kicker">{t('coverageSetsWithoutEvidence')}</div>
+      <ul style={{ margin: 0, paddingLeft: 18 }}>
+        {report.sets_without_evidence.map((entry) => (
+          <li key={entry.set_key}>
+            {setName(entry.set_key)}{' '}
+            <span className="text-muted">({t(NO_EVIDENCE_LABELS[entry.reason])})</span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

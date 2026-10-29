@@ -113,6 +113,22 @@ test('flags reduced mode', () => {
   expect(screen.getByText(/nur auf dem Titel/i)).toBeInTheDocument()
 })
 
+test('says that no test case is linked instead of an empty matrix', () => {
+  render(
+    <CoverageReport
+      report={{
+        ...REPORT,
+        aspects: [],
+        sets_without_evidence: [{ set_key: 'S-1', reason: 'no_test_cases' }],
+        no_linked_tests: true,
+      }}
+    />,
+  )
+  expect(screen.getByText(/kein Testfall verknüpft/i)).toBeInTheDocument()
+  expect(screen.queryByTestId('coverage-summary')).not.toBeInTheDocument()
+  expect(screen.getByText(/keine Testfälle/i)).toBeInTheDocument()
+})
+
 test('says nothing about incompleteness for a complete report', () => {
   render(<CoverageReport report={REPORT} />)
   expect(screen.queryByText(/nicht alle verknüpften/i)).not.toBeInTheDocument()

@@ -176,6 +176,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   checked at all -- neither its prompt file nor its `class_path` has to resolve. Both keep a
   configuration that started before this release starting after it.
 
+- The coverage checker's precheck no longer loads the JSON report of the whole TOV, so the
+  trigger answers quickly. It only checks that the requirement exists in a JSON-based TOV; the
+  run searches the linked test case sets. A requirement without a linked test case is no longer
+  refused with `409`: the job succeeds with a report whose `no_linked_tests` is `true`, and the
+  console's Jobs screen says so. Nothing is written to TestBench in that case.
+
 ### Fixed
 
 - A project that overrides both `language` and its agent's `prompt.file` now starts. At boot,
