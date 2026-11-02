@@ -117,7 +117,7 @@ export function VariantPane({
         <section data-testid="variant-steps" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <h5 style={{ margin: 0 }}>{t('variantSteps')}</h5>
           <div className="text-muted" style={{ fontSize: 12 }}>
-            {t('variantStepsReadOnly')}
+            {t('variantStepsFixed')}
           </div>
           <ul style={{ margin: 0, paddingLeft: 18 }}>
             {Object.entries(variant.steps).map(([step, messages]) => (

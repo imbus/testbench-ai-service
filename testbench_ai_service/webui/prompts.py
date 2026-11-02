@@ -23,6 +23,7 @@ data stream, suffix ``".yaml:evil"``).
 """
 
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -349,8 +350,8 @@ def _previous_template_refs(prompt_path: Path, prompts_dir: Path) -> set[Path]:
 def _steps_on_disk(prompt_path: Path) -> dict[str, dict[str, Any]]:
     """Each variant's raw ``steps`` mapping as the file on disk has it, by variant name.
 
-    The console cannot edit steps yet, so a save carries them over from disk
-    rather than trusting whatever the browser sends back.
+    A save that sends no steps for a variant (an older console, say) carries
+    them over from here, so it cannot drop them by omission.
     """
     try:
         document = yaml.safe_load(Path(prompt_path).read_text(encoding="utf-8"))
@@ -371,7 +372,7 @@ def _steps_on_disk(prompt_path: Path) -> dict[str, dict[str, Any]]:
 def _variant_entry(
     variant: PromptVariantDoc, messages: list[dict[str, Any]], steps: dict[str, Any] | None
 ) -> dict[str, Any]:
-    """The YAML mapping for one saved variant; *steps* is carried over from disk."""
+    """The YAML mapping for one saved variant."""
     entry: dict[str, Any] = {
         "name": variant.name,
         "description": variant.description,
@@ -387,7 +388,7 @@ def _variant_entry(
 def _step_template_targets(
     disk_steps: dict[str, dict[str, Any]], prompt_path: Path, prompts_dir: Path
 ) -> set[Path]:
-    """Templates the on-disk steps reference. A save never edits steps, so never deletes these."""
+    """Templates the carried-over on-disk steps reference, which a save never deletes."""
     from testbench_ai_service.webui.template_refs import message_refs  # noqa: PLC0415
 
     targets: set[Path] = set()
@@ -483,7 +484,12 @@ def read_prompt_document(
             )
         )
 
-    bodies = [message.content for variant in variants for message in variant.messages]
+    # Step templates count too: the render tab renders one step at a time.
+    bodies = [
+        message.content
+        for variant in variants
+        for message in [*variant.messages, *(m for step in variant.steps.values() for m in step)]
+    ]
     return PromptDocumentResponse(
         lang=lang,
         agent=agent,
@@ -734,6 +740,60 @@ class WritePlan(BaseModel):
     deletions_skipped: str | None = None
 
 
+@dataclass
+class _SaveTargets:
+    """What one save resolves its file-backed messages against, and collects."""
+
+    base: Path
+    prompt_path: Path
+    previous_refs: set[Path]
+    created: set[Path] = field(default_factory=set)
+    bodies: dict[Path, str] = field(default_factory=dict)
+
+
+def _message_entry(message: PromptMessageDoc, targets: _SaveTargets) -> dict[str, Any]:
+    """One message's YAML entry; a file-backed body is queued in ``targets.bodies``."""
+    if message.source != "file":
+        return {"role": message.role, "text": message.content}
+    if not message.file:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A file-backed message must name a file",
+        )
+    if not message.readable:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"The template file {message.file!r} could not be read when "
+                f"this prompt was loaded, so the editor is holding an empty "
+                f"body for it, not its real text. Saving would overwrite the "
+                f"file with nothing. Repair the file on disk -- check that it "
+                f"exists and is valid UTF-8 -- then reload this prompt and "
+                f"save again."
+            ),
+        )
+    target = _resolve_or_create_target(
+        targets.base,
+        targets.prompt_path,
+        message.file,
+        message.content,
+        targets.previous_refs,
+        targets.created,
+    )
+    existing = targets.bodies.get(target)
+    if existing is not None and existing != message.content:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Two messages give different content for the same template "
+                f"file {message.file!r}. A file has one body: point one of "
+                f"them at a different file, or make the two bodies identical."
+            ),
+        )
+    targets.bodies[target] = message.content
+    return {"role": message.role, "file": message.file}
+
+
 def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: Path) -> WritePlan:
     """Validate *request* and turn it into a :class:`WritePlan`, touching nothing.
 
@@ -763,8 +823,7 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
     base = Path(prompts_dir)
     previous_refs = _previous_template_refs(prompt_path, base)
     disk_steps = _steps_on_disk(prompt_path)
-    created: set[Path] = set()
-    bodies: dict[Path, str] = {}
+    targets = _SaveTargets(base, Path(prompt_path), previous_refs)
 
     document: dict[str, Any] = {
         "name": request.name,
@@ -775,54 +834,28 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
         "variants": [],
     }
 
+    # Steps whose variant the request sends without any are carried over from disk.
+    carried_steps: dict[str, dict[str, Any]] = {}
     for variant in request.variants:
-        messages: list[dict[str, Any]] = []
-        for message in variant.messages:
-            if message.source == "file":
-                if not message.file:
-                    raise HTTPException(
-                        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                        detail="A file-backed message must name a file",
-                    )
-                if not message.readable:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail=(
-                            f"The template file {message.file!r} could not be read when "
-                            f"this prompt was loaded, so the editor is holding an empty "
-                            f"body for it, not its real text. Saving would overwrite the "
-                            f"file with nothing. Repair the file on disk -- check that it "
-                            f"exists and is valid UTF-8 -- then reload this prompt and "
-                            f"save again."
-                        ),
-                    )
-                target = _resolve_or_create_target(
-                    base, prompt_path, message.file, message.content, previous_refs, created
-                )
-                existing = bodies.get(target)
-                if existing is not None and existing != message.content:
-                    raise HTTPException(
-                        status_code=status.HTTP_409_CONFLICT,
-                        detail=(
-                            f"Two messages give different content for the same template "
-                            f"file {message.file!r}. A file has one body: point one of "
-                            f"them at a different file, or make the two bodies identical."
-                        ),
-                    )
-                bodies[target] = message.content
-                messages.append({"role": message.role, "file": message.file})
-            else:
-                messages.append({"role": message.role, "text": message.content})
-
-        entry = _variant_entry(variant, messages, disk_steps.get(variant.name))
+        messages = [_message_entry(message, targets) for message in variant.messages]
+        if variant.steps:
+            steps: dict[str, Any] | None = {
+                step: [_message_entry(message, targets) for message in templates]
+                for step, templates in variant.steps.items()
+            }
+        else:
+            steps = disk_steps.get(variant.name)
+            if steps:
+                carried_steps[variant.name] = steps
+        entry = _variant_entry(variant, messages, steps)
         document["variants"].append(entry)
 
     _validate_document(document)
     _refuse_invalid_jinja(request)
 
-    plan = WritePlan(creates=created)
-    for target, text in bodies.items():
-        if target in created or not _already_on_disk(target, text):
+    plan = WritePlan(creates=targets.created)
+    for target, text in targets.bodies.items():
+        if target in targets.created or not _already_on_disk(target, text):
             plan.writes[target] = text
 
     yaml_text = document_to_yaml(document, header=schema_header(Path(prompt_path), base))
@@ -833,7 +866,7 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
         Path(prompt_path),
         base,
         previous_refs,
-        set(bodies) | _step_template_targets(disk_steps, prompt_path, base),
+        set(targets.bodies) | _step_template_targets(carried_steps, prompt_path, base),
     )
     return plan
 
@@ -847,12 +880,21 @@ def _refuse_invalid_jinja(request: PromptSaveRequest) -> None:
     ``POST /prompts/lint``, so the editor's live check and this refusal agree.
     """
     for variant in request.variants:
-        for number, message in enumerate(variant.messages, start=1):
+        lists = [("", variant.messages)] + [
+            (f"step {step!r}, ", templates) for step, templates in variant.steps.items()
+        ]
+        for prefix, number, message in (
+            (prefix, number, message)
+            for prefix, templates in lists
+            for number, message in enumerate(templates, start=1)
+        ):
             result = lint_template(message.content)
             if result.ok:
                 continue
             error = result.errors[0]
-            where = f"message {number}" + (f" ({message.file})" if message.source == "file" else "")
+            where = f"{prefix}message {number}" + (
+                f" ({message.file})" if message.source == "file" else ""
+            )
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=(

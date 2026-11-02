@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { PromptMessageDoc } from '../api/types'
 import {
-  closeTab, initialTabs, messageTabOf, openTab, pinTab, useEditorTabs, visibleTabs,
+  closeTab, initialTabs, messageTabOf, openTab, parseStepTab, pinTab, stepTabOf, useEditorTabs, visibleTabs,
   type TabId, type VariantTabs,
 } from './editorTabs'
 
@@ -160,5 +160,21 @@ describe('useEditorTabs', () => {
     expect(result.current.tabsFor(A).open).toEqual(['msg:a', 'msg:b'])
     act(() => result.current.reset())
     expect(result.current.tabsFor(A).open).toEqual(['msg:a'])
+  })
+})
+
+describe('step tabs', () => {
+  it('round-trips a step name that holds a colon', () => {
+    expect(stepTabOf('a:b', 2)).toBe('step:2:a:b')
+    expect(parseStepTab(stepTabOf('a:b', 2))).toEqual({ step: 'a:b', index: 2 })
+    expect(parseStepTab('msg:x')).toBeNull()
+  })
+
+  it("opens a steps-only variant on its first step's first message", () => {
+    const { result } = renderHook(() => useEditorTabs())
+    const steps = { name: 'S', messages: [], steps: { aspects: [msg('a'), msg('b')], prefilter: [msg('c')] } }
+    expect(result.current.tabsFor(steps).open).toEqual(['step:0:aspects'])
+    act(() => result.current.update(steps, (t) => openTab(t, stepTabOf('prefilter', 0), true)))
+    expect(result.current.tabsFor(steps).open).toEqual(['step:0:aspects', 'step:0:prefilter'])
   })
 })

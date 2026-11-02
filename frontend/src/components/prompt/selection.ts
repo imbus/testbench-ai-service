@@ -1,7 +1,13 @@
 import type { PromptMessageDoc } from '../../api/types'
 
 /** What the editor's centre pane shows. `message.index` is into the SELECTED variant. */
-export type Selection = { kind: 'meta' } | { kind: 'variant' } | { kind: 'render' } | { kind: 'message'; index: number }
+export type Selection =
+  | { kind: 'meta' }
+  | { kind: 'variant' }
+  | { kind: 'render' }
+  | { kind: 'message'; index: number }
+  /** A message of a multi-step variant's step -- read-only in the console. */
+  | { kind: 'step'; step: string; index: number }
 
 /** The tree/tab label: a file-backed message by its file, an inline one by its first line. */
 export function messageLabel(message: PromptMessageDoc, empty: string): string {
@@ -15,12 +21,14 @@ export function messageLabel(message: PromptMessageDoc, empty: string): string {
  * `docFile` is the document's own `file` (`de/explainer/prompt.yaml`, relative
  * to `prompts_dir`); a template sits next to it.
  */
-export function messagePath(docFile: string, variant: string, index: number, message: PromptMessageDoc): string {
+export function messagePath(docFile: string, variant: string, index: number, message: PromptMessageDoc, step?: string): string {
   if (message.source === 'file' && message.file) {
     const dir = docFile.includes('/') ? docFile.slice(0, docFile.lastIndexOf('/')) : ''
     return `prompts/${dir ? `${dir}/` : ''}${message.file}`
   }
-  return `prompt.yaml › ${variant} › messages[${index}]`
+  return step === undefined
+    ? `prompt.yaml › ${variant} › messages[${index}]`
+    : `prompt.yaml › ${variant} › steps › ${step}[${index}]`
 }
 
 export function uniqueVariantName(base: string, existing: string[]): string {

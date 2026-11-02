@@ -27,10 +27,11 @@ import { TestRunPanel } from '../components/TestRunPanel'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { MIN_PANE_HEIGHT, usePaneHeight } from '../state/editorLayout'
-import { closeTab, messageTabOf, openTab, pinTab, useEditorTabs, type TabId } from '../state/editorTabs'
+import { closeTab, messageTabOf, openTab, parseStepTab, pinTab, stepTabOf, useEditorTabs, type TabId } from '../state/editorTabs'
 import {
   isDirty,
   isMessageDirty,
+  isStepMessageDirty,
   isMetaDirty,
   isVariantDirty,
   newMessageUid,
@@ -182,6 +183,11 @@ function selectedVariantOf(draft: PromptDocument, selected: string | null) {
   return draft.variants.find((v) => v.name === name) ?? draft.variants[0]
 }
 
+/** Names one step message across variants: its tab id repeats in every variant. */
+function stepKey(variant: string, tab: TabId): string {
+  return `${variant}/${tab}`
+}
+
 function withoutIndex(set: ReadonlySet<number>, index: number): ReadonlySet<number> {
   if (!set.has(index)) return set
   const next = new Set(set)
@@ -241,6 +247,13 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // connection. Without it a failed request just stopped the spinner and said
   // nothing, unlike every other action on this screen.
   const [lintError, setLintError] = useState<string | null>(null)
+  // The live check's verdict on each step message it has checked, by
+  // `stepKey`; `[]` is a clean check. Steps cannot move, so unlike
+  // `diagnostics` this survives a reorder of the variant's own messages.
+  const [stepDiagnostics, setStepDiagnostics] = useState<Record<string, LintError[]>>({})
+  // Which step the render tab renders, for a multi-step variant. Unset (or a
+  // step this variant does not have) falls back to its first step.
+  const [renderStep, setRenderStep] = useState<string | null>(null)
 
   /** Every prior lint result is invalid: a variant switch, a document reset,
    * a removed message, or a reordering (`diagnostics` is keyed by index, so
@@ -249,6 +262,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
    * so a stale "no syntax errors" cannot survive either. */
   const clearDiagnostics = () => {
     setDiagnosticsMap({})
+    setStepDiagnostics({})
     setChecked(new Set())
     setLintError(null)
     setLintEpoch((epoch) => epoch + 1)
@@ -383,14 +397,30 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const liveVariant = original ? selectedVariantOf(draft, selectedVariant) : undefined
   const liveActive = tabsState.tabsFor(liveVariant).active
   const liveIndex = liveVariant ? liveVariant.messages.findIndex((m, i) => messageTabOf(m, i) === liveActive) : -1
-  const liveMessage = liveVariant?.messages[liveIndex]
+  const liveStep = parseStepTab(liveActive)
+  const liveMessage = liveStep
+    ? liveVariant?.steps?.[liveStep.step]?.[liveStep.index]
+    : liveVariant?.messages[liveIndex]
+  const liveStepKey = liveVariant && liveStep && liveActive ? stepKey(liveVariant.name, liveActive) : null
   const liveLint = useLintTemplate()
   const live = useLiveLint(
     liveVariant && liveMessage
-      ? { key: `${liveVariant.name}:${liveIndex}:${lintEpoch}`, content: liveMessage.content }
+      ? { key: `${liveVariant.name}:${liveStepKey ?? liveIndex}:${lintEpoch}`, content: liveMessage.content }
       : null,
     async (content) => (await liveLint.mutateAsync(content)).errors,
-    (errors) => applyLiveResult(liveIndex, errors),
+    (errors) => {
+      if (liveStepKey === null) {
+        applyLiveResult(liveIndex, errors)
+        return
+      }
+      setStepDiagnostics((current) => {
+        const next = { ...current }
+        // A failed request leaves the message unchecked, not clean.
+        if (errors) next[liveStepKey] = errors
+        else delete next[liveStepKey]
+        return next
+      })
+    },
   )
 
   // `document.isLoading` is only true on the FIRST load. A failed refetch
@@ -441,14 +471,21 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // What the centre pane shows: the active tab. Null when every tab is closed.
   const tabs = tabsState.tabsFor(selectedVariantObj)
   const activeIndex = messages.findIndex((m, i) => messageTabOf(m, i) === tabs.active)
+  const activeStep = parseStepTab(tabs.active)
   const current: Selection | null =
     tabs.active === 'meta' ? { kind: 'meta' }
       : tabs.active === 'variant' && selectedVariantObj ? { kind: 'variant' }
       : tabs.active === 'render' && selectedVariantObj ? { kind: 'render' }
       : activeIndex >= 0 ? { kind: 'message', index: activeIndex }
+      : activeStep ? { kind: 'step', ...activeStep }
       : null
   const currentMessage = current?.kind === 'message' ? messages[current.index] : undefined
-  const used = currentMessage ? usedTemplateVars(currentMessage.content) : []
+  // `tabs.open` only holds tabs that resolve, so an active step tab has its message.
+  const currentStepMessage = current?.kind === 'step' ? selectedVariantObj?.steps?.[current.step]?.[current.index] : undefined
+  const currentStepKey = current?.kind === 'step' ? stepKey(variantName, stepTabOf(current.step, current.index)) : null
+  // The message the editor and the variable sidebar work on, of either kind.
+  const editedMessage = currentMessage ?? currentStepMessage
+  const used = editedMessage ? usedTemplateVars(editedMessage.content) : []
   const agentVars = Object.keys(agentContext).map((k) => `agent.${k}`)
   const declaredVars = Object.keys(vars).map((k) => `vars.${k}`)
   // Read through a ref by CodeEditor, so a fresh object per render costs nothing.
@@ -489,7 +526,15 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const invalidJinja = flagged
     .filter((index) => messages[index])
     .sort((a, b) => a - b)
-    .map((index) => ({ index, message: messages[index], error: diagnostics[index][0] }))
+    .map((index) => ({ label: `${index + 1}`, message: messages[index], error: diagnostics[index][0] }))
+  // Step messages of the selected variant the live check flagged.
+  const invalidStepJinja = Object.entries(selectedVariantObj?.steps ?? {}).flatMap(([step, stepMessages]) =>
+    stepMessages.flatMap((message, index) => {
+      const error = stepDiagnostics[stepKey(variantName, stepTabOf(step, index))]?.[0]
+      return error ? [{ label: `${step} ${index + 1}`, message, error }] : []
+    }),
+  )
+  const invalidAll = [...invalidJinja, ...invalidStepJinja]
 
   /**
    * Which control a 422 names, whichever of the two requests it came from.
@@ -584,9 +629,13 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
    * message the draft adds in the same event, before the reducer has run. */
   const variantTabs = (name: string, extra: PromptMessageDoc[] = []) => {
     const variant = draft.variants.find((v) => v.name === name)
-    return { name, messages: [...(variant?.messages ?? []), ...extra] }
+    return { name, messages: [...(variant?.messages ?? []), ...extra], steps: variant?.steps }
   }
-  const open = (tab: TabId, pin: boolean) => tabsState.update(variantTabs(variantName), (prev) => openTab(prev, tab, pin))
+  const open = (tab: TabId, pin: boolean) => {
+    // Render opened from a step message renders that message's step.
+    if (tab === 'render' && current?.kind === 'step') setRenderStep(current.step)
+    tabsState.update(variantTabs(variantName), (prev) => openTab(prev, tab, pin))
+  }
   /** The first edit in a preview tab keeps it, as in VS Code. */
   const pinActive = () => {
     if (tabs.active && tabs.preview === tabs.active) tabsState.update(variantTabs(variantName), (prev) => pinTab(prev, tabs.active as TabId))
@@ -691,11 +740,16 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     checking: live.checking,
     clean:
       flagged.length === 0 &&
+      invalidStepJinja.length === 0 &&
       (current?.kind === 'message'
         ? checked.has(current.index)
-        : messages.length > 0 && messages.every((_, index) => checked.has(index))),
+        : currentStepKey
+          ? currentStepKey in stepDiagnostics
+          : messages.length > 0 && messages.every((_, index) => checked.has(index))),
     error: lintError,
-    errors: current?.kind === 'message' ? (diagnostics[current.index] ?? []) : [],
+    errors: current?.kind === 'message'
+      ? (diagnostics[current.index] ?? [])
+      : currentStepKey ? (stepDiagnostics[currentStepKey] ?? []) : [],
   }
 
   const varSidebarProps = {
@@ -704,7 +758,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     declaredVars,
     used,
     undeclared,
-    canInsert: isAdmin && !!currentMessage?.readable,
+    canInsert: isAdmin && !!editedMessage?.readable,
     canDeclare: isAdmin,
     lint: lintState,
     onInsert: insert,
@@ -716,21 +770,35 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // A message's editor model is named after its tab, so the key the pane
   // shows and the keys kept alive below can never disagree.
   const modelKeyOf = (tab: `msg:${string}`) => `${docLang}/${agentKey}/${tab.slice(4)}`
+  // A step tab names its message by position, which repeats across variants,
+  // so its model key carries the variant too.
+  const stepModelKeyOf = (variant: string, tab: `step:${string}`) => `${docLang}/${agentKey}/${variant}/${tab}`
   // Every open message tab of every variant keeps its editor model (undo,
   // cursor, scroll). Resolved per variant: a deleted message's tab drops out
   // at once, and a variant never touched still has its implicit first tab.
-  const modelKeys = draft.variants
-    .flatMap((variant) => tabsState.tabsFor(variant).open)
-    .filter((id): id is `msg:${string}` => id.startsWith('msg:'))
-    .map(modelKeyOf)
+  const modelKeys = draft.variants.flatMap((variant) =>
+    tabsState.tabsFor(variant).open.flatMap((id) =>
+      id.startsWith('msg:') ? [modelKeyOf(id as `msg:${string}`)]
+        : id.startsWith('step:') ? [stepModelKeyOf(variant.name, id as `step:${string}`)]
+        : [],
+    ),
+  )
 
   // The render and test-run requests post these; the uids are client-only.
   const [requestVariant] = selectedVariantObj ? withoutMessageUids([selectedVariantObj]) : []
   const requestMessages = requestVariant?.messages ?? []
+  // A multi-step variant renders one step at a time; the step messages carry
+  // no uids, so they are posted as they are.
+  const stepNames = Object.keys(selectedVariantObj?.steps ?? {})
+  const shownStep = renderStep && stepNames.includes(renderStep) ? renderStep : stepNames[0]
+  const renderMessages = shownStep ? (selectedVariantObj?.steps?.[shownStep] ?? []) : requestMessages
 
   const preview = (
     <RenderPreview
-      messages={requestMessages}
+      messages={renderMessages}
+      steps={stepNames}
+      step={shownStep}
+      onStep={setRenderStep}
       vars={sampleVars(vars)}
       decls={vars}
       skeleton={agentContext}
@@ -871,6 +939,46 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           }}
         />
       )}
+      {currentStepMessage && current?.kind === 'step' && (
+        // A step message: text and role are edited like any message's, but
+        // the agent's code expects these steps and messages, so they cannot
+        // be moved, removed or re-pointed at another file (`fixed`).
+        <MessagePane
+          key={`${docLang}/${agentKey}`}
+          editorRef={editorRef}
+          path={messagePath(draft.file, variantName, current.index, currentStepMessage, current.step)}
+          message={currentStepMessage}
+          index={current.index}
+          count={selectedVariantObj?.steps?.[current.step]?.length ?? 0}
+          readOnly={!isAdmin}
+          fixed
+          diagnostics={currentStepKey ? stepDiagnostics[currentStepKey] : undefined}
+          insertable={[...agentVars, ...declaredVars]}
+          completion={completion}
+          modelKey={stepModelKeyOf(variantName, stepTabOf(current.step, current.index))}
+          keepModels={modelKeys}
+          onRemove={() => {}}
+          onMove={() => {}}
+          onRole={(role) => {
+            pinActive()
+            dispatch({ type: 'setMessageRole', variant: variantName, step: current.step, index: current.index, role })
+          }}
+          onContent={(content) => {
+            if (content === currentStepMessage.content) return
+            pinActive()
+            dispatch({ type: 'setMessageContent', variant: variantName, step: current.step, index: current.index, content })
+            // Only this message's own verdict described the old text.
+            setStepDiagnostics((diags) => {
+              if (!currentStepKey || !(currentStepKey in diags)) return diags
+              const next = { ...diags }
+              delete next[currentStepKey]
+              return next
+            })
+          }}
+          onSource={() => {}}
+          onFile={() => {}}
+        />
+      )}
     </>
   )
 
@@ -892,6 +1000,18 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     if (id === 'variant') {
       return { id, label: variantName, prefix: '⚙', dirty: selectedVariantObj ? isVariantDirty(original, selectedVariantObj) : false, flagged: false, preview: isPreview }
     }
+    const step = parseStepTab(id)
+    if (step) {
+      const message = selectedVariantObj?.steps?.[step.step]?.[step.index] as PromptMessageDoc
+      return {
+        id,
+        label: `${step.step} · ${messageLabel(message, t('emptyMessage'))}`,
+        prefix: message.role,
+        dirty: isStepMessageDirty(original, variantName, step.step, step.index, message),
+        flagged: (stepDiagnostics[stepKey(variantName, id)] ?? []).length > 0,
+        preview: isPreview,
+      }
+    }
     const index = messages.findIndex((m, i) => messageTabOf(m, i) === id)
     const message = messages[index]
     return { id, label: messageLabel(message, t('emptyMessage')), prefix: message.role, dirty: isMessageDirty(original, message), flagged: index in diagnostics, preview: isPreview }
@@ -910,6 +1030,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         onPickVariant={pickVariant}
         onOpenVariantSettings={openVariantSettings}
         onPickMessage={(index, pin) => open(messageTabOf(messages[index], index), pin)}
+        onPickStep={(step, index, pin) => open(stepTabOf(step, index), pin)}
         onAddVariant={addVariant}
         onAddMessage={addMessage}
         // The render endpoint is admin-gated (RenderPreview renders nothing
@@ -929,7 +1050,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         />
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           {centre}
-          {currentMessage && <VarSidebar {...varSidebarProps} />}
+          {editedMessage && <VarSidebar {...varSidebarProps} />}
         </div>
         {/* The editor above keeps at least 160px; the rest is the viewer's
             to hand to the test run. The render preview is a tab above. */}
@@ -975,7 +1096,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         selectedVariant={variantName}
         onVariant={pickVariant}
         showSave={isAdmin}
-        canSave={dirty && emptyEnumVariants.length === 0 && invalidJinja.length === 0}
+        canSave={dirty && emptyEnumVariants.length === 0 && invalidAll.length === 0}
         onSave={openConfirm}
       />
 
@@ -986,7 +1107,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
       {document.isError && (
         <Message severity="error" style={alertStyle} text={t('promptDocError')} />
       )}
-      {isAdmin && invalidJinja.length > 0 && (
+      {isAdmin && invalidAll.length > 0 && (
         // `status`, not `alert`: the error itself is already the alert (the
         // editor's marker, the sidebar's line) -- this says what it blocks.
         <Message
@@ -997,9 +1118,9 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           text={
             <>
               {t('saveBlockedJinja')}{' '}
-              {invalidJinja
-                .map(({ index, message, error }) =>
-                  `${index + 1} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine', { line: error.line, message: error.message })}`,
+              {invalidAll
+                .map(({ label, message, error }) =>
+                  `${label} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine', { line: error.line, message: error.message })}`,
                 )
                 .join(' · ')}
             </>

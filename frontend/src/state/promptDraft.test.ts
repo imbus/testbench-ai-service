@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { PromptDocument, PromptMessageDoc } from '../api/types'
 import {
-  changedFiles, isDirty, isMessageDirty, isMetaDirty, isVariantDirty,
+  changedFiles, isDirty, isMessageDirty, isMetaDirty, isStepMessageDirty, isVariantDirty,
   promptDraftReducer as reduce, withMessageUids, withoutMessageUids,
 } from './promptDraft'
 import { defaultTemplateName } from '../api/prompts'
@@ -457,5 +457,49 @@ describe('per-tab dirty', () => {
     expect(isVariantDirty(original, modelled.variants[0])).toBe(true)
     const renamed = reduce(original, { type: 'renameVariant', from: 'A', to: 'Z' })
     expect(isVariantDirty(original, renamed.variants[0])).toBe(true)
+  })
+})
+
+describe('step messages', () => {
+  const steps: PromptDocument = {
+    ...base,
+    variants: [
+      {
+        ...base.variants[0],
+        messages: [],
+        steps: {
+          aspects: [
+            { role: 'system', source: 'file', file: 'aspects.jinja', content: 'A', readable: true },
+            { role: 'user', source: 'inline', file: null, content: 'B', readable: true },
+          ],
+          gaps: [{ role: 'system', source: 'file', file: 'aspects.jinja', content: 'A', readable: true }],
+        },
+      },
+    ],
+  }
+
+  it('edits a file-backed step body, in every message sharing the file', () => {
+    const next = reduce(steps, { type: 'setMessageContent', variant: 'A', step: 'aspects', index: 0, content: 'A2' })
+    expect(next.variants[0].steps?.aspects[0].content).toBe('A2')
+    expect(next.variants[0].steps?.gaps[0].content).toBe('A2')
+    expect(changedFiles(steps, next)).toEqual(['aspects.jinja'])
+    expect(isStepMessageDirty(steps, 'A', 'aspects', 0, next.variants[0].steps!.aspects[0])).toBe(true)
+    expect(isStepMessageDirty(steps, 'A', 'aspects', 1, next.variants[0].steps!.aspects[1])).toBe(false)
+  })
+
+  it('edits an inline step body and a role into the YAML', () => {
+    const inline = reduce(steps, { type: 'setMessageContent', variant: 'A', step: 'aspects', index: 1, content: 'B2' })
+    expect(changedFiles(steps, inline)).toEqual(['de/explainer/prompt.yaml'])
+    const role = reduce(steps, { type: 'setMessageRole', variant: 'A', step: 'aspects', index: 1, role: 'assistant' })
+    expect(role.variants[0].steps?.aspects[1].role).toBe('assistant')
+    expect(isDirty(steps, role)).toBe(true)
+  })
+
+  it('ignores an unknown step', () => {
+    expect(reduce(steps, { type: 'setMessageContent', variant: 'A', step: 'nope', index: 0, content: 'x' })).toBe(steps)
+  })
+
+  it('sends the steps with the save request', () => {
+    expect(withoutMessageUids(steps.variants)[0].steps).toEqual(steps.variants[0].steps)
   })
 })

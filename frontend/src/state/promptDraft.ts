@@ -13,8 +13,9 @@ export type PromptDraftAction =
   | { type: 'addMessage'; variant: string; uid: string }
   | { type: 'removeMessage'; variant: string; index: number }
   | { type: 'moveMessage'; variant: string; index: number; to: number }
-  | { type: 'setMessageRole'; variant: string; index: number; role: MessageRole }
-  | { type: 'setMessageContent'; variant: string; index: number; content: string }
+  /** With `step`, `index` is into that step's messages instead of the variant's own. */
+  | { type: 'setMessageRole'; variant: string; index: number; role: MessageRole; step?: string }
+  | { type: 'setMessageContent'; variant: string; index: number; content: string; step?: string }
   | { type: 'setMessageSource'; variant: string; index: number; source: MessageSource }
   | { type: 'setMessageFile'; variant: string; index: number; file: string }
   | { type: 'reset'; document: PromptDocument }
@@ -28,6 +29,28 @@ function mapVariant(
     ...doc,
     variants: doc.variants.map((variant) => (variant.name === name ? change(variant) : variant)),
   }
+}
+
+/** The message list `step` names, or the variant's own messages without one. */
+function listOf(variant: PromptVariantDoc, step: string | undefined): PromptMessageDoc[] | undefined {
+  return step === undefined ? variant.messages : variant.steps?.[step]
+}
+
+/** `variant` with `change` applied to the list `step` names (see `listOf`). */
+function mapList(
+  variant: PromptVariantDoc,
+  step: string | undefined,
+  change: (messages: PromptMessageDoc[]) => PromptMessageDoc[],
+): PromptVariantDoc {
+  if (step === undefined) return { ...variant, messages: change(variant.messages) }
+  const messages = variant.steps?.[step]
+  if (!messages) return variant
+  return { ...variant, steps: { ...variant.steps, [step]: change(messages) } }
+}
+
+/** Every message of a variant: its own, then each step's. */
+export function allMessages(variant: PromptVariantDoc): PromptMessageDoc[] {
+  return [...variant.messages, ...Object.values(variant.steps ?? {}).flat()]
 }
 
 /**
@@ -46,25 +69,28 @@ function setMessageContent(
   variantName: string,
   index: number,
   content: string,
+  step?: string,
 ): PromptDocument {
-  const target = doc.variants.find((v) => v.name === variantName)?.messages[index]
+  const variant = doc.variants.find((v) => v.name === variantName)
+  const target = variant ? listOf(variant, step)?.[index] : undefined
   if (!target) return doc
 
   if (target.source !== 'file' || !target.file) {
-    return mapVariant(doc, variantName, (v) => ({
-      ...v,
-      messages: v.messages.map((m, i) => (i === index ? { ...m, content } : m)),
-    }))
+    return mapVariant(doc, variantName, (v) =>
+      mapList(v, step, (messages) => messages.map((m, i) => (i === index ? { ...m, content } : m))),
+    )
   }
 
+  // Step messages included: a step may share its template with a message.
   const file = target.file
+  const sync = (messages: PromptMessageDoc[]) =>
+    messages.map((m) => (m.source === 'file' && m.file === file ? { ...m, content } : m))
   return {
     ...doc,
     variants: doc.variants.map((v) => ({
       ...v,
-      messages: v.messages.map((m) =>
-        m.source === 'file' && m.file === file ? { ...m, content } : m,
-      ),
+      messages: sync(v.messages),
+      ...(v.steps ? { steps: Object.fromEntries(Object.entries(v.steps).map(([name, messages]) => [name, sync(messages)])) } : {}),
     })),
   }
 }
@@ -183,13 +209,12 @@ export function promptDraftReducer(
       })
 
     case 'setMessageRole':
-      return mapVariant(state, action.variant, (v) => ({
-        ...v,
-        messages: v.messages.map((m, i) => (i === action.index ? { ...m, role: action.role } : m)),
-      }))
+      return mapVariant(state, action.variant, (v) =>
+        mapList(v, action.step, (messages) => messages.map((m, i) => (i === action.index ? { ...m, role: action.role } : m))),
+      )
 
     case 'setMessageContent':
-      return setMessageContent(state, action.variant, action.index, action.content)
+      return setMessageContent(state, action.variant, action.index, action.content, action.step)
 
     case 'setMessageSource':
       return mapVariant(state, action.variant, (v) => {
@@ -252,6 +277,11 @@ export function promptDraftReducer(
   }
 }
 
+/** A message as the YAML holds it: an inline body lives there, a file body does not. */
+function yamlMessage(m: PromptMessageDoc) {
+  return { role: m.role, source: m.source, file: m.file, text: m.source === 'inline' ? m.content : null }
+}
+
 /** Everything except the file-backed message bodies -- i.e. what the YAML holds. */
 function yamlShape(doc: PromptDocument): string {
   return JSON.stringify({
@@ -265,13 +295,8 @@ function yamlShape(doc: PromptDocument): string {
       description: v.description,
       model: v.model,
       vars: v.vars,
-      messages: v.messages.map((m) => ({
-        role: m.role,
-        source: m.source,
-        file: m.file,
-        // An inline body lives in the YAML; a file body does not.
-        text: m.source === 'inline' ? m.content : null,
-      })),
+      messages: v.messages.map(yamlMessage),
+      steps: Object.entries(v.steps ?? {}).map(([step, messages]) => [step, messages.map(yamlMessage)]),
     })),
   })
 }
@@ -292,12 +317,12 @@ export function changedFiles(original: PromptDocument, draft: PromptDocument): s
 
   const before = new Map<string, string>()
   for (const variant of original.variants) {
-    for (const message of variant.messages) {
+    for (const message of allMessages(variant)) {
       if (message.source === 'file' && message.file) before.set(message.file, message.content)
     }
   }
   for (const variant of draft.variants) {
-    for (const message of variant.messages) {
+    for (const message of allMessages(variant)) {
       if (message.source !== 'file' || !message.file) continue
       if (before.get(message.file) !== message.content && !files.includes(message.file)) {
         files.push(message.file)
@@ -357,6 +382,20 @@ export function isMessageDirty(original: PromptDocument, message: PromptMessageD
     if (before) return !sameMessage(before, message)
   }
   return true
+}
+
+/** Whether message `index` of step `step` differs from the loaded one. Steps
+ * cannot be reordered, so position is identity -- matched within the variant
+ * of the same name. */
+export function isStepMessageDirty(
+  original: PromptDocument,
+  variant: string,
+  step: string,
+  index: number,
+  message: PromptMessageDoc,
+): boolean {
+  const before = original.variants.find((v) => v.name === variant)?.steps?.[step]?.[index]
+  return !before || !sameMessage(before, message)
 }
 
 /** Whether prompt.yaml's own header fields changed. */

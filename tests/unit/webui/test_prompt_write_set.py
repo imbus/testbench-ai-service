@@ -356,3 +356,69 @@ def test_renaming_a_step_variant_is_refused_instead_of_dropping_its_steps(steps_
         build_write_set(_steps_request("B"), path, steps_prompt)
 
     assert caught.value.status_code == 422
+
+
+def _edited_steps_request(*step_messages):
+    return PromptSaveRequest(
+        name="x",
+        default_model="m",
+        default_variant="A",
+        variants=[PromptVariantDoc(name="A", messages=[], steps={"aspects": list(step_messages)})],
+    )
+
+
+def test_a_save_writes_an_edited_step_template(steps_prompt):
+    path = steps_prompt / "de/coverage/prompt.yaml"
+    template = steps_prompt / "de/coverage/aspects_system.jinja"
+
+    plan = build_write_set(
+        _edited_steps_request(external("aspects_system.jinja", "split it better")),
+        path,
+        steps_prompt,
+    )
+
+    assert plan.writes[template] == "split it better"
+    assert template not in plan.deletes
+    parsed = yaml.safe_load(plan.writes[path])
+    assert parsed["variants"][0]["steps"] == {
+        "aspects": [{"role": "system", "file": "aspects_system.jinja"}]
+    }
+
+
+def test_a_save_writes_an_inline_step_message_and_its_role(steps_prompt):
+    path = steps_prompt / "de/coverage/prompt.yaml"
+    message = PromptMessageDoc(role="user", source="inline", file=None, content="{{ agent.x }}")
+
+    plan = build_write_set(_edited_steps_request(message), path, steps_prompt)
+
+    parsed = yaml.safe_load(plan.writes[path])
+    assert parsed["variants"][0]["steps"] == {
+        "aspects": [{"role": "user", "text": "{{ agent.x }}"}]
+    }
+    # The step no longer references the file, and nothing else does.
+    assert steps_prompt / "de/coverage/aspects_system.jinja" in plan.deletes
+
+
+def test_invalid_jinja_in_a_step_is_refused(steps_prompt):
+    with pytest.raises(HTTPException) as caught:
+        build_write_set(
+            _edited_steps_request(external("aspects_system.jinja", "{% if %}")),
+            steps_prompt / "de/coverage/prompt.yaml",
+            steps_prompt,
+        )
+
+    assert caught.value.status_code == 422
+    assert "step 'aspects'" in caught.value.detail
+
+
+def test_an_unreadable_step_template_is_never_overwritten(steps_prompt):
+    message = PromptMessageDoc(
+        role="system", source="file", file="aspects_system.jinja", content="", readable=False
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        build_write_set(
+            _edited_steps_request(message), steps_prompt / "de/coverage/prompt.yaml", steps_prompt
+        )
+
+    assert caught.value.status_code == 409

@@ -104,3 +104,17 @@ def test_the_document_lists_step_templates_read_only(tmp_path):
     assert step_message.file == "aspects_system.jinja"
     assert step_message.content == "split it"
     assert document.variants[0].messages == []
+
+
+def test_the_context_skeleton_covers_step_templates(tmp_path):
+    agent = tmp_path / "de" / "finder"
+    agent.mkdir(parents=True)
+    (agent / "prompt.yaml").write_text(
+        'name: "x"\ndefault_variant: "A"\ndefault_model: "m"\nvariants:\n'
+        '  - name: "A"\n    messages: []\n    steps:\n      aspects:\n'
+        '        - role: "user"\n          text: "{{ agent.requirement }}"\n',
+        encoding="utf-8",
+    )
+    doc = read_prompt_document(agent / "prompt.yaml", tmp_path, "de", "finder")
+    assert doc.agent_context_skeleton == {"requirement": ""}
+

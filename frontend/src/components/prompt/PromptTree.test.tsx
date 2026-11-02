@@ -14,6 +14,13 @@ const VARIANTS: PromptVariantDoc[] = [
     { role: 'user', source: 'inline', file: null, content: 'Explain {{ agent.defect }}', readable: true, uid: 'u' },
   ] },
   { name: 'Quick', description: null, model: null, vars: {}, messages: [] },
+  { name: 'Pipeline', description: null, model: null, vars: {}, messages: [], steps: {
+    aspects: [
+      { role: 'system', source: 'file', file: 'aspects_system.jinja', content: 'a', readable: true },
+      { role: 'user', source: 'file', file: 'aspects_user.jinja', content: 'b', readable: true },
+    ],
+    prefilter: [{ role: 'system', source: 'inline', file: null, content: 'Screen it', readable: true }],
+  } },
 ]
 
 function setup(overrides = {}) {
@@ -21,7 +28,7 @@ function setup(overrides = {}) {
     variants: VARIANTS, selectedVariant: 'Thorough', activeTab: 'msg:u' as const,
     flagged: [], readOnly: false,
     onOpenMeta: vi.fn(), onPickVariant: vi.fn(), onOpenVariantSettings: vi.fn(),
-    onPickMessage: vi.fn(), onAddVariant: vi.fn(), onAddMessage: vi.fn(), onOpenRender: vi.fn(), ...overrides,
+    onPickMessage: vi.fn(), onPickStep: vi.fn(), onAddVariant: vi.fn(), onAddMessage: vi.fn(), onOpenRender: vi.fn(), ...overrides,
   }
   render(<PromptTree {...props} />)
   return props
@@ -79,7 +86,7 @@ describe('PromptTree', () => {
 
   it('lists the referenced template files', () => {
     setup()
-    expect(screen.getByText('sys.jinja', { selector: '[data-testid="tree-files"] *' })).toBeInTheDocument()
+    expect(screen.getByText(/^sys\.jinja,/, { selector: '[data-testid="tree-files"] *' })).toBeInTheDocument()
   })
 
   it('hides every add button in a read-only session', () => {
@@ -107,5 +114,18 @@ describe('PromptTree', () => {
   it('has no render row without a handler', () => {
     setup({ onOpenRender: undefined })
     expect(screen.queryByRole('button', { name: 'Render' })).not.toBeInTheDocument()
+  })
+
+  it("lists a multi-step variant's messages per step and opens them", async () => {
+    const props = setup({ selectedVariant: 'Pipeline', activeTab: 'step:1:aspects' })
+    const aspects = screen.getByRole('group', { name: 'Step: aspects' })
+    expect(within(aspects).getByRole('button', { name: /aspects_user\.jinja/ })).toHaveAttribute('aria-current', 'true')
+    await userEvent.click(within(screen.getByRole('group', { name: 'Step: prefilter' })).getByRole('button', { name: /Screen it/ }))
+    expect(props.onPickStep).toHaveBeenCalledWith('prefilter', 0, false)
+    await userEvent.dblClick(within(aspects).getByRole('button', { name: /aspects_system\.jinja/ }))
+    expect(props.onPickStep).toHaveBeenLastCalledWith('aspects', 0, true)
+    // A variant has messages or steps, never both.
+    expect(screen.queryByRole('button', { name: '+ message' })).not.toBeInTheDocument()
+    expect(screen.getByText(/aspects_system\.jinja/, { selector: '[data-testid="tree-files"] *' })).toBeInTheDocument()
   })
 })

@@ -1748,3 +1748,111 @@ it('renders German labels by default', async () => {
   await ready()
   expect(screen.getByRole('button', { name: 'Speichern' })).toBeInTheDocument()
 })
+
+describe('a multi-step variant', () => {
+  const STEPS_DOC: PromptDocument = {
+    ...DOC,
+    default_variant: 'Pipeline',
+    variants: [
+      ...DOC.variants,
+      {
+        name: 'Pipeline',
+        description: null,
+        model: null,
+        vars: {},
+        messages: [],
+        steps: {
+          aspects: [
+            { role: 'system', source: 'file', file: 'aspects_system.jinja', content: 'Split the requirement.', readable: true },
+            { role: 'user', source: 'inline', file: null, content: 'Requirement: {{ agent.requirement }}', readable: true },
+          ],
+          prefilter: [
+            { role: 'user', source: 'inline', file: null, content: 'Screen {{ agent.test_case_sets }}', readable: true },
+          ],
+        },
+      },
+    ],
+  }
+
+  it('opens the first step message and shows the others from the tree', async () => {
+    docBody = STEPS_DOC
+    renderEditor({ lang: 'en' })
+    await ready()
+    expect(await screen.findByLabelText('system (aspects_system.jinja)')).toHaveValue('Split the requirement.')
+    expect(screen.getByLabelText('system (aspects_system.jinja)')).not.toHaveAttribute('readonly')
+    // The agent expects these messages: none can be moved, removed or re-pointed.
+    expect(screen.queryByRole('button', { name: 'Delete message' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Move down' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Source')).not.toBeInTheDocument()
+
+    const group = within(screen.getByRole('group', { name: 'Step: aspects' }))
+    await userEvent.click(group.getByRole('button', { name: /Requirement:/ }))
+    expect(screen.getByLabelText('user')).toHaveValue('Requirement: {{ agent.requirement }}')
+    expect(screen.getByText('prompt.yaml › Pipeline › steps › aspects[1]')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /aspects · Requirement:/ })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('saves an edited step message with the steps', async () => {
+    docBody = STEPS_DOC
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.type(await screen.findByLabelText('system (aspects_system.jinja)'), '!')
+    expect(screen.getByRole('button', { name: /Close .*\(unsaved changes\)/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(await within(dialog).findByRole('button', { name: /^confirm$/i }))
+    await waitFor(() => expect(putCalls()).toHaveLength(1))
+    const body = JSON.parse(String((putCalls()[0][1] as RequestInit).body)) as PromptDocument
+    expect(body.variants.find((v) => v.name === 'Pipeline')?.steps?.aspects[0].content).toBe('Split the requirement.!')
+  })
+
+  it('a non-admin session sees the step messages read-only', async () => {
+    docBody = STEPS_DOC
+    renderEditor({ lang: 'en', isAdmin: false })
+    await ready()
+    expect(await screen.findByLabelText('system (aspects_system.jinja)')).toHaveAttribute('readonly')
+  })
+
+  it('checks a step message live and blocks the save on a syntax error', async () => {
+    docBody = STEPS_DOC
+    lintResponder = (content) =>
+      content.includes('{% if %}')
+        ? { ok: false, errors: [{ line: 1, column: 1, message: 'Expected an expression' }] }
+        : { ok: true, errors: [] }
+    renderEditor({ lang: 'en' })
+    await ready()
+    const editor = await screen.findByLabelText('system (aspects_system.jinja)')
+    await userEvent.clear(editor)
+    await userEvent.type(editor, '{{% if %}')
+    expect(await screen.findByTestId('save-blocked-jinja')).toHaveTextContent('aspects 1 (system, aspects_system.jinja)')
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+  })
+
+  /** The messages the last render request posted. */
+  const renderedContents = () =>
+    (JSON.parse(String((renderCalls().at(-1)![1] as RequestInit).body)) as { messages: { content: string }[] }).messages.map((m) => m.content)
+
+  it('renders one step at a time and switches between them', async () => {
+    docBody = STEPS_DOC
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openRender()
+    await waitFor(() => expect(renderCalls()).toHaveLength(1))
+    expect(renderedContents()).toEqual(['Split the requirement.', 'Requirement: {{ agent.requirement }}'])
+    expect(dropdownValue('Step')).toBe('aspects')
+
+    await chooseOption(userEvent.setup(), 'Step', 'prefilter')
+    await waitFor(() => expect(renderedContents()).toEqual(['Screen {{ agent.test_case_sets }}']))
+  })
+
+  it("renders the open step message's step", async () => {
+    docBody = STEPS_DOC
+    renderEditor({ lang: 'en' })
+    await ready()
+    await userEvent.click(within(screen.getByRole('group', { name: 'Step: prefilter' })).getByRole('button', { name: /Screen/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Open render' }))
+    await waitFor(() => expect(renderCalls()).toHaveLength(1))
+    expect(renderedContents()).toEqual(['Screen {{ agent.test_case_sets }}'])
+  })
+})
+

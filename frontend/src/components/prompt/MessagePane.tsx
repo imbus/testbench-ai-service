@@ -42,6 +42,7 @@ export function MessagePane({
   index,
   count,
   readOnly,
+  fixed = false,
   diagnostics,
   insertable,
   completion,
@@ -60,6 +61,9 @@ export function MessagePane({
   index: number
   count: number
   readOnly: boolean
+  /** A step message: its text and role are editable, but its place and where
+   * it is stored are not -- no move, delete, source or file controls. */
+  fixed?: boolean
   diagnostics?: LintError[]
   insertable: string[]
   completion?: CompletionContext
@@ -97,15 +101,15 @@ export function MessagePane({
             {path}
           </span>
           <div style={{ flex: 1 }} />
-          {!readOnly && index > 0 && (
+          {!readOnly && !fixed && index > 0 && (
             <Button type="button" text label={t('moveUp')} style={{ fontSize: 12 }} onClick={() => onMove(index - 1)} />
           )}
-          {!readOnly && index < count - 1 && (
+          {!readOnly && !fixed && index < count - 1 && (
             <Button type="button" text label={t('moveDown')} style={{ fontSize: 12 }} onClick={() => onMove(index + 1)} />
           )}
           {/* Hidden on a variant's only message: the reducer refuses to remove
               it (PromptVariant requires one), so the button would do nothing. */}
-          {!readOnly && count > 1 && (
+          {!readOnly && !fixed && count > 1 && (
             <Button type="button" text severity="danger" label={t('deleteMessage')} style={{ fontSize: 12, color: '#a33a2b' }} onClick={onRemove} />
           )}
         </div>
@@ -133,7 +137,7 @@ export function MessagePane({
               style={small}
             />
           </div>
-          {!readOnly && (
+          {!readOnly && !fixed && (
             <div style={pair}>
               <label htmlFor={sourceId} style={{ fontSize: 11 }}>
                 {t('messageSourceLabel')}
@@ -162,7 +166,7 @@ export function MessagePane({
               />
             </div>
           )}
-          {message.source === 'file' && !readOnly && (
+          {message.source === 'file' && !readOnly && !fixed && (
             <div style={pair}>
               <label htmlFor={fileId} style={{ fontSize: 11 }}>
                 {t('messageFileLabel')}
@@ -175,7 +179,7 @@ export function MessagePane({
               />
             </div>
           )}
-          {message.source === 'file' && readOnly && message.file && (
+          {message.source === 'file' && (readOnly || fixed) && message.file && (
             <span className="text-muted" style={{ fontSize: 11, fontFamily: codeFont }}>
               {message.file}
             </span>

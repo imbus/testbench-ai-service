@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from 'primereact/button'
+import { Dropdown } from 'primereact/dropdown'
 import { InputTextarea } from 'primereact/inputtextarea'
 import { Message } from 'primereact/message'
 import { DefaultValueControl } from './VarDeclTable'
@@ -87,6 +88,9 @@ export function RenderPreview({
   skeleton,
   isAdmin,
   active,
+  steps = [],
+  step,
+  onStep,
 }: {
   messages: PromptMessageDoc[]
   vars: Record<string, unknown>
@@ -96,6 +100,11 @@ export function RenderPreview({
   isAdmin: boolean
   /** Whether the Render tab is the open one; renders live only then. */
   active: boolean
+  /** A multi-step variant's step names. `messages` is then the one `step`
+   * renders, and the inputs column offers the others. */
+  steps?: string[]
+  step?: string
+  onStep?: (step: string) => void
 }) {
   const { t } = useTranslation()
   const render = useRenderPrompt()
@@ -232,6 +241,21 @@ export function RenderPreview({
         data-testid="render-inputs"
         style={{ ...column, display: 'flex', flexDirection: 'column', gap: 12, fontSize: 12 }}
       >
+        {steps.length > 0 && (
+          <div className="field" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label htmlFor="render-step" style={{ fontSize: 12 }}>
+              {t('variantStep')}
+            </label>
+            {/* A step name is a wire token from prompt.yaml, so untranslated. */}
+            <Dropdown
+              inputId="render-step"
+              value={step}
+              options={steps.map((name) => ({ label: name, value: name }))}
+              onChange={(event) => onStep?.(event.value as string)}
+              style={{ minHeight: 26, fontSize: 12, fontFamily: 'var(--font-code)' }}
+            />
+          </div>
+        )}
         <fieldset
           data-testid="render-vars"
           style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}

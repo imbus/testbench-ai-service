@@ -10,7 +10,7 @@ import type { PromptMessageDoc } from '../api/types'
  * reorder or delete never points a tab at a different message. `render` is
  * the variant's render preview -- one per variant, like its settings.
  */
-export type TabId = 'meta' | 'variant' | 'render' | `msg:${string}`
+export type TabId = 'meta' | 'variant' | 'render' | `msg:${string}` | `step:${string}`
 
 export type VariantTabs = {
   /** In opening order -- a reorder of the messages does not reorder tabs. */
@@ -20,10 +20,33 @@ export type VariantTabs = {
   preview: TabId | null
 }
 
-export type TabsVariant = { name: string; messages: PromptMessageDoc[] }
+export type TabsVariant = { name: string; messages: PromptMessageDoc[]; steps?: Record<string, PromptMessageDoc[]> }
 
 export function messageTabOf(message: PromptMessageDoc, index: number): `msg:${string}` {
   return `msg:${message.uid ?? `#${index}`}`
+}
+
+/**
+ * The tab of message `index` of a multi-step variant's step `step`.
+ *
+ * Steps are read-only in the console, so they never move or get deleted and
+ * their position is a stable identity. The index comes first so a step name
+ * holding a colon still parses (`parseStepTab`).
+ */
+export function stepTabOf(step: string, index: number): `step:${string}` {
+  return `step:${index}:${step}`
+}
+
+export function parseStepTab(tab: TabId | null): { step: string; index: number } | null {
+  if (!tab?.startsWith('step:')) return null
+  const rest = tab.slice(5)
+  const colon = rest.indexOf(':')
+  return { index: Number(rest.slice(0, colon)), step: rest.slice(colon + 1) }
+}
+
+/** Every step message's tab, in the order the tree lists them. */
+export function stepTabsOf(variant: TabsVariant): `step:${string}`[] {
+  return Object.entries(variant.steps ?? {}).flatMap(([step, messages]) => messages.map((_, index) => stepTabOf(step, index)))
 }
 
 export function initialTabs(first: TabId): VariantTabs {
@@ -76,12 +99,12 @@ export function visibleTabs(tabs: VariantTabs, valid: TabId[]): VariantTabs {
 }
 
 function validTabs(variant: TabsVariant): TabId[] {
-  return ['meta', 'variant', 'render', ...variant.messages.map(messageTabOf)]
+  return ['meta', 'variant', 'render', ...variant.messages.map(messageTabOf), ...stepTabsOf(variant)]
 }
 
 function resolve(state: Record<string, VariantTabs>, variant: TabsVariant | undefined): VariantTabs {
   if (!variant) return initialTabs('meta')
-  const first: TabId = variant.messages[0] ? messageTabOf(variant.messages[0], 0) : 'variant'
+  const first: TabId = variant.messages[0] ? messageTabOf(variant.messages[0], 0) : (stepTabsOf(variant)[0] ?? 'variant')
   return visibleTabs(state[variant.name] ?? initialTabs(first), validTabs(variant))
 }
 

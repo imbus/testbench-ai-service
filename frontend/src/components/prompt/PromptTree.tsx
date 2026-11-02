@@ -2,7 +2,7 @@ import { Button } from 'primereact/button'
 import { Tag } from 'primereact/tag'
 import type { PromptVariantDoc } from '../../api/types'
 import { useTranslation } from 'react-i18next'
-import { messageTabOf, type TabId } from '../../state/editorTabs'
+import { messageTabOf, stepTabOf, type TabId } from '../../state/editorTabs'
 import { messageLabel } from './selection'
 
 const codeFont = 'var(--font-code)'
@@ -19,7 +19,7 @@ const rowButton = { border: 0, background: 'transparent', color: 'inherit', font
  * A single click opens a row in the preview tab, a double click keeps it
  * open -- VS Code's explorer. The marked row is the active tab's.
  */
-export function PromptTree({ variants, selectedVariant, activeTab, flagged, invalidVariants = [], readOnly, onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onAddVariant, onAddMessage, onOpenRender }: {
+export function PromptTree({ variants, selectedVariant, activeTab, flagged, invalidVariants = [], readOnly, onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onPickStep, onAddVariant, onAddMessage, onOpenRender }: {
   variants: PromptVariantDoc[]
   selectedVariant: string
   activeTab: TabId | null
@@ -31,6 +31,8 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
   onPickVariant: (name: string) => void
   onOpenVariantSettings: (name: string, pin: boolean) => void
   onPickMessage: (index: number, pin: boolean) => void
+  /** Opens message `index` of step `step` (read-only). */
+  onPickStep: (step: string, index: number, pin: boolean) => void
   onAddVariant: () => void
   onAddMessage: () => void
   /** Opens the variant's render preview tab. No handler, no row: the render
@@ -38,7 +40,7 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
   onOpenRender?: (pin: boolean) => void
 }) {
   const { t } = useTranslation()
-  const files = [...new Set(variants.flatMap((v) => v.messages.filter((m) => m.source === 'file' && m.file).map((m) => m.file as string)))]
+  const files = [...new Set(variants.flatMap((v) => [...v.messages, ...Object.values(v.steps ?? {}).flat()].filter((m) => m.source === 'file' && m.file).map((m) => m.file as string)))]
 
   return (
     // No aria-label: `t('variants')` already names the toolbar's variant select,
@@ -97,7 +99,34 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
                 </button>
               )
             })}
-            {open && !readOnly && (
+            {/* A multi-step variant's message lists, one group per step. The agent's
+                code expects these steps, so there is no add or remove here. */}
+            {open && Object.entries(variant.steps ?? {}).map(([step, messages]) => (
+              <div key={step} role="group" aria-label={`${t('variantStep')}: ${step}`} style={{ display: 'flex', flexDirection: 'column' }}>
+                <div className="text-muted" style={{ padding: '6px 14px 2px 34px', fontSize: 11, fontFamily: codeFont }}>
+                  {t('variantStep')}: {step}
+                </div>
+                {messages.map((message, index) => {
+                  const tab = stepTabOf(step, index)
+                  const current = activeTab === tab
+                  return (
+                    <button
+                      key={index}
+                      type="button"
+                      aria-current={current || undefined}
+                      onClick={() => onPickStep(step, index, false)}
+                      onDoubleClick={() => onPickStep(step, index, true)}
+                      style={{ ...rowButton, fontSize: 12, padding: '5px 14px 5px 44px', display: 'flex', gap: 6, alignItems: 'center', background: current ? 'var(--color-surface)' : 'transparent' }}
+                    >
+                      <Tag severity="secondary" value={message.role} style={{ padding: '0 5px', fontSize: 10 }} />
+                      <span style={{ fontFamily: codeFont, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{messageLabel(message, t('emptyMessage'))}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
+            {/* A variant uses either messages or steps, never both. */}
+            {open && !readOnly && Object.keys(variant.steps ?? {}).length === 0 && (
               <Button type="button" text className="text-muted" label={t('addMessageShort')} onClick={onAddMessage} style={{ fontSize: 12, padding: '4px 14px 6px 34px', justifyContent: 'flex-start' }} />
             )}
             {/* Not gated on readOnly: rendering is not an edit. */}

@@ -294,6 +294,16 @@ Selecting a prompt opens an editor for:
 - each **variant**'s own model override, its variable declarations, and its
   Jinja messages, one per role.
 
+A variant of a multi-step agent (Link Finder, Coverage Checker) has `steps`
+instead of messages. The tree lists each step's messages under the variant,
+and they open in the editor like any message. Their text and role are
+editable, with the same live syntax check and the same save as a message.
+The steps themselves are not: the agent's code expects exactly these steps and
+messages, so a step message cannot be added, removed, moved or pointed at
+another template file. **Render** renders one step at a time: pick it in
+the **Step** field beside the output. Opened from a step message, Render
+starts on that message's step. The test run below does not cover steps yet.
+
 A message body is edited in a Jinja-aware code editor. The **Lint** button
 checks every message of the selected variant at once, on demand — it does not
 check continuously as you type — and reports the line of the first error in
