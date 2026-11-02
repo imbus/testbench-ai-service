@@ -73,7 +73,7 @@ test('a failed sign-in leaves the form usable', async () => {
     await result.current.signIn('a.mueller', 'wrong').catch(() => {})
   })
 
-  expect(result.current.error).toBe('Invalid credentials')
+  expect(result.current.error).toMatchObject({ status: 401, message: 'Invalid credentials' })
   expect(result.current.busy).toBe(false)
 })
 
@@ -92,7 +92,7 @@ test('a retried sign-in clears the previous error', async () => {
   await act(async () => {
     await result.current.signIn('a.mueller', 'wrong').catch(() => {})
   })
-  expect(result.current.error).toBe('Invalid credentials')
+  expect(result.current.error).toMatchObject({ status: 401, message: 'Invalid credentials' })
 
   await act(async () => {
     await result.current.signIn('a.mueller', 'secret')

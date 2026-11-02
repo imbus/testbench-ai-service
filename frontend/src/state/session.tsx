@@ -6,7 +6,7 @@ import { claimStoredDraft, clearStoredDraft } from './draft'
 interface SessionState {
   session: SessionInfo | null
   loading: boolean
-  error: string | null
+  error: ApiError | null
   busy: boolean
   signIn: (username: string, password: string) => Promise<void>
   signOut: () => Promise<void>
@@ -18,7 +18,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<SessionInfo | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ApiError | null>(null)
 
   // A page reload still has the cookie; ask who we are rather than forcing a login.
   useEffect(() => {
@@ -46,7 +46,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       claimStoredDraft(signedIn.username)
       setSession(signedIn)
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : 'Sign-in failed')
+      setError(cause instanceof ApiError ? cause : new ApiError('Sign-in failed', 0))
       throw cause
     } finally {
       setBusy(false)

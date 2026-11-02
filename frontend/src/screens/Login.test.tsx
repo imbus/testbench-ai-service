@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Login } from './Login'
 import { i18n } from '../i18n'
+import { ApiError } from '../api/client'
 
 const props = {
   theme: 'light' as const,
@@ -35,9 +36,19 @@ test('does not submit an empty form', async () => {
   expect(props.onSignIn).not.toHaveBeenCalled()
 })
 
-test('shows a sign-in error', () => {
-  render(<Login {...props} error="Invalid credentials" />)
-  expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials')
+test('shows wrong credentials without technical details', () => {
+  render(<Login {...props} error={new ApiError('Invalid credentials', 401)} />)
+  expect(screen.getByRole('alert')).toHaveTextContent('Benutzername oder Passwort ist falsch.')
+  expect(screen.queryByText('Details')).toBeNull()
+})
+
+test('explains an unreachable TestBench and keeps the cause under details', () => {
+  const cause = 'Could not connect to TestBench server: HTTPSConnectionPool(...)'
+  render(<Login {...props} error={new ApiError(cause, 502)} />)
+  const alert = screen.getByRole('alert')
+  expect(alert).toHaveTextContent('Der TestBench-Server ist nicht erreichbar.')
+  expect(screen.getByText('Details')).toBeInTheDocument()
+  expect(screen.getByText(cause)).not.toBeVisible()
 })
 
 test('has no role selector', () => {
