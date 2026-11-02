@@ -22,6 +22,23 @@ This guide walks you through connecting the TestBench AI Service to the OpenAI A
 2. Navigate to **API keys** in the left sidebar.
 3. Click **Create new secret key**, give it a name, and copy the key immediately. It is only shown once.
 
+### Restrict the key's permissions
+
+The service only sends requests to two OpenAI endpoints, so a key with **Restricted** permissions is enough. Set the permissions below and leave all others at **None**:
+
+| Permission | Value | Endpoint | Needed by |
+|---|---|---|---|
+| **Responses API** | Write | `POST /v1/responses` | Test Case Set Reviewer, Test Case Set Describer, Defect Explainer, Test Idea Generator, Link Finder, Coverage Checker, and prompt test runs in the web console |
+| **Model capabilities** | Request | `POST /v1/embeddings` | Test Planner, only with embedding provider `openai` |
+
+The service does not list models, upload files, use vector stores, assistants or batches, and does not store responses at OpenAI (`store=false`). The Test Planner with embedding provider `local` or `azure_openai` makes no calls with this key.
+
+:::tip
+If a request fails with `401` and `Missing scopes: model.request`, set **Model capabilities** to **Request** as well. OpenAI requires this scope for some keys even for the Responses API. Permission changes can take a few minutes to apply.
+:::
+
+Custom agents may call other endpoints; check their code before restricting the key they use.
+
 ## 2. Set the API key
 
 The service reads the OpenAI API key from the environment variable `OPENAI_API_KEY`.

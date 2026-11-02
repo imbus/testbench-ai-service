@@ -223,6 +223,10 @@ Allowed project roles and required API token permissions differ per agent. See e
 - [Defect Explainer](defect-explainer.md#authorization)
 - [Test Idea Generator](generate-test-ideas.md#authorization)
 - [Test Planner](test-planner.md#authorization)
+- [Link Finder](link-finder.md#authorization)
+- [Coverage Checker](coverage-checker.md#authorization)
+
+The permissions an OpenAI API key needs per agent are listed in [OpenAI Setup](../llm-providers/openai-setup.md#restrict-the-keys-permissions).
 
 For custom agents, implement your own permission and role checks inside `precheck()`. See [Custom Agent: 1. Implement the agent class](custom-agent.md#1-implement-the-agent-class) for details.
 
