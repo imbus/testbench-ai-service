@@ -1,7 +1,6 @@
 import asyncio
 
 from pydantic import ValidationError
-from testbench2robotframework.json_reader import TestCaseSet
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
@@ -25,6 +24,7 @@ from testbench_ai_service.agents.test_planner.model import (
 from testbench_ai_service.agents.test_planner.params import UnknownVariantError, parse_run_params
 from testbench_ai_service.agents.test_planner.planner import build_plan
 from testbench_ai_service.agents.test_planner.writeback import plan_test_cases
+from testbench_ai_service.jobs.handle import current_job
 from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData, ExecutionContext, PrecheckResult
@@ -65,24 +65,35 @@ class TestPlannerAgent(Agent):
     )
     ALLOWED_ROLES = frozenset({ProjectRole.TestManager})
 
-    def __init__(self, args: TestPlannerArgs | None = None):
-        super().__init__(args)
-        # load_agent builds a new instance per request, so the data collected in
-        # precheck() can be handed to run() on the instance instead of exporting
-        # the report twice.
-        self._params: PlannerRunParams | None = None
-        self._catalog: dict[str, TestCaseSet] = {}
-        self._test_cases: list[PlannerTestCase] = []
-        self._warnings: list[str] = []
-
     async def precheck(self, context: ExecutionContext, conn: TBConnection) -> PrecheckResult:
+        """Refuse anything but a cycle of a JSON-based TOV with valid parameters.
+
+        The test cases are collected by the run: that needs the cycle's JSON report,
+        which is too slow for the request.
+
+        Returns:
+            On success the cycle's key as the only item.
+        """
         if failure := await _check_scope(context, conn):
             return failure
         params = _parse_params(context)
         if isinstance(params, PrecheckResult):
             return params
+        return PrecheckResult(passed=True, items=[context.cycle_key])
 
+    async def run(
+        self,
+        context: ExecutionContext,
+        conn: TBConnection,
+        llm_client: LLMClient,
+        item_ids: list[str],
+    ) -> None:
+        """Collect the cycle's test cases, plan the selection and set it to planned.
+
+        ``item_ids`` holds only the cycle; the test cases are collected here.
+        """
         language = context.language
+        params = parse_run_params(context.prompt_config)
         catalog = await asyncio.to_thread(load_catalog, conn, context)
         test_cases = test_cases_from_catalog(catalog)
         candidates = [case for case in test_cases if not case.executed]
@@ -95,32 +106,15 @@ class TestPlannerAgent(Agent):
             context.cycle_key,
         )
         if len(candidates) < MIN_TEST_CASES:
-            return _failed(
+            await current_job().fail(
                 get_translation(
-                    "test_planner.precheck.too_few_test_cases", language, count=len(candidates)
+                    "test_planner.run.too_few_test_cases", language, count=len(candidates)
                 )
             )
-
-        self._params = params
-        self._catalog = catalog
-        self._test_cases = test_cases
-        self._warnings = _data_warnings(params, candidates, language)
-        return PrecheckResult(
-            passed=True,
-            warnings=self._warnings,
-            items=[case.unique_id for case in candidates],
-        )
-
-    async def run(
-        self,
-        context: ExecutionContext,
-        conn: TBConnection,
-        llm_client: LLMClient,
-        item_ids: list[str],
-    ) -> None:
-        params = self._params
-        if params is None:
-            raise RuntimeError("run() needs the data of a passed precheck()")
+            return
+        data_warnings = _data_warnings(params, candidates, language)
+        for warning in data_warnings:
+            await current_job().warn(warning)
 
         embedding_args = self.args.embedding
         client = create_embedding_client(embedding_args, context.llm_config, context.project_name)
@@ -129,7 +123,7 @@ class TestPlannerAgent(Agent):
                 embedding_args.cache_dir, embedding_args.provider.value, embedding_args.model
             )
             embeddings = await embed_with_cache(
-                client, cache, [case.text for case in self._test_cases], embedding_args.batch_size
+                client, cache, [case.text for case in test_cases], embedding_args.batch_size
             )
         finally:
             await client.close()
@@ -137,15 +131,15 @@ class TestPlannerAgent(Agent):
         # CPU-bound for large suites; a worker thread keeps the service responsive.
         result, notes = await asyncio.to_thread(
             build_plan,
-            self._test_cases,
+            test_cases,
             normalize(embeddings),
             params,
             self.args.mandatory_tag,
             self.args.cluster_threshold,
         )
         result.warnings = [
-            *self._warnings,
-            *(_note_text(note, params, context.language) for note in notes),
+            *data_warnings,
+            *(_note_text(note, params, language) for note in notes),
         ]
         logger.info(
             "Test planner selection | project='%s' | cycle='%s' | mode=%s | selected=%d/%d\n%s",
@@ -158,7 +152,7 @@ class TestPlannerAgent(Agent):
         )
 
         planned = await plan_test_cases(
-            conn, context, self._catalog, [entry.unique_id for entry in result.selection]
+            conn, context, catalog, [entry.unique_id for entry in result.selection]
         )
         logger.info(
             "Test planner set %d of %d selected test cases to planned | cycle='%s'",
@@ -211,7 +205,7 @@ def _data_warnings(
         if missing:
             return [
                 get_translation(
-                    "test_planner.precheck.missing_requirement_links",
+                    "test_planner.run.missing_requirement_links",
                     language,
                     missing=missing,
                     total=total,
@@ -222,7 +216,7 @@ def _data_warnings(
         if missing:
             return [
                 get_translation(
-                    "test_planner.precheck.missing_durations",
+                    "test_planner.run.missing_durations",
                     language,
                     missing=missing,
                     total=total,

@@ -182,6 +182,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   refused with `409`: the job succeeds with a report whose `no_linked_tests` is `true`, and the
   console's Jobs screen says so. Nothing is written to TestBench in that case.
 
+- The test planner's precheck no longer loads the JSON report of the cycle, so the trigger
+  answers quickly. It only checks the TestBench version, the TOV format and the prompt
+  parameters; the run collects the test cases. Fewer than two test cases that are not executed
+  yet are no longer refused with `409`: the job fails with that reason. The warnings about
+  missing requirement links or planned durations are job warnings now instead of being part of
+  the `202` response.
+
 - The built-in model lists follow the current OpenAI, Azure OpenAI and Anthropic offerings.
   New: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`,
   `gpt-6.1-sol`, `gpt-6.1-terra` as reasoning models and `claude-opus-5-5`, `claude-sonnet-5-5`,

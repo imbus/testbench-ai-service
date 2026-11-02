@@ -101,32 +101,14 @@ class TestClassSetup:
 
 @pytest.mark.usefixtures("json_tov")
 class TestPrecheck:
-    async def test_passes_with_candidates_as_items(self):
-        agent = TestPlannerAgent()
-        cases = [_case(0), _case(1), _case(2, status=ActivityStatus.Performed)]
-
-        with _collect(cases):
-            result = await agent.precheck(_context(), _conn())
+    async def test_passes_with_the_cycle_as_item_without_loading_the_report(self):
+        with patch(f"{_MODULE}.load_catalog") as load_catalog:
+            result = await TestPlannerAgent().precheck(_context(), _conn())
 
         assert result.passed
-        assert result.items == ["TC-0", "TC-1"]
+        assert result.items == ["C1"]
         assert result.warnings == []
-
-    async def test_logs_how_many_test_cases_were_looked_at(self, caplog):
-        cases = [_case(0), _case(1), _case(2, status=ActivityStatus.Performed)]
-        catalog = {"S": SimpleNamespace(test_cases=dict.fromkeys(range(5)))}
-
-        with (
-            patch(f"{_MODULE}.load_catalog", return_value=catalog),
-            patch(f"{_MODULE}.test_cases_from_catalog", return_value=cases),
-            caplog.at_level(logging.INFO, logger="testbench_ai_service"),
-        ):
-            await TestPlannerAgent().precheck(_context(), _conn())
-
-        assert (
-            "Test planner looked at 5 test cases, 3 of them in the cycle, "
-            "2 of them not executed yet | cycle='C1'" in caplog.messages
-        )
+        load_catalog.assert_not_called()
 
     async def test_missing_tov_fails(self):
         result = await TestPlannerAgent().precheck(_context(tov_key=None), _conn())
@@ -186,37 +168,84 @@ class TestPrecheck:
         assert not result.passed
         assert result.warnings[0].startswith("Invalid parameters")
 
-    async def test_all_executed_fails(self):
+
+def _agent(tmp_path):
+    return TestPlannerAgent(TestPlannerArgs(embedding={"cache_dir": str(tmp_path)}))
+
+
+def _client(n):
+    return MagicMock(embed=AsyncMock(return_value=np.eye(n, dtype=np.float32)), close=AsyncMock())
+
+
+class _Job:
+    def __init__(self):
+        self.warn = AsyncMock()
+        self.fail = AsyncMock()
+
+
+@pytest.fixture
+def job():
+    handle = _Job()
+    with patch(f"{_MODULE}.current_job", return_value=handle):
+        yield handle
+
+
+class TestRun:
+    async def test_logs_how_many_test_cases_were_looked_at(self, caplog, tmp_path):
+        cases = [_case(0), _case(1), _case(2, status=ActivityStatus.Performed)]
+        catalog = {"S": SimpleNamespace(test_cases=dict.fromkeys(range(5)))}
+
+        with (
+            patch(f"{_MODULE}.load_catalog", return_value=catalog),
+            patch(f"{_MODULE}.test_cases_from_catalog", return_value=cases),
+            patch(f"{_MODULE}.create_embedding_client", return_value=_client(3)),
+            caplog.at_level(logging.INFO, logger="testbench_ai_service"),
+        ):
+            await _agent(tmp_path).run(_context(), _conn(), NoLLMClient(), ["C1"])
+
+        assert (
+            "Test planner looked at 5 test cases, 3 of them in the cycle, "
+            "2 of them not executed yet | cycle='C1'" in caplog.messages
+        )
+
+    async def test_all_executed_fails_the_job(self, job, plan_test_cases):
         cases = [_case(0, status=ActivityStatus.Performed), _case(1, status=ActivityStatus.Running)]
 
-        with _collect(cases):
-            result = await TestPlannerAgent().precheck(_context(), _conn())
+        with _collect(cases), patch(f"{_MODULE}.create_embedding_client") as create_client:
+            await TestPlannerAgent().run(_context(), _conn(), NoLLMClient(), ["C1"])
 
-        assert not result.passed
-        assert "only 0 test cases" in result.warnings[0]
+        [message] = job.fail.await_args.args
+        assert "only 0 test cases" in message
+        create_client.assert_not_called()
+        plan_test_cases.assert_not_awaited()
 
-    async def test_coverage_warns_about_missing_links(self):
-        with _collect([_case(0, reqs=("R1",)), _case(1)]):
-            result = await TestPlannerAgent().precheck(
-                _context(variant="Requirement coverage"), _conn()
+    async def test_coverage_warns_about_missing_links(self, job, tmp_path):
+        with (
+            _collect([_case(0, reqs=("R1",)), _case(1)]),
+            patch(f"{_MODULE}.create_embedding_client", return_value=_client(2)),
+        ):
+            await _agent(tmp_path).run(
+                _context(variant="Requirement coverage"), _conn(), NoLLMClient(), ["C1"]
             )
 
-        assert result.passed
-        assert result.warnings == [
+        job.warn.assert_awaited_once_with(
             "1 of 2 test cases have no requirement links; the coverage is of limited meaning."
-        ]
+        )
+        job.fail.assert_not_awaited()
 
-    async def test_budget_warns_about_missing_durations(self):
-        with _collect([_case(0, minutes=0), _case(1)]):
-            result = await TestPlannerAgent().precheck(_context(variant="Time budget"), _conn())
+    async def test_budget_warns_about_missing_durations(self, job, tmp_path):
+        with (
+            _collect([_case(0, minutes=0), _case(1)]),
+            patch(f"{_MODULE}.create_embedding_client", return_value=_client(2)),
+        ):
+            await _agent(tmp_path).run(
+                _context(variant="Time budget"), _conn(), NoLLMClient(), ["C1"]
+            )
 
-        assert result.warnings == [
+        job.warn.assert_awaited_once_with(
             "1 of 2 test cases have no planned duration; they count as 0 minutes."
-        ]
+        )
 
-
-@pytest.mark.usefixtures("json_tov")
-class TestRun:
     async def test_logs_the_plan_as_json(self, caplog, tmp_path):
         agent = TestPlannerAgent(TestPlannerArgs(embedding={"cache_dir": str(tmp_path)}))
         cases = [_case(0), _case(1), _case(2)]
@@ -225,9 +254,8 @@ class TestRun:
         client.close = AsyncMock()
         context = _context(variant="Count", variables={"count": "2"})
 
-        with _collect(cases):
-            await agent.precheck(context, _conn())
         with (
+            _collect(cases),
             patch(f"{_MODULE}.create_embedding_client", return_value=client),
             caplog.at_level(logging.INFO, logger="testbench_ai_service"),
         ):
@@ -249,9 +277,10 @@ class TestRun:
         context = _context(variant="Count", variables={"count": "2"})
         conn = _conn()
 
-        with _collect([_case(0), _case(1), _case(2)]):
-            await agent.precheck(context, conn)
-        with patch(f"{_MODULE}.create_embedding_client", return_value=client):
+        with (
+            _collect([_case(0), _case(1), _case(2)]),
+            patch(f"{_MODULE}.create_embedding_client", return_value=client),
+        ):
             await agent.run(context, conn, NoLLMClient(), ["TC-0", "TC-1", "TC-2"])
 
         plan_test_cases.assert_awaited_once_with(conn, context, CATALOG, ["TC-0", "TC-1"])
@@ -263,9 +292,8 @@ class TestRun:
         )
         context = _context(variant="Requirement coverage")
 
-        with _collect([_case(0), _case(1)]):
-            await agent.precheck(context, _conn())
         with (
+            _collect([_case(0), _case(1)]),
             patch(f"{_MODULE}.create_embedding_client", return_value=client),
             caplog.at_level(logging.INFO, logger="testbench_ai_service"),
         ):
@@ -275,17 +303,12 @@ class TestRun:
         warnings = json.loads(record.getMessage().split("\n", 1)[1])["warnings"]
         assert warnings[-1].startswith("No test case has requirement links")
 
-    async def test_run_without_precheck_raises(self):
-        with pytest.raises(RuntimeError, match="precheck"):
-            await TestPlannerAgent().run(_context(), _conn(), NoLLMClient(), [])
-
     async def test_embedding_client_is_closed_on_failure(self, tmp_path):
         agent = TestPlannerAgent(TestPlannerArgs(embedding={"cache_dir": str(tmp_path)}))
         client = MagicMock(embed=AsyncMock(side_effect=RuntimeError("api down")), close=AsyncMock())
 
-        with _collect([_case(0), _case(1)]):
-            await agent.precheck(_context(), _conn())
         with (
+            _collect([_case(0), _case(1)]),
             patch(f"{_MODULE}.create_embedding_client", return_value=client),
             pytest.raises(RuntimeError, match="api down"),
         ):
@@ -294,7 +317,6 @@ class TestRun:
         client.close.assert_awaited_once()
 
 
-@pytest.mark.usefixtures("json_tov")
 async def test_run_keeps_the_event_loop_responsive(tmp_path):
 
     real_build_plan = planner.build_plan
@@ -313,9 +335,8 @@ async def test_run_keeps_the_event_loop_responsive(tmp_path):
             await asyncio.sleep(0.02)
             ticks += 1
 
-    with _collect([_case(0), _case(1)]):
-        await agent.precheck(_context(), _conn())
     with (
+        _collect([_case(0), _case(1)]),
         patch(f"{_MODULE}.create_embedding_client", return_value=client),
         patch(f"{_MODULE}.build_plan", side_effect=slow_build_plan),
     ):
