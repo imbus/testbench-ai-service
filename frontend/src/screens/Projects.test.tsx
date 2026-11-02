@@ -192,8 +192,8 @@ describe('a project card', () => {
     renderProjects()
     await ready()
     const card = screen.getByTestId('project-Alpha')
-    expect(within(card).getByLabelText(/reviewer/)).toHaveAttribute('data-state', 'off')
-    expect(within(card).getByLabelText(/explainer/)).toHaveAttribute('data-state', 'inherit')
+    expect(within(card).getByRole('switch', { name: /reviewer/ })).toHaveAttribute('data-state', 'off')
+    expect(within(card).getByRole('switch', { name: /explainer/ })).toHaveAttribute('data-state', 'inherit')
     expect(within(card).getByRole('switch', { name: /reviewer/ })).toHaveAttribute(
       'aria-checked',
       'false',
@@ -205,7 +205,7 @@ describe('a project card', () => {
     await ready()
     const card = screen.getByTestId('project-Fresh')
     // explainer is off globally, so switching it here turns it on.
-    await userEvent.click(within(card).getByLabelText(/explainer/))
+    await userEvent.click(within(card).getByRole('switch', { name: /explainer/ }))
     expect(edits()).toEqual({ 'projects.Fresh.agents.explainer.enabled': true })
   })
 
@@ -343,7 +343,7 @@ describe('when TestBench could not be asked', () => {
     await userEvent.type(screen.getByLabelText('Project name'), 'Release 2.0')
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
     const card = screen.getByTestId('project-Release 2.0')
-    await userEvent.click(within(card).getByLabelText(/reviewer/))
+    await userEvent.click(within(card).getByRole('switch', { name: /reviewer/ }))
 
     expect(edits()).toEqual({ 'projects."Release 2.0".agents.reviewer.enabled': false })
   })
@@ -373,7 +373,7 @@ describe('a non-admin session', () => {
     renderProjects({ isAdmin: false })
     await ready()
     const card = screen.getByTestId('project-Alpha')
-    expect(within(card).getByLabelText(/reviewer/)).toBeDisabled()
+    expect(within(card).getByRole('switch', { name: /reviewer/ })).toBeDisabled()
     expect(
       within(card).queryByRole('button', { name: /remove all overrides/i }),
     ).not.toBeInTheDocument()
