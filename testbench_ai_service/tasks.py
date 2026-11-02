@@ -90,7 +90,7 @@ async def _run_agent(
     try:
         llm_client: LLMClient
         if getattr(agent, "USES_LLM", True):
-            prompt_model = get_prompt_model(context.prompt_config)
+            prompt_model = context.llm_config.model or get_prompt_model(context.prompt_config)
             llm_client = llm_factory.get_client(
                 config=context.llm_config,
                 prompt_model=prompt_model,

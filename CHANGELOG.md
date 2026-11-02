@@ -10,6 +10,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- A model per agent. `[testbench-ai-service.llm_config.agent_models]` maps agent keys to models
+  and takes precedence over `model`; a project's `llm_config.agent_models` overrides it agent by
+  agent. The web console's Agents screen picks the global model in the model column, which now
+  shows the model the agent actually runs on. A project's model is picked in the agent's expanded
+  row and on the agent's detail screen for the selected project. Documented in
+  `docs/configuration.md`.
+
 - Agent jobs. Every agent trigger now returns a `job_id` in its `202` response, and
   `GET /jobs/{job_id}` reports the run's status (`running`, `succeeded`, `failed`), progress,
   warnings, error and report, for the user who triggered it only. Other users' and unknown jobs
@@ -198,6 +205,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `claude-opus-4-1*`. These names now take the fallback request unless `model_routing` maps them.
 
 ### Fixed
+
+- A run whose `llm_config.model` names a model of another provider than the prompt's model now
+  reaches that provider's client. The client was chosen by the prompt's model.
 
 - A project that overrides both `language` and its agent's `prompt.file` now starts. At boot,
   `validate_prompt_paths` checked such a file against the **global** language while

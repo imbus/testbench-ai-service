@@ -253,6 +253,7 @@ For step-by-step instructions on configuring each provider see the [LLM Provider
 | ------------------ | ------- | ----------------------------------------------------------------------------------------- | ---------------- |
 | `provider`       | String  | LLM provider: `"openai"`, `"azure_openai"`, `"anthropic"`, or `"custom"`.          | `"openai"`     |
 | `model`          | String  | Override the default model (if not set, the model from the prompt variant is used).       | —               |
+| `agent_models`   | Table   | The model one agent runs on, keyed by agent key. Takes precedence over `model`. See [Model per agent](#model-per-agent). | —               |
 | `azure_endpoint` | String  | Azure OpenAI endpoint URL (required when `provider = "azure_openai"`).                  | —               |
 | `api_version`    | String  | Azure OpenAI API version (required when `provider = "azure_openai"`).                   | —               |
 | `class_path`     | String  | Full Python class path for a custom LLM client (required when `provider = "custom"`).   | —               |
@@ -288,9 +289,31 @@ api_version = "2025-04-01-preview"
 model = "gpt-4o"  # use your Azure deployment name here
 ```
 
+### Model per agent
+
+`agent_models` picks the model for single agents. Entries are keyed by agent key and take precedence over `model`, so `model` stays the model for every agent without an entry:
+
+```toml
+# config.toml
+[testbench-ai-service.llm_config.agent_models]
+test_case_set_reviewer = "claude-sonnet-4-6"
+
+[testbench-ai-service.projects."Release 2.0".llm_config.agent_models]
+test_case_set_reviewer = "gpt-4.1"
+```
+
+A project's `agent_models` overrides the global table agent by agent; agents the project does not name keep their global entry. The model of an agent is resolved in this order:
+
+1. its `agent_models` entry (request, then project, then global)
+2. `model` (request, then project, then global)
+3. the `model` of the prompt variant
+4. the `default_model` of the prompt
+
+In the web console, the **Agents** screen sets the global entry in the model column and a project's entry in the agent's expanded row, and the agent's detail screen sets the entry of the selected scope. **Inherited** removes the entry.
+
 ### Automatic model routing
 
-The service automatically routes each request to the correct client based on the model name specified in the prompt variant, regardless of the globally configured `provider`. This lets you mix models from different providers across prompt variants without changing the global config:
+The service automatically routes each request to the correct client based on the model the agent runs on (see [Model per agent](#model-per-agent)), regardless of the globally configured `provider`. This lets you mix models from different providers across prompt variants without changing the global config:
 
 | Model name prefix | Routed to |
 | ----------------- | --------- |

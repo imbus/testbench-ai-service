@@ -10,6 +10,7 @@ import { DraftProvider, useDraft } from '../state/draft'
 import type { ConfigResponse, ProjectsResponse, PromptMeta } from '../api/types'
 import { Agents } from './Agents'
 import { i18n } from '../i18n'
+import { chooseOption, dropdownValue } from '../test/prime'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -74,6 +75,17 @@ beforeEach(() => {
     if (url.startsWith('/admin/api/projects')) return ok(projectsBody)
     if (url.includes('/prompts/de/reviewer/')) return ok(meta('Test Case Set Reviewer'))
     if (url.includes('/prompts/de/explainer/')) return ok(meta('Defect Explainer'))
+    if (url.startsWith('/admin/api/models')) {
+      return ok({
+        providers: [
+          {
+            provider: 'anthropic',
+            key_present: true,
+            models: [{ id: 'claude-opus-5', routing: 'adaptive', source: 'builtin' }],
+          },
+        ],
+      })
+    }
     return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -348,5 +360,45 @@ describe('a config payload with nothing in it', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument(),
     )
+  })
+})
+
+// --- the model column ---------------------------------------------------
+
+describe('the model column', () => {
+  it('shows the model the agent inherits', async () => {
+    renderAgents()
+    await waitFor(() =>
+      expect(dropdownValue(screen.getByLabelText('reviewer · Model'))).toBe('Inherited (gpt-5.5)'),
+    )
+  })
+
+  it('writes a pick to the global agent_models table', async () => {
+    renderAgents()
+    const field = await screen.findByLabelText('reviewer · Model')
+    await chooseOption(userEvent.setup(), field, 'claude-opus-5')
+    expect(edits()).toEqual({ 'llm_config.agent_models.reviewer': 'claude-opus-5' })
+    expect(dropdownValue(field)).toBe('claude-opus-5')
+  })
+
+  it('is plain text for a viewer', async () => {
+    renderAgents({ isAdmin: false })
+    await waitFor(() => expect(screen.getAllByText('Inherited (gpt-5.5)')).toHaveLength(2))
+    expect(screen.queryByLabelText('reviewer · Model')).not.toBeInTheDocument()
+  })
+})
+
+describe('the model of an agent per project', () => {
+  it('writes a pick in the expanded row to that project', async () => {
+    renderAgents()
+    await waitFor(() => expect(screen.getByText('reviewer')).toBeInTheDocument())
+    await userEvent.click(
+      within(screen.getByTestId('agent-row-reviewer')).getByRole('button', { name: /overrides/i }),
+    )
+    const row = screen.getByTestId('agent-project-Release 2.0')
+    await chooseOption(userEvent.setup(), within(row).getByLabelText('reviewer · Model'), 'claude-opus-5')
+    expect(edits()).toEqual({
+      'projects."Release 2.0".llm_config.agent_models.reviewer': 'claude-opus-5',
+    })
   })
 })

@@ -115,6 +115,7 @@ export const en = {
   issueCount_other: '{{count}} issues',
   inheritsGlobal: 'inherits global',
   override: 'Override',
+  agentModelHint: 'The model the agent runs on in this scope',
   model: 'Model',
   effective: 'effective',
   perProject: 'Per project',

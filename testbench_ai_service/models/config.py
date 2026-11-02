@@ -61,6 +61,13 @@ class LLMConfig(BaseModel):
             "the client should use for it."
         ),
     )
+    agent_models: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "The model one agent runs on, keyed by agent key. Takes precedence over "
+            "'model'; a project or request table overrides it agent by agent."
+        ),
+    )
 
     model_config = ConfigDict(extra="allow")
 

@@ -200,3 +200,41 @@ export function llmOverridingProjects(config: Record<string, unknown>): string[]
   if (!projects) return []
   return Object.keys(projects).filter((name) => table(table(projects[name])?.llm_config) !== undefined)
 }
+
+/** Address one agent's entry in a scope's `llm_config.agent_models`. */
+export function agentModelPath(scope: Scope, agentKey: string): string {
+  const head = scope.kind === 'global' ? [] : ['projects', scope.project]
+  return joinPath([...head, 'llm_config', 'agent_models', agentKey])
+}
+
+function modelName(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined
+}
+
+/**
+ * The model one agent runs on in *scope*, mirroring the server's
+ * `get_llm_config(agent_key=...)`: an `agent_models` entry at any level beats
+ * `llm_config.model` at any level, and the prompt's own model comes last.
+ *
+ * `read` looks a path up -- through the draft, so a pending pick shows before
+ * it is applied. `own` is what the scope itself states; `inherited` is what
+ * would apply without it.
+ */
+export function effectiveAgentModel(
+  read: (path: string) => unknown,
+  scope: Scope,
+  agentKey: string,
+  promptModel: string | undefined,
+): { own: string | undefined; inherited: string | undefined } {
+  const global: Scope = { kind: 'global' }
+  const candidates =
+    scope.kind === 'global'
+      ? [read(joinPath(['llm_config', 'model']))]
+      : [
+          read(agentModelPath(global, agentKey)),
+          read(projectLlmPath(scope.project, 'model')),
+          read(joinPath(['llm_config', 'model'])),
+        ]
+  const inherited = candidates.map(modelName).find((model) => model !== undefined) ?? promptModel
+  return { own: modelName(read(agentModelPath(scope, agentKey))), inherited }
+}

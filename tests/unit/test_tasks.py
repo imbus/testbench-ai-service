@@ -358,7 +358,7 @@ def _ctx(user_key: str):
         user_key=user_key,
         project_key=f"p-{user_key}",
         project_name="P",
-        llm_config=None,
+        llm_config=SimpleNamespace(model=None),
         prompt_config=None,
     )
 
@@ -451,6 +451,27 @@ class TestRunAgentWithoutLLM:
             )
 
         assert agent.run.call_args.kwargs["llm_client"] is llm_factory.get_client.return_value
+
+    async def test_the_configured_model_picks_the_client(self):
+        # An agent model of another provider than the prompt's default must
+        # reach that provider's client.
+        agent = MagicMock(spec=["run"])
+        agent.run = AsyncMock()
+        llm_factory = MagicMock()
+        context = MagicMock(project_name="P")
+        context.llm_config.model = "claude-sonnet-5"
+
+        with patch("testbench_ai_service.tasks.get_prompt_model", return_value="gpt-5.5"):
+            await run_agent(
+                agent_key="custom",
+                agent=agent,
+                context=context,
+                conn=MagicMock(),
+                llm_factory=llm_factory,
+                item_ids=[],
+            )
+
+        assert llm_factory.get_client.call_args.kwargs["prompt_model"] == "claude-sonnet-5"
 
     async def test_no_llm_client_refuses_queries(self):
         with pytest.raises(RuntimeError, match="does not use an LLM"):

@@ -9,7 +9,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  agentModelPath,
   agentPath,
+  effectiveAgentModel,
   effectiveAgent,
   inheritedVars,
   llmOverridingProjects,
@@ -300,5 +302,55 @@ describe('llmOverridingProjects', () => {
 
   test('no projects table is not an error', () => {
     expect(llmOverridingProjects({})).toEqual([])
+  })
+})
+
+// --- agent models --------------------------------------------------------
+
+describe('effectiveAgentModel', () => {
+  const MODELS = {
+    llm_config: { model: 'gpt-4o', agent_models: { reviewer: 'claude-haiku-5' } },
+    projects: {
+      'Release 2.0': { llm_config: { model: 'o3', agent_models: { describer: 'gpt-4.1' } } },
+      Plain: { llm_config: { model: 'o3' } },
+    },
+  }
+  const read = (path: string) =>
+    splitPath(path).reduce<unknown>(
+      (node, key) => (node as Record<string, unknown> | undefined)?.[key],
+      MODELS,
+    )
+
+  it('addresses agent_models in both scopes', () => {
+    expect(agentModelPath({ kind: 'global' }, 'reviewer')).toBe('llm_config.agent_models.reviewer')
+    expect(splitPath(agentModelPath({ kind: 'project', project: 'Release 2.0' }, 'reviewer'))).toEqual(
+      ['projects', 'Release 2.0', 'llm_config', 'agent_models', 'reviewer'],
+    )
+  })
+
+  it('globally, an own entry and the llm_config model it replaces', () => {
+    expect(effectiveAgentModel(read, { kind: 'global' }, 'reviewer', 'gpt-5')).toEqual({
+      own: 'claude-haiku-5',
+      inherited: 'gpt-4o',
+    })
+  })
+
+  it('in a project, the global agent entry beats the project model', () => {
+    expect(
+      effectiveAgentModel(read, { kind: 'project', project: 'Plain' }, 'reviewer', 'gpt-5'),
+    ).toEqual({ own: undefined, inherited: 'claude-haiku-5' })
+  })
+
+  it('in a project, the project model beats the global one', () => {
+    expect(
+      effectiveAgentModel(read, { kind: 'project', project: 'Release 2.0' }, 'describer', 'gpt-5'),
+    ).toEqual({ own: 'gpt-4.1', inherited: 'o3' })
+  })
+
+  it('falls back to the prompt model', () => {
+    expect(effectiveAgentModel(() => null, { kind: 'global' }, 'reviewer', 'gpt-5')).toEqual({
+      own: undefined,
+      inherited: 'gpt-5',
+    })
   })
 })

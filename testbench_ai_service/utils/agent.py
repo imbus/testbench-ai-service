@@ -122,6 +122,7 @@ def build_execution_context(
         config=app_config,
         project_name=project_name,
         request_config=trigger_request.llm_config,
+        agent_key=agent_key,
     )
     prompt_config = get_prompt_config(
         agent_key=agent_key,

@@ -114,6 +114,7 @@ export const de = {
   issueCount_other: '{{count}} Probleme',
   inheritsGlobal: 'erbt global',
   override: 'Überschreibung',
+  agentModelHint: 'Modell, mit dem der Agent in diesem Bereich läuft',
   model: 'Modell',
   effective: 'effektiv',
   perProject: 'Pro Projekt',

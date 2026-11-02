@@ -511,3 +511,70 @@ class TestProjectLlmConfigInheritance:
 
         assert merged.provider == LLMProvider.ANTHROPIC
         assert merged.model == "claude-opus-5"
+
+
+class TestAgentModels:
+    """``llm_config.agent_models`` picks the model one agent runs on.
+
+    It is part of the LLM config, so it follows the same global -> project ->
+    request layering, merged key by key: a project that names one agent must
+    not wipe the global choices for the others.
+    """
+
+    def _config(self) -> AppConfig:
+        return AppConfig(
+            llm_config={
+                "provider": "anthropic",
+                "model": "claude-opus-5",
+                "agent_models": {"reviewer": "claude-haiku-5", "describer": "claude-sonnet-5"},
+            },
+            projects={
+                "Release 2.0": {"llm_config": {"agent_models": {"reviewer": "gpt-4.1"}}},
+            },
+        )
+
+    def test_the_global_agent_model_beats_the_global_model(self):
+        merged = get_llm_config(self._config(), agent_key="describer")
+
+        assert merged.model == "claude-sonnet-5"
+
+    def test_an_agent_without_an_entry_keeps_the_model(self):
+        merged = get_llm_config(self._config(), agent_key="planner")
+
+        assert merged.model == "claude-opus-5"
+
+    def test_no_agent_key_leaves_the_model_alone(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0")
+
+        assert merged.model == "claude-opus-5"
+
+    def test_the_project_entry_beats_the_global_one(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0", agent_key="reviewer")
+
+        assert merged.model == "gpt-4.1"
+
+    def test_the_project_merges_per_agent(self):
+        merged = get_llm_config(
+            self._config(), project_name="Release 2.0", agent_key="describer"
+        )
+
+        assert merged.model == "claude-sonnet-5"
+        assert merged.agent_models == {"reviewer": "gpt-4.1", "describer": "claude-sonnet-5"}
+
+    def test_a_project_model_does_not_beat_the_agent_model(self):
+        config = self._config()
+        config.projects["Release 2.0"].llm_config = LLMConfig(model="gpt-4o")
+
+        merged = get_llm_config(config, project_name="Release 2.0", agent_key="reviewer")
+
+        assert merged.model == "claude-haiku-5"
+
+    def test_the_request_entry_wins(self):
+        merged = get_llm_config(
+            self._config(),
+            project_name="Release 2.0",
+            request_config=LLMConfig(agent_models={"reviewer": "o3"}),
+            agent_key="reviewer",
+        )
+
+        assert merged.model == "o3"

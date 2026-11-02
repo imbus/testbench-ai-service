@@ -143,6 +143,17 @@ beforeEach(() => {
   fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
     if (url.startsWith('/admin/api/config')) return ok(CONFIG)
     if (url.startsWith('/admin/api/projects')) return ok(PROJECTS)
+    if (url.startsWith('/admin/api/models')) {
+      return ok({
+        providers: [
+          {
+            provider: 'openai',
+            key_present: true,
+            models: [{ id: 'gpt-4.1', routing: 'chat', source: 'builtin' }],
+          },
+        ],
+      })
+    }
     if ((init?.method ?? 'GET').toUpperCase() === 'POST' && url.includes('/fork')) {
       return forkError
         ? ({ ok: false, status: 400, json: async () => ({ detail: forkError }) } as Response)
@@ -687,5 +698,24 @@ describe('forking a prompt for a project', () => {
         screen.getByText('The project name has no usable directory name; supply one.'),
       ).toBeInTheDocument(),
     )
+  })
+})
+
+// --- the model --------------------------------------------------------------
+
+describe('the agent model', () => {
+  it('writes the global agent_models entry in global scope', async () => {
+    renderDetail()
+    await ready()
+    await chooseOption(userEvent.setup(), 'reviewer · Model', 'gpt-4.1')
+    expect(edits()).toEqual({ 'llm_config.agent_models.reviewer': 'gpt-4.1' })
+  })
+
+  it('writes the project agent_models entry in a project tab', async () => {
+    renderDetail()
+    await ready()
+    await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
+    await chooseOption(userEvent.setup(), 'reviewer · Model', 'gpt-4.1')
+    expect(edits()).toEqual({ 'projects.Alpha.llm_config.agent_models.reviewer': 'gpt-4.1' })
   })
 })

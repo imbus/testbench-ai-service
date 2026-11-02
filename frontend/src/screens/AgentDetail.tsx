@@ -20,6 +20,7 @@ import { Field } from '../components/Field'
 import { Modal } from '../components/Modal'
 import { ReadOnlyField } from '../components/ReadOnlyField'
 import { ScopeTabs } from '../components/ScopeTabs'
+import { AgentModelPicker } from '../components/AgentModelPicker'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
@@ -230,6 +231,34 @@ export function AgentDetail({
             )
           },
         )}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(180px, 260px) 1fr',
+            gap: 16,
+            padding: '10px 0',
+            borderBottom: '1px solid var(--color-divider)',
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 13, fontFamily: 'var(--font-code)' }}>
+              llm_config.agent_models
+            </div>
+            <div className="text-muted" style={{ fontSize: 11 }}>
+              {t('agentModelHint')}
+            </div>
+          </div>
+          <div>
+            <AgentModelPicker
+              agentKey={agentKey}
+              scope={scope}
+              disk={disk}
+              running={running}
+              language={language}
+              readOnly={!isAdmin}
+            />
+          </div>
+        </div>
       </div>
 
       <section className="blueprint" data-testid="agent-vars" style={{ padding: '10px 14px' }}>

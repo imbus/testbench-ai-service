@@ -13,8 +13,10 @@ import {
   effectiveAgent,
   overridingProjects,
   projectAgentPath,
+  projectPath,
 } from '../api/agents'
 import { useConfig, useProjects, usePromptMeta } from '../api/queries'
+import { AgentModelPicker } from '../components/AgentModelPicker'
 import { AgentSwitch } from '../components/AgentSwitch'
 import { IconToggle, ListIcon, MatrixIcon } from '../components/IconToggle'
 import { useTranslation } from 'react-i18next'
@@ -199,7 +201,13 @@ function AgentList({
       cellMemo={false}
       expandedRows={expanded}
       rowExpansionTemplate={(row: Row) => (
-        <ProjectList agentKey={row.agentKey} active={row.active} />
+        <ProjectList
+          agentKey={row.agentKey}
+          active={row.active}
+          disk={disk}
+          running={running}
+          isAdmin={isAdmin}
+        />
       )}
       pt={{
         bodyRow: (options) => {
@@ -251,7 +259,14 @@ function AgentList({
       <Column
         header={`${t('model')} (${t('effective')})`}
         body={(row: Row) => (
-          <AgentModel agentKey={row.agentKey} language={language} promptFile={row.promptFile} />
+          <AgentModelPicker
+            agentKey={row.agentKey}
+            scope={{ kind: 'global' }}
+            disk={disk}
+            running={running}
+            language={language}
+            readOnly={!isAdmin}
+          />
         )}
       />
       <Column
@@ -340,30 +355,19 @@ function AgentTitle({
 }
 
 /** The prompt's default model, from the same cached query `AgentTitle` reads. */
-function AgentModel({
-  agentKey,
-  language,
-  promptFile,
-}: {
-  agentKey: string
-  language: string
-  promptFile: string | undefined
-}) {
-  const meta = usePromptMeta(language, agentKey, promptFile)
-  return (
-    <div className="text-muted" style={MONO_CELL} title={meta.data?.default_model}>
-      {meta.data?.default_model ?? '—'}
-    </div>
-  )
-}
-
 /** The expanded row: every project the agent is active in, and why. */
 function ProjectList({
   agentKey,
   active,
+  disk,
+  running,
+  isAdmin,
 }: {
   agentKey: string
   active: { project: string; overridden: boolean }[]
+  disk: Record<string, unknown>
+  running: Record<string, unknown>
+  isAdmin: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -381,16 +385,40 @@ function ProjectList({
         <div
           key={project}
           data-testid={`agent-project-${project}`}
-          style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}
+          // The same label/control grid as a settings field, so the model sits
+          // next to its project rather than at the far edge of the table.
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(180px, 260px) 1fr',
+            gap: 16,
+            alignItems: 'center',
+            fontSize: 13,
+          }}
         >
-          <span style={{ flex: 1 }}>{project}</span>
-          {overridden ? (
-            <Tag value={t('override')} style={{ padding: '1px 6px', fontSize: 10 }} />
-          ) : (
-            <span className="text-muted" style={{ fontSize: 10 }}>
-              {t('inherit')}
-            </span>
-          )}
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <span style={{ overflowWrap: 'anywhere' }}>{project}</span>
+            {overridden ? (
+              <Tag value={t('override')} style={{ padding: '1px 6px', fontSize: 10 }} />
+            ) : (
+              <span className="text-muted" style={{ fontSize: 10 }}>
+                {t('inherit')}
+              </span>
+            )}
+          </span>
+          <span>
+            <AgentModelPicker
+              agentKey={agentKey}
+              scope={{ kind: 'project', project }}
+              disk={disk}
+              running={running}
+              language={String(
+                valueAt(running, projectPath(project, 'language')) ??
+                  valueAt(running, 'language') ??
+                  'de',
+              )}
+              readOnly={!isAdmin}
+            />
+          </span>
         </div>
       ))}
     </div>
