@@ -191,9 +191,35 @@ Poll every 2 to 3 seconds until `status` is `succeeded` or `failed`.
 | `401`  | Missing or invalid authorization token.                                                                |
 | `503`  | The job store could not be read. Try again later.                                                      |
 
+### Job page in the browser
+
+A browser cannot send the `Authorization` header, so a plain link to `GET /jobs/{job_id}` fails with `401`. To show a job in the browser, the plugin first asks for a one-time ticket with the header:
+
+```
+POST /jobs/{job_id}/view-ticket?language=de
+```
+
+```json
+{
+  "view_path": "/jobs/7f3a9c1e5b2d4e8f9a0b1c2d3e4f5a6b/view",
+  "view_token": "q2X…",
+  "expires_in": 120
+}
+```
+
+It then opens `<service URL>{view_path}?view_token={view_token}` in the browser. `language` (`de` or `en`) is optional and defaults to the service's `language`. Only the user who triggered the job gets a ticket; anyone else gets `404`, as for `GET /jobs/{job_id}`.
+
+- The ticket works **once** and only within `expires_in` seconds (2 minutes). A ticket presented for another job is used up as well.
+- Redeeming it opens a view session for this job and user, kept for 8 hours in an HttpOnly cookie that is only sent to the job's view path. The browser is then redirected to the same path without the ticket, so it does not stay in the address bar or the browser history.
+- The page shows the job as the web console's job page does: status, progress, error, warnings and the report, the coverage checker's and link finder's reports in their own views and any other report as JSON. It updates itself every 3 seconds while the job runs.
+- With the web console enabled, *Sign in* in the top bar signs in to the console and opens the same job there. A user already signed in to the console goes straight to it.
+- The JWT never reaches the browser. Tickets and view sessions live in memory, so a service restart ends them; a new click in the plugin opens a new link.
+
+An expired or reused link shows a page asking to open the job again from TestBench (`401`).
+
 ### Reports
 
-`report_type` names the schema of `report`; the service stores the report as JSON and returns it unchanged. It renders nothing, the plugin does.
+`report_type` names the schema of `report`; the service stores the report as JSON and returns it unchanged. The plugin renders it; the [job page](#job-page-in-the-browser) shows it as the web console does.
 
 | `report_type`      | `report`                                                                                                  |
 | ------------------ | --------------------------------------------------------------------------------------------------------- |

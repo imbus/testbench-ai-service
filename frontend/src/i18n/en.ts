@@ -19,6 +19,8 @@ export const en = {
   jobFinished: 'Finished',
   jobError: 'Error',
   jobWarnings: 'Warnings',
+  jobViewExpired: 'This link has expired or was already used. Open the job again from TestBench.',
+  jobViewLoadFailed: 'The job could not be loaded. Open it again from TestBench.',
   coverageCovered: 'Covered',
   coverageWeak: 'Weak',
   coverageMissing: 'Missing',

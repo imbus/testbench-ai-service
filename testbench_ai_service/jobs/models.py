@@ -39,3 +39,11 @@ class JobDetail(JobSummary):
     """A job including its report."""
 
     report: Any | None = None
+
+
+class JobViewTicket(BaseModel):
+    """Where to open a job in the browser, and the one-time ticket to get in."""
+
+    view_path: str
+    view_token: str  # named *token* so the request logging masks it
+    expires_in: int

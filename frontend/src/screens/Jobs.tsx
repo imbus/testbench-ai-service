@@ -4,133 +4,32 @@ import { Column } from 'primereact/column'
 import { DataTable } from 'primereact/datatable'
 import { Dropdown } from 'primereact/dropdown'
 import { Message } from 'primereact/message'
-import { ProgressBar } from 'primereact/progressbar'
 import { useTranslation } from 'react-i18next'
 import { useJob, useJobs } from '../api/queries'
-import type {
-  CoverageResult,
-  JobDetail,
-  JobStatus,
-  JobSummary,
-  LinkFinderResult,
-} from '../api/types'
-import { type Lang, type Translations, useLang } from '../i18n'
+import type { JobStatus, JobSummary } from '../api/types'
+import { useLang } from '../i18n'
 import { useSession } from '../state/session'
 import { formatActivityTime } from './Status'
-import { CoverageReport } from './jobs/CoverageReport'
-import { LinkFinderReport } from './jobs/LinkFinderReport'
-
-const STATUS_COLORS: Record<JobStatus, string> = {
-  succeeded: '#2e9e6b',
-  running: '#b8860b',
-  failed: '#c0392b',
-}
-
-const STATUS_LABELS: Record<JobStatus, keyof Translations> = {
-  running: 'jobStatusRunning',
-  succeeded: 'jobStatusSucceeded',
-  failed: 'jobStatusFailed',
-}
+import {
+  JobDetailView,
+  LOCALES,
+  Progress,
+  STATUS_LABELS,
+  StatusLabel,
+} from './jobs/JobDetailView'
 
 const STATUSES: JobStatus[] = ['running', 'succeeded', 'failed']
-const LOCALES: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
 
 /** The requirement or item a job is for: its root key, else the first item. */
 function itemLabel(job: JobSummary): string | null {
   return job.root_key ?? job.item_ids[0] ?? null
 }
 
-function StatusLabel({ job }: { job: JobSummary }) {
-  const { t } = useTranslation()
-  return (
-    <span style={{ color: STATUS_COLORS[job.status], fontWeight: 500 }}>
-      {t(STATUS_LABELS[job.status])}
-    </span>
-  )
-}
-
-function Progress({ job }: { job: JobSummary }) {
-  if (job.status !== 'running' || !job.progress) return null
-  const { done, total, text } = job.progress
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <ProgressBar
-        value={total > 0 ? Math.round((done / total) * 100) : 0}
-        showValue={false}
-        style={{ height: 6 }}
-      />
-      <span className="text-muted" style={{ fontSize: 12 }}>
-        <span>{`${done}/${total}`}</span>
-        {text ? ` · ${text}` : ''}
-      </span>
-    </div>
-  )
-}
-
-function Report({ job }: { job: JobDetail }) {
-  if (job.report_type === 'coverage_checker' && job.report) {
-    return <CoverageReport report={job.report as CoverageResult} />
-  }
-  if (job.report_type === 'link_finder' && job.report) {
-    return <LinkFinderReport report={job.report as LinkFinderResult} />
-  }
-  // A report type this UI does not know is still shown, as the stored JSON.
-  if (job.report) {
-    return (
-      <pre style={{ margin: 0, overflowX: 'auto', fontFamily: 'var(--font-code)', fontSize: 12 }}>
-        {JSON.stringify(job.report, null, 2)}
-      </pre>
-    )
-  }
-  return null
-}
-
 function JobPane({ jobId }: { jobId: string }) {
   const { t } = useTranslation()
-  const lang = useLang()
   const job = useJob(jobId)
   if (job.isError) return <Message severity="error" text={t('jobsError')} />
-  const data = job.data
-  if (!data) return null
-  // The root key leads; the items follow without repeating it.
-  const items = [...new Set([data.root_key, ...data.item_ids].filter((id): id is string => !!id))]
-  const when = (iso: string) => formatActivityTime(iso, undefined, LOCALES[lang])
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div>
-        <h2 style={{ margin: 0 }}>{data.agent_key}</h2>
-        <div className="text-muted">
-          {t('jobProject')}: {data.project_name} ({data.project_key})
-          {items.length > 0 && ` · ${items.join(', ')}`}
-        </div>
-        <div className="text-muted" style={{ fontSize: 13 }}>
-          {t('jobStarted')}: {when(data.created_at)}
-          {data.finished_at && ` · ${t('jobFinished')}: ${when(data.finished_at)}`}
-        </div>
-      </div>
-      <div>
-        <StatusLabel job={data} />
-        <Progress job={data} />
-      </div>
-      {data.error && (
-        <div style={{ color: STATUS_COLORS.failed }}>
-          <span className="card-kicker">{t('jobError')}</span>
-          <div>{data.error}</div>
-        </div>
-      )}
-      {data.warnings.length > 0 && (
-        <div>
-          <div className="card-kicker">{t('jobWarnings')}</div>
-          <ul style={{ margin: 0, paddingLeft: 18 }}>
-            {data.warnings.map((warning, i) => (
-              <li key={i}>{warning}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      <Report job={data} />
-    </div>
-  )
+  return job.data ? <JobDetailView job={job.data} /> : null
 }
 
 /**

@@ -16,6 +16,8 @@ from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import http_exception_handler
 from testbench_ai_service.jobs.routes import router as jobs_router
 from testbench_ai_service.jobs.store import JobStore
+from testbench_ai_service.jobs.view import JobViewStore
+from testbench_ai_service.jobs.view import view_router as job_view_router
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.middlewares import (
@@ -64,6 +66,7 @@ def init_routers(app: FastAPI):
 
     app.include_router(router)
     app.include_router(jobs_router)
+    app.include_router(job_view_router)
 
     agent_routers = get_agent_routers(app.state.config)
     for agent_router in agent_routers:
@@ -143,6 +146,7 @@ def create_app(config: AppConfig | None = None) -> FastAPI:
     app.state.usage_store = UsageStore(resolve_usage_file(config.usage_file, app.state.config_path))
 
     app.state.job_store = JobStore(resolve_usage_file(config.usage_file, app.state.config_path))
+    app.state.job_view_store = JobViewStore()
 
     init_routers(app)
     init_webui(app)
