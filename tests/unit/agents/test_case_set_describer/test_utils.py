@@ -1,4 +1,5 @@
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 from zoneinfo import ZoneInfo
 
@@ -305,3 +306,82 @@ class TestPatchPreviousDescription:
         )
         called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
         assert "<br/><br/>" not in called_spec.description.html
+
+
+TEMPLATES_DIR = Path(__file__).resolve().parents[4] / "templates"
+
+
+class TestKeepLockedOnFinalPatch:
+    """The lock held before the run must survive the final patch."""
+
+    @patch(
+        "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
+        new_callable=AsyncMock,
+    )
+    async def test_generated_description_keeps_lock_when_locked_before_run(self, mock_patch_spec):
+        await patch_generated_description_for_test_structure_element(
+            MagicMock(),
+            "PROJ1",
+            "SPEC1",
+            "New description",
+            "",
+            LanguageOption.ENGLISH,
+            "user123",
+            TEMPLATES_DIR,
+            keep_locked=True,
+        )
+        called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
+        assert called_spec.locker.optional == "user123"
+
+    @patch(
+        "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
+        new_callable=AsyncMock,
+    )
+    async def test_generated_description_unlocks_by_default(self, mock_patch_spec):
+        await patch_generated_description_for_test_structure_element(
+            MagicMock(),
+            "PROJ1",
+            "SPEC1",
+            "New description",
+            "",
+            LanguageOption.ENGLISH,
+            "user123",
+            TEMPLATES_DIR,
+        )
+        called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
+        assert called_spec.locker.optional is None
+
+    @patch(
+        "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
+        new_callable=AsyncMock,
+    )
+    async def test_failed_run_keeps_lock_when_locked_before_run(self, mock_patch_spec):
+        await patch_previous_description_for_test_structure_element(
+            MagicMock(),
+            "PROJ1",
+            "SPEC1",
+            "",
+            LanguageOption.ENGLISH,
+            "user123",
+            TEMPLATES_DIR,
+            keep_locked=True,
+        )
+        called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
+        assert called_spec.locker.optional == "user123"
+
+    @patch(
+        "testbench_ai_service.agents.test_case_set_describer.utils.patch_test_structure_element_spec",
+        new_callable=AsyncMock,
+    )
+    async def test_failed_run_unlocks_by_default(self, mock_patch_spec):
+        await patch_previous_description_for_test_structure_element(
+            MagicMock(),
+            "PROJ1",
+            "SPEC1",
+            "",
+            LanguageOption.ENGLISH,
+            "user123",
+            TEMPLATES_DIR,
+        )
+        called_spec: SpecificationDetailsForUpdate = mock_patch_spec.call_args[0][3]
+        assert called_spec.locker.optional is None
