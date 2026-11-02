@@ -20,7 +20,7 @@ class TestBuiltinRouting:
 
     def test_each_set_maps_to_its_own_family(self):
         assert BUILTIN_ROUTING["gpt-4o"] is RoutingFamily.CHAT
-        assert BUILTIN_ROUTING["o3"] is RoutingFamily.REASONING
+        assert BUILTIN_ROUTING["gpt-6-sol"] is RoutingFamily.REASONING
         assert BUILTIN_ROUTING["claude-haiku-4-5"] is RoutingFamily.BUDGET
         assert BUILTIN_ROUTING["claude-opus-4-6"] is RoutingFamily.ADAPTIVE
 

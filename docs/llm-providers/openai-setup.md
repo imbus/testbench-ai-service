@@ -70,16 +70,9 @@ variants:
 |---|---|
 | `gpt-4o` | Flagship multimodal model |
 | `gpt-4o-mini` | Fast, cost-efficient |
-| `gpt-4o-search-preview` | gpt-4o with integrated web search |
-| `gpt-4o-mini-search-preview` | gpt-4o-mini with integrated web search |
 | `gpt-4.1` | 1 M context window |
 | `gpt-4.1-mini` | 1 M context, cost-efficient |
 | `gpt-4.1-nano` | Fastest and cheapest GPT-4.1 variant |
-| `gpt-4-turbo` | GPT-4 Turbo (legacy) |
-| `gpt-4` | GPT-4 (legacy) |
-| `gpt-3.5-turbo` | GPT-3.5 Turbo (legacy) |
-| `gpt-3.5-turbo-16k` | GPT-3.5 Turbo with 16k context (legacy) |
-| `gpt-3.5-turbo-instruct` | GPT-3.5 Turbo Instruct (legacy) |
 
 ### Supported reasoning models
 
@@ -108,16 +101,19 @@ Reasoning models use `reasoning_effort` (`low`, `medium`, `high`) instead of tem
 | `gpt-5.4-pro` | High-capability GPT-5.4 variant |
 | `gpt-5.5` | GPT-5.5 |
 | `gpt-5.5-pro` | High-capability GPT-5.5 variant |
+| `gpt-5.6-sol` | GPT-5.6 Sol |
+| `gpt-5.6-terra` | GPT-5.6 Terra |
+| `gpt-5.6-luna` | GPT-5.6 Luna |
 
-**o-series**
+**GPT-6 family**
 
 | Model | Notes |
 |---|---|
-| `o1` | First-generation reasoning model |
-| `o1-pro` | High-capability o1 variant |
-| `o3` | Powerful reasoning |
-| `o3-mini` | Lightweight o3 |
-| `o4-mini` | Compact o4 reasoning model |
+| `gpt-6-astra` | GPT-6 Astra |
+| `gpt-6-sol` | GPT-6 Sol |
+| `gpt-6-luna` | GPT-6 Luna |
+| `gpt-6.1-sol` | GPT-6.1 Sol |
+| `gpt-6.1-terra` | GPT-6.1 Terra |
 
 
 :::note

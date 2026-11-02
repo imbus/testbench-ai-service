@@ -119,7 +119,7 @@ class TestOpenAIUsage:
         )
         client.client.responses.create = AsyncMock(return_value=_openai_response(usage))
 
-        result = await client.query_llm_with_usage("o3", MESSAGES)
+        result = await client.query_llm_with_usage("gpt-6-sol", MESSAGES)
 
         assert result == LLMResult(
             text="hi",

@@ -186,7 +186,7 @@ Microsoft releases new API versions regularly. Check the [Azure OpenAI REST API 
 
 ## 5. Map deployment names to canonical models
 
-In prompt YAML files you reference your Azure **deployment name**. The service needs to know the underlying canonical model name in order to route requests correctly (for example, reasoning models like `o3` require different API parameters than chat models like `gpt-4o`).
+In prompt YAML files you reference your Azure **deployment name**. The service needs to know the underlying canonical model name in order to route requests correctly (for example, reasoning models like `gpt-5.6-sol` require different API parameters than chat models like `gpt-4o`).
 
 If your deployment name is identical to a known canonical model name no mapping is required. Otherwise, add a `deployment_mapping` table:
 
@@ -200,7 +200,7 @@ api_version = "2025-04-01-preview"
 [testbench-ai-service.llm_config.deployment_mapping]
 "my-gpt4o-deployment"    = "gpt-4o"
 "my-gpt41-mini"          = "gpt-4.1-mini"
-"my-o3-deployment"       = "o3"
+"my-gpt56-deployment"    = "gpt-5.6-sol"
 ```
 
 The key is the deployment name you use in prompt variants; the value is the canonical OpenAI model identifier that the deployment is based on.
@@ -211,16 +211,9 @@ The key is the deployment name you use in prompt variants; the value is the cano
 | ----------------- | ------------- |
 | `gpt-4o`        | Chat          |
 | `gpt-4o-mini`   | Chat          |
-| `gpt-4o-search-preview` | Chat |
-| `gpt-4o-mini-search-preview` | Chat |
 | `gpt-4.1`       | Chat          |
 | `gpt-4.1-mini`  | Chat          |
 | `gpt-4.1-nano`  | Chat          |
-| `gpt-4-turbo`   | Chat          |
-| `gpt-4`         | Chat          |
-| `gpt-3.5-turbo` | Chat          |
-| `gpt-3.5-turbo-16k` | Chat      |
-| `gpt-3.5-turbo-instruct` | Chat  |
 
 ### Known canonical reasoning models
 
@@ -245,11 +238,14 @@ The key is the deployment name you use in prompt variants; the value is the cano
 | `gpt-5.4-pro`          | Reasoning |
 | `gpt-5.5`              | Reasoning |
 | `gpt-5.5-pro`          | Reasoning |
-| `o1`                   | Reasoning |
-| `o1-pro`               | Reasoning |
-| `o3`                   | Reasoning |
-| `o3-mini`              | Reasoning |
-| `o4-mini`              | Reasoning |
+| `gpt-5.6-sol`          | Reasoning |
+| `gpt-5.6-terra`        | Reasoning |
+| `gpt-5.6-luna`         | Reasoning |
+| `gpt-6-astra`          | Reasoning |
+| `gpt-6-sol`            | Reasoning |
+| `gpt-6-luna`           | Reasoning |
+| `gpt-6.1-sol`          | Reasoning |
+| `gpt-6.1-terra`        | Reasoning |
 
 ## 6. Reference the deployment in a prompt variant
 

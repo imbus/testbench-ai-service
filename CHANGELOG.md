@@ -182,6 +182,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   refused with `409`: the job succeeds with a report whose `no_linked_tests` is `true`, and the
   console's Jobs screen says so. Nothing is written to TestBench in that case.
 
+- The built-in model lists follow the current OpenAI, Azure OpenAI and Anthropic offerings.
+  New: `gpt-5.6-sol`, `gpt-5.6-terra`, `gpt-5.6-luna`, `gpt-6-astra`, `gpt-6-sol`, `gpt-6-luna`,
+  `gpt-6.1-sol`, `gpt-6.1-terra` as reasoning models and `claude-opus-5-5`, `claude-sonnet-5-5`,
+  `claude-haiku-5-5`, `claude-fable-5` as adaptive thinking models. Removed, because neither
+  OpenAI nor Azure serves them any more: `gpt-3.5-turbo*`, `gpt-4`, `gpt-4-turbo*`, the
+  `gpt-4o*-search-preview` models and the o-series (`o1*`, `o3*`, `o4-mini*`); also
+  `claude-opus-4-1*`. These names now take the fallback request unless `model_routing` maps them.
+
 ### Fixed
 
 - A project that overrides both `language` and its agent's `prompt.file` now starts. At boot,

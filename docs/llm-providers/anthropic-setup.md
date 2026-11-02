@@ -86,8 +86,6 @@ These models support extended thinking with a configurable token budget. The `re
 | `claude-haiku-4-5-20251001` | Claude Haiku 4.5 (dated version) |
 | `claude-sonnet-4-5` | Claude Sonnet 4.5 |
 | `claude-sonnet-4-5-20250929` | Claude Sonnet 4.5 (dated version) |
-| `claude-opus-4-1` | Claude Opus 4.1 |
-| `claude-opus-4-1-20250805` | Claude Opus 4.1 (dated version) |
 | `claude-opus-4-5` | Claude Opus 4.5 |
 | `claude-opus-4-5-20251101` | Claude Opus 4.5 (dated version) |
 
@@ -101,6 +99,13 @@ These models use a streaming-based thinking approach with adaptive budgets. `rea
 | `claude-opus-4-6` | Claude Opus 4.6 |
 | `claude-opus-4-7` | Claude Opus 4.7 |
 | `claude-opus-4-8` | Claude Opus 4.8 |
+| `claude-sonnet-5` | Claude Sonnet 5 |
+| `claude-opus-5` | Claude Opus 5 |
+| `claude-sonnet-5-5` | Claude Sonnet 5.5 |
+| `claude-opus-5-5` | Claude Opus 5.5 |
+| `claude-haiku-5-5` | Claude Haiku 5.5 |
+| `claude-fable-5` | Claude Fable 5 |
+| `claude-fable-5-1` | Claude Fable 5.1 |
 
 
 :::note

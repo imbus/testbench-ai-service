@@ -137,7 +137,7 @@ Each message must have **either** `text` (inline template) **or** `file` (path t
 | --------------- | ------ | ---------------------------------------------------------------------------------------------------- | -------- |
 | `name`        | String | Unique variant identifier.                                                                           | Yes      |
 | `description` | String | Human-readable description.                                                                          | No       |
-| `model`       | String | LLM model to use (e.g.,`"gpt-5.5"`, `"o3"`). Falls back to `default_model` if not set.         | No       |
+| `model`       | String | LLM model to use (e.g.,`"gpt-5.5"`, `"claude-opus-5-5"`). Falls back to `default_model` if not set.         | No       |
 | `vars`        | Object | Declared user-provided variables for this variant (see [Variable declarations](#variable-declarations)). | No       |
 | `messages`    | List[Message]   | Ordered list of message blocks.                                                                      | Yes      |
 

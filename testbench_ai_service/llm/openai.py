@@ -28,16 +28,6 @@ if TYPE_CHECKING:
 
 CHAT_MODELS: frozenset[str] = frozenset(
     {
-        "gpt-3.5-turbo",
-        "gpt-3.5-turbo-0125",
-        "gpt-3.5-turbo-1106",
-        "gpt-3.5-turbo-16k",
-        "gpt-3.5-turbo-instruct",
-        "gpt-3.5-turbo-instruct-0914",
-        "gpt-4",
-        "gpt-4-0613",
-        "gpt-4-turbo",
-        "gpt-4-turbo-2024-04-09",
         "gpt-4.1",
         "gpt-4.1-2025-04-14",
         "gpt-4.1-mini",
@@ -50,10 +40,6 @@ CHAT_MODELS: frozenset[str] = frozenset(
         "gpt-4o-2024-11-20",
         "gpt-4o-mini",
         "gpt-4o-mini-2024-07-18",
-        "gpt-4o-mini-search-preview",
-        "gpt-4o-mini-search-preview-2025-03-11",
-        "gpt-4o-search-preview",
-        "gpt-4o-search-preview-2025-03-11",
     }
 )
 
@@ -91,16 +77,14 @@ REASONING_MODELS: frozenset[str] = frozenset(
         "gpt-5.5-2026-04-23",
         "gpt-5.5-pro",
         "gpt-5.5-pro-2026-04-23",
-        "o1",
-        "o1-2024-12-17",
-        "o1-pro",
-        "o1-pro-2025-03-19",
-        "o3",
-        "o3-2025-04-16",
-        "o3-mini",
-        "o3-mini-2025-01-31",
-        "o4-mini",
-        "o4-mini-2025-04-16",
+        "gpt-5.6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-6-astra",
+        "gpt-6-luna",
+        "gpt-6-sol",
+        "gpt-6.1-sol",
+        "gpt-6.1-terra",
     }
 )
 
