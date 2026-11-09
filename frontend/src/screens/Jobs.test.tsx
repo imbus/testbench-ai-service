@@ -115,6 +115,21 @@ test('selecting a job opens it on its own page without the list', async () => {
   expect(screen.queryByText('coverage_checker')).not.toBeInTheDocument()
 })
 
+test('each job row is a real link to its job, keeping the filters', async () => {
+  // A link rather than a selectable row: middle-click, Ctrl-click, "copy link"
+  // and the status-bar URL all need an <a href>.
+  list = [FAILED]
+  renderJobs('/admin/jobs?status=failed')
+  const link = await screen.findByRole('link', { name: 'link_finder' })
+  expect(link).toHaveAttribute('href', '/admin/jobs/j2?status=failed')
+})
+
+test('the job table has no row selection', async () => {
+  const { container } = renderJobs()
+  await screen.findByText('link_finder')
+  expect(container.querySelector('.p-selectable-row')).toBeNull()
+})
+
 test('a chosen filter is kept in the URL', async () => {
   renderJobs()
   await screen.findByText('link_finder')

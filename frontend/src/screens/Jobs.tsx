@@ -88,7 +88,6 @@ function JobList({
 }) {
   const { t } = useTranslation()
   const lang = useLang()
-  const navigate = useNavigate()
   const { session } = useSession()
   const rows = jobs.data ?? []
   // Only the agents seen so far can be offered; keep the chosen one selectable
@@ -126,19 +125,17 @@ function JobList({
         </div>
       )}
       {rows.length > 0 && (
-        <DataTable
-          value={rows}
-          dataKey="job_id"
-          selectionMode="single"
-          metaKeySelection={false}
-          selection={null}
-          onSelectionChange={(event) => {
-            const picked = event.value as JobSummary | null
-            if (picked) navigate(`/admin/jobs/${picked.job_id}${search}`)
-          }}
-          size="small"
-        >
-          <Column header={t('jobFilterAgent')} field="agent_key" />
+        <DataTable value={rows} dataKey="job_id" size="small" rowClassName={() => 'tb-link-row'}>
+          {/* A real link, stretched over the row by .tb-row-link, so the row
+              opens like any link: middle-click, Ctrl-click, copy link. */}
+          <Column
+            header={t('jobFilterAgent')}
+            body={(job: JobSummary) => (
+              <Link className="tb-row-link" to={`/admin/jobs/${job.job_id}${search}`}>
+                {job.agent_key}
+              </Link>
+            )}
+          />
           <Column header={t('jobItem')} body={(job: JobSummary) => itemLabel(job) ?? ''} />
           <Column header={t('jobProject')} field="project_name" />
           <Column

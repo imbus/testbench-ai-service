@@ -37,6 +37,15 @@ a{color:var(--color-accent-700)}a:hover{color:var(--color-accent-800)}
 .tb-nav:hover{background:color-mix(in srgb,var(--color-text) 6%,transparent)}
 .btn,.tb-chip{white-space:nowrap;flex:none}
 .tb-row:hover{background:color-mix(in srgb,var(--color-text) 4%,transparent)}
+/* Not from the artboard: a table row that opens as one link. The row's real
+   <a class="tb-row-link"> stretches an ::after over the whole row, so a click
+   anywhere on it -- middle and Ctrl-click included -- is a click on the link. */
+.tb-link-row{position:relative;cursor:pointer}
+.tb-link-row:hover{background:color-mix(in srgb,var(--color-text) 4%,transparent)}
+.tb-link-row:focus-within{outline:2px solid var(--color-accent);outline-offset:-2px}
+.tb-row-link{color:inherit;text-decoration:none;font-weight:500}
+.tb-row-link::after{content:"";position:absolute;inset:0}
+.tb-row-link:focus-visible{outline:none}
 /* Not from the artboard: our rows sit in per-row wrappers, so the
    :first-child rounding above hits every row and shows a rounded top corner
    on hover. The clipping .blueprint already rounds the list's top. */
