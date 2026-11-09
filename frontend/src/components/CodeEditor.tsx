@@ -28,10 +28,19 @@ export type CodeEditorHandle = {
 const MonacoEditor = lazy(() => import('./MonacoEditor'))
 
 /** A Jinja template editor. See `MonacoEditor` for the editor itself. */
-export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(function CodeEditor(props, ref) {
-  return (
-    <Suspense fallback={<div data-testid="code-editor" style={props.fill ? { height: '100%' } : { minHeight: 80 }} />}>
-      <MonacoEditor ref={ref} {...props} />
-    </Suspense>
-  )
-})
+export const CodeEditor = forwardRef<CodeEditorHandle, CodeEditorProps>(
+  function CodeEditor(props, ref) {
+    return (
+      <Suspense
+        fallback={
+          <div
+            data-testid="code-editor"
+            style={props.fill ? { height: '100%' } : { minHeight: 80 }}
+          />
+        }
+      >
+        <MonacoEditor ref={ref} {...props} />
+      </Suspense>
+    )
+  },
+)

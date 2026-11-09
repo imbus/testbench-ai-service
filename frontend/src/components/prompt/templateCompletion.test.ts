@@ -10,16 +10,29 @@ const agent = {
 }
 
 function decl(name: string, extra: Partial<PromptVarDecl> = {}): PromptVarDecl {
-  return { name, description: null, value_type: 'string', choices: null, default_value: null, required: false, ...extra }
+  return {
+    name,
+    description: null,
+    value_type: 'string',
+    choices: null,
+    default_value: null,
+    required: false,
+    ...extra,
+  }
 }
 
 const vars = {
-  tone: decl('tone', { value_type: 'enum', choices: ['formal', 'casual'], description: 'Answer style' }),
+  tone: decl('tone', {
+    value_type: 'enum',
+    choices: ['formal', 'casual'],
+    description: 'Answer style',
+  }),
   max_items: decl('max_items', { value_type: 'number', default_value: 5 }),
 }
 
 const ctx = { agent, vars }
-const labels = (text: string) => templateCompletions(text, ctx)?.items.map((item) => item.label) ?? null
+const labels = (text: string) =>
+  templateCompletions(text, ctx)?.items.map((item) => item.label) ?? null
 
 describe('templateCompletions', () => {
   it('offers nothing outside a Jinja tag', () => {
@@ -65,7 +78,10 @@ describe('templateCompletions', () => {
   it('offers the variant variables with their declaration', () => {
     const result = templateCompletions('{% if vars.', ctx)
     expect(result?.items.map((item) => item.label)).toEqual(['tone', 'max_items'])
-    expect(result?.items[0]).toMatchObject({ detail: 'enum', documentation: 'Answer style\n\nChoices: formal, casual' })
+    expect(result?.items[0]).toMatchObject({
+      detail: 'enum',
+      documentation: 'Answer style\n\nChoices: formal, casual',
+    })
     expect(result?.items[1]).toMatchObject({ detail: 'number', documentation: 'Default: 5' })
   })
 

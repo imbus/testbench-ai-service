@@ -1,8 +1,19 @@
 import { TEMPLATE_EXTENSION, defaultTemplateName, emptyMessage, emptyVariant } from '../api/prompts'
-import type { MessageRole, MessageSource, PromptDocument, PromptMessageDoc, PromptVarDecl, PromptVariantDoc } from '../api/types'
+import type {
+  MessageRole,
+  MessageSource,
+  PromptDocument,
+  PromptMessageDoc,
+  PromptVarDecl,
+  PromptVariantDoc,
+} from '../api/types'
 
 export type PromptDraftAction =
-  | { type: 'setHeader'; field: 'name' | 'summary' | 'description' | 'default_model' | 'default_variant'; value: string }
+  | {
+      type: 'setHeader'
+      field: 'name' | 'summary' | 'description' | 'default_model' | 'default_variant'
+      value: string
+    }
   | { type: 'addVariant'; name: string; uid: string }
   | { type: 'renameVariant'; from: string; to: string }
   | { type: 'removeVariant'; name: string }
@@ -32,7 +43,10 @@ function mapVariant(
 }
 
 /** The message list `step` names, or the variant's own messages without one. */
-function listOf(variant: PromptVariantDoc, step: string | undefined): PromptMessageDoc[] | undefined {
+function listOf(
+  variant: PromptVariantDoc,
+  step: string | undefined,
+): PromptMessageDoc[] | undefined {
   return step === undefined ? variant.messages : variant.steps?.[step]
 }
 
@@ -90,7 +104,13 @@ function setMessageContent(
     variants: doc.variants.map((v) => ({
       ...v,
       messages: sync(v.messages),
-      ...(v.steps ? { steps: Object.fromEntries(Object.entries(v.steps).map(([name, messages]) => [name, sync(messages)])) } : {}),
+      ...(v.steps
+        ? {
+            steps: Object.fromEntries(
+              Object.entries(v.steps).map(([name, messages]) => [name, sync(messages)]),
+            ),
+          }
+        : {}),
     })),
   }
 }
@@ -110,7 +130,10 @@ export function promptDraftReducer(
       const variant = emptyVariant(action.name)
       return {
         ...state,
-        variants: [...state.variants, { ...variant, messages: variant.messages.map((m) => ({ ...m, uid: action.uid })) }],
+        variants: [
+          ...state.variants,
+          { ...variant, messages: variant.messages.map((m) => ({ ...m, uid: action.uid })) },
+        ],
       }
     }
 
@@ -118,7 +141,8 @@ export function promptDraftReducer(
       // Variants are found by name, so two of one name would from then on be
       // renamed together; PromptDefinition refuses both cases on save.
       if (!action.to.trim()) return state
-      if (action.to !== action.from && state.variants.some((v) => v.name === action.to)) return state
+      if (action.to !== action.from && state.variants.some((v) => v.name === action.to))
+        return state
       const renamed = mapVariant(state, action.from, (v) => ({ ...v, name: action.to }))
       // A rename that left default_variant behind would fail validation on save.
       return state.default_variant === action.from
@@ -210,7 +234,9 @@ export function promptDraftReducer(
 
     case 'setMessageRole':
       return mapVariant(state, action.variant, (v) =>
-        mapList(v, action.step, (messages) => messages.map((m, i) => (i === action.index ? { ...m, role: action.role } : m))),
+        mapList(v, action.step, (messages) =>
+          messages.map((m, i) => (i === action.index ? { ...m, role: action.role } : m)),
+        ),
       )
 
     case 'setMessageContent':
@@ -223,7 +249,12 @@ export function promptDraftReducer(
         // The body survives the switch in both directions: it is the same text,
         // and losing it would make the toggle destructive.
         if (action.source !== 'file') {
-          return { ...v, messages: v.messages.map((m, i) => (i === action.index ? { ...current, source: 'inline', file: null, readable: true } : m)) }
+          return {
+            ...v,
+            messages: v.messages.map((m, i) =>
+              i === action.index ? { ...current, source: 'inline', file: null, readable: true } : m,
+            ),
+          }
         }
 
         // Moving to file: deduplicate the generated filename.
@@ -279,7 +310,12 @@ export function promptDraftReducer(
 
 /** A message as the YAML holds it: an inline body lives there, a file body does not. */
 function yamlMessage(m: PromptMessageDoc) {
-  return { role: m.role, source: m.source, file: m.file, text: m.source === 'inline' ? m.content : null }
+  return {
+    role: m.role,
+    source: m.source,
+    file: m.file,
+    text: m.source === 'inline' ? m.content : null,
+  }
 }
 
 /** Everything except the file-backed message bodies -- i.e. what the YAML holds. */
@@ -296,7 +332,10 @@ function yamlShape(doc: PromptDocument): string {
       model: v.model,
       vars: v.vars,
       messages: v.messages.map(yamlMessage),
-      steps: Object.entries(v.steps ?? {}).map(([step, messages]) => [step, messages.map(yamlMessage)]),
+      steps: Object.entries(v.steps ?? {}).map(([step, messages]) => [
+        step,
+        messages.map(yamlMessage),
+      ]),
     })),
   })
 }
@@ -347,7 +386,10 @@ export function newMessageUid(): string {
  * a save. The saved document equals that draft position for position, so its
  * uids are adopted by (variant name, index) and open tabs survive the save.
  */
-export function withMessageUids(doc: PromptDocument, previous?: PromptDocument | null): PromptDocument {
+export function withMessageUids(
+  doc: PromptDocument,
+  previous?: PromptDocument | null,
+): PromptDocument {
   return {
     ...doc,
     variants: doc.variants.map((variant) => {
@@ -367,7 +409,13 @@ export function withMessageUids(doc: PromptDocument, previous?: PromptDocument |
 export function withoutMessageUids(variants: PromptVariantDoc[]): PromptVariantDoc[] {
   return variants.map((variant) => ({
     ...variant,
-    messages: variant.messages.map(({ role, source, file, content, readable }) => ({ role, source, file, content, readable })),
+    messages: variant.messages.map(({ role, source, file, content, readable }) => ({
+      role,
+      source,
+      file,
+      content,
+      readable,
+    })),
   }))
 }
 

@@ -31,7 +31,14 @@ vi.mock('../components/CodeEditor', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   return {
     CodeEditor: forwardRef(function MockCodeEditor(
-      { value, onChange, ariaLabel, readOnly, diagnostics, modelKey }: {
+      {
+        value,
+        onChange,
+        ariaLabel,
+        readOnly,
+        diagnostics,
+        modelKey,
+      }: {
         value: string
         onChange: (value: string) => void
         ariaLabel: string
@@ -41,7 +48,10 @@ vi.mock('../components/CodeEditor', async () => {
       },
       ref,
     ) {
-      useImperativeHandle(ref, () => ({ insert: (text: string) => onChange(value + text) }), [value, onChange])
+      useImperativeHandle(ref, () => ({ insert: (text: string) => onChange(value + text) }), [
+        value,
+        onChange,
+      ])
       return (
         <div>
           <textarea
@@ -52,7 +62,9 @@ vi.mock('../components/CodeEditor', async () => {
             onChange={(e) => onChange(e.target.value)}
           />
           {(diagnostics ?? []).map((error, index) => (
-            <div key={index} role="alert">{error.message}</div>
+            <div key={index} role="alert">
+              {error.message}
+            </div>
           ))}
         </div>
       )
@@ -85,8 +97,20 @@ const DOC: PromptDocument = {
         },
       },
       messages: [
-        { role: 'system', source: 'file', file: 'sys.jinja', content: 'You are helpful.', readable: true },
-        { role: 'user', source: 'inline', file: null, content: 'Explain {{ agent.defect }}', readable: true },
+        {
+          role: 'system',
+          source: 'file',
+          file: 'sys.jinja',
+          content: 'You are helpful.',
+          readable: true,
+        },
+        {
+          role: 'user',
+          source: 'inline',
+          file: null,
+          content: 'Explain {{ agent.defect }}',
+          readable: true,
+        },
       ],
     },
     {
@@ -126,9 +150,21 @@ function docWithThreeMessages(): PromptDocument {
         model: null,
         vars: {},
         messages: [
-          { role: 'system', source: 'inline', file: null, content: 'First message', readable: true },
+          {
+            role: 'system',
+            source: 'inline',
+            file: null,
+            content: 'First message',
+            readable: true,
+          },
           { role: 'user', source: 'inline', file: null, content: 'Middle message', readable: true },
-          { role: 'assistant', source: 'inline', file: null, content: 'Last message', readable: true },
+          {
+            role: 'assistant',
+            source: 'inline',
+            file: null,
+            content: 'Last message',
+            readable: true,
+          },
         ],
       },
       DOC.variants[1],
@@ -154,14 +190,18 @@ const OTHER_DOC: PromptDocument = {
       description: null,
       model: null,
       vars: {},
-      messages: [{ role: 'user', source: 'inline', file: null, content: 'Other quick', readable: true }],
+      messages: [
+        { role: 'user', source: 'inline', file: null, content: 'Other quick', readable: true },
+      ],
     },
     {
       name: 'Deep',
       description: null,
       model: null,
       vars: {},
-      messages: [{ role: 'user', source: 'inline', file: null, content: 'Other deep', readable: true }],
+      messages: [
+        { role: 'user', source: 'inline', file: null, content: 'Other deep', readable: true },
+      ],
     },
   ],
 }
@@ -232,7 +272,9 @@ beforeEach(() => {
     if (url.startsWith('/admin/api/config')) return ok(CONFIG)
     if (method === 'POST' && url.startsWith('/admin/api/prompts/lint')) {
       if (lintFailure) return fail(lintFailure.status, lintFailure.detail)
-      const body = init?.body ? (JSON.parse(String(init.body)) as { content: string }) : { content: '' }
+      const body = init?.body
+        ? (JSON.parse(String(init.body)) as { content: string })
+        : { content: '' }
       return ok(lintResponder(body.content))
     }
     if (method === 'POST' && url.startsWith('/admin/api/prompts/render')) {
@@ -243,7 +285,9 @@ beforeEach(() => {
     // so it must be checked first or it would always fall through to the PUT
     // branch instead.
     if (method === 'POST' && url.endsWith('/plan')) {
-      return planResult.status === 200 ? ok(planResult.body) : fail(planResult.status, planResult.detail)
+      return planResult.status === 200
+        ? ok(planResult.body)
+        : fail(planResult.status, planResult.detail)
     }
     if (method === 'PUT' && url.startsWith('/admin/api/prompts/')) {
       if (putResult.status === 200) return ok(SAVE_OK)
@@ -253,10 +297,33 @@ beforeEach(() => {
     // generic document GET below only for readability -- it has no trailing
     // slash, so it never matched that branch anyway.
     if (method === 'GET' && url === '/admin/api/prompts') {
-      return ok({ languages: [{ lang: 'de', prompts: [
-        { agent: 'explainer', file: 'de/explainer/prompt.yaml', name: 'Explainer', variants: ['Thorough', 'Quick'], ok: true, error: null, used_by: [] },
-        { agent: 'other', file: 'de/other/prompt.yaml', name: 'Other', variants: ['Quick', 'Deep'], ok: true, error: null, used_by: [] },
-      ] }] })
+      return ok({
+        languages: [
+          {
+            lang: 'de',
+            prompts: [
+              {
+                agent: 'explainer',
+                file: 'de/explainer/prompt.yaml',
+                name: 'Explainer',
+                variants: ['Thorough', 'Quick'],
+                ok: true,
+                error: null,
+                used_by: [],
+              },
+              {
+                agent: 'other',
+                file: 'de/other/prompt.yaml',
+                name: 'Other',
+                variants: ['Quick', 'Deep'],
+                ok: true,
+                error: null,
+                used_by: [],
+              },
+            ],
+          },
+        ],
+      })
     }
     if (method === 'GET' && url === '/admin/api/prompts/de/other') return ok(OTHER_DOC)
     if (method === 'GET' && url.startsWith('/admin/api/prompts/')) {
@@ -503,7 +570,10 @@ describe('saving', () => {
   })
 
   it('shows a plan refusal inside the dialog rather than behind it', async () => {
-    planResult = { status: 422, detail: "default_variant 'Gone' names no variant. Available: Thorough" }
+    planResult = {
+      status: 422,
+      detail: "default_variant 'Gone' names no variant. Available: Thorough",
+    }
     renderEditor({ lang: 'en' })
     await ready()
 
@@ -638,7 +708,9 @@ describe('saving', () => {
       expect(screen.getByRole('button', { name: 'Quick' })).toHaveAttribute('aria-invalid', 'true'),
     )
     expect(screen.getByRole('button', { name: 'Thorough' })).not.toHaveAttribute('aria-invalid')
-    expect(within(screen.getByRole('dialog')).getByText(/needs at least one message/)).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('dialog')).getByText(/needs at least one message/),
+    ).toBeInTheDocument()
   })
 
   it('clears a stale 422 field marker once the operator edits that field', async () => {
@@ -681,7 +753,9 @@ describe('saving', () => {
       expect(screen.getByLabelText('Default variant')).toHaveAttribute('aria-invalid', 'true'),
     )
 
-    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^cancel$/i }))
+    await userEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: /^cancel$/i }),
+    )
     expect(screen.getByLabelText('Default variant')).not.toHaveAttribute('aria-invalid')
 
     // Reopening Save must not resurrect the stale marker either.
@@ -829,8 +903,9 @@ describe('variant controls', () => {
     renderEditor({ lang: 'en' })
     await ready()
     await openVariantSettings('Thorough')
-    expect(within(screen.getByTestId('variant-actions')).queryByRole('button', { name: /^remove$/i }))
-      .not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('variant-actions')).queryByRole('button', { name: /^remove$/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('renames the selected variant', async () => {
@@ -937,9 +1012,7 @@ describe('linting', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
 
-    await waitFor(() =>
-      expect(screen.getByRole('alert')).toHaveTextContent('Lint is unavailable'),
-    )
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Lint is unavailable'))
     // And no false "clean" verdict alongside it.
     expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^lint$/i })).not.toBeDisabled()
@@ -989,8 +1062,9 @@ describe('linting', () => {
       await waitFor(() =>
         expect(screen.getByRole('alert')).toHaveTextContent('Unexpected end of template'),
       )
-      expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Explain/ }))
-        .toHaveAttribute('aria-invalid', 'true')
+      expect(
+        within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Explain/ }),
+      ).toHaveAttribute('aria-invalid', 'true')
     })
 
     it('clears the marker once the error is fixed', async () => {
@@ -1021,8 +1095,9 @@ describe('linting', () => {
 
       // Message 0 (sys.jinja, containing "helpful") is open on load.
       await waitFor(() =>
-        expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }))
-          .toHaveAttribute('aria-invalid', 'true'),
+        expect(
+          within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }),
+        ).toHaveAttribute('aria-invalid', 'true'),
       )
     })
 
@@ -1087,8 +1162,9 @@ describe('linting', () => {
       await userEvent.type(screen.getByLabelText('user'), 'BROKEN')
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
       await waitFor(() =>
-        expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Middle message/ }))
-          .toHaveAttribute('aria-invalid', 'true'),
+        expect(
+          within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Middle message/ }),
+        ).toHaveAttribute('aria-invalid', 'true'),
       )
 
       await openMessage(/First message/)
@@ -1098,7 +1174,10 @@ describe('linting', () => {
       // 0, open after the delete) -- the only marker is on the message that
       // actually has the error, never on the one that shifted into index 1.
       await waitFor(() =>
-        expect(treeMessages().map((b) => b.getAttribute('aria-invalid') === 'true')).toEqual([true, false]),
+        expect(treeMessages().map((b) => b.getAttribute('aria-invalid') === 'true')).toEqual([
+          true,
+          false,
+        ]),
       )
       expect(treeMessages()[0]).toHaveAccessibleName(/Middle message/)
     })
@@ -1117,11 +1196,13 @@ describe('linting', () => {
       // Only the moved (still broken) message is flagged, at its new index,
       // by the live check -- never the clean one that took its old place.
       await waitFor(() =>
-        expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Explain/ }))
-          .toHaveAttribute('aria-invalid', 'true'),
+        expect(
+          within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /Explain/ }),
+        ).toHaveAttribute('aria-invalid', 'true'),
       )
-      expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }))
-        .not.toHaveAttribute('aria-invalid')
+      expect(
+        within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }),
+      ).not.toHaveAttribute('aria-invalid')
     })
 
     it('shows no "no syntax errors" on a clean message while another message is flagged', async () => {
@@ -1136,8 +1217,9 @@ describe('linting', () => {
       await openMessage(/Explain/)
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
       await waitFor(() =>
-        expect(within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }))
-          .toHaveAttribute('aria-invalid', 'true'),
+        expect(
+          within(screen.getByTestId('prompt-tree')).getByRole('button', { name: /sys\.jinja/ }),
+        ).toHaveAttribute('aria-invalid', 'true'),
       )
       expect(screen.queryByText(/No syntax errors\./)).not.toBeInTheDocument()
     })
@@ -1148,14 +1230,23 @@ describe('linting', () => {
       const quick = DOC.variants[1]
       docBody = {
         ...DOC,
-        variants: [DOC.variants[0], { ...quick, messages: [...quick.messages, { ...quick.messages[0], content: 'Quick two' }] }],
+        variants: [
+          DOC.variants[0],
+          {
+            ...quick,
+            messages: [...quick.messages, { ...quick.messages[0], content: 'Quick two' }],
+          },
+        ],
       }
       lintResponder = (content) =>
         content.includes('Explain')
           ? { ok: false, errors: [{ line: 1, column: 1, message: 'Unexpected end of template' }] }
           : { ok: true, errors: [] }
       const gate = deferredResponse()
-      const answer = fetchMock.getMockImplementation() as (url: string, init?: RequestInit) => Promise<Response>
+      const answer = fetchMock.getMockImplementation() as (
+        url: string,
+        init?: RequestInit,
+      ) => Promise<Response>
       fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
         if (url.startsWith('/admin/api/prompts/lint')) await gate.promise
         return answer(url, init)
@@ -1167,7 +1258,9 @@ describe('linting', () => {
       await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
       await userEvent.click(screen.getByRole('button', { name: 'Quick' }))
       gate.resolve(ok({}))
-      await waitFor(() => expect(screen.getByRole('button', { name: /^lint$/i })).not.toBeDisabled())
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /^lint$/i })).not.toBeDisabled(),
+      )
 
       expect(treeMessages().map((b) => b.getAttribute('aria-invalid'))).toEqual([null, null])
       expect(screen.queryByTestId('save-blocked-jinja')).not.toBeInTheDocument()
@@ -1392,7 +1485,9 @@ describe('workbench navigation', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
     expect(tree().queryByRole('button', { name: /Explain/ })).not.toBeInTheDocument()
     expect(tree().getByRole('button', { name: /sys\.jinja/ })).not.toHaveAttribute('aria-current')
-    expect(screen.getByText('Open a message, prompt.yaml or the variant settings from the tree.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Open a message, prompt.yaml or the variant settings from the tree.'),
+    ).toBeInTheDocument()
   })
 
   it('offers no Delete message on a one-message variant', async () => {
@@ -1411,7 +1506,10 @@ describe('workbench navigation', () => {
     await openVariantSettings('Thorough')
     await userEvent.type(screen.getByLabelText('Variant name'), 'X')
     expect(dropdownValue('Variants')).toBe('ThoroughX')
-    expect(tree().getByRole('button', { name: 'ThoroughX' })).toHaveAttribute('aria-expanded', 'true')
+    expect(tree().getByRole('button', { name: 'ThoroughX' })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    )
   })
 
   it('keeps the current agent selected when a dirty navigation is cancelled', async () => {
@@ -1436,7 +1534,10 @@ describe('workbench navigation', () => {
     await pickAgent('Other')
     await waitFor(() => expect(tree().getByRole('button', { name: 'Deep' })).toBeInTheDocument())
     expect(dropdownValue('Variants')).toBe('Deep')
-    expect(tree().getByRole('button', { name: /Other deep/ })).toHaveAttribute('aria-current', 'true')
+    expect(tree().getByRole('button', { name: /Other deep/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
   })
 
   it('stays on the prompt.yaml pane after a successful save', async () => {
@@ -1463,7 +1564,9 @@ describe('workbench navigation', () => {
     await ready()
     await openMessage(/Explain/)
     await userEvent.type(screen.getByLabelText('user'), ' {{{{ vars.depth }}')
-    await userEvent.click(within(screen.getByTestId('var-sidebar')).getByRole('button', { name: 'declare' }))
+    await userEvent.click(
+      within(screen.getByTestId('var-sidebar')).getByRole('button', { name: 'declare' }),
+    )
     await openVariantSettings('Thorough')
     expect(screen.getAllByTestId('var-row')).toHaveLength(2)
   })
@@ -1472,7 +1575,9 @@ describe('workbench navigation', () => {
     renderEditor({ lang: 'en' })
     await ready()
     await openMessage(/Explain/)
-    await userEvent.click(within(screen.getByTestId('var-sidebar')).getByRole('button', { name: /vars\.tone/ }))
+    await userEvent.click(
+      within(screen.getByTestId('var-sidebar')).getByRole('button', { name: /vars\.tone/ }),
+    )
     expect(screen.getByLabelText('user')).toHaveValue('Explain {{ agent.defect }}{{ vars.tone }}')
   })
 })
@@ -1484,7 +1589,10 @@ describe('editor tabs', () => {
     renderEditor({ lang: 'en' })
     await ready()
     expect(strip().getAllByRole('tab')).toHaveLength(1)
-    expect(strip().getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('aria-selected', 'true')
+    expect(strip().getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
   })
 
   it('replaces the preview tab on a single click and keeps a double-clicked one', async () => {
@@ -1494,10 +1602,11 @@ describe('editor tabs', () => {
     expect(strip().getAllByRole('tab')).toHaveLength(1)
     await userEvent.dblClick(tree().getByRole('button', { name: /Explain/ }))
     await openMeta()
-    expect(strip().getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-      expect.stringContaining('Explain'),
-      expect.stringContaining('prompt.yaml'),
-    ])
+    expect(
+      strip()
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent),
+    ).toEqual([expect.stringContaining('Explain'), expect.stringContaining('prompt.yaml')])
   })
 
   it('pins a preview tab on the first edit and marks it unsaved', async () => {
@@ -1517,9 +1626,14 @@ describe('editor tabs', () => {
     await userEvent.dblClick(tree().getByRole('button', { name: /prompt\.yaml/ }))
     await userEvent.click(strip().getByRole('tab', { name: /sys\.jinja/ }))
     await userEvent.click(strip().getByRole('button', { name: /^Close sys\.jinja/ }))
-    expect(strip().getByRole('tab', { name: /prompt\.yaml/ })).toHaveAttribute('aria-selected', 'true')
+    expect(strip().getByRole('tab', { name: /prompt\.yaml/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     await userEvent.click(strip().getByRole('button', { name: /^Close prompt\.yaml/ }))
-    expect(screen.getByText('Open a message, prompt.yaml or the variant settings from the tree.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Open a message, prompt.yaml or the variant settings from the tree.'),
+    ).toBeInTheDocument()
   })
 
   it('closes the tab of a deleted message', async () => {
@@ -1529,7 +1643,10 @@ describe('editor tabs', () => {
     await userEvent.dblClick(tree().getByRole('button', { name: /Explain/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Delete message' }))
     expect(strip().queryByRole('tab', { name: /Explain/ })).not.toBeInTheDocument()
-    expect(strip().getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('aria-selected', 'true')
+    expect(strip().getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
   })
 
   it('keeps each variant’s tabs and restores them on the way back', async () => {
@@ -1564,8 +1681,15 @@ describe('editor tabs', () => {
     await within(dialog).findByText('/p/de/explainer/prompt.yaml')
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
     await waitFor(() => expect(putCalls()).toHaveLength(1))
-    expect(JSON.stringify(JSON.parse(String((putCalls()[0][1] as RequestInit).body)))).not.toContain('"uid"')
-    await waitFor(() => expect(strip().getByRole('tab', { name: /Explain/ })).toHaveAttribute('aria-selected', 'true'))
+    expect(
+      JSON.stringify(JSON.parse(String((putCalls()[0][1] as RequestInit).body))),
+    ).not.toContain('"uid"')
+    await waitFor(() =>
+      expect(strip().getByRole('tab', { name: /Explain/ })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      ),
+    )
   })
 
   it('gives each message its own editor model', async () => {
@@ -1595,11 +1719,21 @@ describe('editor tabs', () => {
     renderEditor({ lang: 'en' })
     await ready()
     await userEvent.click(screen.getByRole('button', { name: /^lint$/i }))
-    await waitFor(() => expect(tree().getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true'))
+    await waitFor(() =>
+      expect(tree().getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute(
+        'aria-invalid',
+        'true',
+      ),
+    )
     // Same variant: opening its settings no longer clears the diagnostics.
     await openVariantSettings('Thorough')
-    expect(tree().getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true')
-    await userEvent.click(within(screen.getByTestId('variant-actions')).getByRole('button', { name: /^remove$/i }))
+    expect(tree().getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    await userEvent.click(
+      within(screen.getByTestId('variant-actions')).getByRole('button', { name: /^remove$/i }),
+    )
     expect(treeMessages()).toHaveLength(1)
     expect(treeMessages()[0]).not.toHaveAttribute('aria-invalid')
   })
@@ -1613,7 +1747,8 @@ describe('editor tabs', () => {
     await userEvent.click(preview.getByRole('button', { name: /^render$/i }))
     // Opening the tab renders once by itself; the click is the second.
     await waitFor(() => expect(renderCalls()).toHaveLength(2))
-    for (const call of renderCalls()) expect(String((call[1] as RequestInit).body)).not.toContain('"uid"')
+    for (const call of renderCalls())
+      expect(String((call[1] as RequestInit).body)).not.toContain('"uid"')
   })
 })
 
@@ -1700,7 +1835,9 @@ describe('the live render tab', () => {
     const inputs = screen.getByTestId('render-inputs')
     expect(within(inputs).getByTestId('render-vars')).toBeInTheDocument()
     expect(within(inputs).getByLabelText('Context')).toBeInTheDocument()
-    expect(within(screen.getByTestId('render-output')).queryByTestId('render-vars')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('render-output')).queryByTestId('render-vars'),
+    ).not.toBeInTheDocument()
   })
 
   it('sends nothing while another tab is open', async () => {
@@ -1714,14 +1851,17 @@ describe('the live render tab', () => {
 })
 
 describe('creating a variable from the sidebar', () => {
-  const newVarField = () => within(screen.getByTestId('var-sidebar')).getByLabelText('New variable name')
+  const newVarField = () =>
+    within(screen.getByTestId('var-sidebar')).getByLabelText('New variable name')
 
   it('declares it on the variant and inserts it at the cursor', async () => {
     renderEditor({ lang: 'en' })
     await ready()
     await openMessage(/Explain/)
     await userEvent.type(newVarField(), 'audience{Enter}')
-    expect(screen.getByLabelText('user')).toHaveValue('Explain {{ agent.defect }}{{ vars.audience }}')
+    expect(screen.getByLabelText('user')).toHaveValue(
+      'Explain {{ agent.defect }}{{ vars.audience }}',
+    )
 
     await openVariantSettings('Thorough')
     expect(screen.getAllByTestId('var-row')).toHaveLength(2)
@@ -1763,11 +1903,29 @@ describe('a multi-step variant', () => {
         messages: [],
         steps: {
           aspects: [
-            { role: 'system', source: 'file', file: 'aspects_system.jinja', content: 'Split the requirement.', readable: true },
-            { role: 'user', source: 'inline', file: null, content: 'Requirement: {{ agent.requirement }}', readable: true },
+            {
+              role: 'system',
+              source: 'file',
+              file: 'aspects_system.jinja',
+              content: 'Split the requirement.',
+              readable: true,
+            },
+            {
+              role: 'user',
+              source: 'inline',
+              file: null,
+              content: 'Requirement: {{ agent.requirement }}',
+              readable: true,
+            },
           ],
           prefilter: [
-            { role: 'user', source: 'inline', file: null, content: 'Screen {{ agent.test_case_sets }}', readable: true },
+            {
+              role: 'user',
+              source: 'inline',
+              file: null,
+              content: 'Screen {{ agent.test_case_sets }}',
+              readable: true,
+            },
           ],
         },
       },
@@ -1778,7 +1936,9 @@ describe('a multi-step variant', () => {
     docBody = STEPS_DOC
     renderEditor({ lang: 'en' })
     await ready()
-    expect(await screen.findByLabelText('system (aspects_system.jinja)')).toHaveValue('Split the requirement.')
+    expect(await screen.findByLabelText('system (aspects_system.jinja)')).toHaveValue(
+      'Split the requirement.',
+    )
     expect(screen.getByLabelText('system (aspects_system.jinja)')).not.toHaveAttribute('readonly')
     // The agent expects these messages: none can be moved, removed or re-pointed.
     expect(screen.queryByRole('button', { name: 'Delete message' })).not.toBeInTheDocument()
@@ -1789,7 +1949,10 @@ describe('a multi-step variant', () => {
     await userEvent.click(group.getByRole('button', { name: /Requirement:/ }))
     expect(screen.getByLabelText('user')).toHaveValue('Requirement: {{ agent.requirement }}')
     expect(screen.getByText('prompt.yaml › Pipeline › steps › aspects[1]')).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: /aspects · Requirement:/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /aspects · Requirement:/ })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
   })
 
   it('saves an edited step message with the steps', async () => {
@@ -1803,14 +1966,18 @@ describe('a multi-step variant', () => {
     await userEvent.click(await within(dialog).findByRole('button', { name: /^confirm$/i }))
     await waitFor(() => expect(putCalls()).toHaveLength(1))
     const body = JSON.parse(String((putCalls()[0][1] as RequestInit).body)) as PromptDocument
-    expect(body.variants.find((v) => v.name === 'Pipeline')?.steps?.aspects[0].content).toBe('Split the requirement.!')
+    expect(body.variants.find((v) => v.name === 'Pipeline')?.steps?.aspects[0].content).toBe(
+      'Split the requirement.!',
+    )
   })
 
   it('a non-admin session sees the step messages read-only', async () => {
     docBody = STEPS_DOC
     renderEditor({ lang: 'en', isAdmin: false })
     await ready()
-    expect(await screen.findByLabelText('system (aspects_system.jinja)')).toHaveAttribute('readonly')
+    expect(await screen.findByLabelText('system (aspects_system.jinja)')).toHaveAttribute(
+      'readonly',
+    )
   })
 
   it('checks a step message live and blocks the save on a syntax error', async () => {
@@ -1824,13 +1991,19 @@ describe('a multi-step variant', () => {
     const editor = await screen.findByLabelText('system (aspects_system.jinja)')
     await userEvent.clear(editor)
     await userEvent.type(editor, '{{% if %}')
-    expect(await screen.findByTestId('save-blocked-jinja')).toHaveTextContent('aspects 1 (system, aspects_system.jinja)')
+    expect(await screen.findByTestId('save-blocked-jinja')).toHaveTextContent(
+      'aspects 1 (system, aspects_system.jinja)',
+    )
     expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
   })
 
   /** The messages the last render request posted. */
   const renderedContents = () =>
-    (JSON.parse(String((renderCalls().at(-1)![1] as RequestInit).body)) as { messages: { content: string }[] }).messages.map((m) => m.content)
+    (
+      JSON.parse(String((renderCalls().at(-1)![1] as RequestInit).body)) as {
+        messages: { content: string }[]
+      }
+    ).messages.map((m) => m.content)
 
   it('renders one step at a time and switches between them', async () => {
     docBody = STEPS_DOC
@@ -1838,7 +2011,10 @@ describe('a multi-step variant', () => {
     await ready()
     await openRender()
     await waitFor(() => expect(renderCalls()).toHaveLength(1))
-    expect(renderedContents()).toEqual(['Split the requirement.', 'Requirement: {{ agent.requirement }}'])
+    expect(renderedContents()).toEqual([
+      'Split the requirement.',
+      'Requirement: {{ agent.requirement }}',
+    ])
     expect(dropdownValue('Step')).toBe('aspects')
 
     await chooseOption(userEvent.setup(), 'Step', 'prefilter')
@@ -1849,10 +2025,13 @@ describe('a multi-step variant', () => {
     docBody = STEPS_DOC
     renderEditor({ lang: 'en' })
     await ready()
-    await userEvent.click(within(screen.getByRole('group', { name: 'Step: prefilter' })).getByRole('button', { name: /Screen/ }))
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Step: prefilter' })).getByRole('button', {
+        name: /Screen/,
+      }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Open render' }))
     await waitFor(() => expect(renderCalls()).toHaveLength(1))
     expect(renderedContents()).toEqual(['Screen {{ agent.test_case_sets }}'])
   })
 })
-

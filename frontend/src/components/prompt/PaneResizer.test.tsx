@@ -12,7 +12,9 @@ beforeAll(() => {
 
 function setup(height = 230, max = 500) {
   const onResize = vi.fn()
-  render(<PaneResizer height={height} min={120} max={() => max} label="Resize" onResize={onResize} />)
+  render(
+    <PaneResizer height={height} min={120} max={() => max} label="Resize" onResize={onResize} />,
+  )
   return { handle: screen.getByRole('separator', { name: 'Resize' }), onResize }
 }
 

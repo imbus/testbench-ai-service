@@ -17,7 +17,12 @@ import { MetaPane } from '../components/prompt/MetaPane'
 import { PaneResizer } from '../components/prompt/PaneResizer'
 import { PromptTree } from '../components/prompt/PromptTree'
 import { useLiveLint } from '../components/prompt/liveLint'
-import { messageLabel, messagePath, uniqueVariantName, type Selection } from '../components/prompt/selection'
+import {
+  messageLabel,
+  messagePath,
+  uniqueVariantName,
+  type Selection,
+} from '../components/prompt/selection'
 import { undeclaredVars, usedTemplateVars } from '../components/prompt/templateVars'
 import { VariantPane } from '../components/prompt/VariantPane'
 import { VarSidebar, type LintState } from '../components/prompt/VarSidebar'
@@ -27,7 +32,16 @@ import { TestRunPanel } from '../components/TestRunPanel'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
 import { MIN_PANE_HEIGHT, usePaneHeight } from '../state/editorLayout'
-import { closeTab, messageTabOf, openTab, parseStepTab, pinTab, stepTabOf, useEditorTabs, type TabId } from '../state/editorTabs'
+import {
+  closeTab,
+  messageTabOf,
+  openTab,
+  parseStepTab,
+  pinTab,
+  stepTabOf,
+  useEditorTabs,
+  type TabId,
+} from '../state/editorTabs'
 import {
   isDirty,
   isMessageDirty,
@@ -172,7 +186,9 @@ function fieldFromSaveError(message: string): SaveFieldError | null {
 /** Localizes one `agentsUsingVariant` scope. Only the project name (a wire
  * token, like an agent key) stays untranslated. */
 function referenceLabel(t: TFunction, scope: Scope): string {
-  return scope.kind === 'global' ? t('orphanGlobalTable') : t('orphanProject', { project: scope.project })
+  return scope.kind === 'global'
+    ? t('orphanGlobalTable')
+    : t('orphanProject', { project: scope.project })
 }
 
 /** The variant the centre pane works on. Never `variants[0]` unguarded: an
@@ -366,7 +382,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // tree and the render/test context both work from this one object, and the
   // render pane re-merges only when its identity changes.
   const agentContext = useMemo(
-    () => agentContextOf(original?.agent_context_sample ?? {}, original?.agent_context_skeleton ?? {}),
+    () =>
+      agentContextOf(original?.agent_context_sample ?? {}, original?.agent_context_skeleton ?? {}),
     [original],
   )
 
@@ -396,16 +413,22 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // belongs to this route, never from a previous agent's leftover draft.
   const liveVariant = original ? selectedVariantOf(draft, selectedVariant) : undefined
   const liveActive = tabsState.tabsFor(liveVariant).active
-  const liveIndex = liveVariant ? liveVariant.messages.findIndex((m, i) => messageTabOf(m, i) === liveActive) : -1
+  const liveIndex = liveVariant
+    ? liveVariant.messages.findIndex((m, i) => messageTabOf(m, i) === liveActive)
+    : -1
   const liveStep = parseStepTab(liveActive)
   const liveMessage = liveStep
     ? liveVariant?.steps?.[liveStep.step]?.[liveStep.index]
     : liveVariant?.messages[liveIndex]
-  const liveStepKey = liveVariant && liveStep && liveActive ? stepKey(liveVariant.name, liveActive) : null
+  const liveStepKey =
+    liveVariant && liveStep && liveActive ? stepKey(liveVariant.name, liveActive) : null
   const liveLint = useLintTemplate()
   const live = useLiveLint(
     liveVariant && liveMessage
-      ? { key: `${liveVariant.name}:${liveStepKey ?? liveIndex}:${lintEpoch}`, content: liveMessage.content }
+      ? {
+          key: `${liveVariant.name}:${liveStepKey ?? liveIndex}:${lintEpoch}`,
+          content: liveMessage.content,
+        }
       : null,
     async (content) => (await liveLint.mutateAsync(content)).errors,
     (errors) => {
@@ -473,16 +496,25 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const activeIndex = messages.findIndex((m, i) => messageTabOf(m, i) === tabs.active)
   const activeStep = parseStepTab(tabs.active)
   const current: Selection | null =
-    tabs.active === 'meta' ? { kind: 'meta' }
-      : tabs.active === 'variant' && selectedVariantObj ? { kind: 'variant' }
-      : tabs.active === 'render' && selectedVariantObj ? { kind: 'render' }
-      : activeIndex >= 0 ? { kind: 'message', index: activeIndex }
-      : activeStep ? { kind: 'step', ...activeStep }
-      : null
+    tabs.active === 'meta'
+      ? { kind: 'meta' }
+      : tabs.active === 'variant' && selectedVariantObj
+        ? { kind: 'variant' }
+        : tabs.active === 'render' && selectedVariantObj
+          ? { kind: 'render' }
+          : activeIndex >= 0
+            ? { kind: 'message', index: activeIndex }
+            : activeStep
+              ? { kind: 'step', ...activeStep }
+              : null
   const currentMessage = current?.kind === 'message' ? messages[current.index] : undefined
   // `tabs.open` only holds tabs that resolve, so an active step tab has its message.
-  const currentStepMessage = current?.kind === 'step' ? selectedVariantObj?.steps?.[current.step]?.[current.index] : undefined
-  const currentStepKey = current?.kind === 'step' ? stepKey(variantName, stepTabOf(current.step, current.index)) : null
+  const currentStepMessage =
+    current?.kind === 'step'
+      ? selectedVariantObj?.steps?.[current.step]?.[current.index]
+      : undefined
+  const currentStepKey =
+    current?.kind === 'step' ? stepKey(variantName, stepTabOf(current.step, current.index)) : null
   // The message the editor and the variable sidebar work on, of either kind.
   const editedMessage = currentMessage ?? currentStepMessage
   const used = editedMessage ? usedTemplateVars(editedMessage.content) : []
@@ -526,13 +558,18 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const invalidJinja = flagged
     .filter((index) => messages[index])
     .sort((a, b) => a - b)
-    .map((index) => ({ label: `${index + 1}`, message: messages[index], error: diagnostics[index][0] }))
+    .map((index) => ({
+      label: `${index + 1}`,
+      message: messages[index],
+      error: diagnostics[index][0],
+    }))
   // Step messages of the selected variant the live check flagged.
-  const invalidStepJinja = Object.entries(selectedVariantObj?.steps ?? {}).flatMap(([step, stepMessages]) =>
-    stepMessages.flatMap((message, index) => {
-      const error = stepDiagnostics[stepKey(variantName, stepTabOf(step, index))]?.[0]
-      return error ? [{ label: `${step} ${index + 1}`, message, error }] : []
-    }),
+  const invalidStepJinja = Object.entries(selectedVariantObj?.steps ?? {}).flatMap(
+    ([step, stepMessages]) =>
+      stepMessages.flatMap((message, index) => {
+        const error = stepDiagnostics[stepKey(variantName, stepTabOf(step, index))]?.[0]
+        return error ? [{ label: `${step} ${index + 1}`, message, error }] : []
+      }),
   )
   const invalidAll = [...invalidJinja, ...invalidStepJinja]
 
@@ -600,7 +637,9 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     setChecked(new Set())
     setLintError(null)
     try {
-      const results = await Promise.all(messages.map((message) => lint.mutateAsync(message.content)))
+      const results = await Promise.all(
+        messages.map((message) => lint.mutateAsync(message.content)),
+      )
       // Keyed by index: after a variant switch or a reorder they would mark
       // the wrong messages.
       if (lintEpochRef.current !== epoch) return
@@ -638,7 +677,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   }
   /** The first edit in a preview tab keeps it, as in VS Code. */
   const pinActive = () => {
-    if (tabs.active && tabs.preview === tabs.active) tabsState.update(variantTabs(variantName), (prev) => pinTab(prev, tabs.active as TabId))
+    if (tabs.active && tabs.preview === tabs.active)
+      tabsState.update(variantTabs(variantName), (prev) => pinTab(prev, tabs.active as TabId))
   }
 
   const pickVariant = (name: string) => {
@@ -658,7 +698,10 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   }
 
   const addVariant = () => {
-    const name = uniqueVariantName(t('newVariantDefault'), draft.variants.map((v) => v.name))
+    const name = uniqueVariantName(
+      t('newVariantDefault'),
+      draft.variants.map((v) => v.name),
+    )
     const uid = newMessageUid()
     dispatch({ type: 'addVariant', name, uid })
     setSelectedVariant(name)
@@ -666,13 +709,17 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     // The reducer has not run yet, so the new variant is described by hand.
     // Its first message opens as the preview tab (as for any variant), and
     // the settings open beside it, pinned and active.
-    tabsState.update({ name, messages: [{ ...emptyMessage(), uid }] }, (prev) => openTab(prev, 'variant', true))
+    tabsState.update({ name, messages: [{ ...emptyMessage(), uid }] }, (prev) =>
+      openTab(prev, 'variant', true),
+    )
   }
 
   const addMessage = () => {
     const uid = newMessageUid()
     dispatch({ type: 'addMessage', variant: variantName, uid })
-    tabsState.update(variantTabs(variantName, [{ ...emptyMessage(), uid }]), (prev) => openTab(prev, `msg:${uid}`, true))
+    tabsState.update(variantTabs(variantName, [{ ...emptyMessage(), uid }]), (prev) =>
+      openTab(prev, `msg:${uid}`, true),
+    )
   }
 
   const removeMessage = (index: number) => {
@@ -747,9 +794,12 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           ? currentStepKey in stepDiagnostics
           : messages.length > 0 && messages.every((_, index) => checked.has(index))),
     error: lintError,
-    errors: current?.kind === 'message'
-      ? (diagnostics[current.index] ?? [])
-      : currentStepKey ? (stepDiagnostics[currentStepKey] ?? []) : [],
+    errors:
+      current?.kind === 'message'
+        ? (diagnostics[current.index] ?? [])
+        : currentStepKey
+          ? (stepDiagnostics[currentStepKey] ?? [])
+          : [],
   }
 
   const varSidebarProps = {
@@ -772,16 +822,21 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const modelKeyOf = (tab: `msg:${string}`) => `${docLang}/${agentKey}/${tab.slice(4)}`
   // A step tab names its message by position, which repeats across variants,
   // so its model key carries the variant too.
-  const stepModelKeyOf = (variant: string, tab: `step:${string}`) => `${docLang}/${agentKey}/${variant}/${tab}`
+  const stepModelKeyOf = (variant: string, tab: `step:${string}`) =>
+    `${docLang}/${agentKey}/${variant}/${tab}`
   // Every open message tab of every variant keeps its editor model (undo,
   // cursor, scroll). Resolved per variant: a deleted message's tab drops out
   // at once, and a variant never touched still has its implicit first tab.
   const modelKeys = draft.variants.flatMap((variant) =>
-    tabsState.tabsFor(variant).open.flatMap((id) =>
-      id.startsWith('msg:') ? [modelKeyOf(id as `msg:${string}`)]
-        : id.startsWith('step:') ? [stepModelKeyOf(variant.name, id as `step:${string}`)]
-        : [],
-    ),
+    tabsState
+      .tabsFor(variant)
+      .open.flatMap((id) =>
+        id.startsWith('msg:')
+          ? [modelKeyOf(id as `msg:${string}`)]
+          : id.startsWith('step:')
+            ? [stepModelKeyOf(variant.name, id as `step:${string}`)]
+            : [],
+      ),
   )
 
   // The render and test-run requests post these; the uids are client-only.
@@ -791,7 +846,9 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // no uids, so they are posted as they are.
   const stepNames = Object.keys(selectedVariantObj?.steps ?? {})
   const shownStep = renderStep && stepNames.includes(renderStep) ? renderStep : stepNames[0]
-  const renderMessages = shownStep ? (selectedVariantObj?.steps?.[shownStep] ?? []) : requestMessages
+  const renderMessages = shownStep
+    ? (selectedVariantObj?.steps?.[shownStep] ?? [])
+    : requestMessages
 
   const preview = (
     <RenderPreview
@@ -813,7 +870,10 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   const centre = (
     <>
       {!current && (
-        <div className="text-muted" style={{ flex: 1, display: 'grid', placeItems: 'center', fontSize: 13, padding: 24 }}>
+        <div
+          className="text-muted"
+          style={{ flex: 1, display: 'grid', placeItems: 'center', fontSize: 13, padding: 24 }}
+        >
           {t('noOpenEditor')}
         </div>
       )}
@@ -833,7 +893,15 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         />
       )}
       {current?.kind === 'variant' && selectedVariantObj && (
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'auto' }}>
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'auto',
+          }}
+        >
           {messages.length === 0 && Object.keys(selectedVariantObj.steps ?? {}).length === 0 && (
             <div className="text-muted" style={{ padding: '20px 24px 0', fontSize: 13 }}>
               {t('noMessages')}
@@ -891,7 +959,12 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         // inputs) each scroll and fill the full height, like editor + sidebar.
         <div
           data-testid="render-pane"
-          style={{ flex: 1, minWidth: 0, minHeight: 0, display: current?.kind === 'render' ? 'flex' : 'none' }}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            display: current?.kind === 'render' ? 'flex' : 'none',
+          }}
         >
           {preview}
         </div>
@@ -924,14 +997,24 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
             // only a real edit pins the tab and drops the lint result.
             if (content === currentMessage.content) return
             pinActive()
-            dispatch({ type: 'setMessageContent', variant: variantName, index: current.index, content })
+            dispatch({
+              type: 'setMessageContent',
+              variant: variantName,
+              index: current.index,
+              content,
+            })
             // Only THIS message's own result is invalid -- it changed no
             // index, so every other message's result still points correctly.
             dropDiagnostic(current.index)
           }}
           onSource={(source) => {
             pinActive()
-            dispatch({ type: 'setMessageSource', variant: variantName, index: current.index, source })
+            dispatch({
+              type: 'setMessageSource',
+              variant: variantName,
+              index: current.index,
+              source,
+            })
           }}
           onFile={(file) => {
             pinActive()
@@ -946,7 +1029,13 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         <MessagePane
           key={`${docLang}/${agentKey}`}
           editorRef={editorRef}
-          path={messagePath(draft.file, variantName, current.index, currentStepMessage, current.step)}
+          path={messagePath(
+            draft.file,
+            variantName,
+            current.index,
+            currentStepMessage,
+            current.step,
+          )}
           message={currentStepMessage}
           index={current.index}
           count={selectedVariantObj?.steps?.[current.step]?.length ?? 0}
@@ -961,12 +1050,24 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
           onMove={() => {}}
           onRole={(role) => {
             pinActive()
-            dispatch({ type: 'setMessageRole', variant: variantName, step: current.step, index: current.index, role })
+            dispatch({
+              type: 'setMessageRole',
+              variant: variantName,
+              step: current.step,
+              index: current.index,
+              role,
+            })
           }}
           onContent={(content) => {
             if (content === currentStepMessage.content) return
             pinActive()
-            dispatch({ type: 'setMessageContent', variant: variantName, step: current.step, index: current.index, content })
+            dispatch({
+              type: 'setMessageContent',
+              variant: variantName,
+              step: current.step,
+              index: current.index,
+              content,
+            })
             // Only this message's own verdict described the old text.
             setStepDiagnostics((diags) => {
               if (!currentStepKey || !(currentStepKey in diags)) return diags
@@ -995,10 +1096,32 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // tab always finds its message.
   const editorTabs: EditorTab[] = tabs.open.map((id) => {
     const isPreview = tabs.preview === id
-    if (id === 'meta') return { id, label: 'prompt.yaml', dirty: isMetaDirty(original, draft), flagged: false, preview: isPreview }
-    if (id === 'render') return { id, label: t('render'), prefix: '▶', dirty: false, flagged: false, preview: isPreview }
+    if (id === 'meta')
+      return {
+        id,
+        label: 'prompt.yaml',
+        dirty: isMetaDirty(original, draft),
+        flagged: false,
+        preview: isPreview,
+      }
+    if (id === 'render')
+      return {
+        id,
+        label: t('render'),
+        prefix: '▶',
+        dirty: false,
+        flagged: false,
+        preview: isPreview,
+      }
     if (id === 'variant') {
-      return { id, label: variantName, prefix: '⚙', dirty: selectedVariantObj ? isVariantDirty(original, selectedVariantObj) : false, flagged: false, preview: isPreview }
+      return {
+        id,
+        label: variantName,
+        prefix: '⚙',
+        dirty: selectedVariantObj ? isVariantDirty(original, selectedVariantObj) : false,
+        flagged: false,
+        preview: isPreview,
+      }
     }
     const step = parseStepTab(id)
     if (step) {
@@ -1014,7 +1137,14 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     }
     const index = messages.findIndex((m, i) => messageTabOf(m, i) === id)
     const message = messages[index]
-    return { id, label: messageLabel(message, t('emptyMessage')), prefix: message.role, dirty: isMessageDirty(original, message), flagged: index in diagnostics, preview: isPreview }
+    return {
+      id,
+      label: messageLabel(message, t('emptyMessage')),
+      prefix: message.role,
+      dirty: isMessageDirty(original, message),
+      flagged: index in diagnostics,
+      preview: isPreview,
+    }
   })
 
   const split = (
@@ -1037,16 +1167,29 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         // without it), so a non-admin gets no way to open an empty tab.
         onOpenRender={isAdmin ? (pin) => open('render', pin) : undefined}
       />
-      <div ref={splitColumnRef} style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <div
+        ref={splitColumnRef}
+        style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}
+      >
         <EditorTabs
           tabs={editorTabs}
           active={tabs.active}
           onActivate={(id) => open(id, false)}
           onPin={(id) => tabsState.update(variantTabs(variantName), (prev) => pinTab(prev, id))}
           onClose={(id) => tabsState.update(variantTabs(variantName), (prev) => closeTab(prev, id))}
-          trailing={isAdmin && (
-            <Button type="button" text label="▶" aria-label={t('openRender')} title={t('openRender')} onClick={() => open('render', true)} style={{ padding: '0 6px', fontSize: 12 }} />
-          )}
+          trailing={
+            isAdmin && (
+              <Button
+                type="button"
+                text
+                label="▶"
+                aria-label={t('openRender')}
+                title={t('openRender')}
+                onClick={() => open('render', true)}
+                style={{ padding: '0 6px', fontSize: 12 }}
+              />
+            )
+          }
         />
         <div style={{ flex: 1, minHeight: 0, display: 'flex' }}>
           {centre}
@@ -1081,7 +1224,12 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div
       data-testid="prompt-editor"
-      style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 52px)', minHeight: 600 }}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: 'calc(100vh - 52px)',
+        minHeight: 600,
+      }}
     >
       {/* Blocked, not merely flagged: design §6 has the form enforce both
           edges, and an enum with no `choices` is refused by
@@ -1119,8 +1267,9 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
             <>
               {t('saveBlockedJinja')}{' '}
               {invalidAll
-                .map(({ label, message, error }) =>
-                  `${label} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine', { line: error.line, message: error.message })}`,
+                .map(
+                  ({ label, message, error }) =>
+                    `${label} (${message.role}${message.source === 'file' && message.file ? `, ${message.file}` : ''}), ${t('lintLine', { line: error.line, message: error.message })}`,
                 )
                 .join(' · ')}
             </>

@@ -16,13 +16,7 @@ interface TopBarProps {
   onSignOut: () => void
 }
 
-export function TopBar({
-  session,
-  theme,
-  serviceLabel,
-  onToggleTheme,
-  onSignOut,
-}: TopBarProps) {
+export function TopBar({ session, theme, serviceLabel, onToggleTheme, onSignOut }: TopBarProps) {
   const { t } = useTranslation()
   return (
     <header

@@ -7,7 +7,11 @@ const ERROR: LintError = { line: 1, column: 1, message: 'Unexpected end of templ
 
 /** A `check` whose every call waits until the test settles it by hand. */
 function deferredCheck() {
-  const calls: { content: string; resolve: (errors: LintError[]) => void; reject: (e: Error) => void }[] = []
+  const calls: {
+    content: string
+    resolve: (errors: LintError[]) => void
+    reject: (e: Error) => void
+  }[] = []
   const check = vi.fn(
     (content: string) =>
       new Promise<LintError[]>((resolve, reject) => {

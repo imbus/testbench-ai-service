@@ -204,9 +204,7 @@ function VarRow({
   return (
     <div data-testid="var-row" className="var-card">
       <div className="var-card-head">
-        <code className="var-card-name">
-          {`{{ ${name} }}`}
-        </code>
+        <code className="var-card-name">{`{{ ${name} }}`}</code>
         <span className="var-card-required">
           <span id={requiredLabelId}>{t('varRequired')}</span>
           <Switch
@@ -217,9 +215,7 @@ function VarRow({
             onToggle={() => onEdit({ ...decl, required: !decl.required })}
           />
         </span>
-        {!readOnly && (
-          <Button type="button" text label={t('remove')} onClick={onRemove} />
-        )}
+        {!readOnly && <Button type="button" text label={t('remove')} onClick={onRemove} />}
       </div>
       <div className="var-card-grid">
         <div className="field var-card-wide">

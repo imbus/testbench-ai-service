@@ -44,7 +44,8 @@ export function useLiveLint(
       () => {
         sentKey.current = key
         setChecking(true)
-        checkRef.current(content)
+        checkRef
+          .current(content)
           .then(
             (errors) => live && onResultRef.current(errors),
             () => live && onResultRef.current(null),

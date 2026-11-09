@@ -20,7 +20,11 @@ export type VariantTabs = {
   preview: TabId | null
 }
 
-export type TabsVariant = { name: string; messages: PromptMessageDoc[]; steps?: Record<string, PromptMessageDoc[]> }
+export type TabsVariant = {
+  name: string
+  messages: PromptMessageDoc[]
+  steps?: Record<string, PromptMessageDoc[]>
+}
 
 export function messageTabOf(message: PromptMessageDoc, index: number): `msg:${string}` {
   return `msg:${message.uid ?? `#${index}`}`
@@ -46,7 +50,9 @@ export function parseStepTab(tab: TabId | null): { step: string; index: number }
 
 /** Every step message's tab, in the order the tree lists them. */
 export function stepTabsOf(variant: TabsVariant): `step:${string}`[] {
-  return Object.entries(variant.steps ?? {}).flatMap(([step, messages]) => messages.map((_, index) => stepTabOf(step, index)))
+  return Object.entries(variant.steps ?? {}).flatMap(([step, messages]) =>
+    messages.map((_, index) => stepTabOf(step, index)),
+  )
 }
 
 export function initialTabs(first: TabId): VariantTabs {
@@ -58,7 +64,9 @@ export function openTab(tabs: VariantTabs, tab: TabId, pin: boolean): VariantTab
     return { ...tabs, active: tab, preview: pin && tabs.preview === tab ? null : tabs.preview }
   }
   if (pin) return { ...tabs, open: [...tabs.open, tab], active: tab }
-  const open = tabs.preview ? tabs.open.map((id) => (id === tabs.preview ? tab : id)) : [...tabs.open, tab]
+  const open = tabs.preview
+    ? tabs.open.map((id) => (id === tabs.preview ? tab : id))
+    : [...tabs.open, tab]
   return { open, active: tab, preview: tab }
 }
 
@@ -92,26 +100,46 @@ export function visibleTabs(tabs: VariantTabs, valid: TabId[]): VariantTabs {
   const open = tabs.open.filter((id) => valid.includes(id))
   let active = tabs.active
   if (active && !valid.includes(active)) {
-    const index = tabs.open.slice(0, tabs.open.indexOf(active)).filter((id) => valid.includes(id)).length
+    const index = tabs.open
+      .slice(0, tabs.open.indexOf(active))
+      .filter((id) => valid.includes(id)).length
     active = neighbour(open, index)
   }
-  return { open, active, preview: tabs.preview && valid.includes(tabs.preview) ? tabs.preview : null }
+  return {
+    open,
+    active,
+    preview: tabs.preview && valid.includes(tabs.preview) ? tabs.preview : null,
+  }
 }
 
 function validTabs(variant: TabsVariant): TabId[] {
-  return ['meta', 'variant', 'render', ...variant.messages.map(messageTabOf), ...stepTabsOf(variant)]
+  return [
+    'meta',
+    'variant',
+    'render',
+    ...variant.messages.map(messageTabOf),
+    ...stepTabsOf(variant),
+  ]
 }
 
-function resolve(state: Record<string, VariantTabs>, variant: TabsVariant | undefined): VariantTabs {
+function resolve(
+  state: Record<string, VariantTabs>,
+  variant: TabsVariant | undefined,
+): VariantTabs {
   if (!variant) return initialTabs('meta')
-  const first: TabId = variant.messages[0] ? messageTabOf(variant.messages[0], 0) : (stepTabsOf(variant)[0] ?? 'variant')
+  const first: TabId = variant.messages[0]
+    ? messageTabOf(variant.messages[0], 0)
+    : (stepTabsOf(variant)[0] ?? 'variant')
   return visibleTabs(state[variant.name] ?? initialTabs(first), validTabs(variant))
 }
 
 export function useEditorTabs() {
   const [state, setState] = useState<Record<string, VariantTabs>>({})
 
-  const tabsFor = useCallback((variant: TabsVariant | undefined) => resolve(state, variant), [state])
+  const tabsFor = useCallback(
+    (variant: TabsVariant | undefined) => resolve(state, variant),
+    [state],
+  )
 
   /** `variant` may already list a message the draft adds in the same event (add message). */
   const update = useCallback((variant: TabsVariant, change: (tabs: VariantTabs) => VariantTabs) => {

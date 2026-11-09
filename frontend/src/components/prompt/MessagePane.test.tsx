@@ -12,7 +12,13 @@ vi.mock('../CodeEditor', async () => {
   const { forwardRef, useImperativeHandle } = await import('react')
   return {
     CodeEditor: forwardRef(function MockCodeEditor(
-      { value, onChange, ariaLabel, readOnly, diagnostics }: {
+      {
+        value,
+        onChange,
+        ariaLabel,
+        readOnly,
+        diagnostics,
+      }: {
         value: string
         onChange: (value: string) => void
         ariaLabel: string
@@ -21,7 +27,10 @@ vi.mock('../CodeEditor', async () => {
       },
       ref,
     ) {
-      useImperativeHandle(ref, () => ({ insert: (text: string) => onChange(value + text) }), [value, onChange])
+      useImperativeHandle(ref, () => ({ insert: (text: string) => onChange(value + text) }), [
+        value,
+        onChange,
+      ])
       return (
         <div>
           <textarea
@@ -31,7 +40,9 @@ vi.mock('../CodeEditor', async () => {
             onChange={(e) => onChange(e.target.value)}
           />
           {(diagnostics ?? []).map((error, index) => (
-            <div key={index} role="alert">{error.message}</div>
+            <div key={index} role="alert">
+              {error.message}
+            </div>
           ))}
         </div>
       )
@@ -207,24 +218,32 @@ describe('MessagePane', () => {
   })
 
   it('marks an unreadable template', () => {
-    setup({ message: { role: 'system', source: 'file', file: 'sys.jinja', content: '', readable: false } })
+    setup({
+      message: { role: 'system', source: 'file', file: 'sys.jinja', content: '', readable: false },
+    })
     expect(screen.getByRole('alert')).toHaveTextContent(/sys\.jinja/)
   })
 
   it('disables the source toggle for an unreadable message and shows why', () => {
-    setup({ message: { role: 'system', source: 'file', file: 'sys.jinja', content: '', readable: false } })
+    setup({
+      message: { role: 'system', source: 'file', file: 'sys.jinja', content: '', readable: false },
+    })
     expect(screen.getByLabelText(/source/i)).toBeDisabled()
     expect(screen.getByRole('alert')).toHaveTextContent(/sys\.jinja/)
   })
 
   it('keeps the editor of an unreadable template read-only', () => {
     // Saving it is refused (409), so typing into the empty stand-in is lost.
-    setup({ message: { role: 'system', source: 'file', file: 'sys.jinja', content: '', readable: false } })
+    setup({
+      message: { role: 'system', source: 'file', file: 'sys.jinja', content: '', readable: false },
+    })
     expect(screen.getByRole('textbox', { name: /sys\.jinja/ })).toHaveAttribute('readonly')
   })
 
   it('leaves the source toggle enabled for a readable message', () => {
-    setup({ message: { role: 'system', source: 'file', file: 'sys.jinja', content: 'S', readable: true } })
+    setup({
+      message: { role: 'system', source: 'file', file: 'sys.jinja', content: 'S', readable: true },
+    })
     expect(screen.getByLabelText(/source/i)).toBeEnabled()
   })
 
@@ -276,7 +295,9 @@ describe('MessagePane', () => {
   })
 
   it('offers no variable picker for an unreadable file', () => {
-    setup({ message: { role: 'system', source: 'file', file: 'gone.jinja', content: '', readable: false } })
+    setup({
+      message: { role: 'system', source: 'file', file: 'gone.jinja', content: '', readable: false },
+    })
     expect(screen.queryByLabelText('Insert variable…')).not.toBeInTheDocument()
   })
 })

@@ -2,7 +2,8 @@ import { de } from './de'
 import { en } from './en'
 import { i18n, storedLang } from '.'
 
-const placeholders = (text: string) => [...text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m[1]).sort()
+const placeholders = (text: string) =>
+  [...text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m[1]).sort()
 
 test('both languages use the same placeholders per key', () => {
   for (const key of Object.keys(de) as (keyof typeof de)[]) {

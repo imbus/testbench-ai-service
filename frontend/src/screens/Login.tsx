@@ -25,9 +25,7 @@ interface LoginProps {
  * The service's own message is technical (it is the requests exception for an
  * unreachable TestBench), so it goes under "Details" rather than in the headline.
  */
-function signInErrorKeys(
-  status: number,
-): [keyof Translations, keyof Translations | null] {
+function signInErrorKeys(status: number): [keyof Translations, keyof Translations | null] {
   switch (status) {
     case 0:
       return ['loginErrorService', 'loginErrorServiceHint']
@@ -51,13 +49,7 @@ function signInErrorKeys(
  * role segmented control is not ported, because the role comes from the JWT
  * TestBench issues and is not the operator's to choose.
  */
-export function Login({
-  theme,
-  busy,
-  error,
-  onSignIn,
-  onToggleTheme,
-}: LoginProps) {
+export function Login({ theme, busy, error, onSignIn, onToggleTheme }: LoginProps) {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')

@@ -6,7 +6,14 @@ import { messageTabOf, stepTabOf, type TabId } from '../../state/editorTabs'
 import { messageLabel } from './selection'
 
 const codeFont = 'var(--font-code)'
-const rowButton = { border: 0, background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', textAlign: 'left' as const }
+const rowButton = {
+  border: 0,
+  background: 'transparent',
+  color: 'inherit',
+  font: 'inherit',
+  cursor: 'pointer',
+  textAlign: 'left' as const,
+}
 
 /**
  * The Split layout's left column: prompt.yaml, then variants with the selected one expanded.
@@ -19,7 +26,22 @@ const rowButton = { border: 0, background: 'transparent', color: 'inherit', font
  * A single click opens a row in the preview tab, a double click keeps it
  * open -- VS Code's explorer. The marked row is the active tab's.
  */
-export function PromptTree({ variants, selectedVariant, activeTab, flagged, invalidVariants = [], readOnly, onOpenMeta, onPickVariant, onOpenVariantSettings, onPickMessage, onPickStep, onAddVariant, onAddMessage, onOpenRender }: {
+export function PromptTree({
+  variants,
+  selectedVariant,
+  activeTab,
+  flagged,
+  invalidVariants = [],
+  readOnly,
+  onOpenMeta,
+  onPickVariant,
+  onOpenVariantSettings,
+  onPickMessage,
+  onPickStep,
+  onAddVariant,
+  onAddMessage,
+  onOpenRender,
+}: {
   variants: PromptVariantDoc[]
   selectedVariant: string
   activeTab: TabId | null
@@ -40,31 +62,73 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
   onOpenRender?: (pin: boolean) => void
 }) {
   const { t } = useTranslation()
-  const files = [...new Set(variants.flatMap((v) => [...v.messages, ...Object.values(v.steps ?? {}).flat()].filter((m) => m.source === 'file' && m.file).map((m) => m.file as string)))]
+  const files = [
+    ...new Set(
+      variants.flatMap((v) =>
+        [...v.messages, ...Object.values(v.steps ?? {}).flat()]
+          .filter((m) => m.source === 'file' && m.file)
+          .map((m) => m.file as string),
+      ),
+    ),
+  ]
 
   return (
     // No aria-label: `t('variants')` already names the toolbar's variant select,
     // and a second element with that label makes getByLabelText ambiguous.
     <nav
       data-testid="prompt-tree"
-      style={{ width: 250, flex: 'none', borderRight: '1px solid var(--color-divider)', display: 'flex', flexDirection: 'column', overflow: 'auto', fontSize: 13 }}
+      style={{
+        width: 250,
+        flex: 'none',
+        borderRight: '1px solid var(--color-divider)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'auto',
+        fontSize: 13,
+      }}
     >
       <button
         type="button"
         aria-current={activeTab === 'meta' || undefined}
         onClick={() => onOpenMeta(false)}
         onDoubleClick={() => onOpenMeta(true)}
-        style={{ ...rowButton, padding: '8px 14px', display: 'flex', flexDirection: 'column', background: activeTab === 'meta' ? 'var(--color-surface)' : 'transparent' }}
+        style={{
+          ...rowButton,
+          padding: '8px 14px',
+          display: 'flex',
+          flexDirection: 'column',
+          background: activeTab === 'meta' ? 'var(--color-surface)' : 'transparent',
+        }}
       >
         <span style={{ fontFamily: codeFont, fontSize: 12 }}>prompt.yaml</span>
-        <span className="text-muted" style={{ fontSize: 11 }}>{t('promptMetaHint')}</span>
+        <span className="text-muted" style={{ fontSize: 11 }}>
+          {t('promptMetaHint')}
+        </span>
       </button>
 
-      <div className="text-muted" style={{ display: 'flex', alignItems: 'center', padding: '10px 14px 4px', fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+      <div
+        className="text-muted"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '10px 14px 4px',
+          fontSize: 11,
+          letterSpacing: '.08em',
+          textTransform: 'uppercase',
+        }}
+      >
         <span>{t('variants')}</span>
         <div style={{ flex: 1 }} />
         {!readOnly && (
-          <Button type="button" text label="+" aria-label={t('newVariantDefault')} title={t('newVariantDefault')} style={{ padding: '0 4px', fontSize: 12 }} onClick={onAddVariant} />
+          <Button
+            type="button"
+            text
+            label="+"
+            aria-label={t('newVariantDefault')}
+            title={t('newVariantDefault')}
+            style={{ padding: '0 4px', fontSize: 12 }}
+            onClick={onAddVariant}
+          />
         )}
       </div>
 
@@ -73,61 +137,165 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
         const invalid = invalidVariants.includes(variant.name)
         return (
           <div key={variant.name} style={{ display: 'flex', flexDirection: 'column' }}>
-            <div style={{ display: 'flex', alignItems: 'center', padding: '6px 14px', gap: 6, background: open && activeTab === 'variant' ? 'var(--color-surface)' : 'transparent' }}>
-              <button type="button" aria-expanded={open} aria-invalid={invalid || undefined} onClick={() => onPickVariant(variant.name)} style={{ ...rowButton, fontWeight: 500, padding: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6, color: invalid ? 'var(--color-danger)' : 'inherit' }}>
-                <span aria-hidden style={{ fontSize: 10 }}>{open ? '▾' : '▸'}</span>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                padding: '6px 14px',
+                gap: 6,
+                background:
+                  open && activeTab === 'variant' ? 'var(--color-surface)' : 'transparent',
+              }}
+            >
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-invalid={invalid || undefined}
+                onClick={() => onPickVariant(variant.name)}
+                style={{
+                  ...rowButton,
+                  fontWeight: 500,
+                  padding: 0,
+                  flex: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  color: invalid ? 'var(--color-danger)' : 'inherit',
+                }}
+              >
+                <span aria-hidden style={{ fontSize: 10 }}>
+                  {open ? '▾' : '▸'}
+                </span>
                 {variant.name}
               </button>
-              {variant.model && <span className="text-muted" style={{ fontFamily: codeFont, fontSize: 11 }}>{variant.model}</span>}
-              <Button type="button" text label="⚙" aria-label={`${t('variantSettings')}: ${variant.name}`} title={t('variantSettings')} onClick={() => onOpenVariantSettings(variant.name, false)} onDoubleClick={() => onOpenVariantSettings(variant.name, true)} style={{ padding: '0 4px', fontSize: 12 }} />
+              {variant.model && (
+                <span className="text-muted" style={{ fontFamily: codeFont, fontSize: 11 }}>
+                  {variant.model}
+                </span>
+              )}
+              <Button
+                type="button"
+                text
+                label="⚙"
+                aria-label={`${t('variantSettings')}: ${variant.name}`}
+                title={t('variantSettings')}
+                onClick={() => onOpenVariantSettings(variant.name, false)}
+                onDoubleClick={() => onOpenVariantSettings(variant.name, true)}
+                style={{ padding: '0 4px', fontSize: 12 }}
+              />
             </div>
-            {open && variant.messages.map((message, index) => {
-              const current = activeTab === messageTabOf(message, index)
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  aria-current={current || undefined}
-                  aria-invalid={flagged.includes(index) || undefined}
-                  onClick={() => onPickMessage(index, false)}
-                  onDoubleClick={() => onPickMessage(index, true)}
-                  style={{ ...rowButton, fontSize: 12, padding: '5px 14px 5px 34px', display: 'flex', gap: 6, alignItems: 'center', background: current ? 'var(--color-surface)' : 'transparent' }}
-                >
-                  <Tag severity="secondary" value={message.role} style={{ padding: '0 5px', fontSize: 10 }} />
-                  <span style={{ fontFamily: codeFont, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{messageLabel(message, t('emptyMessage'))}</span>
-                  {flagged.includes(index) && <span aria-hidden style={{ color: 'var(--color-danger)' }}>●</span>}
-                </button>
-              )
-            })}
+            {open &&
+              variant.messages.map((message, index) => {
+                const current = activeTab === messageTabOf(message, index)
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    aria-current={current || undefined}
+                    aria-invalid={flagged.includes(index) || undefined}
+                    onClick={() => onPickMessage(index, false)}
+                    onDoubleClick={() => onPickMessage(index, true)}
+                    style={{
+                      ...rowButton,
+                      fontSize: 12,
+                      padding: '5px 14px 5px 34px',
+                      display: 'flex',
+                      gap: 6,
+                      alignItems: 'center',
+                      background: current ? 'var(--color-surface)' : 'transparent',
+                    }}
+                  >
+                    <Tag
+                      severity="secondary"
+                      value={message.role}
+                      style={{ padding: '0 5px', fontSize: 10 }}
+                    />
+                    <span
+                      style={{
+                        fontFamily: codeFont,
+                        flex: 1,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {messageLabel(message, t('emptyMessage'))}
+                    </span>
+                    {flagged.includes(index) && (
+                      <span aria-hidden style={{ color: 'var(--color-danger)' }}>
+                        ●
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
             {/* A multi-step variant's message lists, one group per step. The agent's
                 code expects these steps, so there is no add or remove here. */}
-            {open && Object.entries(variant.steps ?? {}).map(([step, messages]) => (
-              <div key={step} role="group" aria-label={`${t('variantStep')}: ${step}`} style={{ display: 'flex', flexDirection: 'column' }}>
-                <div className="text-muted" style={{ padding: '6px 14px 2px 34px', fontSize: 11, fontFamily: codeFont }}>
-                  {t('variantStep')}: {step}
+            {open &&
+              Object.entries(variant.steps ?? {}).map(([step, messages]) => (
+                <div
+                  key={step}
+                  role="group"
+                  aria-label={`${t('variantStep')}: ${step}`}
+                  style={{ display: 'flex', flexDirection: 'column' }}
+                >
+                  <div
+                    className="text-muted"
+                    style={{ padding: '6px 14px 2px 34px', fontSize: 11, fontFamily: codeFont }}
+                  >
+                    {t('variantStep')}: {step}
+                  </div>
+                  {messages.map((message, index) => {
+                    const tab = stepTabOf(step, index)
+                    const current = activeTab === tab
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        aria-current={current || undefined}
+                        onClick={() => onPickStep(step, index, false)}
+                        onDoubleClick={() => onPickStep(step, index, true)}
+                        style={{
+                          ...rowButton,
+                          fontSize: 12,
+                          padding: '5px 14px 5px 44px',
+                          display: 'flex',
+                          gap: 6,
+                          alignItems: 'center',
+                          background: current ? 'var(--color-surface)' : 'transparent',
+                        }}
+                      >
+                        <Tag
+                          severity="secondary"
+                          value={message.role}
+                          style={{ padding: '0 5px', fontSize: 10 }}
+                        />
+                        <span
+                          style={{
+                            fontFamily: codeFont,
+                            flex: 1,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {messageLabel(message, t('emptyMessage'))}
+                        </span>
+                      </button>
+                    )
+                  })}
                 </div>
-                {messages.map((message, index) => {
-                  const tab = stepTabOf(step, index)
-                  const current = activeTab === tab
-                  return (
-                    <button
-                      key={index}
-                      type="button"
-                      aria-current={current || undefined}
-                      onClick={() => onPickStep(step, index, false)}
-                      onDoubleClick={() => onPickStep(step, index, true)}
-                      style={{ ...rowButton, fontSize: 12, padding: '5px 14px 5px 44px', display: 'flex', gap: 6, alignItems: 'center', background: current ? 'var(--color-surface)' : 'transparent' }}
-                    >
-                      <Tag severity="secondary" value={message.role} style={{ padding: '0 5px', fontSize: 10 }} />
-                      <span style={{ fontFamily: codeFont, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{messageLabel(message, t('emptyMessage'))}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            ))}
+              ))}
             {/* A variant uses either messages or steps, never both. */}
             {open && !readOnly && Object.keys(variant.steps ?? {}).length === 0 && (
-              <Button type="button" text className="text-muted" label={t('addMessageShort')} onClick={onAddMessage} style={{ fontSize: 12, padding: '4px 14px 6px 34px', justifyContent: 'flex-start' }} />
+              <Button
+                type="button"
+                text
+                className="text-muted"
+                label={t('addMessageShort')}
+                onClick={onAddMessage}
+                style={{ fontSize: 12, padding: '4px 14px 6px 34px', justifyContent: 'flex-start' }}
+              />
             )}
             {/* Not gated on readOnly: rendering is not an edit. */}
             {open && onOpenRender && (
@@ -136,9 +304,19 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
                 aria-current={activeTab === 'render' || undefined}
                 onClick={() => onOpenRender(false)}
                 onDoubleClick={() => onOpenRender(true)}
-                style={{ ...rowButton, fontSize: 12, padding: '5px 14px 5px 34px', display: 'flex', gap: 6, alignItems: 'center', background: activeTab === 'render' ? 'var(--color-surface)' : 'transparent' }}
+                style={{
+                  ...rowButton,
+                  fontSize: 12,
+                  padding: '5px 14px 5px 34px',
+                  display: 'flex',
+                  gap: 6,
+                  alignItems: 'center',
+                  background: activeTab === 'render' ? 'var(--color-surface)' : 'transparent',
+                }}
               >
-                <span aria-hidden className="text-muted" style={{ fontSize: 10 }}>▶</span>
+                <span aria-hidden className="text-muted" style={{ fontSize: 10 }}>
+                  ▶
+                </span>
                 {t('render')}
               </button>
             )}
@@ -147,8 +325,13 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
       })}
 
       <div style={{ flex: 1 }} />
-      <div data-testid="tree-files" className="text-muted" style={{ padding: '10px 14px', borderTop: '1px solid var(--color-divider)', fontSize: 11 }}>
-        {t('promptFiles')}: <span style={{ fontFamily: codeFont }}>{files.length ? files.join(', ') : '—'}</span>
+      <div
+        data-testid="tree-files"
+        className="text-muted"
+        style={{ padding: '10px 14px', borderTop: '1px solid var(--color-divider)', fontSize: 11 }}
+      >
+        {t('promptFiles')}:{' '}
+        <span style={{ fontFamily: codeFont }}>{files.length ? files.join(', ') : '—'}</span>
       </div>
     </nav>
   )

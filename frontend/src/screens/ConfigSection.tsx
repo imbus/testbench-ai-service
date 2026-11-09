@@ -142,11 +142,10 @@ export function ConfigSection({
           one line, so the section reads as the subject of the heading rather
           than as a caption under it. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t(TITLE_KEY[section])}</h2>
-        <span
-          className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
-        >
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+          {t(TITLE_KEY[section])}
+        </h2>
+        <span className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}>
           {TOML_SECTION[section]} · {config.data.config_path}
         </span>
       </div>
@@ -263,8 +262,8 @@ export function ConfigSection({
             // Same source ordering every other field on this screen uses:
             // the file first (what the draft is measured against), the
             // fully-defaulted running config only if the file is silent.
-            ((valueAt(config.data.disk, 'llm_config.extra_models') ??
-              valueAt(running, 'llm_config.extra_models')) ??
+            (valueAt(config.data.disk, 'llm_config.extra_models') ??
+              valueAt(running, 'llm_config.extra_models') ??
               {}) as Record<string, ExtraModelEntry>
           }
           issues={issues}

@@ -136,9 +136,7 @@ test('keeps a traceback with its entry', async () => {
 
 test('badges service entries', async () => {
   renderStatus()
-  await waitFor(() =>
-    expect(screen.getByText('Application startup complete.')).toBeInTheDocument(),
-  )
+  await waitFor(() => expect(screen.getByText('Application startup complete.')).toBeInTheDocument())
   expect(screen.getByTestId('service-badge')).toBeInTheDocument()
 })
 
@@ -265,7 +263,9 @@ describe('token usage', () => {
     renderStatus()
 
     await waitFor(() =>
-      expect(screen.getByTestId('token-total')).toHaveTextContent('12.500 Eingabe-Tokens / 3.250 Ausgabe-Tokens'),
+      expect(screen.getByTestId('token-total')).toHaveTextContent(
+        '12.500 Eingabe-Tokens / 3.250 Ausgabe-Tokens',
+      ),
     )
     expect(screen.getByText('gpt-5')).toBeInTheDocument()
     expect(screen.getByText('o3')).toBeInTheDocument()

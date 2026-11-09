@@ -18,11 +18,9 @@ test('preferredTheme falls back to light when the media query is unavailable', (
 })
 
 test('applyTheme still stamps the root element when localStorage.setItem throws', () => {
-  const setItemSpy = vi
-    .spyOn(Storage.prototype, 'setItem')
-    .mockImplementation(() => {
-      throw new Error('storage blocked')
-    })
+  const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('storage blocked')
+  })
 
   expect(() => applyTheme('dark')).not.toThrow()
   expect(document.documentElement.dataset.theme).toBe('dark')

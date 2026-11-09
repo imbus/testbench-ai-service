@@ -78,8 +78,13 @@ export function TestRunPanel({
   // "Other model…": Prime's grouped Dropdown takes groups all the way down.
   const modelGroups = [
     ...providers.map((provider) => ({
-      label: provider.key_present ? provider.provider : `${provider.provider} (${t('testRunNoKey')})`,
-      items: provider.models.map((entry) => ({ label: `${entry.id} · ${entry.routing}`, value: entry.id })),
+      label: provider.key_present
+        ? provider.provider
+        : `${provider.provider} (${t('testRunNoKey')})`,
+      items: provider.models.map((entry) => ({
+        label: `${entry.id} · ${entry.routing}`,
+        value: entry.id,
+      })),
     })),
     { label: '', items: [{ label: t('testRunModelCustom'), value: CUSTOM }] },
   ]
@@ -134,7 +139,9 @@ export function TestRunPanel({
               {selectedEntry.routing === 'fallback' && (
                 <Tag severity="warning" value={t('testRunFallbackHint')} />
               )}
-              {!selectedProvider.key_present && <Tag severity="warning" value={t('testRunNoKey')} />}
+              {!selectedProvider.key_present && (
+                <Tag severity="warning" value={t('testRunNoKey')} />
+              )}
             </div>
           )}
         </div>
@@ -146,7 +153,10 @@ export function TestRunPanel({
             value={project ?? ''}
             options={[
               { label: t('testRunProjectGlobal'), value: '' },
-              ...(projects.data?.projects ?? []).map((entry) => ({ label: entry.name, value: entry.name })),
+              ...(projects.data?.projects ?? []).map((entry) => ({
+                label: entry.name,
+                value: entry.name,
+              })),
             ]}
             onChange={(event) => setProject((event.value as string) || null)}
           />

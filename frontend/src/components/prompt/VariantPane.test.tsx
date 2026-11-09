@@ -39,8 +39,20 @@ const DOC: PromptDocument = {
         },
       },
       messages: [
-        { role: 'system', source: 'file', file: 'sys.jinja', content: 'You are helpful.', readable: true },
-        { role: 'user', source: 'inline', file: null, content: 'Explain {{ agent.defect }}', readable: true },
+        {
+          role: 'system',
+          source: 'file',
+          file: 'sys.jinja',
+          content: 'You are helpful.',
+          readable: true,
+        },
+        {
+          role: 'user',
+          source: 'inline',
+          file: null,
+          content: 'Explain {{ agent.defect }}',
+          readable: true,
+        },
       ],
     },
     {
@@ -73,7 +85,9 @@ describe('VariantPane', () => {
     expect(props.onModel).toHaveBeenLastCalledWith('g')
     // Scoped: VarDeclTable renders its own per-row "Remove" button, and this
     // variant's one var means there is one on screen at the same time (R1).
-    await userEvent.click(within(screen.getByTestId('variant-actions')).getByRole('button', { name: /^remove$/i }))
+    await userEvent.click(
+      within(screen.getByTestId('variant-actions')).getByRole('button', { name: /^remove$/i }),
+    )
     expect(props.onRemove).toHaveBeenCalled()
     expect(screen.getAllByTestId('var-row')).toHaveLength(1)
   })
@@ -116,7 +130,9 @@ describe('VariantPane', () => {
       />,
     )
     expect(screen.getByLabelText('Variant name')).toBeInTheDocument()
-    expect(within(screen.getByTestId('variant-actions')).queryByRole('button', { name: /^remove$/i })).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('variant-actions')).queryByRole('button', { name: /^remove$/i }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows only the declarations for a non-admin', () => {
@@ -195,7 +211,13 @@ describe('VariantPane steps', () => {
     messages: [],
     steps: {
       aspects: [
-        { role: 'system', source: 'file', file: 'aspects_system.jinja', content: 'x', readable: true },
+        {
+          role: 'system',
+          source: 'file',
+          file: 'aspects_system.jinja',
+          content: 'x',
+          readable: true,
+        },
         { role: 'user', source: 'inline', file: null, content: 'y', readable: true },
       ],
     },

@@ -17,9 +17,7 @@ const REPORT: CoverageResult = {
       aspect: aspect('a1', 'Login works'),
       status: 'covered',
       weak_reason: null,
-      evidence: [
-        { set_key: 'S-1', test_case_key: 'TC-1', strength: 'full', evidence: 'logs in' },
-      ],
+      evidence: [{ set_key: 'S-1', test_case_key: 'TC-1', strength: 'full', evidence: 'logs in' }],
       gap_reason: null,
       suggested_test: null,
     },

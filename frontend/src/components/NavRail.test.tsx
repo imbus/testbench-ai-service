@@ -24,10 +24,7 @@ test('marks restricted destinations for a non-admin', () => {
 
 test('leaves Status open to a non-admin', () => {
   renderNav(false)
-  expect(screen.getByRole('link', { name: /Status/ })).not.toHaveAttribute(
-    'aria-disabled',
-    'true',
-  )
+  expect(screen.getByRole('link', { name: /Status/ })).not.toHaveAttribute('aria-disabled', 'true')
 })
 
 test('an admin has nothing disabled', () => {
@@ -40,10 +37,7 @@ test('an admin has nothing disabled', () => {
 it('offers the raw config screen to an admin', () => {
   renderNav(true)
 
-  expect(screen.getByRole('link', { name: /config\.toml/ })).toHaveAttribute(
-    'href',
-    '/admin/raw',
-  )
+  expect(screen.getByRole('link', { name: /config\.toml/ })).toHaveAttribute('href', '/admin/raw')
 })
 
 it('marks the raw config screen restricted for a non-admin', () => {
@@ -58,14 +52,8 @@ it('marks the raw config screen restricted for a non-admin', () => {
 it('offers the agents and projects screens to an admin', () => {
   renderNav(true)
 
-  expect(screen.getByRole('link', { name: /Agenten/ })).toHaveAttribute(
-    'href',
-    '/admin/agents',
-  )
-  expect(screen.getByRole('link', { name: /Projekte/ })).toHaveAttribute(
-    'href',
-    '/admin/projects',
-  )
+  expect(screen.getByRole('link', { name: /Agenten/ })).toHaveAttribute('href', '/admin/agents')
+  expect(screen.getByRole('link', { name: /Projekte/ })).toHaveAttribute('href', '/admin/projects')
 })
 
 it('keeps agents and projects readable for a non-admin', () => {
@@ -75,10 +63,7 @@ it('keeps agents and projects readable for a non-admin', () => {
   renderNav(false)
 
   for (const label of [/Agenten/, /Projekte/]) {
-    expect(screen.getByRole('link', { name: label })).not.toHaveAttribute(
-      'aria-disabled',
-      'true',
-    )
+    expect(screen.getByRole('link', { name: label })).not.toHaveAttribute('aria-disabled', 'true')
   }
 })
 
@@ -107,10 +92,7 @@ it('keeps the prompt editor readable for a non-admin', () => {
   // Read-only for a non-admin, like Agents and Projects: hiding the link
   // would conceal information the operator is allowed to see.
   renderNav(false)
-  expect(screen.getByRole('link', { name: /Prompts/ })).not.toHaveAttribute(
-    'aria-disabled',
-    'true',
-  )
+  expect(screen.getByRole('link', { name: /Prompts/ })).not.toHaveAttribute('aria-disabled', 'true')
 })
 
 it('orders agents and projects after the config sections and before the raw file', () => {

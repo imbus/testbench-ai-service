@@ -131,10 +131,7 @@ export function usePromptMeta(
  * one — matching the backend's silent credential fallback, so the answer is
  * "will a run find a key at all".
  */
-export function useModels(
-  project?: string,
-  { enabled = true }: { enabled?: boolean } = {},
-) {
+export function useModels(project?: string, { enabled = true }: { enabled?: boolean } = {}) {
   const query = project ? `?project=${encodeURIComponent(project)}` : ''
   return useQuery({
     queryKey: ['models', project ?? null],

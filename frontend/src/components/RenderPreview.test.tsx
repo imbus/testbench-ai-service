@@ -237,7 +237,10 @@ describe('RenderPreview', () => {
       JSON.parse(String((calls()[index][1] as RequestInit).body)) as {
         vars: Record<string, unknown>
       }
-    const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms) })
+    const advance = (ms: number) =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(ms)
+      })
     // react-query hands results over through a setTimeout(0) of its own,
     // which the fake clock holds back -- `findBy*` alone would wait forever.
     const settle = async () => {
@@ -346,10 +349,14 @@ describe('RenderPreview', () => {
       fireEvent.change(screen.getByLabelText('tone'), { target: { value: 'casual' } })
       await advance(500)
       expect(pending).toHaveLength(2)
-      await act(async () => pending[1]({ messages: [{ role: 'user', content: 'Newer', error: null }] }))
+      await act(async () =>
+        pending[1]({ messages: [{ role: 'user', content: 'Newer', error: null }] }),
+      )
       await settle()
       expect(screen.getByText('Newer')).toBeInTheDocument()
-      await act(async () => pending[0]({ messages: [{ role: 'user', content: 'Older', error: null }] }))
+      await act(async () =>
+        pending[0]({ messages: [{ role: 'user', content: 'Older', error: null }] }),
+      )
       await settle()
       expect(screen.queryByText('Older')).not.toBeInTheDocument()
       expect(screen.getByText('Newer')).toBeInTheDocument()

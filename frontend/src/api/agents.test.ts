@@ -163,10 +163,7 @@ describe('effectiveAgent', () => {
 
 describe('overridingProjects', () => {
   it('names the projects that override a given agent', () => {
-    expect(overridingProjects(CONFIG, 'test_case_set_reviewer')).toEqual([
-      'Alpha',
-      'Release 2.0',
-    ])
+    expect(overridingProjects(CONFIG, 'test_case_set_reviewer')).toEqual(['Alpha', 'Release 2.0'])
   })
 
   it('excludes a project that overrides only its language', () => {
@@ -212,7 +209,9 @@ describe('the shape the server actually sends', () => {
       Beta: {
         language: 'en',
         llm_config: null,
-        agents: { reviewer: { enabled: null, prompt: { file: null, variant: null, vars: { b: 99 } } } },
+        agents: {
+          reviewer: { enabled: null, prompt: { file: null, variant: null, vars: { b: 99 } } },
+        },
       },
     },
   }
@@ -249,7 +248,7 @@ describe('scopedLlmPath', () => {
     expect(scopedLlmPath({ kind: 'global' }, 'provider')).toBe('llm_config.provider')
   })
 
-  test('project scope addresses the project\'s own llm_config table', () => {
+  test("project scope addresses the project's own llm_config table", () => {
     expect(scopedLlmPath({ kind: 'project', project: 'Alpha' }, 'provider')).toBe(
       'projects.Alpha.llm_config.provider',
     )
@@ -265,9 +264,9 @@ describe('scopedLlmPath', () => {
   })
 
   test('the quoted path tokenizes back to the four segments it means', () => {
-    expect(splitPath(scopedLlmPath({ kind: 'project', project: 'Release 2.0' }, 'provider'))).toEqual(
-      ['projects', 'Release 2.0', 'llm_config', 'provider'],
-    )
+    expect(
+      splitPath(scopedLlmPath({ kind: 'project', project: 'Release 2.0' }, 'provider')),
+    ).toEqual(['projects', 'Release 2.0', 'llm_config', 'provider'])
   })
 
   test('without a setting it addresses the table itself', () => {
@@ -323,9 +322,9 @@ describe('effectiveAgentModel', () => {
 
   it('addresses agent_models in both scopes', () => {
     expect(agentModelPath({ kind: 'global' }, 'reviewer')).toBe('llm_config.agent_models.reviewer')
-    expect(splitPath(agentModelPath({ kind: 'project', project: 'Release 2.0' }, 'reviewer'))).toEqual(
-      ['projects', 'Release 2.0', 'llm_config', 'agent_models', 'reviewer'],
-    )
+    expect(
+      splitPath(agentModelPath({ kind: 'project', project: 'Release 2.0' }, 'reviewer')),
+    ).toEqual(['projects', 'Release 2.0', 'llm_config', 'agent_models', 'reviewer'])
   })
 
   it('globally, an own entry and the llm_config model it replaces', () => {

@@ -28,7 +28,8 @@ export const en = {
   coverageMissing: 'Missing',
   coverageGap: 'Gap',
   coverageSuggestedTest: 'Suggested test',
-  coverageIncomplete: 'The report is incomplete: not all linked test case sets could be interpreted.',
+  coverageIncomplete:
+    'The report is incomplete: not all linked test case sets could be interpreted.',
   coverageNoLinkedTests:
     'No test case is linked to {{requirement}}, so there is nothing to check. Link test case sets to it, or generate test ideas for it first.',
   coverageReduced: 'The aspects rest on the title only, the requirement has no description.',
@@ -51,9 +52,12 @@ export const en = {
   linkCandidate: 'Candidate',
   linkAspects: 'Aspects',
   linkSetsRead: '{{detailed}} of {{screened}} test case sets read in detail',
-  linkNoCandidates: 'No candidates found: no unlinked test case set recognisably tests this requirement.',
-  linkIncomplete: 'The report is incomplete: not all test case sets could be screened or evaluated.',
-  linkReduced: 'The aspects rest on the title only, the requirement has no description; every confidence is lowered by one level.',
+  linkNoCandidates:
+    'No candidates found: no unlinked test case set recognisably tests this requirement.',
+  linkIncomplete:
+    'The report is incomplete: not all test case sets could be screened or evaluated.',
+  linkReduced:
+    'The aspects rest on the title only, the requirement has no description; every confidence is lowered by one level.',
   linkAlreadyLinkedTo: 'Already linked to',
   linkEmptySets: 'Candidates without test cases',
   linkFailedSets: 'Candidates whose evaluation failed',
@@ -283,8 +287,7 @@ export const en = {
   confirmSaveCreated: 'Created:',
   confirmSaveUpdated: 'Updated:',
   confirmSaveDeleted: 'Deleted (no prompt references it any more):',
-  confirmSaveDeletionsSkipped:
-    'Nothing will be deleted, because a prompt file could not be read:',
+  confirmSaveDeletionsSkipped: 'Nothing will be deleted, because a prompt file could not be read:',
   planning: 'Checking …',
   confirmSaveOrphanWarning: 'Still referenced by:',
   cancel: 'Cancel',
@@ -320,7 +323,8 @@ export const en = {
   variantSettings: 'Variant settings',
   variantSteps: 'Pipeline steps',
   variantStep: 'Step',
-  variantStepsFixed: 'The agent expects exactly these steps and messages. Edit their text and role from the tree; steps and messages cannot be added or removed.',
+  variantStepsFixed:
+    'The agent expects exactly these steps and messages. Edit their text and role from the tree; steps and messages cannot be added or removed.',
   inlineMessage: 'inline',
   newVariantDefault: 'New variant',
   addMessageShort: '+ message',

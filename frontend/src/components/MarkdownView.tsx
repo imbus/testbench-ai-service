@@ -33,7 +33,13 @@ const COMPONENTS: Components = {
  * it unless a raw-HTML plugin is added, and none is). Rendered prompts carry
  * TestBench data, which must not become markup in the console.
  */
-export function MarkdownView({ text, defaultMode = 'markdown' }: { text: string; defaultMode?: MarkdownMode }) {
+export function MarkdownView({
+  text,
+  defaultMode = 'markdown',
+}: {
+  text: string
+  defaultMode?: MarkdownMode
+}) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<MarkdownMode>(defaultMode)
 
@@ -57,7 +63,9 @@ export function MarkdownView({ text, defaultMode = 'markdown' }: { text: string;
       />
       {mode === 'markdown' ? (
         <div className="markdown-body" data-testid="markdown-rendered">
-          <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>{text}</Markdown>
+          <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
+            {text}
+          </Markdown>
         </div>
       ) : (
         <pre className="markdown-plain" data-testid="markdown-plain">

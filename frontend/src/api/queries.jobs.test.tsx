@@ -64,7 +64,6 @@ describe.each([
     await advance(3_100)
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
-
 })
 
 describe('useJob polling', () => {

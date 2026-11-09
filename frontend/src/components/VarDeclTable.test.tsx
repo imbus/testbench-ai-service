@@ -11,13 +11,20 @@ import { chooseOption } from '../test/prime'
 beforeEach(() => i18n.changeLanguage('en'))
 
 const decl = (over: Partial<PromptVarDecl> = {}): PromptVarDecl => ({
-  name: 'tone', description: null, value_type: 'string',
-  choices: null, default_value: null, required: false, ...over,
+  name: 'tone',
+  description: null,
+  value_type: 'string',
+  choices: null,
+  default_value: null,
+  required: false,
+  ...over,
 })
 
 describe('VarDeclTable', () => {
   it('lists each declaration by key', () => {
-    render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
+    render(
+      <VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />,
+    )
     expect(screen.getByText('{{ tone }}')).toBeInTheDocument()
   })
 
@@ -29,7 +36,9 @@ describe('VarDeclTable', () => {
     rerender(
       <VarDeclTable
         vars={{ tone: decl({ value_type: 'enum', choices: ['a'] }) }}
-        onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()}
+        onAdd={vi.fn()}
+        onEdit={vi.fn()}
+        onRemove={vi.fn()}
       />,
     )
     expect(screen.getByLabelText(/choices/i)).toBeInTheDocument()
@@ -40,7 +49,9 @@ describe('VarDeclTable', () => {
     render(
       <VarDeclTable
         vars={{ tone: decl({ value_type: 'enum', choices: [] }) }}
-        onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()}
+        onAdd={vi.fn()}
+        onEdit={vi.fn()}
+        onRemove={vi.fn()}
       />,
     )
     expect(screen.getByRole('alert')).toHaveTextContent(/choices/i)
@@ -48,20 +59,32 @@ describe('VarDeclTable', () => {
 
   it('emits an edit when the type changes', async () => {
     const onEdit = vi.fn()
-    render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={onEdit} onRemove={vi.fn()} />)
+    render(
+      <VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={onEdit} onRemove={vi.fn()} />,
+    )
     await chooseOption(userEvent.setup(), /type/i, 'number')
     expect(onEdit).toHaveBeenCalledWith('tone', expect.objectContaining({ value_type: 'number' }))
   })
 
   it('emits a removal', async () => {
     const onRemove = vi.fn()
-    render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={onRemove} />)
+    render(
+      <VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={onRemove} />,
+    )
     await userEvent.click(screen.getByRole('button', { name: /remove/i }))
     expect(onRemove).toHaveBeenCalledWith('tone')
   })
 
   it('offers no add or remove control when read-only', () => {
-    render(<VarDeclTable vars={{ tone: decl() }} readOnly onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
+    render(
+      <VarDeclTable
+        vars={{ tone: decl() }}
+        readOnly
+        onAdd={vi.fn()}
+        onEdit={vi.fn()}
+        onRemove={vi.fn()}
+      />,
+    )
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument()
   })
@@ -73,7 +96,9 @@ describe('VarDeclTable', () => {
   // only by i18n.test.ts's key-parity check.
   it('renders German labels', async () => {
     await i18n.changeLanguage('de')
-    render(<VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
+    render(
+      <VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />,
+    )
     expect(screen.getByLabelText('Beschreibung')).toBeInTheDocument()
     expect(screen.getByLabelText('Typ')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Entfernen' })).toBeInTheDocument()

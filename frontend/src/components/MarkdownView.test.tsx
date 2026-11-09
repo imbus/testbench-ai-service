@@ -22,7 +22,9 @@ describe('MarkdownView', () => {
   })
 
   it('shows raw HTML as text, never as markup', () => {
-    const { container } = render(<MarkdownView text={'<img src=x onerror="alert(1)"> <b>bold</b>'} />)
+    const { container } = render(
+      <MarkdownView text={'<img src=x onerror="alert(1)"> <b>bold</b>'} />,
+    )
     expect(container.querySelector('img')).toBeNull()
     expect(container.querySelector('b')).toBeNull()
   })
@@ -55,7 +57,10 @@ describe('MarkdownView', () => {
 
   it('starts in the requested mode', () => {
     render(<MarkdownView text="**x**" defaultMode="plain" />)
-    expect(screen.getByRole('button', { name: 'Plain text' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Plain text' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     expect(screen.getByTestId('markdown-plain')).toHaveTextContent('**x**')
   })
 })

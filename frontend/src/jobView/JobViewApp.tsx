@@ -121,11 +121,7 @@ export function JobViewApp({ config }: { config: JobViewConfig }) {
         <BrandMark size="header" />
         <div style={{ flex: 1 }} />
         <LangSeg compact />
-        <ThemeButton
-          theme={theme}
-          onToggle={toggleTheme}
-          size={32}
-        />
+        <ThemeButton theme={theme} onToggle={toggleTheme} size={32} />
         {config.consoleUrl && (
           <div style={{ borderLeft: '1px solid var(--color-divider)', paddingLeft: 14 }}>
             <Button

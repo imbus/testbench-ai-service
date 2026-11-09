@@ -139,9 +139,7 @@ const VAR_TYPES: Record<PromptVarDefinition['value_type'], FieldSpec['type']> = 
  */
 export function promptVarPath(scope: Scope, agentKey: string, varName: string): string {
   const prefix =
-    scope.kind === 'global'
-      ? ['agents', agentKey]
-      : ['projects', scope.project, 'agents', agentKey]
+    scope.kind === 'global' ? ['agents', agentKey] : ['projects', scope.project, 'agents', agentKey]
   // Over segments, never over an already-joined string: a variable name
   // containing a dot must be quoted as one segment, and re-splitting a joined
   // path would tear it back apart.

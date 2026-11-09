@@ -159,9 +159,7 @@ export function PendingBanner({
           </div>
         }
       />
-      {showDiff && (
-        <DiffDialog onClose={() => setShowDiff(false)} onIssues={onIssues} />
-      )}
+      {showDiff && <DiffDialog onClose={() => setShowDiff(false)} onIssues={onIssues} />}
     </>
   )
 }

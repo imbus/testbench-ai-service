@@ -176,11 +176,10 @@ export function AgentDetail({
       }}
     >
       <div>
-        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{meta.data?.name ?? agentKey}</h2>
-        <div
-          className="text-muted"
-          style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
-        >
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+          {meta.data?.name ?? agentKey}
+        </h2>
+        <div className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}>
           {agentKey} · {config.data.config_path}
         </div>
       </div>
@@ -208,29 +207,32 @@ export function AgentDetail({
         <i className="corner tr" />
         <i className="corner bl" />
         <i className="corner br" />
-        {AGENT_FIELDS(scope, agentKey, variantNames, savedVariant ? String(savedVariant) : undefined).map(
-          (spec) => {
-            // From the spec, not from the shape of its path: a fourth field
-            // added to AGENT_FIELDS would otherwise be silently read as the
-            // variant.
-            const setting = spec.setting ?? ''
-            return isAdmin ? (
-              <Field
-                key={spec.key}
-                spec={spec}
-                saved={valueAt(disk, spec.key)}
-                issue={issueFor(issues, spec.key)}
-                inheritedFrom={inherited(setting)}
-              />
-            ) : (
-              <ReadOnlyField
-                key={spec.key}
-                spec={spec}
-                value={valueAt(scopedAgent as Record<string, unknown>, setting)}
-              />
-            )
-          },
-        )}
+        {AGENT_FIELDS(
+          scope,
+          agentKey,
+          variantNames,
+          savedVariant ? String(savedVariant) : undefined,
+        ).map((spec) => {
+          // From the spec, not from the shape of its path: a fourth field
+          // added to AGENT_FIELDS would otherwise be silently read as the
+          // variant.
+          const setting = spec.setting ?? ''
+          return isAdmin ? (
+            <Field
+              key={spec.key}
+              spec={spec}
+              saved={valueAt(disk, spec.key)}
+              issue={issueFor(issues, spec.key)}
+              inheritedFrom={inherited(setting)}
+            />
+          ) : (
+            <ReadOnlyField
+              key={spec.key}
+              spec={spec}
+              value={valueAt(scopedAgent as Record<string, unknown>, setting)}
+            />
+          )
+        })}
         <div
           style={{
             display: 'grid',
@@ -268,10 +270,7 @@ export function AgentDetail({
         <i className="corner br" />
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
           <h3 style={{ margin: 0, fontSize: 16 }}>{t('promptVars')}</h3>
-          <span
-            className="text-muted"
-            style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}
-          >
+          <span className="text-muted" style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}>
             prompt.vars
           </span>
         </div>
@@ -308,9 +307,7 @@ export function AgentDetail({
                     label: name,
                     hint: t('notDeclaredByVariant'),
                   }}
-                  value={
-                    (scopedAgent.prompt?.vars as Record<string, unknown> | undefined)?.[name]
-                  }
+                  value={(scopedAgent.prompt?.vars as Record<string, unknown> | undefined)?.[name]}
                 />
               </div>
             ))}
@@ -425,7 +422,8 @@ function VarField({
   const saved = valueAt(disk, spec.key)
 
   const fromGlobal = inheritable[varName]
-  const inheritedValue = scope.kind === 'project' ? (fromGlobal ?? varDefault(definition)) : varDefault(definition)
+  const inheritedValue =
+    scope.kind === 'project' ? (fromGlobal ?? varDefault(definition)) : varDefault(definition)
   const label =
     scope.kind === 'project' && fromGlobal !== undefined ? t('globalScope') : t('promptDefault')
 

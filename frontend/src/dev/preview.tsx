@@ -73,7 +73,10 @@ const FIXTURES: Record<string, unknown> = {
       agents: {
         test_case_set_reviewer: {
           enabled: true,
-          prompt: { variant: 'Gründlich', vars: { tone: 'sachlich und sehr ausführlich formuliert' } },
+          prompt: {
+            variant: 'Gründlich',
+            vars: { tone: 'sachlich und sehr ausführlich formuliert' },
+          },
         },
       },
     },
@@ -88,7 +91,10 @@ const FIXTURES: Record<string, unknown> = {
       },
       agents: {
         test_case_set_reviewer: {
-          prompt: { variant: 'Gründlich', vars: { tone: 'sachlich und sehr ausführlich formuliert' } },
+          prompt: {
+            variant: 'Gründlich',
+            vars: { tone: 'sachlich und sehr ausführlich formuliert' },
+          },
         },
       },
     },
@@ -338,7 +344,13 @@ const JOBS = [
       aspects: [
         ['a1', 'covered', 'Ein falsches Passwort erhöht den Fehlerzähler.', 'TS-7', 'TC-12'],
         ['a2', 'covered', 'Nach dem dritten Fehlversuch wird das Konto gesperrt.', 'TS-8', 'TC-14'],
-        ['a3', 'weak', 'Ein gesperrter Nutzer sieht einen Hinweis mit der Wartezeit.', 'TS-8', 'TC-15'],
+        [
+          'a3',
+          'weak',
+          'Ein gesperrter Nutzer sieht einen Hinweis mit der Wartezeit.',
+          'TS-8',
+          'TC-15',
+        ],
         ['a4', 'missing', 'Die Sperre hebt sich nach 15 Minuten von selbst auf.', null, null],
       ].map(([id, status, statement, set, tc]) => ({
         aspect: { id, statement, kind: 'happy_path', source_quote: statement },
@@ -357,7 +369,11 @@ const JOBS = [
       skipped_comments: ['TS-9'],
       reduced_mode: false,
       incomplete: false,
-      set_paths: { 'TS-7': 'Login / Anmeldung', 'TS-8': 'Login / Sperre', 'TS-9': 'Login / Passwort' },
+      set_paths: {
+        'TS-7': 'Login / Anmeldung',
+        'TS-8': 'Login / Sperre',
+        'TS-9': 'Login / Passwort',
+      },
     },
   },
   {
@@ -387,7 +403,7 @@ FIXTURES['/admin/api/jobs'] = JOBS.map(({ report: _report, ...summary }) => summ
 for (const job of JOBS) FIXTURES[`/admin/api/jobs/${job.job_id}`] = job
 
 window.fetch = (async (input: RequestInfo | URL) => {
-  const url = String(typeof input === 'string' ? input : (input as Request).url ?? input)
+  const url = String(typeof input === 'string' ? input : ((input as Request).url ?? input))
   const path = url.split('?')[0]
   const body = path.startsWith('/admin/api/activity') ? ACTIVITY : FIXTURES[path]
   if (body === undefined || (path === '/admin/api/session' && !signedIn)) {

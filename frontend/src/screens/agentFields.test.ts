@@ -79,9 +79,7 @@ describe('AGENT_FIELDS', () => {
     // A 404 on the metadata endpoint (a prompt file that moved) must still
     // leave the field editable, or the operator cannot fix the path that
     // caused the 404 in the first place.
-    const variant = AGENT_FIELDS(GLOBAL, 'reviewer').find((f) =>
-      f.key.endsWith('prompt.variant'),
-    )
+    const variant = AGENT_FIELDS(GLOBAL, 'reviewer').find((f) => f.key.endsWith('prompt.variant'))
     expect(variant?.type).toBe('text')
     expect(variant?.options).toBeUndefined()
   })
@@ -96,8 +94,8 @@ describe('AGENT_FIELDS', () => {
   })
 
   it('does not duplicate a configured variant that is already declared', () => {
-    const variant = AGENT_FIELDS(GLOBAL, 'reviewer', ['Thorough', 'Quick'], 'Quick').find(
-      (f) => f.key.endsWith('prompt.variant'),
+    const variant = AGENT_FIELDS(GLOBAL, 'reviewer', ['Thorough', 'Quick'], 'Quick').find((f) =>
+      f.key.endsWith('prompt.variant'),
     )
     expect(variant?.options).toEqual(['Thorough', 'Quick'])
   })
@@ -152,9 +150,7 @@ describe('PROJECT_FIELDS', () => {
 describe('promptVarField', () => {
   it('addresses the variable under the scope prompt vars table', () => {
     const field = promptVarField(PROJECT, 'reviewer', 'max_findings', def())
-    expect(field.key).toBe(
-      'projects."Release 2.0".agents.reviewer.prompt.vars.max_findings',
-    )
+    expect(field.key).toBe('projects."Release 2.0".agents.reviewer.prompt.vars.max_findings')
   })
 
   it('quotes a variable name that contains a dot', () => {

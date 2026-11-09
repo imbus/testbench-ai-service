@@ -84,8 +84,12 @@ test('routing choices are filtered to what the provider accepts', async () => {
   await choose(user, /new provider/i, 'Anthropic')
 
   const routing = await openOptions(user, /new routing/i)
-  expect(within(routing).queryByRole('option', { name: 'chat', hidden: true })).not.toBeInTheDocument()
-  expect(within(routing).getByRole('option', { name: 'adaptive', hidden: true })).toBeInTheDocument()
+  expect(
+    within(routing).queryByRole('option', { name: 'chat', hidden: true }),
+  ).not.toBeInTheDocument()
+  expect(
+    within(routing).getByRole('option', { name: 'adaptive', hidden: true }),
+  ).toBeInTheDocument()
 })
 
 test('a custom-provider entry can only be fallback', async () => {
@@ -95,8 +99,12 @@ test('a custom-provider entry can only be fallback', async () => {
   await choose(user, /new provider/i, 'Custom')
 
   const routing = await openOptions(user, /new routing/i)
-  expect(within(routing).getByRole('option', { name: 'fallback', hidden: true })).toBeInTheDocument()
-  expect(within(routing).queryByRole('option', { name: 'adaptive', hidden: true })).not.toBeInTheDocument()
+  expect(
+    within(routing).getByRole('option', { name: 'fallback', hidden: true }),
+  ).toBeInTheDocument()
+  expect(
+    within(routing).queryByRole('option', { name: 'adaptive', hidden: true }),
+  ).not.toBeInTheDocument()
 })
 
 test('renders a config issue against the offending row', () => {
@@ -130,7 +138,6 @@ test('a read-only operator cannot add or remove', () => {
   expect(screen.getByRole('button', { name: /add/i })).toBeDisabled()
   expect(screen.getByRole('button', { name: /remove/i })).toBeDisabled()
 })
-
 
 test('a dotted model name produces one key, not a nested table', async () => {
   // OpenAI's own set is full of dotted names (gpt-4.1, gpt-5.1, gpt-5.5), so

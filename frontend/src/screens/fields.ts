@@ -95,9 +95,7 @@ export const SERVICE_TABS: ServiceTab[] = [
   {
     key: 'proxy',
     labelKey: 'proxy',
-    fields: [
-      { key: 'trusted_proxies', type: 'list', hint: 'Trusted proxy IP addresses' },
-    ],
+    fields: [{ key: 'trusted_proxies', type: 'list', hint: 'Trusted proxy IP addresses' }],
   },
 ]
 

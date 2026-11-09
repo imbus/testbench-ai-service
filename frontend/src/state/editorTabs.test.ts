@@ -2,12 +2,32 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { PromptMessageDoc } from '../api/types'
 import {
-  closeTab, initialTabs, messageTabOf, openTab, parseStepTab, pinTab, stepTabOf, useEditorTabs, visibleTabs,
-  type TabId, type VariantTabs,
+  closeTab,
+  initialTabs,
+  messageTabOf,
+  openTab,
+  parseStepTab,
+  pinTab,
+  stepTabOf,
+  useEditorTabs,
+  visibleTabs,
+  type TabId,
+  type VariantTabs,
 } from './editorTabs'
 
-const msg = (uid: string): PromptMessageDoc => ({ role: 'user', source: 'inline', file: null, content: uid, readable: true, uid })
-const tabs = (open: TabId[], active: TabId | null, preview: TabId | null = null): VariantTabs => ({ open, active, preview })
+const msg = (uid: string): PromptMessageDoc => ({
+  role: 'user',
+  source: 'inline',
+  file: null,
+  content: uid,
+  readable: true,
+  uid,
+})
+const tabs = (open: TabId[], active: TabId | null, preview: TabId | null = null): VariantTabs => ({
+  open,
+  active,
+  preview,
+})
 
 describe('messageTabOf', () => {
   it('uses the uid, falling back to the index', () => {
@@ -23,19 +43,27 @@ describe('openTab', () => {
   })
 
   it('appends a preview tab when there is no preview', () => {
-    expect(openTab(tabs(['meta'], 'meta'), 'msg:b', false)).toEqual(tabs(['meta', 'msg:b'], 'msg:b', 'msg:b'))
+    expect(openTab(tabs(['meta'], 'meta'), 'msg:b', false)).toEqual(
+      tabs(['meta', 'msg:b'], 'msg:b', 'msg:b'),
+    )
   })
 
   it('appends a pinned tab and leaves the preview alone', () => {
-    expect(openTab(tabs(['msg:a'], 'msg:a', 'msg:a'), 'meta', true)).toEqual(tabs(['msg:a', 'meta'], 'meta', 'msg:a'))
+    expect(openTab(tabs(['msg:a'], 'msg:a', 'msg:a'), 'meta', true)).toEqual(
+      tabs(['msg:a', 'meta'], 'meta', 'msg:a'),
+    )
   })
 
   it('only activates a tab that is already open', () => {
-    expect(openTab(tabs(['msg:a', 'meta'], 'meta'), 'msg:a', false)).toEqual(tabs(['msg:a', 'meta'], 'msg:a'))
+    expect(openTab(tabs(['msg:a', 'meta'], 'meta'), 'msg:a', false)).toEqual(
+      tabs(['msg:a', 'meta'], 'msg:a'),
+    )
   })
 
   it('pins an open preview tab when opened pinned', () => {
-    expect(openTab(tabs(['msg:a'], 'msg:a', 'msg:a'), 'msg:a', true)).toEqual(tabs(['msg:a'], 'msg:a', null))
+    expect(openTab(tabs(['msg:a'], 'msg:a', 'msg:a'), 'msg:a', true)).toEqual(
+      tabs(['msg:a'], 'msg:a', null),
+    )
   })
 })
 
@@ -48,7 +76,9 @@ describe('pinTab', () => {
 
 describe('closeTab', () => {
   it('activates the right neighbour of a closed active tab', () => {
-    expect(closeTab(tabs(['meta', 'msg:a', 'msg:b'], 'msg:a'), 'msg:a')).toEqual(tabs(['meta', 'msg:b'], 'msg:b'))
+    expect(closeTab(tabs(['meta', 'msg:a', 'msg:b'], 'msg:a'), 'msg:a')).toEqual(
+      tabs(['meta', 'msg:b'], 'msg:b'),
+    )
   })
 
   it('falls back to the left neighbour at the end', () => {
@@ -67,7 +97,9 @@ describe('closeTab', () => {
 describe('visibleTabs', () => {
   it('drops tabs whose message is gone and moves the active tab to a neighbour', () => {
     const valid: TabId[] = ['meta', 'variant', 'msg:a', 'msg:c']
-    expect(visibleTabs(tabs(['msg:a', 'msg:b', 'msg:c'], 'msg:b', 'msg:b'), valid)).toEqual(tabs(['msg:a', 'msg:c'], 'msg:c', null))
+    expect(visibleTabs(tabs(['msg:a', 'msg:b', 'msg:c'], 'msg:b', 'msg:b'), valid)).toEqual(
+      tabs(['msg:a', 'msg:c'], 'msg:c', null),
+    )
   })
 
   it('returns the same object when nothing is stale', () => {
@@ -120,8 +152,14 @@ describe('useEditorTabs', () => {
 
   it('keeps a tab opened for a message the variant does not list yet (add message)', () => {
     const { result } = renderHook(() => useEditorTabs())
-    act(() => result.current.update({ ...A, messages: [...A.messages, msg('new')] }, (t) => openTab(t, 'msg:new', true)))
-    expect(result.current.tabsFor({ ...A, messages: [...A.messages, msg('new')] }).active).toBe('msg:new')
+    act(() =>
+      result.current.update({ ...A, messages: [...A.messages, msg('new')] }, (t) =>
+        openTab(t, 'msg:new', true),
+      ),
+    )
+    expect(result.current.tabsFor({ ...A, messages: [...A.messages, msg('new')] }).active).toBe(
+      'msg:new',
+    )
   })
 
   // The render preview is one tab per variant, like its settings; it has no
@@ -172,7 +210,11 @@ describe('step tabs', () => {
 
   it("opens a steps-only variant on its first step's first message", () => {
     const { result } = renderHook(() => useEditorTabs())
-    const steps = { name: 'S', messages: [], steps: { aspects: [msg('a'), msg('b')], prefilter: [msg('c')] } }
+    const steps = {
+      name: 'S',
+      messages: [],
+      steps: { aspects: [msg('a'), msg('b')], prefilter: [msg('c')] },
+    }
     expect(result.current.tabsFor(steps).open).toEqual(['step:0:aspects'])
     act(() => result.current.update(steps, (t) => openTab(t, stepTabOf('prefilter', 0), true)))
     expect(result.current.tabsFor(steps).open).toEqual(['step:0:aspects', 'step:0:prefilter'])

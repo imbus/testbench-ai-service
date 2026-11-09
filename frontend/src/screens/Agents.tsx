@@ -91,11 +91,10 @@ export function Agents({ isAdmin }: { isAdmin: boolean }) {
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
         <div>
-          <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('agents')}</h2>
-          <div
-            className="text-muted"
-            style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
-          >
+          <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+            {t('agents')}
+          </h2>
+          <div className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}>
             [testbench-ai-service.agents] · {config.data.config_path}
           </div>
         </div>
@@ -343,10 +342,7 @@ function AgentTitle({
         {meta.data?.name ?? agentKey}
       </div>
       {meta.data?.name && (
-        <div
-          className="text-muted"
-          style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}
-        >
+        <div className="text-muted" style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}>
           {agentKey}
         </div>
       )}

@@ -58,7 +58,9 @@ export function Raw() {
       }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>config.toml</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+          config.toml
+        </h2>
         <span className="text-muted" style={{ fontSize: 12 }}>
           {t('rawSub')}
         </span>

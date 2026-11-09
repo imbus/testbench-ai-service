@@ -61,7 +61,6 @@ export function App() {
         onSignIn={(username, password) => {
           void signIn(username, password).catch(() => undefined)
         }}
-       
         onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
       />
     )
@@ -88,7 +87,6 @@ export function App() {
           theme={theme}
           serviceLabel={service ? `${service.host}:${service.port}` : undefined}
           onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-         
           onSignOut={() => void signOut()}
         />
         {session.is_admin && <PendingBanner onIssues={setIssues} />}
@@ -119,51 +117,30 @@ export function App() {
               <Route
                 path="/admin/service"
                 element={
-                  <ConfigSection
-                    section="service"
-                    isAdmin={session.is_admin}
-                    issues={issues}
-                  />
+                  <ConfigSection section="service" isAdmin={session.is_admin} issues={issues} />
                 }
               />
               <Route
                 path="/admin/llm"
-                element={
-                  <ConfigSection
-                    section="llm"
-                    isAdmin={session.is_admin}
-                    issues={issues}
-                  />
-                }
+                element={<ConfigSection section="llm" isAdmin={session.is_admin} issues={issues} />}
               />
               <Route
                 path="/admin/logging"
                 element={
-                  <ConfigSection
-                    section="logging"
-                    isAdmin={session.is_admin}
-                    issues={issues}
-                  />
+                  <ConfigSection section="logging" isAdmin={session.is_admin} issues={issues} />
                 }
               />
               {/* Both read-only for a non-admin, like Status -- so neither
                   route is gated; each screen renders through ReadOnlyField
                   instead. */}
-              <Route
-                path="/admin/agents"
-                element={<Agents isAdmin={session.is_admin} />}
-              />
+              <Route path="/admin/agents" element={<Agents isAdmin={session.is_admin} />} />
               <Route
                 path="/admin/agents/:agentKey"
-                element={
-                  <AgentDetail isAdmin={session.is_admin} issues={issues} />
-                }
+                element={<AgentDetail isAdmin={session.is_admin} issues={issues} />}
               />
               <Route
                 path="/admin/projects"
-                element={
-                  <Projects isAdmin={session.is_admin} issues={issues} />
-                }
+                element={<Projects isAdmin={session.is_admin} issues={issues} />}
               />
               <Route path="/admin/raw" element={<Raw />} />
               {/* Under /admin like every other screen: vite's `base` is

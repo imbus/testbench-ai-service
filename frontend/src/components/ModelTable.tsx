@@ -205,9 +205,7 @@ export function ModelTable({
         <Column
           field="model"
           header={t('modelName')}
-          body={(row: Row) => (
-            <span style={{ fontFamily: 'var(--font-code)' }}>{row.model}</span>
-          )}
+          body={(row: Row) => <span style={{ fontFamily: 'var(--font-code)' }}>{row.model}</span>}
         />
         <Column field="provider" header={t('modelProvider')} />
         <Column field="routing" header={t('modelRouting')} />
@@ -272,13 +270,7 @@ export function ModelTable({
             onChange={(event) => setNewRouting(event.value as RoutingFamily)}
           />
         </div>
-        <Button
-          type="button"
-          outlined
-          label={t('modelAdd')}
-          disabled={readOnly}
-          onClick={onAdd}
-        />
+        <Button type="button" outlined label={t('modelAdd')} disabled={readOnly} onClick={onAdd} />
       </div>
     </div>
   )

@@ -11,44 +11,92 @@ import { chooseOption, dropdownValue, openDropdown } from '../../test/prime'
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
 
-const TREE: PromptTreeResponse = { languages: [
-  { lang: 'de', prompts: [
-    { agent: 'explainer', file: 'de/explainer/prompt.yaml', name: 'Explainer', variants: ['Thorough', 'Quick'], ok: true, error: null, used_by: [] },
-    { agent: 'broken', file: 'de/broken/prompt.yaml', name: null, variants: [], ok: false, error: 'bad yaml', used_by: [] },
-  ] },
-  { lang: 'en', prompts: [
-    { agent: 'reviewer', file: 'en/reviewer/prompt.yaml', name: 'Reviewer', variants: ['A'], ok: true, error: null, used_by: [] },
-  ] },
-] }
+const TREE: PromptTreeResponse = {
+  languages: [
+    {
+      lang: 'de',
+      prompts: [
+        {
+          agent: 'explainer',
+          file: 'de/explainer/prompt.yaml',
+          name: 'Explainer',
+          variants: ['Thorough', 'Quick'],
+          ok: true,
+          error: null,
+          used_by: [],
+        },
+        {
+          agent: 'broken',
+          file: 'de/broken/prompt.yaml',
+          name: null,
+          variants: [],
+          ok: false,
+          error: 'bad yaml',
+          used_by: [],
+        },
+      ],
+    },
+    {
+      lang: 'en',
+      prompts: [
+        {
+          agent: 'reviewer',
+          file: 'en/reviewer/prompt.yaml',
+          name: 'Reviewer',
+          variants: ['A'],
+          ok: true,
+          error: null,
+          used_by: [],
+        },
+      ],
+    },
+  ],
+}
 
 beforeEach(() => {
-  vi.stubGlobal('fetch', vi.fn(async (url: string) =>
-    url === '/admin/api/prompts'
-      ? ({ ok: true, status: 200, json: async () => TREE } as Response)
-      : ({ ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response)))
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string) =>
+      url === '/admin/api/prompts'
+        ? ({ ok: true, status: 200, json: async () => TREE } as Response)
+        : ({ ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response),
+    ),
+  )
 })
 afterEach(() => vi.unstubAllGlobals())
 
 function setup(overrides: Partial<Parameters<typeof EditorToolbar>[0]> = {}) {
   const props = {
-    path: 'prompts/de/explainer/prompt.yaml', variants: ['Thorough', 'Quick'], selectedVariant: 'Thorough',
-    canSave: true, showSave: true,
-    onVariant: vi.fn(), onSave: vi.fn(), ...overrides,
+    path: 'prompts/de/explainer/prompt.yaml',
+    variants: ['Thorough', 'Quick'],
+    selectedVariant: 'Thorough',
+    canSave: true,
+    showSave: true,
+    onVariant: vi.fn(),
+    onSave: vi.fn(),
+    ...overrides,
   }
   function Screen() {
     const { lang = '', agent = '' } = useParams()
     return (
       <>
         <EditorToolbar docLang={lang} agentKey={agent} {...props} />
-        <div data-testid="params">{lang}/{agent}</div>
+        <div data-testid="params">
+          {lang}/{agent}
+        </div>
       </>
     )
   }
-  const router = createMemoryRouter([{ path: '/admin/prompts/:lang/:agent', element: <Screen /> }], {
-    initialEntries: ['/admin/prompts/de/explainer'],
-  })
+  const router = createMemoryRouter(
+    [{ path: '/admin/prompts/:lang/:agent', element: <Screen /> }],
+    {
+      initialEntries: ['/admin/prompts/de/explainer'],
+    },
+  )
   render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
       <RouterProvider router={router} />
     </QueryClientProvider>,
   )
@@ -61,8 +109,12 @@ describe('EditorToolbar', () => {
     // The tree loads after the first render; the label tracks it.
     await waitFor(() => expect(dropdownValue('Agent')).toBe('Explainer'))
     const agents = await openDropdown(userEvent.setup(), 'Agent')
-    expect(within(agents).getByRole('option', { name: 'Explainer', hidden: true })).toBeInTheDocument()
-    expect(within(agents).queryByRole('option', { name: 'broken', hidden: true })).not.toBeInTheDocument()
+    expect(
+      within(agents).getByRole('option', { name: 'Explainer', hidden: true }),
+    ).toBeInTheDocument()
+    expect(
+      within(agents).queryByRole('option', { name: 'broken', hidden: true }),
+    ).not.toBeInTheDocument()
   })
 
   it("switching language falls back to that language's first prompt", async () => {

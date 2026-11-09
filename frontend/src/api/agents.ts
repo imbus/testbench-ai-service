@@ -95,7 +95,9 @@ function projectOverride(
 }
 
 /** The `vars` table a scope declares itself, as opposed to inherits. */
-function declaredVars(agent: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+function declaredVars(
+  agent: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
   return table(table(agent?.prompt)?.vars)
 }
 
@@ -152,10 +154,7 @@ export function inheritedVars(
  * under it is still a block the operator wrote, and hiding it would make the
  * Agents list disagree with the file.
  */
-export function overridingProjects(
-  config: Record<string, unknown>,
-  agentKey: string,
-): string[] {
+export function overridingProjects(config: Record<string, unknown>, agentKey: string): string[] {
   const projects = table(config.projects)
   if (!projects) return []
   return Object.keys(projects).filter(
@@ -198,7 +197,9 @@ export function scopedLlmPath(scope: Scope, setting?: string): string {
 export function llmOverridingProjects(config: Record<string, unknown>): string[] {
   const projects = table(config.projects)
   if (!projects) return []
-  return Object.keys(projects).filter((name) => table(table(projects[name])?.llm_config) !== undefined)
+  return Object.keys(projects).filter(
+    (name) => table(table(projects[name])?.llm_config) !== undefined,
+  )
 }
 
 /** Address one agent's entry in a scope's `llm_config.agent_models`. */

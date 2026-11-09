@@ -3,7 +3,8 @@ import { undeclaredVars, usedTemplateVars } from './templateVars'
 
 describe('usedTemplateVars', () => {
   it('finds agent.* and vars.* inside expressions and statements', () => {
-    const text = 'Hi {{ agent.defect }}\n{% for c in agent.test_cases %}{{ c }}{% endfor %}{{ vars.tone | upper }}'
+    const text =
+      'Hi {{ agent.defect }}\n{% for c in agent.test_cases %}{{ c }}{% endfor %}{{ vars.tone | upper }}'
     expect(usedTemplateVars(text)).toEqual(['agent.defect', 'agent.test_cases', 'vars.tone'])
   })
 

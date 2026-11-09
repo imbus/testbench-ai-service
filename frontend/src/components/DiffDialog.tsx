@@ -181,7 +181,10 @@ export function DiffDialog({
 
       {data?.valid &&
         data.diffs.map((entry) => (
-          <div key={entry.path} style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0 }}>
+          <div
+            key={entry.path}
+            style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0 }}
+          >
             <div
               className="text-muted"
               title={entry.path}
@@ -220,9 +223,7 @@ export function DiffDialog({
       )}
 
       {data && data.in_flight_tasks > 0 && (
-        <div style={{ fontSize: 13 }}>
-          {t('inFlight', { count: data.in_flight_tasks })}
-        </div>
+        <div style={{ fontSize: 13 }}>{t('inFlight', { count: data.in_flight_tasks })}</div>
       )}
 
       {apply.isSuccess && apply.data.reload_detail && (

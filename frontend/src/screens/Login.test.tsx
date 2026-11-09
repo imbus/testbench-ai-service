@@ -25,9 +25,7 @@ test('submits the credentials', async () => {
   await userEvent.type(screen.getByLabelText('Benutzername'), 'a.mueller')
   await userEvent.type(screen.getByLabelText('Passwort'), 'secret')
   await userEvent.click(screen.getByRole('button', { name: 'Mit TestBench anmelden' }))
-  await waitFor(() =>
-    expect(props.onSignIn).toHaveBeenCalledWith('a.mueller', 'secret'),
-  )
+  await waitFor(() => expect(props.onSignIn).toHaveBeenCalledWith('a.mueller', 'secret'))
 })
 
 test('does not submit an empty form', async () => {

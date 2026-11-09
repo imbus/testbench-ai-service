@@ -96,28 +96,73 @@ export function MessagePane({
             that act on the message as a whole. Task 10's controller ruling:
             one row can't fit path + every control at 1440-1280px, so the
             toolbar is two deliberate rows rather than an undirected wrap. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '6px 12px 4px', fontSize: 12 }}>
-          <span className="text-muted" style={{ fontFamily: codeFont, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '6px 12px 4px',
+            fontSize: 12,
+          }}
+        >
+          <span
+            className="text-muted"
+            style={{
+              fontFamily: codeFont,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+          >
             {path}
           </span>
           <div style={{ flex: 1 }} />
           {!readOnly && !fixed && index > 0 && (
-            <Button type="button" text label={t('moveUp')} style={{ fontSize: 12 }} onClick={() => onMove(index - 1)} />
+            <Button
+              type="button"
+              text
+              label={t('moveUp')}
+              style={{ fontSize: 12 }}
+              onClick={() => onMove(index - 1)}
+            />
           )}
           {!readOnly && !fixed && index < count - 1 && (
-            <Button type="button" text label={t('moveDown')} style={{ fontSize: 12 }} onClick={() => onMove(index + 1)} />
+            <Button
+              type="button"
+              text
+              label={t('moveDown')}
+              style={{ fontSize: 12 }}
+              onClick={() => onMove(index + 1)}
+            />
           )}
           {/* Hidden on a variant's only message: the reducer refuses to remove
               it (PromptVariant requires one), so the button would do nothing. */}
           {!readOnly && !fixed && count > 1 && (
-            <Button type="button" text severity="danger" label={t('deleteMessage')} style={{ fontSize: 12, color: 'var(--color-danger)' }} onClick={onRemove} />
+            <Button
+              type="button"
+              text
+              severity="danger"
+              label={t('deleteMessage')}
+              style={{ fontSize: 12, color: 'var(--color-danger)' }}
+              onClick={onRemove}
+            />
           )}
         </div>
         {/* Row 2: how the message is edited -- role, source, file name, then
             variable insertion. Each label+control is its own no-wrap group so
             a label never separates from its control if this row itself wraps
             below ~1280px. */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 12px 6px', fontSize: 12, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '0 12px 6px',
+            fontSize: 12,
+            flexWrap: 'wrap',
+          }}
+        >
           <div style={pair}>
             {/* No visually-hidden class exists in industry.css (checked); a
                 small muted visible label stands in for what would otherwise
@@ -175,7 +220,13 @@ export function MessagePane({
                 id={fileId}
                 value={message.file ?? ''}
                 onChange={(event) => onFile(event.target.value)}
-                style={{ ...small, padding: '1px 6px', width: '26ch', minWidth: '26ch', fontFamily: codeFont }}
+                style={{
+                  ...small,
+                  padding: '1px 6px',
+                  width: '26ch',
+                  minWidth: '26ch',
+                  fontFamily: codeFont,
+                }}
               />
             </div>
           )}
@@ -200,7 +251,8 @@ export function MessagePane({
                 onChange={(event) => {
                   const name = event.value as string | null
                   if (!name) return
-                  const handle = typeof editorRef === 'object' && editorRef ? editorRef.current : null
+                  const handle =
+                    typeof editorRef === 'object' && editorRef ? editorRef.current : null
                   handle?.insert(`{{ ${name} }}`)
                 }}
               />

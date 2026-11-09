@@ -34,13 +34,7 @@ function issueFor(issues: ConfigIssue[], key: string): string | undefined {
  * usually means the project was renamed or deleted in TestBench, which is
  * exactly the case an operator has to be able to see and clean up.
  */
-export function Projects({
-  isAdmin,
-  issues = [],
-}: {
-  isAdmin: boolean
-  issues?: ConfigIssue[]
-}) {
+export function Projects({ isAdmin, issues = [] }: { isAdmin: boolean; issues?: ConfigIssue[] }) {
   const { t } = useTranslation()
   const config = useConfig()
   const projects = useProjects()
@@ -83,11 +77,10 @@ export function Projects({
     >
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('projects')}</h2>
-          <div
-            className="text-muted"
-            style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
-          >
+          <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+            {t('projects')}
+          </h2>
+          <div className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}>
             [testbench-ai-service.projects] · {config.data.config_path}
           </div>
         </div>
@@ -237,7 +230,8 @@ function ProjectCard({
   // draft is not consulted -- the chip describes the file, and the pending
   // banner already describes the draft.
   const overrideCount = (() => {
-    const table = block !== null && typeof block === 'object' ? (block as Record<string, unknown>) : {}
+    const table =
+      block !== null && typeof block === 'object' ? (block as Record<string, unknown>) : {}
     const agents = table.agents
     const perAgent =
       agents !== null && typeof agents === 'object' ? Object.keys(agents as object).length : 0
@@ -275,14 +269,15 @@ function ProjectCard({
           content: { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
         }}
       >
-
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <h3 className="card-title" style={{ margin: 0, fontSize: 19 }}>
             {name}
           </h3>
           <div style={{ flex: 1 }} />
           {inTestBench === false && (
-            <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>⚠ {t('notInTestBench')}</span>
+            <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>
+              ⚠ {t('notInTestBench')}
+            </span>
           )}
           {overrideCount > 0 ? (
             <Tag value={t('overrideCount', { count: overrideCount })} />

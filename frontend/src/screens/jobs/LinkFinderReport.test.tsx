@@ -91,7 +91,9 @@ test('says plainly that nothing was found', () => {
 test('names empty sets and skipped comments by path', () => {
   render(<LinkFinderReport report={REPORT} />)
   expect(screen.getByText(/\/Auth\/Empty/)).toBeInTheDocument()
-  expect(screen.getByText(/Review-Kommentar nicht geschrieben für: \/Auth\/Touch/)).toBeInTheDocument()
+  expect(
+    screen.getByText(/Review-Kommentar nicht geschrieben für: \/Auth\/Touch/),
+  ).toBeInTheDocument()
 })
 
 test('flags an incomplete report and reduced mode', () => {

@@ -61,11 +61,7 @@ export function LinkFinderReport({ report }: { report: LinkFinderResult }) {
             <span style={{ textAlign: 'right' }}>{t('linkAspects')}</span>
           </div>
           {report.candidates.map((candidate) => (
-            <CandidateRow
-              key={candidate.set_key}
-              candidate={candidate}
-              aspects={report.aspects}
-            />
+            <CandidateRow key={candidate.set_key} candidate={candidate} aspects={report.aspects} />
           ))}
         </div>
       )}

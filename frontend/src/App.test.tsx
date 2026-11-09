@@ -74,9 +74,7 @@ const renderWithoutSession = () => {
 test('shows the sign-in screen when there is no session', async () => {
   asSession(null)
   renderWithoutSession()
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: /anmelden/i })).toBeInTheDocument(),
-  )
+  await waitFor(() => expect(screen.getByRole('button', { name: /anmelden/i })).toBeInTheDocument())
 })
 
 test('shows the shell when signed in', async () => {
@@ -87,9 +85,7 @@ test('shows the shell when signed in', async () => {
 
 test('shows a read-only notice to a non-admin', async () => {
   renderApp({ isAdmin: false })
-  await waitFor(() =>
-    expect(screen.getByText(/nur lesend/i)).toBeInTheDocument(),
-  )
+  await waitFor(() => expect(screen.getByText(/nur lesend/i)).toBeInTheDocument())
 })
 
 test('renders nothing decisive while the session is still loading', () => {
@@ -161,7 +157,11 @@ const STATUS_OK = {
 const PREVIEW_INVALID = {
   valid: false,
   issues: [
-    { path: 'port', message: 'Input should be a valid integer', toml_section: '[testbench-ai-service]' },
+    {
+      path: 'port',
+      message: 'Input should be a valid integer',
+      toml_section: '[testbench-ai-service]',
+    },
   ],
   diffs: [],
   restart_required: [],
@@ -315,7 +315,11 @@ it('clears the marker when the draft is discarded', async () => {
 const APPLY_REJECTED_DETAIL = {
   message: 'The configuration is not valid and was not written.',
   issues: [
-    { path: 'port', message: 'Input should be a valid integer', toml_section: '[testbench-ai-service]' },
+    {
+      path: 'port',
+      message: 'Input should be a valid integer',
+      toml_section: '[testbench-ai-service]',
+    },
   ],
 }
 
@@ -357,7 +361,9 @@ it('a structured 422 apply rejection does not loop the renderer (regression for 
   )
 
   await waitFor(() =>
-    expect(within(screen.getByRole('dialog')).getByText(/Input should be a valid integer/)).toBeInTheDocument(),
+    expect(
+      within(screen.getByRole('dialog')).getByText(/Input should be a valid integer/),
+    ).toBeInTheDocument(),
   )
 
   const loopMessages = consoleError.mock.calls.filter((call) =>
@@ -427,9 +433,7 @@ it('clears the marker when the session ends', async () => {
   // The session ends -- an expired session surfaces as `session` becoming
   // null exactly like an explicit sign-out does, so this covers both.
   await userEvent.click(screen.getByRole('button', { name: 'Abmelden' }))
-  await waitFor(() =>
-    expect(screen.getByRole('button', { name: /anmelden/i })).toBeInTheDocument(),
-  )
+  await waitFor(() => expect(screen.getByRole('button', { name: /anmelden/i })).toBeInTheDocument())
 
   // A different operator signs in on the same machine.
   await userEvent.type(screen.getByLabelText('Benutzername'), 'b.schmidt')

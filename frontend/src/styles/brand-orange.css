@@ -12,7 +12,7 @@
      itself is only 2.2:1 there and fails WCAG for text and for focus rings.
    - Text on an orange fill is dark (6.7:1), never light (2.2:1). */
 
-[data-brand=testbench] {
+[data-brand='testbench'] {
   --color-accent: #f28c00;
   --color-accent-fg: #9a5500;
   --color-accent-100: #fef3e6;
@@ -37,7 +37,7 @@
 }
 
 /* Dark: the scale inverts -- tints become dark, text shades become light. */
-[data-brand=testbench][data-theme=dark] {
+[data-brand='testbench'][data-theme='dark'] {
   --color-accent: #f28c00;
   --color-accent-fg: #ffa733;
   --color-accent-100: #2e2010;
@@ -49,6 +49,8 @@
   --color-accent-900: #ffe6c2;
 }
 
-[data-brand=testbench] .btn-primary,
-[data-brand=testbench] .btn-primary:hover,
-[data-brand=testbench] .btn-primary:active { color: #1d1f20; }
+[data-brand='testbench'] .btn-primary,
+[data-brand='testbench'] .btn-primary:hover,
+[data-brand='testbench'] .btn-primary:active {
+  color: #1d1f20;
+}

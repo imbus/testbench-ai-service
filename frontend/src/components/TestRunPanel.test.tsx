@@ -48,9 +48,7 @@ function renderPanel(props: Partial<ComponentProps<typeof TestRunPanel>> = {}) {
   return render(
     <MemoryRouter>
       <TestRunPanel
-        messages={[
-          { role: 'user', source: 'inline', file: null, content: 'hi', readable: true },
-        ]}
+        messages={[{ role: 'user', source: 'inline', file: null, content: 'hi', readable: true }]}
         vars={{}}
         agentContext={{}}
         isAdmin
@@ -63,7 +61,9 @@ function renderPanel(props: Partial<ComponentProps<typeof TestRunPanel>> = {}) {
 test('lists catalogue models with their routing family', async () => {
   renderPanel()
   const list = await openDropdown(userEvent.setup(), 'Model')
-  expect(within(list).getByRole('option', { name: /claude-opus-5/, hidden: true })).toBeInTheDocument()
+  expect(
+    within(list).getByRole('option', { name: /claude-opus-5/, hidden: true }),
+  ).toBeInTheDocument()
 })
 
 test('marks a fallback model so a degraded call is visible', async () => {

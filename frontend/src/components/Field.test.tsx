@@ -173,7 +173,9 @@ describe('Field', () => {
 
     await userEvent.type(screen.getByLabelText('trusted_proxies'), ', 10.0.0.3')
 
-    expect(screen.getByTestId('edits')).toHaveTextContent('{"trusted_proxies":["10.0.0.1","10.0.0.2","10.0.0.3"]}')
+    expect(screen.getByTestId('edits')).toHaveTextContent(
+      '{"trusted_proxies":["10.0.0.1","10.0.0.2","10.0.0.3"]}',
+    )
   })
 
   it('restores the saved value in the visible input when reverting a list field', async () => {

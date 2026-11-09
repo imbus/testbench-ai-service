@@ -36,8 +36,22 @@ const ROOTS: TemplateCompletion[] = [
 ]
 
 const KEYWORDS = [
-  'if', 'elif', 'else', 'endif', 'for', 'endfor', 'set', 'endset',
-  'macro', 'endmacro', 'filter', 'endfilter', 'raw', 'endraw', 'with', 'endwith',
+  'if',
+  'elif',
+  'else',
+  'endif',
+  'for',
+  'endfor',
+  'set',
+  'endset',
+  'macro',
+  'endmacro',
+  'filter',
+  'endfilter',
+  'raw',
+  'endraw',
+  'with',
+  'endwith',
 ]
 
 const OPENERS = ['{{', '{%', '{#'] as const
@@ -61,7 +75,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /** The agent sample node a dotted path names, or undefined once it leaves plain objects. */
-function agentNode(agent: Record<string, unknown>, path: string[]): Record<string, unknown> | undefined {
+function agentNode(
+  agent: Record<string, unknown>,
+  path: string[],
+): Record<string, unknown> | undefined {
   let node: unknown = agent
   for (const segment of path) {
     if (!isRecord(node) || !(segment in node)) return undefined
@@ -77,7 +94,11 @@ function varDocumentation(decl: PromptVarDecl): string | undefined {
   const parts: string[] = []
   if (decl.description) parts.push(decl.description)
   if (decl.choices?.length) parts.push(`Choices: ${decl.choices.join(', ')}`)
-  if (decl.default_value !== null && decl.default_value !== undefined && decl.default_value !== '') {
+  if (
+    decl.default_value !== null &&
+    decl.default_value !== undefined &&
+    decl.default_value !== ''
+  ) {
     parts.push(`Default: ${String(decl.default_value)}`)
   }
   return parts.length ? parts.join('\n\n') : undefined
@@ -87,7 +108,10 @@ function varDocumentation(decl: PromptVarDecl): string | undefined {
 const CHAIN = /(^|[^\w.\])])((?:[A-Za-z_]\w*\.)*)([A-Za-z_]\w*)?$/
 
 /** Completions for the cursor at the end of *textBefore*, or null when nothing applies. */
-export function templateCompletions(textBefore: string, ctx: CompletionContext): TemplateCompletions | null {
+export function templateCompletions(
+  textBefore: string,
+  ctx: CompletionContext,
+): TemplateCompletions | null {
   const tag = openTag(textBefore)
   if (!tag || tag.opener === '{#') return null
 
@@ -99,7 +123,8 @@ export function templateCompletions(textBefore: string, ctx: CompletionContext):
 
   if (path.length === 0) {
     // The first word of a block tag is its statement keyword.
-    const statementStart = tag.opener === '{%' && /^[-+]?\s*$/.test(tag.body.slice(0, tag.body.length - partial.length))
+    const statementStart =
+      tag.opener === '{%' && /^[-+]?\s*$/.test(tag.body.slice(0, tag.body.length - partial.length))
     if (statementStart) {
       return { items: KEYWORDS.map((label) => ({ label, kind: 'keyword' })), replaceLength }
     }
@@ -110,20 +135,24 @@ export function templateCompletions(textBefore: string, ctx: CompletionContext):
   if (root === 'agent') {
     const node = agentNode(ctx.agent, rest)
     if (!node) return null
-    const items = Object.entries(node).map(([label, value]): TemplateCompletion => ({
-      label,
-      kind: 'field',
-      detail: sampleType(value),
-    }))
+    const items = Object.entries(node).map(
+      ([label, value]): TemplateCompletion => ({
+        label,
+        kind: 'field',
+        detail: sampleType(value),
+      }),
+    )
     return items.length ? { items, replaceLength } : null
   }
   if (root === 'vars' && rest.length === 0) {
-    const items = Object.entries(ctx.vars).map(([label, decl]): TemplateCompletion => ({
-      label,
-      kind: 'variable',
-      detail: decl.value_type,
-      documentation: varDocumentation(decl),
-    }))
+    const items = Object.entries(ctx.vars).map(
+      ([label, decl]): TemplateCompletion => ({
+        label,
+        kind: 'variable',
+        detail: decl.value_type,
+        documentation: varDocumentation(decl),
+      }),
+    )
     return items.length ? { items, replaceLength } : null
   }
   return null

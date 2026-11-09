@@ -118,7 +118,9 @@ describe('Prompts', () => {
   it('shows the variants of each language file as tags', async () => {
     renderPrompts()
     await waitFor(() => expect(screen.getByTestId('prompt-agent-en-reviewer')).toBeInTheDocument())
-    expect(within(screen.getByTestId('prompt-agent-en-reviewer')).getByText('Thorough')).toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('prompt-agent-en-reviewer')).getByText('Thorough'),
+    ).toBeInTheDocument()
   })
 
   it('marks a language that has no file for the agent', async () => {
@@ -154,9 +156,7 @@ describe('Prompts', () => {
 
   it('shows a badge with the error for a broken prompt, and still links to it', async () => {
     renderPrompts()
-    await waitFor(() =>
-      expect(screen.getByTestId('prompt-agent-de-explainer')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByTestId('prompt-agent-de-explainer')).toBeInTheDocument())
     const row = screen.getByTestId('prompt-agent-de-explainer')
     expect(row.textContent).toMatch(/Invalid YAML at line 4/)
     const link = within(row).getByRole('link')

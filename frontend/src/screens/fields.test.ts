@@ -43,9 +43,7 @@ test('general tab covers the documented service fields', () => {
 
 test('deployment_mapping is deliberately absent from the LLM fields', () => {
   /** Spec 11.3: the backend has no notion of it, so no control pretends to. */
-  expect(LLM_FIELDS.map((field) => field.key)).not.toContain(
-    'llm_config.deployment_mapping',
-  )
+  expect(LLM_FIELDS.map((field) => field.key)).not.toContain('llm_config.deployment_mapping')
 })
 
 test('logging covers both sinks', () => {

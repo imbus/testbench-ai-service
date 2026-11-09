@@ -133,18 +133,14 @@ describe('list view', () => {
 
   it('shows each agent’s endpoint path', async () => {
     renderAgents()
-    await waitFor(() =>
-      expect(screen.getByText('/test-case-set-reviews')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText('/test-case-set-reviews')).toBeInTheDocument())
   })
 
   it('names each agent from its prompt metadata', async () => {
     // The agent key is a config identifier; the prompt's `name` is what a
     // human called it, and it is the only human-readable name that exists.
     renderAgents()
-    await waitFor(() =>
-      expect(screen.getByText('Test Case Set Reviewer')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText('Test Case Set Reviewer')).toBeInTheDocument())
   })
 
   it('still lists an agent whose prompt metadata cannot be read', async () => {
@@ -202,7 +198,9 @@ describe('list view', () => {
     expect(within(detail).getByTestId('agent-project-Gone')).toBeInTheDocument()
     // Alpha's override switches it off, so it is not listed.
     expect(within(detail).queryByTestId('agent-project-Alpha')).toBeNull()
-    expect(within(screen.getByTestId('agent-row-reviewer')).getByTestId('active-count')).toHaveTextContent('2')
+    expect(
+      within(screen.getByTestId('agent-row-reviewer')).getByTestId('active-count'),
+    ).toHaveTextContent('2')
   })
 
   it('lists only the overriding projects for an agent that is off globally', async () => {
@@ -357,9 +355,7 @@ describe('a config payload with nothing in it', () => {
       return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
     })
     renderAgents()
-    await waitFor(() =>
-      expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument())
   })
 })
 
@@ -396,7 +392,11 @@ describe('the model of an agent per project', () => {
       within(screen.getByTestId('agent-row-reviewer')).getByRole('button', { name: /overrides/i }),
     )
     const row = screen.getByTestId('agent-project-Release 2.0')
-    await chooseOption(userEvent.setup(), within(row).getByLabelText('reviewer · Model'), 'claude-opus-5')
+    await chooseOption(
+      userEvent.setup(),
+      within(row).getByLabelText('reviewer · Model'),
+      'claude-opus-5',
+    )
     expect(edits()).toEqual({
       'projects."Release 2.0".llm_config.agent_models.reviewer': 'claude-opus-5',
     })

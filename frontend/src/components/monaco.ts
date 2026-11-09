@@ -29,7 +29,11 @@ import 'monaco-editor/editor/common/standaloneStrings'
 import 'monaco-editor/features/codicon/register'
 import EditorWorker from 'monaco-editor/editor/editor.worker?worker'
 
-import { type CompletionContext, type TemplateCompletion, templateCompletions } from './prompt/templateCompletion'
+import {
+  type CompletionContext,
+  type TemplateCompletion,
+  templateCompletions,
+} from './prompt/templateCompletion'
 
 export { monaco }
 
@@ -47,7 +51,12 @@ document.fonts?.load("13px 'IBM Plex Sans'").then(() => monaco.editor.remeasureF
 monaco.languages.register({ id: LANGUAGE })
 
 monaco.languages.setLanguageConfiguration(LANGUAGE, {
-  brackets: [['{{', '}}'], ['{%', '%}'], ['(', ')'], ['[', ']']],
+  brackets: [
+    ['{{', '}}'],
+    ['{%', '%}'],
+    ['(', ')'],
+    ['[', ']'],
+  ],
   autoClosingPairs: [
     { open: '{{', close: ' }}' },
     { open: '{%', close: ' %}' },
@@ -68,10 +77,41 @@ monaco.languages.setLanguageConfiguration(LANGUAGE, {
 // spans therefore stop at a `{`, letting the tag take over.
 monaco.languages.setMonarchTokensProvider(LANGUAGE, {
   keywords: [
-    'if', 'elif', 'else', 'endif', 'for', 'endfor', 'in', 'not', 'and', 'or', 'is',
-    'set', 'endset', 'macro', 'endmacro', 'call', 'endcall', 'filter', 'endfilter',
-    'raw', 'endraw', 'with', 'endwith', 'block', 'endblock', 'include', 'import',
-    'from', 'as', 'true', 'false', 'none', 'True', 'False', 'None',
+    'if',
+    'elif',
+    'else',
+    'endif',
+    'for',
+    'endfor',
+    'in',
+    'not',
+    'and',
+    'or',
+    'is',
+    'set',
+    'endset',
+    'macro',
+    'endmacro',
+    'call',
+    'endcall',
+    'filter',
+    'endfilter',
+    'raw',
+    'endraw',
+    'with',
+    'endwith',
+    'block',
+    'endblock',
+    'include',
+    'import',
+    'from',
+    'as',
+    'true',
+    'false',
+    'none',
+    'True',
+    'False',
+    'None',
   ],
   roots: ['agent', 'vars'],
   tokenizer: {
@@ -106,13 +146,27 @@ monaco.languages.setMonarchTokensProvider(LANGUAGE, {
       [/#/, 'comment'],
     ],
     tag: [
-      [/-?(\}\}|%\})/, { cases: { '$1==$S2': { token: 'delimiter.bracket', next: '@pop' }, '@default': 'invalid' } }],
+      [
+        /-?(\}\}|%\})/,
+        {
+          cases: { '$1==$S2': { token: 'delimiter.bracket', next: '@pop' }, '@default': 'invalid' },
+        },
+      ],
       [/"([^"\\]|\\.)*"/, 'string'],
       [/'([^'\\]|\\.)*'/, 'string'],
       [/\d+(\.\d+)?/, 'number'],
       [/\|\s*[A-Za-z_]\w*/, 'type'],
       [/\.[A-Za-z_]\w*/, 'variable.property'],
-      [/[A-Za-z_]\w*/, { cases: { '@keywords': 'keyword', '@roots': 'variable.predefined', '@default': 'identifier' } }],
+      [
+        /[A-Za-z_]\w*/,
+        {
+          cases: {
+            '@keywords': 'keyword',
+            '@roots': 'variable.predefined',
+            '@default': 'identifier',
+          },
+        },
+      ],
       [/[=<>!+\-*/%~]+/, 'operator'],
       [/\s+/, ''],
       [/./, ''],
@@ -142,7 +196,11 @@ export function applyEditorTheme(): void {
   const text = cssColor('--color-text')
   const accent = cssColor('--color-accent')
   // Text-safe accent (darker orange on light); Monarch wants hex without `#`.
-  const accentFg = (cssColor('--color-accent-fg') ?? accent ?? (dark ? '#6fd3a8' : '#416180')).slice(1)
+  const accentFg = (
+    cssColor('--color-accent-fg') ??
+    accent ??
+    (dark ? '#6fd3a8' : '#416180')
+  ).slice(1)
   set('editor.background', bg)
   set('editor.foreground', text)
   set('editorGutter.background', surface)
@@ -198,7 +256,10 @@ export function observeTheme(): void {
  */
 const contexts = new Map<string, () => CompletionContext | undefined>()
 
-export function setCompletionContext(model: monaco.editor.ITextModel, get: () => CompletionContext | undefined): () => void {
+export function setCompletionContext(
+  model: monaco.editor.ITextModel,
+  get: () => CompletionContext | undefined,
+): () => void {
   const key = model.uri.toString()
   contexts.set(key, get)
   return () => {

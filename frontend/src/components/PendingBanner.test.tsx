@@ -48,7 +48,9 @@ const DIFF_RESPONSE = {
   json: async () => ({
     valid: true,
     issues: [],
-    diffs: [{ path: '/tmp/config.toml', diff: '-port = 8010\n+port = 9999\n', added: 1, removed: 1 }],
+    diffs: [
+      { path: '/tmp/config.toml', diff: '-port = 8010\n+port = 9999\n', added: 1, removed: 1 },
+    ],
     restart_required: ['port'],
     in_flight_tasks: 0,
     toml: '',
@@ -94,9 +96,15 @@ describe('PendingBanner', () => {
     const strip = within(screen.getByRole('status'))
 
     expect(strip.getByRole('link', { name: 'Service 2' })).toHaveAttribute('href', '/admin/service')
-    expect(strip.getByRole('link', { name: 'LLM provider 1' })).toHaveAttribute('href', '/admin/llm')
+    expect(strip.getByRole('link', { name: 'LLM provider 1' })).toHaveAttribute(
+      'href',
+      '/admin/llm',
+    )
     expect(strip.getByRole('link', { name: 'Agents 1' })).toHaveAttribute('href', '/admin/agents')
-    expect(strip.getByRole('link', { name: 'Projects 1' })).toHaveAttribute('href', '/admin/projects')
+    expect(strip.getByRole('link', { name: 'Projects 1' })).toHaveAttribute(
+      'href',
+      '/admin/projects',
+    )
     expect(strip.getByRole('link', { name: 'Logging 1' })).toHaveAttribute('href', '/admin/logging')
     // The raw dotted paths are the diff dialog's job, not the strip's.
     expect(screen.getByRole('status')).not.toHaveTextContent('llm_config.default_model')

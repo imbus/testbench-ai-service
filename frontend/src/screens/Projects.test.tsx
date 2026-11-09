@@ -19,7 +19,12 @@ const DISK = {
   language: 'de',
   agents: {
     reviewer: { enabled: true, endpoint_path: '/r', class_path: 'a.R', prompt: { file: 'r.yaml' } },
-    explainer: { enabled: false, endpoint_path: '/e', class_path: 'a.E', prompt: { file: 'e.yaml' } },
+    explainer: {
+      enabled: false,
+      endpoint_path: '/e',
+      class_path: 'a.E',
+      prompt: { file: 'e.yaml' },
+    },
   },
   projects: {
     Alpha: { language: 'en', agents: { reviewer: { enabled: false } } },
@@ -149,7 +154,10 @@ describe('a project card', () => {
     })
 
     expect(within(group).getAllByRole('button')).toHaveLength(3)
-    expect(within(group).getByRole('button', { name: 'en' })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(group).getByRole('button', { name: 'en' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
     expect(within(group).getByRole('button', { name: /Inherited/ })).toHaveAttribute(
       'aria-pressed',
       'false',
@@ -192,8 +200,14 @@ describe('a project card', () => {
     renderProjects()
     await ready()
     const card = screen.getByTestId('project-Alpha')
-    expect(within(card).getByRole('switch', { name: /reviewer/ })).toHaveAttribute('data-state', 'off')
-    expect(within(card).getByRole('switch', { name: /explainer/ })).toHaveAttribute('data-state', 'inherit')
+    expect(within(card).getByRole('switch', { name: /reviewer/ })).toHaveAttribute(
+      'data-state',
+      'off',
+    )
+    expect(within(card).getByRole('switch', { name: /explainer/ })).toHaveAttribute(
+      'data-state',
+      'inherit',
+    )
     expect(within(card).getByRole('switch', { name: /reviewer/ })).toHaveAttribute(
       'aria-checked',
       'false',
@@ -259,9 +273,9 @@ describe('the cached list', () => {
     await ready()
     await userEvent.click(screen.getByRole('button', { name: /refresh/i }))
     await waitFor(() =>
-      expect(
-        fetchMock.mock.calls.some((call) => call[0] === '/admin/api/projects/refresh'),
-      ).toBe(true),
+      expect(fetchMock.mock.calls.some((call) => call[0] === '/admin/api/projects/refresh')).toBe(
+        true,
+      ),
     )
   })
 

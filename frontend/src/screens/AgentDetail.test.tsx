@@ -274,7 +274,9 @@ describe('the scope switcher', () => {
     renderDetail()
     await ready()
     const picker = await openDropdown(userEvent.setup(), addOverridePicker())
-    expect(within(picker).getByRole('option', { name: 'Untouched', hidden: true })).toBeInTheDocument()
+    expect(
+      within(picker).getByRole('option', { name: 'Untouched', hidden: true }),
+    ).toBeInTheDocument()
     expect(
       within(picker).queryByRole('option', { name: 'Alpha', hidden: true }),
     ).not.toBeInTheDocument()
@@ -294,10 +296,7 @@ describe('the scope switcher', () => {
     renderDetail()
     await ready()
     await chooseOption(userEvent.setup(), addOverridePicker(), 'Untouched')
-    expect(screen.getByRole('tab', { name: 'Untouched' })).toHaveAttribute(
-      'aria-selected',
-      'true',
-    )
+    expect(screen.getByRole('tab', { name: 'Untouched' })).toHaveAttribute('aria-selected', 'true')
     expect(edits()).toEqual({})
   })
 })
@@ -336,7 +335,9 @@ describe('the form in global scope', () => {
     renderDetail()
     await ready()
     const options = await openDropdown(userEvent.setup(), 'variant')
-    expect(within(options).getByRole('option', { name: 'Thorough', hidden: true })).toBeInTheDocument()
+    expect(
+      within(options).getByRole('option', { name: 'Thorough', hidden: true }),
+    ).toBeInTheDocument()
     expect(within(options).getByRole('option', { name: 'Quick', hidden: true })).toBeInTheDocument()
   })
 
@@ -544,10 +545,7 @@ describe('prompt variables in a project that declares its own', () => {
         <MemoryRouter initialEntries={['/admin/agents/reviewer']}>
           <DraftProvider saved={RUNNING}>
             <Routes>
-              <Route
-                path="/admin/agents/:agentKey"
-                element={<AgentDetail isAdmin issues={[]} />}
-              />
+              <Route path="/admin/agents/:agentKey" element={<AgentDetail isAdmin issues={[]} />} />
             </Routes>
             <Edits />
           </DraftProvider>

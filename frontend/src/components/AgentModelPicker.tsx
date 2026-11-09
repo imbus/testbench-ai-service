@@ -66,7 +66,9 @@ export function AgentModelPicker({
     { label: '', items: [{ label: inheritLabel, value: INHERIT }] },
     ...(own && !known ? [{ label: '', items: [{ label: own, value: own }] }] : []),
     ...providers.map((provider) => ({
-      label: provider.key_present ? provider.provider : `${provider.provider} (${t('testRunNoKey')})`,
+      label: provider.key_present
+        ? provider.provider
+        : `${provider.provider} (${t('testRunNoKey')})`,
       items: provider.models.map((entry) => ({ label: entry.id, value: entry.id })),
     })),
   ]

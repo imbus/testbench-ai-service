@@ -146,9 +146,7 @@ describe('useRefreshProjects', () => {
     )
     await waitFor(() => expect(screen.getByTestId('out')).toHaveTextContent('Alpha'))
 
-    fetchMock.mockResolvedValue(
-      ok({ ...PROJECTS, projects: [{ name: 'Gamma', key: '13' }] }),
-    )
+    fetchMock.mockResolvedValue(ok({ ...PROJECTS, projects: [{ name: 'Gamma', key: '13' }] }))
     await userEvent.click(screen.getByRole('button'))
     await waitFor(() => expect(screen.getByTestId('out')).toHaveTextContent('Gamma'))
   })
@@ -182,9 +180,7 @@ describe('usePromptMeta', () => {
       </Wrapper>,
     )
     await waitFor(() => expect(screen.getByTestId('out')).toHaveTextContent('Thorough|Quick'))
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      '/admin/api/prompts/de/test_case_set_reviewer/meta',
-    )
+    expect(fetchMock.mock.calls[0][0]).toBe('/admin/api/prompts/de/test_case_set_reviewer/meta')
   })
 
   it('passes the draft prompt file as ?file=', async () => {
@@ -195,9 +191,7 @@ describe('usePromptMeta', () => {
       </Wrapper>,
     )
     await waitFor(() => expect(fetchMock).toHaveBeenCalled())
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      '/admin/api/prompts/de/x/meta?file=other%2Fprompt.yaml',
-    )
+    expect(fetchMock.mock.calls[0][0]).toBe('/admin/api/prompts/de/x/meta?file=other%2Fprompt.yaml')
   })
 
   it('percent-encodes an agent key and a language that need it', async () => {

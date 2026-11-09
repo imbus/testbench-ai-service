@@ -13,7 +13,13 @@ const PLAN: PromptPlanResponse = {
 describe('SavePromptDialog', () => {
   it('lists creations, updates and deletions as separate groups', () => {
     render(
-      <SavePromptDialog plan={PLAN} error={null} pending={false} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+      <SavePromptDialog
+        plan={PLAN}
+        error={null}
+        pending={false}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     )
     // Scoped to each group's own testid, not a flat `getByText` anywhere in
     // the document -- a dialog that lumped all three arrays into one
@@ -28,14 +34,20 @@ describe('SavePromptDialog', () => {
     expect(updated.getByText('/p/de/x/prompt.yaml')).toBeInTheDocument()
 
     const deleted = within(screen.getByTestId('confirm-deleted'))
-    expect(deleted.getByText('Gelöscht (wird von keinem Prompt mehr verwendet):')).toBeInTheDocument()
+    expect(
+      deleted.getByText('Gelöscht (wird von keinem Prompt mehr verwendet):'),
+    ).toBeInTheDocument()
     expect(deleted.getByText('/p/de/x/old.jinja')).toBeInTheDocument()
   })
 
   it('explains why nothing will be deleted', () => {
     render(
       <SavePromptDialog
-        plan={{ ...PLAN, deleted: [], deletions_skipped: 'de/broken/prompt.yaml could not be parsed' }}
+        plan={{
+          ...PLAN,
+          deleted: [],
+          deletions_skipped: 'de/broken/prompt.yaml could not be parsed',
+        }}
         error={null}
         pending={false}
         onCancel={vi.fn()}
@@ -60,14 +72,26 @@ describe('SavePromptDialog', () => {
 
   it('cannot be confirmed while there is no plan', () => {
     render(
-      <SavePromptDialog plan={null} error="nope" pending={false} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+      <SavePromptDialog
+        plan={null}
+        error="nope"
+        pending={false}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     )
     expect(screen.getByRole('button', { name: 'Bestätigen' })).toBeDisabled()
   })
 
   it('cannot be confirmed while the plan request is still in flight', () => {
     render(
-      <SavePromptDialog plan={null} error={null} pending={true} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+      <SavePromptDialog
+        plan={null}
+        error={null}
+        pending={true}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     )
     expect(screen.getByRole('button', { name: 'Wird geprüft …' })).toBeDisabled()
   })
@@ -79,7 +103,13 @@ describe('SavePromptDialog', () => {
     // non-null plan already in hand -- the state the dialog is actually in
     // once the operator has clicked Confirm and the PUT is in flight.
     render(
-      <SavePromptDialog plan={PLAN} error={null} pending={true} onCancel={vi.fn()} onConfirm={vi.fn()} />,
+      <SavePromptDialog
+        plan={PLAN}
+        error={null}
+        pending={true}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     )
     expect(screen.getByRole('button', { name: 'Wird gespeichert…' })).toBeDisabled()
   })

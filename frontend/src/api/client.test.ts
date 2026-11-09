@@ -44,9 +44,11 @@ test('omits the CSRF header on GET', async () => {
 test('throws ApiError carrying the status and detail', async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ detail: 'Invalid credentials' }), { status: 401 }),
-    ),
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ detail: 'Invalid credentials' }), { status: 401 }),
+      ),
   )
   await expect(apiFetch('/session', { method: 'POST' })).rejects.toMatchObject({
     status: 401,
@@ -67,9 +69,11 @@ test('surfaces a network failure as an ApiError', async () => {
 test('uses string detail as the error message', async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ detail: 'Custom error message' }), { status: 400 }),
-    ),
+    vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ detail: 'Custom error message' }), { status: 400 }),
+      ),
   )
   await expect(apiFetch('/test')).rejects.toMatchObject({
     message: 'Custom error message',
@@ -78,12 +82,13 @@ test('uses string detail as the error message', async () => {
 })
 
 test('uses object detail.message as error message and carries the full detail', async () => {
-  const detailObj = { message: 'Validation failed', issues: [{ path: 'field', message: 'invalid' }] }
+  const detailObj = {
+    message: 'Validation failed',
+    issues: [{ path: 'field', message: 'invalid' }],
+  }
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ detail: detailObj }), { status: 422 }),
-    ),
+    vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: detailObj }), { status: 422 })),
   )
   await expect(apiFetch('/test')).rejects.toMatchObject({
     message: 'Validation failed',
@@ -94,9 +99,7 @@ test('uses object detail.message as error message and carries the full detail', 
 test('non-JSON error body uses fallback message and leaves detail undefined', async () => {
   vi.stubGlobal(
     'fetch',
-    vi.fn().mockResolvedValue(
-      new Response('Internal Server Error', { status: 500 }),
-    ),
+    vi.fn().mockResolvedValue(new Response('Internal Server Error', { status: 500 })),
   )
   await expect(apiFetch('/test')).rejects.toMatchObject({
     message: 'Request failed with status 500',

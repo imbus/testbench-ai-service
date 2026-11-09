@@ -203,13 +203,28 @@ export function RenderPreview({
   if (!isAdmin) return null
 
   return (
-    <div data-testid="render-preview" style={{ flex: 1, minWidth: 0, minHeight: 0, height: '100%', display: 'flex' }}>
+    <div
+      data-testid="render-preview"
+      style={{ flex: 1, minWidth: 0, minHeight: 0, height: '100%', display: 'flex' }}
+    >
       <div
         data-testid="render-output"
-        style={{ flex: 1, minWidth: 0, overflow: 'auto', padding: '14px 24px', display: 'flex', flexDirection: 'column', gap: 10 }}
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: 'auto',
+          padding: '14px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 10,
+        }}
       >
         {requestError && (
-          <Message severity="error" text={requestError.message} style={{ fontSize: 12, justifyContent: 'flex-start' }} />
+          <Message
+            severity="error"
+            text={requestError.message}
+            style={{ fontSize: 12, justifyContent: 'flex-start' }}
+          />
         )}
         {/* Only while a request is in flight or none was attempted yet: a
             first attempt refused for invalid JSON sends nothing, and its
@@ -223,7 +238,10 @@ export function RenderPreview({
           <div
             key={index}
             data-testid="render-message"
-            style={{ borderTop: index > 0 ? '1px solid var(--color-divider)' : undefined, paddingTop: index > 0 ? 8 : 0 }}
+            style={{
+              borderTop: index > 0 ? '1px solid var(--color-divider)' : undefined,
+              paddingTop: index > 0 ? 8 : 0,
+            }}
           >
             {/* The message role, straight from the wire -- not translated. */}
             <div className="text-muted" style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}>
@@ -231,7 +249,11 @@ export function RenderPreview({
             </div>
             {message.content && <MarkdownView text={message.content} />}
             {message.error && (
-              <Message severity="error" text={message.error} style={{ fontSize: 11, justifyContent: 'flex-start' }} />
+              <Message
+                severity="error"
+                text={message.error}
+                style={{ fontSize: 11, justifyContent: 'flex-start' }}
+              />
             )}
           </div>
         ))}
@@ -258,10 +280,25 @@ export function RenderPreview({
         )}
         <fieldset
           data-testid="render-vars"
-          style={{ border: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}
+          style={{
+            border: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+          }}
         >
           <legend
-            style={{ fontSize: 12, padding: 0, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8, width: '100%' }}
+            style={{
+              fontSize: 12,
+              padding: 0,
+              marginBottom: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              width: '100%',
+            }}
           >
             <span>{t('renderVars')}</span>
             {Object.keys(varEdits).length > 0 && (
@@ -307,10 +344,7 @@ export function RenderPreview({
               not the accessible label: an ordinary UI word ("context") has an
               unambiguous German translation, unlike a literal TOML path such as
               `Field.tsx`'s `spec.key`. */}
-          <span
-            className="text-muted"
-            style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}
-          >
+          <span className="text-muted" style={{ fontSize: 11, fontFamily: 'var(--font-code)' }}>
             agent_context
           </span>
           <InputTextarea
@@ -328,7 +362,11 @@ export function RenderPreview({
         </div>
 
         {parseError && (
-          <Message severity="error" text={t('renderInvalidJson')} style={{ fontSize: 12, justifyContent: 'flex-start' }} />
+          <Message
+            severity="error"
+            text={t('renderInvalidJson')}
+            style={{ fontSize: 12, justifyContent: 'flex-start' }}
+          />
         )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

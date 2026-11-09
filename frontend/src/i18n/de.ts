@@ -29,7 +29,8 @@ export const de = {
   coverageMissing: 'Fehlt',
   coverageGap: 'Lücke',
   coverageSuggestedTest: 'Testvorschlag',
-  coverageIncomplete: 'Der Bericht ist unvollständig: Nicht alle verknüpften Testfallsets konnten ausgewertet werden.',
+  coverageIncomplete:
+    'Der Bericht ist unvollständig: Nicht alle verknüpften Testfallsets konnten ausgewertet werden.',
   coverageNoLinkedTests:
     'Mit {{requirement}} ist kein Testfall verknüpft, es gibt nichts zu prüfen. Testfallsets verknüpfen oder zuerst Testideen generieren.',
   coverageReduced: 'Die Aspekte beruhen nur auf dem Titel, die Anforderung hat keine Beschreibung.',
@@ -52,9 +53,12 @@ export const de = {
   linkCandidate: 'Kandidat',
   linkAspects: 'Aspekte',
   linkSetsRead: '{{detailed}} von {{screened}} Testfallsätzen im Detail gelesen',
-  linkNoCandidates: 'Es wurden keine Kandidaten gefunden: Kein nicht verlinkter Testfallsatz prüft diese Anforderung erkennbar.',
-  linkIncomplete: 'Der Report ist unvollständig: Nicht alle Testfallsätze konnten gesichtet oder ausgewertet werden.',
-  linkReduced: 'Die Aspekte beruhen nur auf dem Titel, die Anforderung hat keine Beschreibung; jede Konfidenz ist um eine Stufe gesenkt.',
+  linkNoCandidates:
+    'Es wurden keine Kandidaten gefunden: Kein nicht verlinkter Testfallsatz prüft diese Anforderung erkennbar.',
+  linkIncomplete:
+    'Der Report ist unvollständig: Nicht alle Testfallsätze konnten gesichtet oder ausgewertet werden.',
+  linkReduced:
+    'Die Aspekte beruhen nur auf dem Titel, die Anforderung hat keine Beschreibung; jede Konfidenz ist um eine Stufe gesenkt.',
   linkAlreadyLinkedTo: 'Bereits verlinkt mit',
   linkEmptySets: 'Kandidaten ohne Testfälle',
   linkFailedSets: 'Kandidaten, deren Auswertung fehlschlug',
@@ -320,7 +324,8 @@ export const de = {
   variantSettings: 'Varianteneinstellungen',
   variantSteps: 'Pipeline-Schritte',
   variantStep: 'Schritt',
-  variantStepsFixed: 'Der Agent erwartet genau diese Schritte und Messages. Text und Rolle bearbeitest du über den Baum, Schritte und Messages hinzufügen oder entfernen geht nicht.',
+  variantStepsFixed:
+    'Der Agent erwartet genau diese Schritte und Messages. Text und Rolle bearbeitest du über den Baum, Schritte und Messages hinzufügen oder entfernen geht nicht.',
   inlineMessage: 'inline',
   newVariantDefault: 'Neue Variante',
   addMessageShort: '+ Nachricht',

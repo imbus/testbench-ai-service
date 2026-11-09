@@ -27,10 +27,7 @@ test('the global tab is selected when no project is', () => {
 
 test('a project tab is selected when it is the current scope', () => {
   renderTabs({ selected: 'Release 2.0' })
-  expect(screen.getByRole('tab', { name: 'Release 2.0' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
+  expect(screen.getByRole('tab', { name: 'Release 2.0' })).toHaveAttribute('aria-selected', 'true')
   expect(screen.getByRole('tab', { name: 'Global' })).toHaveAttribute('aria-selected', 'false')
 })
 
@@ -48,10 +45,7 @@ test('choosing a project tab reports its name', async () => {
 
 test('the add select offers only projects without a tab', async () => {
   renderTabs()
-  const list = await openDropdown(
-    userEvent.setup(),
-    screen.getByLabelText('add project'),
-  )
+  const list = await openDropdown(userEvent.setup(), screen.getByLabelText('add project'))
   expect(list).toHaveTextContent('Beta')
   expect(list).not.toHaveTextContent('Alpha')
   expect(within(list).getAllByRole('option', { hidden: true })).toHaveLength(1)
@@ -59,11 +53,7 @@ test('the add select offers only projects without a tab', async () => {
 
 test('picking from the add select selects that project', async () => {
   const { onSelect } = renderTabs()
-  await chooseOption(
-    userEvent.setup(),
-    screen.getByLabelText('add project'),
-    'Beta',
-  )
+  await chooseOption(userEvent.setup(), screen.getByLabelText('add project'), 'Beta')
   expect(onSelect).toHaveBeenCalledWith('Beta')
 })
 

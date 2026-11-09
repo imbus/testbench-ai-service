@@ -10,7 +10,13 @@ const KEY_STEP = 16
  * `max` is read at the start of each drag / key press rather than passed as
  * a number, because it depends on the surrounding column's live height.
  */
-export function PaneResizer({ height, min, max, label, onResize }: {
+export function PaneResizer({
+  height,
+  min,
+  max,
+  label,
+  onResize,
+}: {
   height: number
   min: number
   max: () => number
@@ -19,7 +25,8 @@ export function PaneResizer({ height, min, max, label, onResize }: {
 }) {
   const drag = useRef<{ startY: number; startHeight: number; max: number } | null>(null)
 
-  const clamp = (value: number, upper: number) => Math.min(Math.max(value, min), Math.max(upper, min))
+  const clamp = (value: number, upper: number) =>
+    Math.min(Math.max(value, min), Math.max(upper, min))
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return

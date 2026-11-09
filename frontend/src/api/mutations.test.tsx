@@ -117,9 +117,7 @@ describe('useApply', () => {
 
   it('reports a 422 as an error carrying the server detail', async () => {
     const detailObj = { message: 'not valid', issues: [{ path: 'port', message: 'invalid' }] }
-    fetchMock.mockResolvedValue(
-      jsonResponse({ detail: detailObj }, 422),
-    )
+    fetchMock.mockResolvedValue(jsonResponse({ detail: detailObj }, 422))
     const { result } = renderHook(() => useApply(), { wrapper })
 
     result.current.mutate({ port: 'nope' })

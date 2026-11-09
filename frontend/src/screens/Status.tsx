@@ -295,7 +295,9 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
       }}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('status')}</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+          {t('status')}
+        </h2>
         <span className="text-muted" style={{ fontSize: 13 }}>
           {t('statusSub')}
         </span>
@@ -355,11 +357,10 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
         </Card>
 
         <Card kicker={t('agents')}>
-          <div className="card-title">
-            {t('agentCount', { count: agents.total })}
-          </div>
+          <div className="card-title">{t('agentCount', { count: agents.total })}</div>
           <div className="card-meta">
-            {agents.enabled} {t('agentsOn')} · {t('overrideCount', { count: agents.project_overrides })}
+            {agents.enabled} {t('agentsOn')} ·{' '}
+            {t('overrideCount', { count: agents.project_overrides })}
           </div>
         </Card>
       </div>

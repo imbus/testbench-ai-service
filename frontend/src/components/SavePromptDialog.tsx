@@ -72,9 +72,21 @@ export function SavePromptDialog({
 
       {plan && (
         <>
-          <FileGroup heading={t('confirmSaveCreated')} files={plan.created} testid="confirm-created" />
-          <FileGroup heading={t('confirmSaveUpdated')} files={plan.updated} testid="confirm-updated" />
-          <FileGroup heading={t('confirmSaveDeleted')} files={plan.deleted} testid="confirm-deleted" />
+          <FileGroup
+            heading={t('confirmSaveCreated')}
+            files={plan.created}
+            testid="confirm-created"
+          />
+          <FileGroup
+            heading={t('confirmSaveUpdated')}
+            files={plan.updated}
+            testid="confirm-updated"
+          />
+          <FileGroup
+            heading={t('confirmSaveDeleted')}
+            files={plan.deleted}
+            testid="confirm-deleted"
+          />
           {plan.deletions_skipped && (
             <Message
               severity="error"

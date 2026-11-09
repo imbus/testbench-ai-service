@@ -40,8 +40,20 @@ const DOC: PromptDocument = {
         },
       },
       messages: [
-        { role: 'system', source: 'file', file: 'sys.jinja', content: 'You are helpful.', readable: true },
-        { role: 'user', source: 'inline', file: null, content: 'Explain {{ agent.defect }}', readable: true },
+        {
+          role: 'system',
+          source: 'file',
+          file: 'sys.jinja',
+          content: 'You are helpful.',
+          readable: true,
+        },
+        {
+          role: 'user',
+          source: 'inline',
+          file: null,
+          content: 'Explain {{ agent.defect }}',
+          readable: true,
+        },
       ],
     },
     {

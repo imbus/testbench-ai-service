@@ -82,17 +82,15 @@ describe('DiffDialog', () => {
   })
 
   it('applies and closes on success', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(PREVIEW_OK))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          written: ['/tmp/config.toml'],
-          backup: '/tmp/config.toml.bak',
-          restart_required: [],
-          reloaded: true,
-          in_flight_tasks: 0,
-        }),
-      )
+    fetchMock.mockResolvedValueOnce(jsonResponse(PREVIEW_OK)).mockResolvedValueOnce(
+      jsonResponse({
+        written: ['/tmp/config.toml'],
+        backup: '/tmp/config.toml.bak',
+        restart_required: [],
+        reloaded: true,
+        in_flight_tasks: 0,
+      }),
+    )
     const onClose = vi.fn()
     renderDialog(onClose)
 
@@ -104,34 +102,28 @@ describe('DiffDialog', () => {
   })
 
   it('clears the draft after a successful apply', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(PREVIEW_OK))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          written: ['/tmp/config.toml'],
-          backup: null,
-          restart_required: [],
-          reloaded: true,
-          in_flight_tasks: 0,
-        }),
-      )
+    fetchMock.mockResolvedValueOnce(jsonResponse(PREVIEW_OK)).mockResolvedValueOnce(
+      jsonResponse({
+        written: ['/tmp/config.toml'],
+        backup: null,
+        restart_required: [],
+        reloaded: true,
+        in_flight_tasks: 0,
+      }),
+    )
     renderDialog()
 
     await screen.findByText(/-port = 8010/)
     await userEvent.click(screen.getByRole('button', { name: 'Apply' }))
 
-    await waitFor(() =>
-      expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull(),
-    )
+    await waitFor(() => expect(window.localStorage.getItem(DRAFT_STORAGE_KEY)).toBeNull())
   })
 
   it('shows the validation issues and offers no apply when the draft is invalid', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse({
         valid: false,
-        issues: [
-          { path: 'port', message: 'Input should be a valid integer', toml_section: '[x]' },
-        ],
+        issues: [{ path: 'port', message: 'Input should be a valid integer', toml_section: '[x]' }],
         diffs: [],
         restart_required: [],
         in_flight_tasks: 0,
@@ -245,18 +237,16 @@ describe('DiffDialog', () => {
   })
 
   it('shows the backup path alongside the reload detail when a reload fails for another reason', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse(PREVIEW_OK))
-      .mockResolvedValueOnce(
-        jsonResponse({
-          written: ['/tmp/config.toml'],
-          backup: '/tmp/config.toml.bak',
-          restart_required: [],
-          reloaded: false,
-          reload_detail: 'Could not open the log file for writing.',
-          in_flight_tasks: 0,
-        }),
-      )
+    fetchMock.mockResolvedValueOnce(jsonResponse(PREVIEW_OK)).mockResolvedValueOnce(
+      jsonResponse({
+        written: ['/tmp/config.toml'],
+        backup: '/tmp/config.toml.bak',
+        restart_required: [],
+        reloaded: false,
+        reload_detail: 'Could not open the log file for writing.',
+        in_flight_tasks: 0,
+      }),
+    )
     const onClose = vi.fn()
     renderDialog(onClose)
 

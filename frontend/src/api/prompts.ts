@@ -123,7 +123,8 @@ export function agentsUsingVariant(
       if (!isRecord(block)) continue
       const projectAgents = block.agents
       if (!isRecord(projectAgents)) continue
-      if (variantOf(projectAgents[agentKey]) === variant) refs.push({ kind: 'project', project: name })
+      if (variantOf(projectAgents[agentKey]) === variant)
+        refs.push({ kind: 'project', project: name })
     }
   }
 

@@ -9,26 +9,64 @@ import { i18n } from '../../i18n'
 beforeEach(() => i18n.changeLanguage('en'))
 
 const VARIANTS: PromptVariantDoc[] = [
-  { name: 'Thorough', description: null, model: 'gpt-5.5', vars: {}, messages: [
-    { role: 'system', source: 'file', file: 'sys.jinja', content: 'x', readable: true, uid: 's' },
-    { role: 'user', source: 'inline', file: null, content: 'Explain {{ agent.defect }}', readable: true, uid: 'u' },
-  ] },
-  { name: 'Quick', description: null, model: null, vars: {}, messages: [] },
-  { name: 'Pipeline', description: null, model: null, vars: {}, messages: [], steps: {
-    aspects: [
-      { role: 'system', source: 'file', file: 'aspects_system.jinja', content: 'a', readable: true },
-      { role: 'user', source: 'file', file: 'aspects_user.jinja', content: 'b', readable: true },
+  {
+    name: 'Thorough',
+    description: null,
+    model: 'gpt-5.5',
+    vars: {},
+    messages: [
+      { role: 'system', source: 'file', file: 'sys.jinja', content: 'x', readable: true, uid: 's' },
+      {
+        role: 'user',
+        source: 'inline',
+        file: null,
+        content: 'Explain {{ agent.defect }}',
+        readable: true,
+        uid: 'u',
+      },
     ],
-    prefilter: [{ role: 'system', source: 'inline', file: null, content: 'Screen it', readable: true }],
-  } },
+  },
+  { name: 'Quick', description: null, model: null, vars: {}, messages: [] },
+  {
+    name: 'Pipeline',
+    description: null,
+    model: null,
+    vars: {},
+    messages: [],
+    steps: {
+      aspects: [
+        {
+          role: 'system',
+          source: 'file',
+          file: 'aspects_system.jinja',
+          content: 'a',
+          readable: true,
+        },
+        { role: 'user', source: 'file', file: 'aspects_user.jinja', content: 'b', readable: true },
+      ],
+      prefilter: [
+        { role: 'system', source: 'inline', file: null, content: 'Screen it', readable: true },
+      ],
+    },
+  },
 ]
 
 function setup(overrides = {}) {
   const props = {
-    variants: VARIANTS, selectedVariant: 'Thorough', activeTab: 'msg:u' as const,
-    flagged: [], readOnly: false,
-    onOpenMeta: vi.fn(), onPickVariant: vi.fn(), onOpenVariantSettings: vi.fn(),
-    onPickMessage: vi.fn(), onPickStep: vi.fn(), onAddVariant: vi.fn(), onAddMessage: vi.fn(), onOpenRender: vi.fn(), ...overrides,
+    variants: VARIANTS,
+    selectedVariant: 'Thorough',
+    activeTab: 'msg:u' as const,
+    flagged: [],
+    readOnly: false,
+    onOpenMeta: vi.fn(),
+    onPickVariant: vi.fn(),
+    onOpenVariantSettings: vi.fn(),
+    onPickMessage: vi.fn(),
+    onPickStep: vi.fn(),
+    onAddVariant: vi.fn(),
+    onAddMessage: vi.fn(),
+    onOpenRender: vi.fn(),
+    ...overrides,
   }
   render(<PromptTree {...props} />)
   return props
@@ -39,7 +77,9 @@ describe('PromptTree', () => {
     setup()
     const tree = screen.getByTestId('prompt-tree')
     expect(within(tree).getByRole('button', { name: /sys\.jinja/ })).toBeInTheDocument()
-    expect(within(tree).getByRole('button', { name: /Explain \{\{ agent\.defect \}\}/ })).toHaveAttribute('aria-current', 'true')
+    expect(
+      within(tree).getByRole('button', { name: /Explain \{\{ agent\.defect \}\}/ }),
+    ).toHaveAttribute('aria-current', 'true')
   })
 
   it('picks a variant, a message, the meta row and the settings', async () => {
@@ -64,13 +104,19 @@ describe('PromptTree', () => {
 
   it('marks the row of the active tab', () => {
     setup({ activeTab: 'meta' })
-    expect(screen.getByRole('button', { name: /prompt\.yaml/ })).toHaveAttribute('aria-current', 'true')
+    expect(screen.getByRole('button', { name: /prompt\.yaml/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
     expect(screen.getByRole('button', { name: /Explain/ })).not.toHaveAttribute('aria-current')
   })
 
   it('flags a message with lint errors', () => {
     setup({ flagged: [0] })
-    expect(screen.getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByRole('button', { name: /sys\.jinja/ })).toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
   })
 
   it('marks a variant a save refusal named', () => {
@@ -86,7 +132,9 @@ describe('PromptTree', () => {
 
   it('lists the referenced template files', () => {
     setup()
-    expect(screen.getByText(/^sys\.jinja,/, { selector: '[data-testid="tree-files"] *' })).toBeInTheDocument()
+    expect(
+      screen.getByText(/^sys\.jinja,/, { selector: '[data-testid="tree-files"] *' }),
+    ).toBeInTheDocument()
   })
 
   it('hides every add button in a read-only session', () => {
@@ -119,13 +167,22 @@ describe('PromptTree', () => {
   it("lists a multi-step variant's messages per step and opens them", async () => {
     const props = setup({ selectedVariant: 'Pipeline', activeTab: 'step:1:aspects' })
     const aspects = screen.getByRole('group', { name: 'Step: aspects' })
-    expect(within(aspects).getByRole('button', { name: /aspects_user\.jinja/ })).toHaveAttribute('aria-current', 'true')
-    await userEvent.click(within(screen.getByRole('group', { name: 'Step: prefilter' })).getByRole('button', { name: /Screen it/ }))
+    expect(within(aspects).getByRole('button', { name: /aspects_user\.jinja/ })).toHaveAttribute(
+      'aria-current',
+      'true',
+    )
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Step: prefilter' })).getByRole('button', {
+        name: /Screen it/,
+      }),
+    )
     expect(props.onPickStep).toHaveBeenCalledWith('prefilter', 0, false)
     await userEvent.dblClick(within(aspects).getByRole('button', { name: /aspects_system\.jinja/ }))
     expect(props.onPickStep).toHaveBeenLastCalledWith('aspects', 0, true)
     // A variant has messages or steps, never both.
     expect(screen.queryByRole('button', { name: '+ message' })).not.toBeInTheDocument()
-    expect(screen.getByText(/aspects_system\.jinja/, { selector: '[data-testid="tree-files"] *' })).toBeInTheDocument()
+    expect(
+      screen.getByText(/aspects_system\.jinja/, { selector: '[data-testid="tree-files"] *' }),
+    ).toBeInTheDocument()
   })
 })

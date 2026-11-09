@@ -59,10 +59,7 @@ function renderSection({
   initialEntries?: string
 } = {}) {
   // If specific disk/running values are provided, update the fetch mock
-  if (
-    disk !== CONFIG.disk ||
-    running !== CONFIG.running
-  ) {
+  if (disk !== CONFIG.disk || running !== CONFIG.running) {
     const fetchMock = vi.mocked(fetch)
     fetchMock.mockResolvedValue({
       ok: true,
@@ -152,9 +149,7 @@ test('the logging section shows both sinks', async () => {
 
 test('the config path is shown so the operator knows which file this is', async () => {
   renderSection({ section: 'service' })
-  await waitFor(() =>
-    expect(screen.getByText(/config\.toml/)).toBeInTheDocument(),
-  )
+  await waitFor(() => expect(screen.getByText(/config\.toml/)).toBeInTheDocument())
 })
 
 // Correction 2: mirrors Status.test.tsx's "shows a translated error" test.
@@ -225,9 +220,7 @@ test('does not show an issue addressed to a different tab', async () => {
   renderSection({
     section: 'service',
     isAdmin: true,
-    issues: [
-      { path: 'llm_config.model', message: 'nope', toml_section: '[x]' },
-    ],
+    issues: [{ path: 'llm_config.model', message: 'nope', toml_section: '[x]' }],
   })
 
   await screen.findByLabelText('host')
@@ -239,9 +232,7 @@ test('shows an issue addressed to an array element on the array field', async ()
   renderSection({
     section: 'service',
     isAdmin: true,
-    issues: [
-      { path: 'prompts_dir.0', message, toml_section: '[x]' },
-    ],
+    issues: [{ path: 'prompts_dir.0', message, toml_section: '[x]' }],
   })
 
   expect(await screen.findByLabelText('prompts_dir')).toHaveAttribute('aria-invalid', 'true')
@@ -252,9 +243,7 @@ test('does not match issues on fields with similar names (dot boundary)', async 
   renderSection({
     section: 'service',
     isAdmin: true,
-    issues: [
-      { path: 'port_extra', message: 'nope', toml_section: '[x]' },
-    ],
+    issues: [{ path: 'port_extra', message: 'nope', toml_section: '[x]' }],
   })
 
   await screen.findByLabelText('port')
@@ -384,10 +373,7 @@ test('the LLM screen offers a tab per project that overrides llm_config', async 
 
 test('a project in the URL is the selected scope', async () => {
   renderLlm({ initialEntries: '/admin/llm?project=Alpha' })
-  expect(await screen.findByRole('tab', { name: 'Alpha' })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
+  expect(await screen.findByRole('tab', { name: 'Alpha' })).toHaveAttribute('aria-selected', 'true')
 })
 
 test('an unstated field shows the inherited global value, not a filled default', async () => {
@@ -428,9 +414,9 @@ test('editing in project scope writes the project path, not the global one', asy
   await userEvent.type(model, 'gpt-5')
 
   await waitFor(() =>
-    expect(
-      JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY) ?? '{}'),
-    ).toHaveProperty(['projects.Alpha.llm_config.model']),
+    expect(JSON.parse(window.localStorage.getItem(DRAFT_STORAGE_KEY) ?? '{}')).toHaveProperty([
+      'projects.Alpha.llm_config.model',
+    ]),
   )
 })
 

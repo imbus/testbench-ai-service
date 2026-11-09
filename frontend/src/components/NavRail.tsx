@@ -147,7 +147,9 @@ export function NavRail({
                 textDecoration: 'none',
                 fontSize: 14,
                 borderLeft: `2px solid ${isActive ? 'var(--color-accent)' : 'transparent'}`,
-                background: isActive ? 'color-mix(in srgb, var(--color-accent) 16%, transparent)' : 'transparent',
+                background: isActive
+                  ? 'color-mix(in srgb, var(--color-accent) 16%, transparent)'
+                  : 'transparent',
                 opacity: restricted ? 0.5 : isActive ? 1 : 0.8,
               })}
             >
@@ -180,9 +182,7 @@ export function NavRail({
                   <path d="M8 11V7a4 4 0 0 1 8 0v4" />
                 </svg>
               )}
-              {badge !== null && (
-                <Badge value={badge} style={{ fontSize: 10 }} />
-              )}
+              {badge !== null && <Badge value={badge} style={{ fontSize: 10 }} />}
             </NavLink>
           </Fragment>
         )

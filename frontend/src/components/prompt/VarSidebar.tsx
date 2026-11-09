@@ -13,7 +13,13 @@ import { useTranslation } from 'react-i18next'
  * is flagged. `checking` is the live check's request in flight, shown apart
  * from `running` (the Lint button's own run).
  */
-export type LintState = { running: boolean; checking?: boolean; clean: boolean; error: string | null; errors: LintError[] }
+export type LintState = {
+  running: boolean
+  checking?: boolean
+  clean: boolean
+  error: string | null
+  errors: LintError[]
+}
 
 const caps = { fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' as const }
 
@@ -49,15 +55,41 @@ function NewVar({ onAdd }: { onAdd: (name: string) => void }) {
           onChange={(event) => setName(event.target.value)}
           style={{ flex: 1, minWidth: 0, fontFamily: codeFont, fontSize: 12, padding: '2px 6px' }}
         />
-        <Button type="submit" outlined label="+" aria-label={t('add')} title={t('add')} disabled={!key || invalid} style={{ padding: '0 8px', fontSize: 12 }} />
+        <Button
+          type="submit"
+          outlined
+          label="+"
+          aria-label={t('add')}
+          title={t('add')}
+          disabled={!key || invalid}
+          style={{ padding: '0 8px', fontSize: 12 }}
+        />
       </div>
-      {invalid && <span className="text-muted" style={{ fontSize: 11 }}>{t('varNameInvalid')}</span>}
+      {invalid && (
+        <span className="text-muted" style={{ fontSize: 11 }}>
+          {t('varNameInvalid')}
+        </span>
+      )}
     </form>
   )
 }
 const codeFont = 'var(--font-code)'
 
-function VarButton({ name, label, type, used, disabled, onInsert }: { name: string; label?: string; type?: string; used: boolean; disabled: boolean; onInsert: () => void }) {
+function VarButton({
+  name,
+  label,
+  type,
+  used,
+  disabled,
+  onInsert,
+}: {
+  name: string
+  label?: string
+  type?: string
+  used: boolean
+  disabled: boolean
+  onInsert: () => void
+}) {
   return (
     <Button
       type="button"
@@ -66,12 +98,29 @@ function VarButton({ name, label, type, used, disabled, onInsert }: { name: stri
       disabled={disabled}
       onClick={onInsert}
       title={name}
-      style={{ flex: 1, minWidth: 0, textAlign: 'left', color: 'inherit', fontFamily: codeFont, fontSize: 12, fontWeight: 400, padding: '2px 0', minHeight: 0, display: 'flex', justifyContent: 'space-between', gap: 6 }}
+      style={{
+        flex: 1,
+        minWidth: 0,
+        textAlign: 'left',
+        color: 'inherit',
+        fontFamily: codeFont,
+        fontSize: 12,
+        fontWeight: 400,
+        padding: '2px 0',
+        minHeight: 0,
+        display: 'flex',
+        justifyContent: 'space-between',
+        gap: 6,
+      }}
     >
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label ?? name}</span>
       <span style={{ display: 'flex', gap: 4, flex: 'none' }}>
         {type && <span className="text-muted">{type}</span>}
-        {used && <span aria-hidden style={{ color: 'var(--color-accent-fg)' }}>●</span>}
+        {used && (
+          <span aria-hidden style={{ color: 'var(--color-accent-fg)' }}>
+            ●
+          </span>
+        )}
       </span>
     </Button>
   )
@@ -111,7 +160,16 @@ function childrenOf(value: unknown): [string, unknown][] {
  * so those fields are shown as a hint of the item's shape, not inserted --
  * the template reaches them through a `{% for %}` loop.
  */
-function AgentField({ name, path, value, depth, insertable, used, disabled, onInsert }: {
+function AgentField({
+  name,
+  path,
+  value,
+  depth,
+  insertable,
+  used,
+  disabled,
+  onInsert,
+}: {
   name: string
   path: string
   value: unknown
@@ -139,22 +197,49 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
             aria-expanded={open}
             aria-label={`${open ? '▾' : '▸'} ${path}`}
             onClick={() => setOpen(!open)}
-            style={{ color: 'inherit', padding: 0, width: 12, minHeight: 0, fontSize: 10, flex: 'none' }}
+            style={{
+              color: 'inherit',
+              padding: 0,
+              width: 12,
+              minHeight: 0,
+              fontSize: 10,
+              flex: 'none',
+            }}
           />
         ) : (
           <span style={{ width: 12, flex: 'none' }} />
         )}
         {insertable ? (
-          <VarButton name={path} label={label} type={type} used={used.includes(path)} disabled={disabled} onInsert={() => onInsert(`{{ ${path} }}`)} />
+          <VarButton
+            name={path}
+            label={label}
+            type={type}
+            used={used.includes(path)}
+            disabled={disabled}
+            onInsert={() => onInsert(`{{ ${path} }}`)}
+          />
         ) : (
-          <span title={path} style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'space-between', gap: 6, fontFamily: codeFont, padding: '2px 0' }}>
+          <span
+            title={path}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: 'flex',
+              justifyContent: 'space-between',
+              gap: 6,
+              fontFamily: codeFont,
+              padding: '2px 0',
+            }}
+          >
             <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span>
             {type && <span className="text-muted">{type}</span>}
           </span>
         )}
       </div>
       {open && (
-        <div style={{ marginLeft: 6, paddingLeft: 6, borderLeft: '1px solid var(--color-divider)' }}>
+        <div
+          style={{ marginLeft: 6, paddingLeft: 6, borderLeft: '1px solid var(--color-divider)' }}
+        >
           {children.map(([key, child]) => (
             <AgentField
               key={key}
@@ -177,7 +262,20 @@ function AgentField({ name, path, value, depth, insertable, used, disabled, onIn
 /**
  * The editor's right column: insertable variables and the syntax check.
  */
-export function VarSidebar({ agentVars, agentContext, declaredVars, used, undeclared, canInsert, canDeclare, lint, onInsert, onDeclare, onLint, onAddVar }: {
+export function VarSidebar({
+  agentVars,
+  agentContext,
+  declaredVars,
+  used,
+  undeclared,
+  canInsert,
+  canDeclare,
+  lint,
+  onInsert,
+  onDeclare,
+  onLint,
+  onAddVar,
+}: {
   agentVars: string[]
   /** Typed sample of the agent.* namespace; shown as a foldable field tree. */
   agentContext?: Record<string, unknown>
@@ -200,18 +298,38 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
     names.map((name) => (
       <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         <span style={{ width: 12, flex: 'none' }} />
-        <VarButton name={name} used={used.includes(name)} disabled={!canInsert} onInsert={() => onInsert(`{{ ${name} }}`)} />
+        <VarButton
+          name={name}
+          used={used.includes(name)}
+          disabled={!canInsert}
+          onInsert={() => onInsert(`{{ ${name} }}`)}
+        />
       </div>
     ))
 
-  const chrome = { width: 230, borderLeft: '1px solid var(--color-divider)', background: 'var(--color-surface)', padding: 12, overflow: 'auto' }
+  const chrome = {
+    width: 230,
+    borderLeft: '1px solid var(--color-divider)',
+    background: 'var(--color-surface)',
+    padding: 12,
+    overflow: 'auto',
+  }
 
   return (
     <aside
       data-testid="var-sidebar"
-      style={{ ...chrome, flex: 'none', display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}
+      style={{
+        ...chrome,
+        flex: 'none',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 6,
+        fontSize: 12,
+      }}
     >
-      <div className="text-muted" style={caps}>agent.*</div>
+      <div className="text-muted" style={caps}>
+        agent.*
+      </div>
       {agentContext
         ? Object.entries(agentContext).map(([key, value]) => (
             <AgentField
@@ -227,7 +345,9 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
             />
           ))
         : list(agentVars)}
-      <div className="text-muted" style={{ ...caps, marginTop: 8 }}>vars.* ({t('varsVariantScope')})</div>
+      <div className="text-muted" style={{ ...caps, marginTop: 8 }}>
+        vars.* ({t('varsVariantScope')})
+      </div>
       {list(declaredVars)}
       {/* Creating a variable also inserts it, so it needs an editor that takes inserts. */}
       {canInsert && <NewVar onAdd={onAddVar} />}
@@ -240,24 +360,57 @@ export function VarSidebar({ agentVars, agentContext, declaredVars, used, undecl
           style={{ padding: 6, fontSize: 12, justifyContent: 'flex-start' }}
           content={
             <div>
-              {t('undeclaredVars')} <span style={{ fontFamily: codeFont }}>{undeclared.join(', ')}</span>{' '}
+              {t('undeclaredVars')}{' '}
+              <span style={{ fontFamily: codeFont }}>{undeclared.join(', ')}</span>{' '}
               {canDeclare && (
-                <Button type="button" text label={t('declareVars')} style={{ fontSize: 11, padding: '0 4px' }} onClick={onDeclare} />
+                <Button
+                  type="button"
+                  text
+                  label={t('declareVars')}
+                  style={{ fontSize: 11, padding: '0 4px' }}
+                  onClick={onDeclare}
+                />
               )}
             </div>
           }
         />
       )}
       <div style={{ flex: 1 }} />
-      <Button type="button" text label={lint.running ? t('linting') : t('lint')} disabled={lint.running} onClick={onLint} style={{ alignSelf: 'flex-start', fontSize: 12 }} />
+      <Button
+        type="button"
+        text
+        label={lint.running ? t('linting') : t('lint')}
+        disabled={lint.running}
+        onClick={onLint}
+        style={{ alignSelf: 'flex-start', fontSize: 12 }}
+      />
       {lint.checking && !lint.running && <div className="text-muted">{t('lintChecking')}</div>}
-      {lint.error && <Message severity="error" text={lint.error} style={{ fontSize: 12, justifyContent: 'flex-start' }} />}
+      {lint.error && (
+        <Message
+          severity="error"
+          text={lint.error}
+          style={{ fontSize: 12, justifyContent: 'flex-start' }}
+        />
+      )}
       {/* `status`, not Prime's default `alert`: the editor's own marker
           is already the alert for each of these lines. */}
       {lint.errors.map((error, index) => (
-        <Message key={index} severity="error" role="status" text={t('lintLine', { line: error.line, message: error.message })} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />
+        <Message
+          key={index}
+          severity="error"
+          role="status"
+          text={t('lintLine', { line: error.line, message: error.message })}
+          style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }}
+        />
       ))}
-      {lint.clean && !lint.error && <Message severity="success" role="status" text={t('lintClean')} style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }} />}
+      {lint.clean && !lint.error && (
+        <Message
+          severity="success"
+          role="status"
+          text={t('lintClean')}
+          style={{ padding: '6px 8px', fontSize: 12, justifyContent: 'flex-start' }}
+        />
+      )}
     </aside>
   )
 }

@@ -59,10 +59,7 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       credentials: 'same-origin',
     })
   } catch (cause) {
-    throw new ApiError(
-      cause instanceof Error ? cause.message : 'Network request failed',
-      0,
-    )
+    throw new ApiError(cause instanceof Error ? cause.message : 'Network request failed', 0)
   }
 
   if (response.status === 401 && path !== '/session') unauthorizedListener?.()
@@ -76,7 +73,12 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
         detailValue = body.detail
         if (typeof body.detail === 'string') {
           message = body.detail
-        } else if (typeof body.detail === 'object' && body.detail !== null && 'message' in body.detail && typeof (body.detail as Record<string, unknown>).message === 'string') {
+        } else if (
+          typeof body.detail === 'object' &&
+          body.detail !== null &&
+          'message' in body.detail &&
+          typeof (body.detail as Record<string, unknown>).message === 'string'
+        ) {
           message = (body.detail as Record<string, unknown>).message as string
         }
       }

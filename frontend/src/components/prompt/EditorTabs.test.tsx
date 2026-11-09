@@ -8,7 +8,14 @@ beforeEach(() => i18n.changeLanguage('en'))
 
 const TABS: EditorTab[] = [
   { id: 'meta', label: 'prompt.yaml', dirty: false, flagged: false, preview: false },
-  { id: 'msg:a', label: 'sys.jinja', prefix: 'system', dirty: true, flagged: false, preview: false },
+  {
+    id: 'msg:a',
+    label: 'sys.jinja',
+    prefix: 'system',
+    dirty: true,
+    flagged: false,
+    preview: false,
+  },
   { id: 'msg:b', label: 'Explain', prefix: 'user', dirty: false, flagged: true, preview: true },
 ]
 
@@ -23,7 +30,10 @@ describe('EditorTabs', () => {
     setup()
     expect(screen.getAllByRole('tab')).toHaveLength(3)
     expect(screen.getByRole('tab', { name: /sys\.jinja/ })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: /prompt\.yaml/ })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('tab', { name: /prompt\.yaml/ })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
   })
 
   it('shows the role prefix, the lint flag and the italic preview', () => {
@@ -37,7 +47,9 @@ describe('EditorTabs', () => {
   it('names the close button after the tab and says when it is unsaved', () => {
     setup()
     expect(screen.getByRole('button', { name: 'Close prompt.yaml' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Close sys.jinja (unsaved changes)' })).toHaveAttribute('data-dirty', 'true')
+    expect(
+      screen.getByRole('button', { name: 'Close sys.jinja (unsaved changes)' }),
+    ).toHaveAttribute('data-dirty', 'true')
   })
 
   it('activates on click, pins on double click, closes with × and middle click', async () => {
@@ -48,7 +60,10 @@ describe('EditorTabs', () => {
     expect(props.onPin).toHaveBeenCalledWith('msg:b')
     await userEvent.click(screen.getByRole('button', { name: 'Close prompt.yaml' }))
     expect(props.onClose).toHaveBeenCalledWith('meta')
-    fireEvent(screen.getByRole('tab', { name: /Explain/ }), new MouseEvent('auxclick', { bubbles: true, button: 1 }))
+    fireEvent(
+      screen.getByRole('tab', { name: /Explain/ }),
+      new MouseEvent('auxclick', { bubbles: true, button: 1 }),
+    )
     expect(props.onClose).toHaveBeenCalledWith('msg:b')
   })
 
@@ -87,7 +102,11 @@ describe('EditorTabs', () => {
         onActivate={vi.fn()}
         onPin={vi.fn()}
         onClose={vi.fn()}
-        trailing={<button type="button" onClick={onOpen}>Open render</button>}
+        trailing={
+          <button type="button" onClick={onOpen}>
+            Open render
+          </button>
+        }
       />,
     )
     const button = screen.getByRole('button', { name: 'Open render' })

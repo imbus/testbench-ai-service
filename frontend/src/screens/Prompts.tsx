@@ -99,12 +99,11 @@ export function Prompts() {
   return (
     <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
-        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>{t('prompts')}</h2>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+          {t('prompts')}
+        </h2>
         {rows.length > 0 && (
-          <div
-            className="text-muted"
-            style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}
-          >
+          <div className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}>
             {t('agents')}: {rows.length} · {langs.join(' · ')}
           </div>
         )}
@@ -142,12 +141,7 @@ export function Prompts() {
             <span>{t('promptsUsedBy')}</span>
           </div>
           {rows.map((row) => (
-            <PromptRowView
-              key={row.agent}
-              row={row}
-              langs={langs}
-              gridColumns={gridColumns}
-            />
+            <PromptRowView key={row.agent} row={row} langs={langs} gridColumns={gridColumns} />
           ))}
         </div>
       )}

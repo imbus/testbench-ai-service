@@ -75,7 +75,10 @@ describe('Raw', () => {
     await user.click(screen.getByRole('button', { name: 'Copy' }))
 
     await waitFor(async () => expect(await navigator.clipboard.readText()).toBe(TOML))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument(), { timeout: 3000 })
+    await waitFor(
+      () => expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument(),
+      { timeout: 3000 },
+    )
   })
 
   it('reports a preview failure rather than rendering an empty file', async () => {

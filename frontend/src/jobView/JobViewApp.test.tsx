@@ -76,7 +76,13 @@ test('reports other load failures', async () => {
   expect(await screen.findByText(/could not be loaded/)).toBeInTheDocument()
 })
 
-const SESSION = { username: 'anna', roles: [], is_admin: false, tb_server_url: 'x', has_user_key: true }
+const SESSION = {
+  username: 'anna',
+  roles: [],
+  is_admin: false,
+  tb_server_url: 'x',
+  has_user_key: true,
+}
 
 /** The job's data, plus the console's session endpoint answering *session* and *signIn*. */
 function respondWithConsole(session: number, signIn = 200) {
@@ -120,7 +126,10 @@ test('signs in to the console on the page, then opens the job there', async () =
   await vi.waitFor(() => expect(assign).toHaveBeenCalledWith('/admin/jobs/j1'))
   expect(fetch).toHaveBeenCalledWith(
     '/admin/api/session',
-    expect.objectContaining({ method: 'POST', body: JSON.stringify({ username: 'anna', password: 'secret' }) }),
+    expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ username: 'anna', password: 'secret' }),
+    }),
   )
 })
 

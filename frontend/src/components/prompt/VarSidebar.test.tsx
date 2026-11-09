@@ -37,7 +37,10 @@ describe('VarSidebar', () => {
 
   it('marks used variables', () => {
     setup()
-    expect(screen.getByRole('button', { name: /agent\.defect/ })).toHaveAttribute('data-used', 'true')
+    expect(screen.getByRole('button', { name: /agent\.defect/ })).toHaveAttribute(
+      'data-used',
+      'true',
+    )
     expect(screen.getByRole('button', { name: /vars\.tone/ })).toHaveAttribute('data-used', 'false')
   })
 
@@ -112,22 +115,30 @@ describe('VarSidebar', () => {
     it('lists every field the agent provides, with its type', () => {
       setup({ agentContext })
       expect(screen.getByRole('button', { name: /agent\.test_case_set\s*str/ })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /agent\.test_case_set_obj\s*object/ })).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /agent\.test_case_set_obj\s*object/ }),
+      ).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /agent\.typo/ })).toBeInTheDocument()
     })
 
     it('unfolds an object and inserts its nested path', async () => {
       const props = setup({ agentContext })
       await userEvent.click(screen.getByRole('button', { name: '▸ agent.test_case_set_obj' }))
-      await userEvent.click(screen.getByRole('button', { name: '▸ agent.test_case_set_obj.details' }))
+      await userEvent.click(
+        screen.getByRole('button', { name: '▸ agent.test_case_set_obj.details' }),
+      )
       await userEvent.click(screen.getByRole('button', { name: /\.uniqueID/ }))
-      expect(props.onInsert).toHaveBeenLastCalledWith('{{ agent.test_case_set_obj.details.uniqueID }}')
+      expect(props.onInsert).toHaveBeenLastCalledWith(
+        '{{ agent.test_case_set_obj.details.uniqueID }}',
+      )
     })
 
     it("shows a list item's fields as a hint, not as an insertable path", async () => {
       setup({ agentContext })
       await userEvent.click(screen.getByRole('button', { name: '▸ agent.test_case_set_obj' }))
-      await userEvent.click(screen.getByRole('button', { name: '▸ agent.test_case_set_obj.testCases' }))
+      await userEvent.click(
+        screen.getByRole('button', { name: '▸ agent.test_case_set_obj.testCases' }),
+      )
       expect(screen.getByText('[].index')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: /\[\]\.index/ })).not.toBeInTheDocument()
     })

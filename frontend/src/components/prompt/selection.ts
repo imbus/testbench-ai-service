@@ -21,7 +21,13 @@ export function messageLabel(message: PromptMessageDoc, empty: string): string {
  * `docFile` is the document's own `file` (`de/explainer/prompt.yaml`, relative
  * to `prompts_dir`); a template sits next to it.
  */
-export function messagePath(docFile: string, variant: string, index: number, message: PromptMessageDoc, step?: string): string {
+export function messagePath(
+  docFile: string,
+  variant: string,
+  index: number,
+  message: PromptMessageDoc,
+  step?: string,
+): string {
   if (message.source === 'file' && message.file) {
     const dir = docFile.includes('/') ? docFile.slice(0, docFile.lastIndexOf('/')) : ''
     return `prompts/${dir ? `${dir}/` : ''}${message.file}`

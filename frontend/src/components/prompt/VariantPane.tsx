@@ -53,7 +53,15 @@ export function VariantPane({
       : null
 
   return (
-    <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, overflow: 'auto' }}>
+    <div
+      style={{
+        padding: '20px 24px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+        overflow: 'auto',
+      }}
+    >
       <h4 style={{ margin: 0 }}>
         {t('variantSettings')} · {variant.name}
       </h4>
@@ -99,9 +107,7 @@ export function VariantPane({
               onChange={(event) => onModel(event.target.value || null)}
             />
           </div>
-          {canRemove && (
-            <Button type="button" text label={t('remove')} onClick={onRemove} />
-          )}
+          {canRemove && <Button type="button" text label={t('remove')} onClick={onRemove} />}
         </div>
       )}
 
@@ -114,7 +120,10 @@ export function VariantPane({
       />
 
       {variant.steps && Object.keys(variant.steps).length > 0 && (
-        <section data-testid="variant-steps" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <section
+          data-testid="variant-steps"
+          style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+        >
           <h5 style={{ margin: 0 }}>{t('variantSteps')}</h5>
           <div className="text-muted" style={{ fontSize: 12 }}>
             {t('variantStepsFixed')}
@@ -124,7 +133,9 @@ export function VariantPane({
               <li key={step}>
                 <strong>{step}</strong>
                 {': '}
-                {messages.map((message) => `${message.role} · ${message.file ?? t('inlineMessage')}`).join(', ')}
+                {messages
+                  .map((message) => `${message.role} · ${message.file ?? t('inlineMessage')}`)
+                  .join(', ')}
               </li>
             ))}
           </ul>

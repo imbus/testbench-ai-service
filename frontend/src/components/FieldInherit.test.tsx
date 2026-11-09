@@ -67,7 +67,9 @@ beforeEach(() => {
 
 describe('with no override', () => {
   it('says it is inheriting, and from where, and what', () => {
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />,
+    )
 
     const note = screen.getByTestId('inherit-note')
     expect(note).toHaveTextContent('Inherited')
@@ -78,17 +80,23 @@ describe('with no override', () => {
   it('shows the inherited value in the control, not an empty one', () => {
     // An empty control would read as "off", which is a different setting from
     // "inherits a global true".
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />,
+    )
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true')
   })
 
   it('marks the control as not overridden for assistive tech', () => {
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />,
+    )
     expect(screen.getByTestId('field-row')).toHaveAttribute('data-overridden', 'false')
   })
 
   it('offers no "clear override" action — there is nothing to clear', () => {
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />,
+    )
     expect(screen.queryByRole('button', { name: 'Clear override' })).not.toBeInTheDocument()
   })
 
@@ -98,7 +106,11 @@ describe('with no override', () => {
     // clearing it queues a removal, which is still "inheriting", which puts
     // the value straight back and the next keystroke appends to it.
     render(
-      <Harness spec={VARIANT} saved={undefined} inherited={{ value: 'Thorough', label: 'global' }} />,
+      <Harness
+        spec={VARIANT}
+        saved={undefined}
+        inherited={{ value: 'Thorough', label: 'global' }}
+      />,
     )
     const input = screen.getByLabelText('variant')
     expect(input).toHaveValue('')
@@ -106,7 +118,13 @@ describe('with no override', () => {
   })
 
   it('shows an em dash for an inherited value that is not set at all', () => {
-    render(<Harness spec={VARIANT} saved={undefined} inherited={{ value: undefined, label: 'global' }} />)
+    render(
+      <Harness
+        spec={VARIANT}
+        saved={undefined}
+        inherited={{ value: undefined, label: 'global' }}
+      />,
+    )
     expect(screen.getByTestId('inherit-note')).toHaveTextContent('—')
   })
 })
@@ -115,7 +133,9 @@ describe('with no override', () => {
 
 describe('taking an override', () => {
   it('records an explicit value when the switch is clicked', async () => {
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />,
+    )
 
     await userEvent.click(screen.getByRole('switch'))
 
@@ -129,20 +149,28 @@ describe('taking an override', () => {
     // draft value alone (undefined while inheriting) would produce `true` --
     // an "override" identical to what was already inherited, which prunes
     // straight back out and leaves the click doing nothing at all.
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />,
+    )
     await userEvent.click(screen.getByRole('switch'))
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
   })
 
   it('marks the row overridden once an edit exists', async () => {
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />,
+    )
     await userEvent.click(screen.getByRole('switch'))
     expect(screen.getByTestId('field-row')).toHaveAttribute('data-overridden', 'true')
   })
 
   it('records a typed text override', async () => {
     render(
-      <Harness spec={VARIANT} saved={undefined} inherited={{ value: 'Thorough', label: 'global' }} />,
+      <Harness
+        spec={VARIANT}
+        saved={undefined}
+        inherited={{ value: 'Thorough', label: 'global' }}
+      />,
     )
 
     await userEvent.type(screen.getByLabelText('variant'), 'Quick')
@@ -154,7 +182,11 @@ describe('taking an override', () => {
 
   it('emptying a typed override goes back to inheriting, not to an empty value', async () => {
     render(
-      <Harness spec={VARIANT} saved={undefined} inherited={{ value: 'Thorough', label: 'global' }} />,
+      <Harness
+        spec={VARIANT}
+        saved={undefined}
+        inherited={{ value: 'Thorough', label: 'global' }}
+      />,
     )
 
     await userEvent.type(screen.getByLabelText('variant'), 'Quick')
@@ -167,7 +199,9 @@ describe('taking an override', () => {
   })
 
   it('stops showing the inherit note once overridden', async () => {
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'global' }} />,
+    )
     await userEvent.click(screen.getByRole('switch'))
     expect(screen.queryByTestId('inherit-note')).not.toBeInTheDocument()
   })
@@ -310,7 +344,9 @@ describe('a value that happens to equal the inherited one', () => {
     // go back to inheriting is "Clear override", which is offered the moment
     // the row is overridden.
     const user = userEvent.setup()
-    render(<Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'Global' }} />)
+    render(
+      <Harness spec={ENABLED} saved={undefined} inherited={{ value: true, label: 'Global' }} />,
+    )
 
     await user.click(screen.getByRole('switch'))
     await user.click(screen.getByRole('switch'))
