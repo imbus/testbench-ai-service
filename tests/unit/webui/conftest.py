@@ -29,7 +29,7 @@ def no_tb_server_probe():
 
 
 @pytest.fixture
-def make_app():
+def make_app(tmp_path):
     """Build a real app with the LLM factory's network-touching parts mocked out.
 
     ``instance`` is a REAL ``LLMFactory``, not a bare ``MagicMock``: methods
@@ -41,6 +41,11 @@ def make_app():
     touch credentials or connections, so only those two are replaced; a test
     that wants ``get_client``/``has_project_credential`` mocked too overrides
     those specific methods on this same instance.
+
+    The config is anchored in ``tmp_path``. Without ``loaded_from`` the app
+    falls back to ``./config.toml``, so the status route would compare the
+    test config against the developer's own file and the usage and job
+    stores would open in the repository root.
     """
 
     def _make(**config_kwargs):
@@ -52,7 +57,10 @@ def make_app():
             instance.init_clients = MagicMock()
             instance.close_clients = AsyncMock()
             factory_cls.return_value = instance
-            return create_app(AppConfig(tb_server_url=TB_URL, **config_kwargs))
+            config = AppConfig(tb_server_url=TB_URL, **config_kwargs)
+            if config.loaded_from is None:
+                config.loaded_from = tmp_path / "config.toml"
+            return create_app(config)
 
     return _make
 
