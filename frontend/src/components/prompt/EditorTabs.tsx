@@ -114,7 +114,7 @@ export function EditorTabs({ tabs, active, onActivate, onPin, onClose, trailing 
               >
                 {tab.prefix && <span className="text-muted" style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>{tab.prefix}</span>}
                 <span style={{ fontStyle: tab.preview ? 'italic' : 'normal', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis' }}>{tab.label}</span>
-                {tab.flagged && <span aria-hidden style={{ color: '#c0392b' }}>●</span>}
+                {tab.flagged && <span aria-hidden style={{ color: 'var(--color-danger)' }}>●</span>}
               </button>
               <button
                 type="button"

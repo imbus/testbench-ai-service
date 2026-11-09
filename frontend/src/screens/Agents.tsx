@@ -530,7 +530,7 @@ function Matrix({
                       fontFamily: 'var(--font-heading)',
                       fontSize: 15,
                       fontWeight: 400,
-                      color: inTestBench ? 'inherit' : '#a33a2b',
+                      color: inTestBench ? 'inherit' : 'var(--color-danger)',
                     }}
                   >
                     {project}

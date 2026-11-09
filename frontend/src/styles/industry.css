@@ -65,6 +65,24 @@
   --shadow-sm: 0 1px 2px color-mix(in srgb, #2b2b2d 14%, transparent);
   --shadow-md: 0 3px 10px color-mix(in srgb, #2b2b2d 16%, transparent);
   --shadow-lg: 0 12px 32px color-mix(in srgb, #2b2b2d 22%, transparent);
+
+  /* Status — good / warning / critical, separate from the accent. Each passes
+     WCAG AA (4.5:1) as text on --color-bg and --color-surface in its theme;
+     the -soft fills are for pills and row tints behind that text. */
+  --color-success: #1a6f48;
+  --color-warning: #8a6100;
+  --color-danger: #b3261e;
+  --color-success-soft: color-mix(in srgb, var(--color-success) 12%, transparent);
+  --color-warning-soft: color-mix(in srgb, var(--color-warning) 12%, transparent);
+  --color-danger-soft: color-mix(in srgb, var(--color-danger) 12%, transparent);
+  /* Text that is present but secondary, as .text-muted draws it. */
+  --color-muted: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+[data-theme=dark] {
+  --color-success: #5fcf9a;
+  --color-warning: #e3b341;
+  --color-danger: #f2867e;
 }
 
 body {

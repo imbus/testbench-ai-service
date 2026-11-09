@@ -8,9 +8,9 @@ import { useTranslation } from 'react-i18next'
 import { type Lang, useLang } from '../i18n'
 
 const LEVEL_COLORS: Record<string, string> = {
-  ERROR: '#c0392b',
-  CRITICAL: '#c0392b',
-  WARNING: '#b8860b',
+  ERROR: 'var(--color-danger)',
+  CRITICAL: 'var(--color-danger)',
+  WARNING: 'var(--color-warning)',
 }
 
 export function formatUptime(seconds: number): string {
@@ -81,7 +81,7 @@ function Dot({ ok }: { ok: boolean }) {
         width: 8,
         height: 8,
         borderRadius: '50%',
-        background: ok ? '#2e9e6b' : '#c0392b',
+        background: ok ? 'var(--color-success)' : 'var(--color-danger)',
         display: 'inline-block',
       }}
     />

@@ -289,7 +289,7 @@ function ProjectCard({
           </h3>
           <div style={{ flex: 1 }} />
           {inTestBench === false && (
-            <span style={{ fontSize: 11, color: '#a33a2b' }}>⚠ {t('notInTestBench')}</span>
+            <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>⚠ {t('notInTestBench')}</span>
           )}
           {overrideCount > 0 ? (
             <Tag value={t('overrideCount', { count: overrideCount })} />

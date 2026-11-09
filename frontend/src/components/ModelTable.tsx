@@ -196,7 +196,7 @@ export function ModelTable({
         emptyMessage={t('modelsEmpty')}
         expandedRows={expandedRows}
         rowExpansionTemplate={(row: Row) => (
-          <span role="alert" style={{ fontSize: 11, color: '#a33a2b' }}>
+          <span role="alert" style={{ fontSize: 11, color: 'var(--color-danger)' }}>
             {row.issue}
           </span>
         )}

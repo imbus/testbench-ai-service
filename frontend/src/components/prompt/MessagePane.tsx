@@ -110,7 +110,7 @@ export function MessagePane({
           {/* Hidden on a variant's only message: the reducer refuses to remove
               it (PromptVariant requires one), so the button would do nothing. */}
           {!readOnly && !fixed && count > 1 && (
-            <Button type="button" text severity="danger" label={t('deleteMessage')} style={{ fontSize: 12, color: '#a33a2b' }} onClick={onRemove} />
+            <Button type="button" text severity="danger" label={t('deleteMessage')} style={{ fontSize: 12, color: 'var(--color-danger)' }} onClick={onRemove} />
           )}
         </div>
         {/* Row 2: how the message is edited -- role, source, file name, then

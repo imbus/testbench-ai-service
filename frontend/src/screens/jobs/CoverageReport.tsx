@@ -10,9 +10,9 @@ import type {
 } from '../../api/types'
 
 const STATUS_COLORS: Record<CoverageStatus, string> = {
-  covered: '#2e9e6b',
-  weak: '#b8860b',
-  missing: '#c0392b',
+  covered: 'var(--color-success)',
+  weak: 'var(--color-warning)',
+  missing: 'var(--color-danger)',
 }
 
 const STATUS_LABELS: Record<CoverageStatus, keyof Translations> = {

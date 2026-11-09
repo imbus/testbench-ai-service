@@ -14,9 +14,9 @@ import { CoverageReport } from './CoverageReport'
 import { LinkFinderReport } from './LinkFinderReport'
 
 const STATUS_COLORS: Record<JobStatus, string> = {
-  succeeded: '#2e9e6b',
-  running: '#b8860b',
-  failed: '#c0392b',
+  succeeded: 'var(--color-success)',
+  running: 'var(--color-warning)',
+  failed: 'var(--color-danger)',
 }
 
 export const STATUS_LABELS: Record<JobStatus, keyof Translations> = {

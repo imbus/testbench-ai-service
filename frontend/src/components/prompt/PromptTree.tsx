@@ -74,7 +74,7 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
         return (
           <div key={variant.name} style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'center', padding: '6px 14px', gap: 6, background: open && activeTab === 'variant' ? 'var(--color-surface)' : 'transparent' }}>
-              <button type="button" aria-expanded={open} aria-invalid={invalid || undefined} onClick={() => onPickVariant(variant.name)} style={{ ...rowButton, fontWeight: 500, padding: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6, color: invalid ? '#a33a2b' : 'inherit' }}>
+              <button type="button" aria-expanded={open} aria-invalid={invalid || undefined} onClick={() => onPickVariant(variant.name)} style={{ ...rowButton, fontWeight: 500, padding: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 6, color: invalid ? 'var(--color-danger)' : 'inherit' }}>
                 <span aria-hidden style={{ fontSize: 10 }}>{open ? '▾' : '▸'}</span>
                 {variant.name}
               </button>
@@ -95,7 +95,7 @@ export function PromptTree({ variants, selectedVariant, activeTab, flagged, inva
                 >
                   <Tag severity="secondary" value={message.role} style={{ padding: '0 5px', fontSize: 10 }} />
                   <span style={{ fontFamily: codeFont, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{messageLabel(message, t('emptyMessage'))}</span>
-                  {flagged.includes(index) && <span aria-hidden style={{ color: '#c0392b' }}>●</span>}
+                  {flagged.includes(index) && <span aria-hidden style={{ color: 'var(--color-danger)' }}>●</span>}
                 </button>
               )
             })}

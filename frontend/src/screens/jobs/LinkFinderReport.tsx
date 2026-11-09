@@ -4,9 +4,9 @@ import type { Translations } from '../../i18n'
 import type { Confidence, LinkCandidate, LinkFinderResult } from '../../api/types'
 
 const CONFIDENCE_COLORS: Record<Confidence, string> = {
-  high: '#2e9e6b',
-  medium: '#b8860b',
-  low: '#8a8f98',
+  high: 'var(--color-success)',
+  medium: 'var(--color-warning)',
+  low: 'var(--color-muted)',
 }
 
 const CONFIDENCE_LABELS: Record<Confidence, keyof Translations> = {
