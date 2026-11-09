@@ -216,6 +216,17 @@ class TestAppConfigDefaults:
         assert self._config.projects == {}
 
 
+class TestAppConfigPortRange:
+    @pytest.mark.parametrize("port", [0, -1, 65536, 99999])
+    def test_port_outside_tcp_range_is_rejected(self, port):
+        with pytest.raises(ValidationError, match="port"):
+            _make_app_config(port=port)
+
+    @pytest.mark.parametrize("port", [1, 8010, 65535])
+    def test_port_inside_tcp_range_is_accepted(self, port):
+        assert _make_app_config(port=port).port == port
+
+
 class TestAppConfigTrustedProxiesValidator:
     def test_string_split_by_comma(self):
         config = _make_app_config(trusted_proxies="10.0.0.1,10.0.0.2")

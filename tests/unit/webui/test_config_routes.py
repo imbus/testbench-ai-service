@@ -244,6 +244,19 @@ def test_preview_of_an_invalid_edit_reports_issues_and_no_diff(file_client, admi
     assert body["diffs"] == []
 
 
+def test_preview_of_a_port_outside_the_tcp_range_reports_an_issue(file_client, admin):
+    admin()
+
+    body = file_client.post(
+        "/admin/api/config/preview",
+        json={"edits": {"port": 99999}},
+        headers=csrf(file_client),
+    ).json()
+
+    assert body["valid"] is False
+    assert [issue["path"] for issue in body["issues"]] == ["port"]
+
+
 def test_preview_writes_nothing(file_client, admin, config_file):
     admin()
     before = config_file.read_text(encoding="utf-8")

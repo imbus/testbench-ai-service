@@ -133,6 +133,8 @@ class AppConfig(BaseModel):
     )
     port: int = Field(
         DEFAULT_PORT,
+        ge=1,
+        le=65535,
         description="Port number to run the service on",
     )
     debug: bool = Field(False, description="Enable debug mode for the service")
