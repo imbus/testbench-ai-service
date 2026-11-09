@@ -1,20 +1,15 @@
-import {
-  Link,
-  useNavigate,
-  useParams,
-  useSearchParams,
-} from "react-router-dom";
-import { Button } from "primereact/button";
-import { Column } from "primereact/column";
-import { DataTable } from "primereact/datatable";
-import { Dropdown } from "primereact/dropdown";
-import { Message } from "primereact/message";
-import { useTranslation } from "react-i18next";
-import { useJob, useJobs } from "../api/queries";
-import type { JobStatus, JobSummary } from "../api/types";
-import { useLang } from "../i18n";
-import { useSession } from "../state/session";
-import { formatActivityTime } from "./Status";
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Button } from 'primereact/button'
+import { Column } from 'primereact/column'
+import { DataTable } from 'primereact/datatable'
+import { Dropdown } from 'primereact/dropdown'
+import { Message } from 'primereact/message'
+import { useTranslation } from 'react-i18next'
+import { useJob, useJobs } from '../api/queries'
+import type { JobStatus, JobSummary } from '../api/types'
+import { useLang } from '../i18n'
+import { useSession } from '../state/session'
+import { formatActivityTime } from './Status'
 import {
   Duration,
   JobDetailView,
@@ -24,23 +19,23 @@ import {
   STATUS_ICONS,
   STATUS_LABELS,
   StatusLabel,
-} from "./jobs/JobDetailView";
+} from './jobs/JobDetailView'
 
-const STATUSES: JobStatus[] = ["running", "succeeded", "failed"];
+const STATUSES: JobStatus[] = ['running', 'succeeded', 'failed']
 
 /**
  * The item a job is for: the unique ID of its tree root. Jobs from before the
  * UID was kept fall back to the root key, else the first item.
  */
 function itemLabel(job: JobSummary): string | null {
-  return job.root_uid ?? job.root_key ?? job.item_ids[0] ?? null;
+  return job.root_uid ?? job.root_key ?? job.item_ids[0] ?? null
 }
 
 function JobPane({ jobId }: { jobId: string }) {
-  const { t } = useTranslation();
-  const job = useJob(jobId);
-  if (job.isError) return <Message severity="error" text={t("jobsError")} />;
-  return job.data ? <JobDetailView job={job.data} /> : null;
+  const { t } = useTranslation()
+  const job = useJob(jobId)
+  if (job.isError) return <Message severity="error" text={t('jobsError')} />
+  return job.data ? <JobDetailView job={job.data} /> : null
 }
 
 /**
@@ -50,43 +45,37 @@ function JobPane({ jobId }: { jobId: string }) {
  * same filtered list.
  */
 export function Jobs() {
-  const { jobId } = useParams();
-  const [params, setParams] = useSearchParams();
-  const agent = params.get("agent") ?? undefined;
-  const rawStatus = params.get("status");
-  const status = STATUSES.find((s) => s === rawStatus);
-  const jobs = useJobs({ agent, status });
-  const search = params.size > 0 ? `?${params}` : "";
+  const { jobId } = useParams()
+  const [params, setParams] = useSearchParams()
+  const agent = params.get('agent') ?? undefined
+  const rawStatus = params.get('status')
+  const status = STATUSES.find((s) => s === rawStatus)
+  const jobs = useJobs({ agent, status })
+  const search = params.size > 0 ? `?${params}` : ''
 
-  const setFilter = (key: "agent" | "status", value: string | undefined) => {
-    const next = new URLSearchParams(params);
-    if (value) next.set(key, value);
-    else next.delete(key);
-    setParams(next, { replace: true });
-  };
+  const setFilter = (key: 'agent' | 'status', value: string | undefined) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setParams(next, { replace: true })
+  }
 
   return (
     <div
       style={{
-        padding: "var(--space-4, 16px)",
-        display: "flex",
-        flexDirection: "column",
+        padding: 'var(--space-4, 16px)',
+        display: 'flex',
+        flexDirection: 'column',
         gap: 12,
       }}
     >
       {jobId ? (
         <JobPage jobId={jobId} rows={jobs.data ?? []} search={search} />
       ) : (
-        <JobList
-          jobs={jobs}
-          agent={agent}
-          status={status}
-          search={search}
-          setFilter={setFilter}
-        />
+        <JobList jobs={jobs} agent={agent} status={status} search={search} setFilter={setFilter} />
       )}
     </div>
-  );
+  )
 }
 
 function JobList({
@@ -96,93 +85,70 @@ function JobList({
   search,
   setFilter,
 }: {
-  jobs: ReturnType<typeof useJobs>;
-  agent: string | undefined;
-  status: JobStatus | undefined;
-  search: string;
-  setFilter: (key: "agent" | "status", value: string | undefined) => void;
+  jobs: ReturnType<typeof useJobs>
+  agent: string | undefined
+  status: JobStatus | undefined
+  search: string
+  setFilter: (key: 'agent' | 'status', value: string | undefined) => void
 }) {
-  const { t } = useTranslation();
-  const lang = useLang();
-  const { session } = useSession();
-  const rows = jobs.data ?? [];
+  const { t } = useTranslation()
+  const lang = useLang()
+  const { session } = useSession()
+  const rows = jobs.data ?? []
   // Only the agents seen so far can be offered; keep the chosen one selectable
   // even when the filtered list no longer shows it.
-  const agents = [
-    ...new Set([
-      ...rows.map((job) => job.agent_key),
-      ...(agent ? [agent] : []),
-    ]),
-  ];
+  const agents = [...new Set([...rows.map((job) => job.agent_key), ...(agent ? [agent] : [])])]
 
   return (
     <>
       <div>
-        <h2 style={{ margin: 0 }}>{t("jobs")}</h2>
-        <div className="text-muted">{t("jobsSub")}</div>
+        <h2 style={{ margin: 0 }}>{t('jobs')}</h2>
+        <div className="text-muted">{t('jobsSub')}</div>
       </div>
       <div
         style={{
-          display: "flex",
+          display: 'flex',
           gap: 12,
-          flexWrap: "wrap",
-          alignItems: "center",
+          flexWrap: 'wrap',
+          alignItems: 'center',
         }}
       >
         <Dropdown
-          ariaLabel={t("jobFilterAgent")}
-          placeholder={t("jobFilterAgent")}
+          ariaLabel={t('jobFilterAgent')}
+          placeholder={t('jobFilterAgent')}
           value={agent ?? null}
           options={agents}
           showClear
-          onChange={(event) =>
-            setFilter("agent", (event.value as string | null) ?? undefined)
-          }
+          onChange={(event) => setFilter('agent', (event.value as string | null) ?? undefined)}
         />
-        <StatusChips
-          value={status}
-          onChange={(value) => setFilter("status", value)}
-        />
+        <StatusChips value={status} onChange={(value) => setFilter('status', value)} />
       </div>
-      {jobs.isError && <Message severity="error" text={t("jobsError")} />}
+      {jobs.isError && <Message severity="error" text={t('jobsError')} />}
       {jobs.isSuccess && rows.length === 0 && (
         <div className="text-muted">
-          {t(session?.has_user_key === false ? "jobsNoUserKey" : "jobsEmpty")}
+          {t(session?.has_user_key === false ? 'jobsNoUserKey' : 'jobsEmpty')}
         </div>
       )}
       {rows.length > 0 && (
-        <DataTable
-          value={rows}
-          dataKey="job_id"
-          size="small"
-          rowClassName={() => "tb-link-row"}
-        >
+        <DataTable value={rows} dataKey="job_id" size="small" rowClassName={() => 'tb-link-row'}>
           {/* A real link, stretched over the row by .tb-row-link, so the row
               opens like any link: middle-click, Ctrl-click, copy link. */}
           <Column
-            header={t("jobFilterAgent")}
+            header={t('jobFilterAgent')}
             body={(job: JobSummary) => (
-              <Link
-                className="tb-row-link"
-                to={`/admin/jobs/${job.job_id}${search}`}
-              >
+              <Link className="tb-row-link" to={`/admin/jobs/${job.job_id}${search}`}>
                 {job.agent_key}
               </Link>
             )}
           />
+          <Column header={t('jobItem')} body={(job: JobSummary) => itemLabel(job) ?? ''} />
+          <Column header={t('jobProject')} field="project_name" />
           <Column
-            header={t("jobItem")}
-            body={(job: JobSummary) => itemLabel(job) ?? ""}
-          />
-          <Column header={t("jobProject")} field="project_name" />
-          <Column
-            header={t("jobStarted")}
-            body={(job: JobSummary) =>
-              formatActivityTime(job.created_at, undefined, LOCALES[lang])
-            }
+            header={t('jobStarted')}
+            body={(job: JobSummary) => formatActivityTime(job.created_at, undefined, LOCALES[lang])}
           />
           <Column
-            header={t("jobFilterStatus")}
+            header={t('jobFilterStatus')}
             body={(job: JobSummary) => (
               <div>
                 <StatusLabel job={job} />
@@ -191,15 +157,15 @@ function JobList({
             )}
           />
           <Column
-            header={t("jobDuration")}
+            header={t('jobDuration')}
             align="right"
-            style={{ fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}
+            style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
             body={(job: JobSummary) => <Duration job={job} />}
           />
         </DataTable>
       )}
     </>
-  );
+  )
 }
 
 /**
@@ -210,32 +176,28 @@ function StatusChips({
   value,
   onChange,
 }: {
-  value: JobStatus | undefined;
-  onChange: (value: JobStatus | undefined) => void;
+  value: JobStatus | undefined
+  onChange: (value: JobStatus | undefined) => void
 }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
   const chips: { status: JobStatus | undefined; label: string }[] = [
-    { status: undefined, label: t("jobFilterAll") },
+    { status: undefined, label: t('jobFilterAll') },
     ...STATUSES.map((s) => ({ status: s, label: t(STATUS_LABELS[s]) })),
-  ];
+  ]
   return (
     <div
       role="group"
-      aria-label={t("jobFilterStatus")}
-      style={{ display: "flex", gap: 6, flexWrap: "wrap" }}
+      aria-label={t('jobFilterStatus')}
+      style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}
     >
       {chips.map(({ status, label }) => (
         <button
-          key={status ?? "all"}
+          key={status ?? 'all'}
           type="button"
           className="tb-chip"
           aria-pressed={value === status}
           data-status={status}
-          style={
-            status
-              ? { ["--chip-color" as string]: STATUS_COLORS[status] }
-              : undefined
-          }
+          style={status ? { ['--chip-color' as string]: STATUS_COLORS[status] } : undefined}
           onClick={() => onChange(status)}
         >
           {status && <span aria-hidden="true">{STATUS_ICONS[status]}</span>}
@@ -243,44 +205,35 @@ function StatusChips({
         </button>
       ))}
     </div>
-  );
+  )
 }
 
 /** One job on a page of its own, with the way back and to its neighbours in the list. */
-function JobPage({
-  jobId,
-  rows,
-  search,
-}: {
-  jobId: string;
-  rows: JobSummary[];
-  search: string;
-}) {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
+function JobPage({ jobId, rows, search }: { jobId: string; rows: JobSummary[]; search: string }) {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
   // The list is newest first; a job the list does not show has no neighbours.
-  const index = rows.findIndex((job) => job.job_id === jobId);
-  const newer = index > 0 ? rows[index - 1] : undefined;
-  const older = index >= 0 ? rows[index + 1] : undefined;
-  const open = (job: JobSummary) =>
-    navigate(`/admin/jobs/${job.job_id}${search}`);
+  const index = rows.findIndex((job) => job.job_id === jobId)
+  const newer = index > 0 ? rows[index - 1] : undefined
+  const older = index >= 0 ? rows[index + 1] : undefined
+  const open = (job: JobSummary) => navigate(`/admin/jobs/${job.job_id}${search}`)
 
   return (
     <>
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           gap: 12,
         }}
       >
-        <Link to={`/admin/jobs${search}`}>← {t("jobsBack")}</Link>
-        <div style={{ display: "flex", gap: 4 }}>
+        <Link to={`/admin/jobs${search}`}>← {t('jobsBack')}</Link>
+        <div style={{ display: 'flex', gap: 4 }}>
           <Button
             type="button"
             text
-            label={`‹ ${t("jobNewer")}`}
+            label={`‹ ${t('jobNewer')}`}
             disabled={!newer}
             onClick={() => newer && open(newer)}
             style={{ fontSize: 13 }}
@@ -288,7 +241,7 @@ function JobPage({
           <Button
             type="button"
             text
-            label={`${t("jobOlder")} ›`}
+            label={`${t('jobOlder')} ›`}
             disabled={!older}
             onClick={() => older && open(older)}
             style={{ fontSize: 13 }}
@@ -299,5 +252,5 @@ function JobPage({
         <JobPane jobId={jobId} />
       </div>
     </>
-  );
+  )
 }
