@@ -1,6 +1,10 @@
 import asyncio
+import re
+from dataclasses import dataclass
+from http import HTTPStatus
 from pathlib import Path
 
+from requests import HTTPError
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.generate_test_ideas.context import html_text
@@ -26,10 +30,16 @@ from testbench_ai_service.models.testbench import (
     TestThemeNode,
     TestThemeSpecification,
 )
-from testbench_ai_service.utils.html_utils import escape_html, has_visible_text
+from testbench_ai_service.utils.html_utils import (
+    add_html_body_tags,
+    escape_html,
+    has_visible_text,
+)
 from testbench_ai_service.utils.i18n import get_translation
 from testbench_ai_service.utils.template_utils import render_template, resolve_template_path
 from testbench_ai_service.utils.testbench import (
+    create_test_case_set,
+    delete_test_case_set,
     get_requirements,
     get_test_case_set_details,
     get_test_theme_details,
@@ -45,6 +55,15 @@ TB_MAX_CONCURRENT_REQUESTS = 4
 
 #: Length a test case set's description is cut to in the prompt.
 DESCRIPTION_SHORT_MAX_CHARS = 300
+
+#: First TestBench version with an endpoint to create test case sets.
+CREATE_TEST_CASE_SETS_MIN_VERSION = [5, 0]
+
+#: Characters TestBench rejects in the name of a new test case set (422).
+FORBIDDEN_NAME_CHARS = re.compile(r"[/.,'<;>&]")
+
+#: Longest name TestBench accepts for a test case set.
+NAME_MAX_CHARS = 255
 
 
 async def load_requirements(
@@ -129,8 +148,9 @@ async def patch_generated_test_ideas(
     language: LanguageOption,
     user_key: str,
     templates_dir: Path,
+    keep_locked: bool = False,
 ):
-    """Write the generated test ideas into a theme's description and unlock it.
+    """Write the generated test ideas into a theme's description and restore its lock.
 
     Args:
         conn: The active TestBench connection.
@@ -141,6 +161,7 @@ async def patch_generated_test_ideas(
         language: Language of the rendered wrapper.
         user_key: The triggering user, recorded as reviewer.
         templates_dir: Root of the write-back templates.
+        keep_locked: Leave the theme locked by the user, who held the lock before the run.
     """
     template_path = resolve_template_path(
         "template.jinja", templates_dir=templates_dir, language=language, agent_key=AGENT_KEY
@@ -156,9 +177,38 @@ async def patch_generated_test_ideas(
         },
     )
     spec_update = SpecificationDetailsForUpdate(
-        locker=OptionalUser(optional=None),
+        locker=OptionalUser(optional=user_key if keep_locked else None),
         reviewer=OptionalUser(optional=user_key),
         description=RichTextInfo(html=description_html, images=[]),
+    )
+    return await patch_test_structure_element_spec(conn, project_key, spec_key, spec_update)
+
+
+async def patch_previous_description(
+    conn: TBConnection,
+    project_key: str,
+    spec_key: str,
+    previous_description: str,
+    user_key: str,
+    keep_locked: bool = False,
+):
+    """Put back a theme's previous description, without any test ideas, and restore its lock.
+
+    Used when the ideas became test case sets: they live in the sets, so the
+    theme keeps only what it said before the run.
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the specification.
+        spec_key: The theme specification to patch.
+        previous_description: The description from before the run, without body tags.
+        user_key: The triggering user, recorded as reviewer.
+        keep_locked: Leave the theme locked by the user, who held the lock before the run.
+    """
+    spec_update = SpecificationDetailsForUpdate(
+        reviewer=OptionalUser(optional=user_key),
+        locker=OptionalUser(optional=user_key if keep_locked else None),
+        description=RichTextInfo(html=add_html_body_tags(previous_description), images=[]),
     )
     return await patch_test_structure_element_spec(conn, project_key, spec_key, spec_update)
 
@@ -171,8 +221,9 @@ async def patch_generation_failed(
     language: LanguageOption,
     user_key: str,
     templates_dir: Path,
+    keep_locked: bool = False,
 ):
-    """Restore a theme's previous description after a failure, and unlock it.
+    """Restore a theme's previous description and lock after a failure.
 
     Args:
         conn: The active TestBench connection.
@@ -182,6 +233,7 @@ async def patch_generation_failed(
         language: Language of the rendered notice.
         user_key: The triggering user, recorded as reviewer.
         templates_dir: Root of the write-back templates.
+        keep_locked: Leave the theme locked by the user, who held the lock before the run.
     """
     template_path = resolve_template_path(
         "failed.jinja", templates_dir=templates_dir, language=language, agent_key=AGENT_KEY
@@ -197,7 +249,7 @@ async def patch_generation_failed(
     )
     spec_update = SpecificationDetailsForUpdate(
         reviewer=OptionalUser(optional=user_key),
-        locker=OptionalUser(optional=None),
+        locker=OptionalUser(optional=user_key if keep_locked else None),
         description=RichTextInfo(html=description_html, images=[]),
     )
     return await patch_test_structure_element_spec(conn, project_key, spec_key, spec_update)
@@ -355,3 +407,161 @@ def render_test_ideas(
         entries.append([get_translation("requirement.run.no_ideas", language)])
 
     return "\n\n".join("\n".join(block) for block in [header, *entries])
+
+
+class TestCaseSetCreationForbiddenError(Exception):
+    """TestBench refused to create the first test case set with 403.
+
+    Typically a JWT without ``ModifyTestStructureElements``. Nothing was created.
+    """
+
+
+@dataclass(frozen=True)
+class CreatedTestCaseSet:
+    """A test case set created by the agent, kept for the rollback."""
+
+    key: str
+    spec_key: str
+
+
+def test_case_set_name(title: str, number: int, language: LanguageOption) -> str:
+    """Turn an idea's title into a name TestBench accepts for a test case set.
+
+    Characters TestBench rejects become spaces, whitespace is collapsed and the
+    name is cut to :data:`NAME_MAX_CHARS`. A title with nothing left falls back to
+    the translated "Test case <number>".
+
+    Args:
+        title: The idea's title.
+        number: Position of the idea, for the fallback name.
+        language: Language of the fallback name.
+
+    Returns:
+        A non-empty name of at most :data:`NAME_MAX_CHARS` characters.
+    """
+    name = " ".join(FORBIDDEN_NAME_CHARS.sub(" ", title).split())[:NAME_MAX_CHARS].rstrip()
+    return name or f"{get_translation('requirement.run.test_case', language)} {number}"
+
+
+def render_test_case_set_description(
+    idea: TestIdea, language: LanguageOption, templates_dir: Path
+) -> str:
+    """Render the HTML description of the test case set created for an idea.
+
+    Args:
+        idea: The idea after :func:`apply_guardrails`.
+        language: Language of the labels and template.
+        templates_dir: Root of the write-back templates.
+
+    Returns:
+        A full ``<html><body>`` document with the escaped idea.
+    """
+    lines = [*idea.description.splitlines()]
+    if idea.covered_requirements:
+        covers = get_translation("requirement.run.covers", language)
+        lines.append(f"{covers}: {', '.join(idea.covered_requirements)}")
+    template_path = resolve_template_path(
+        "test_case_set.jinja", templates_dir=templates_dir, language=language, agent_key=AGENT_KEY
+    )
+    return render_template(
+        template_path,
+        {"current_time": current_time(), "description": escape_html("\n".join(lines))},
+    )
+
+
+async def create_test_case_sets(
+    conn: TBConnection,
+    project_key: str,
+    tov_key: str,
+    theme_key: str,
+    result: TestIdeaResult,
+    language: LanguageOption,
+    templates_dir: Path,
+    created: list[CreatedTestCaseSet],
+) -> None:
+    """Create one test case set per idea, flat below the theme, in the ideas' order.
+
+    TestBench cannot create test themes, so the subtheme grouping of the ideas is
+    dropped. Each set is created locked, given the
+    idea as its description and unlocked again. Every created set is appended to
+    ``created`` right away, so the caller can roll back what exists when a later
+    step fails.
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the theme.
+        tov_key: Key of the TOV the theme belongs to.
+        theme_key: Element key of the theme the sets are created under.
+        result: The ideas after :func:`apply_guardrails`.
+        language: Language of the descriptions.
+        templates_dir: Root of the write-back templates.
+        created: Receives every set created, in order.
+
+    Raises:
+        TestCaseSetCreationForbiddenError: TestBench answered the first creation with 403.
+        Exception: Any other TestBench error; ``created`` lists what exists.
+    """
+    for number, idea in enumerate(result.ideas, start=1):
+        name = test_case_set_name(idea.title, number, language)
+        try:
+            details = await asyncio.to_thread(
+                create_test_case_set,
+                conn,
+                project_key,
+                tov_key,
+                theme_key,
+                name,
+                keep_locked=True,
+            )
+        except HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status == HTTPStatus.FORBIDDEN and not created:
+                body = error.response.text.strip() if error.response is not None else ""
+                raise TestCaseSetCreationForbiddenError(body or str(error)) from error
+            raise
+        created.append(CreatedTestCaseSet(key=details.key, spec_key=details.spec.key))
+        await patch_test_structure_element_spec(
+            conn,
+            project_key,
+            details.spec.key,
+            SpecificationDetailsForUpdate(
+                locker=OptionalUser(optional=None),
+                description=RichTextInfo(
+                    html=render_test_case_set_description(idea, language, templates_dir),
+                    images=[],
+                ),
+            ),
+        )
+
+
+async def delete_test_case_sets(
+    conn: TBConnection,
+    project_key: str,
+    created: list[CreatedTestCaseSet],
+    user_key: str,
+) -> None:
+    """Delete the test case sets the agent created, newest first, as far as possible.
+
+    TestBench deletes a set only while the caller holds the lock on it (and on the
+    parent theme, which the run holds until the end), so each set is locked first.
+    A set that cannot be deleted is logged and left; the others are still tried.
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the sets.
+        created: The sets to delete.
+        user_key: The triggering user, who takes the lock.
+    """
+    for test_case_set in reversed(created):
+        try:
+            await patch_test_structure_element_spec(
+                conn,
+                project_key,
+                test_case_set.spec_key,
+                SpecificationDetailsForUpdate(locker=OptionalUser(optional=user_key)),
+            )
+            await asyncio.to_thread(delete_test_case_set, conn, project_key, test_case_set.key)
+        except Exception as error:
+            logger.error(
+                "Could not delete the created test case set '%s': %r", test_case_set.key, error
+            )

@@ -27,12 +27,18 @@ from testbench_ai_service.agents.generate_test_ideas.model import (
     apply_guardrails,
 )
 from testbench_ai_service.agents.generate_test_ideas.utils import (
+    CREATE_TEST_CASE_SETS_MIN_VERSION,
+    CreatedTestCaseSet,
+    TestCaseSetCreationForbiddenError,
+    create_test_case_sets,
+    delete_test_case_sets,
     get_test_theme,
     get_theme_spec,
     load_requirements,
     patch_generated_test_ideas,
     patch_generation_failed,
     patch_generation_started,
+    patch_previous_description,
     render_test_ideas,
 )
 from testbench_ai_service.jobs.handle import current_job
@@ -61,6 +67,9 @@ class RequirementAgent(Agent):
     AGENT_DATA_CLASS = RequirementAgentData
     ARGS_CLASS = RequirementAgentArgs
     args: RequirementAgentArgs
+    # ModifyTestStructureElements (creating the test case sets, TestBench 5.0) is
+    # deliberately missing: a token of an older TestBench cannot carry it, and
+    # without it the run falls back to writing the ideas as text only.
     REQUIRED_PERMISSIONS = frozenset(
         {
             PermissionWithCode.ReadOwnUserDetails,
@@ -255,6 +264,11 @@ class RequirementAgent(Agent):
                 previous description has been restored.
         """
         previous_description = strip_html_body_tags(spec.description)
+        # A theme the user had locked stays locked for them after the run (precheck
+        # refuses a theme locked by anyone else). The details carry no locker; the
+        # structure node read in precheck does.
+        keep_locked = theme.spec is not None and theme.spec.locker is not None
+        created: list[CreatedTestCaseSet] = []
 
         await patch_generation_started(
             conn=conn,
@@ -282,17 +296,40 @@ class RequirementAgent(Agent):
                 context=context,
                 llm_client=llm_client,
             )
-            await patch_generated_test_ideas(
-                conn=conn,
-                project_key=context.project_key,
-                spec_key=spec.key,
-                test_ideas=render_test_ideas(test_ideas, requirements, context.language),
-                previous_description=previous_description,
-                language=context.language,
-                user_key=context.user_key,
-                templates_dir=context.templates_dir,
-            )
+            if self._creates_test_case_sets(conn):
+                await self._create_test_case_sets(
+                    test_ideas=test_ideas,
+                    theme=theme,
+                    context=context,
+                    conn=conn,
+                    created=created,
+                )
+            if created:
+                # The ideas live in the new test case sets; the theme keeps only
+                # the description it had before the run.
+                await patch_previous_description(
+                    conn=conn,
+                    project_key=context.project_key,
+                    spec_key=spec.key,
+                    previous_description=previous_description,
+                    user_key=context.user_key,
+                    keep_locked=keep_locked,
+                )
+            else:
+                await patch_generated_test_ideas(
+                    conn=conn,
+                    project_key=context.project_key,
+                    spec_key=spec.key,
+                    test_ideas=render_test_ideas(test_ideas, requirements, context.language),
+                    previous_description=previous_description,
+                    language=context.language,
+                    user_key=context.user_key,
+                    templates_dir=context.templates_dir,
+                    keep_locked=keep_locked,
+                )
         except Exception as error:
+            if created:
+                await delete_test_case_sets(conn, context.project_key, created, context.user_key)
             try:
                 await patch_generation_failed(
                     conn=conn,
@@ -302,6 +339,7 @@ class RequirementAgent(Agent):
                     language=context.language,
                     user_key=context.user_key,
                     templates_dir=context.templates_dir,
+                    keep_locked=keep_locked,
                 )
             except Exception as rollback_error:
                 logger.error(
@@ -310,6 +348,61 @@ class RequirementAgent(Agent):
                     rollback_error,
                 )
             raise error
+
+    def _creates_test_case_sets(self, conn: TBConnection) -> bool:
+        """Whether ideas also become test case sets: switched on and TestBench 5.0+."""
+        return (
+            self.args.create_test_case_sets
+            and conn.server_version >= CREATE_TEST_CASE_SETS_MIN_VERSION
+        )
+
+    async def _create_test_case_sets(
+        self,
+        *,
+        test_ideas: TestIdeaResult,
+        theme: TestThemeNode,
+        context: ExecutionContext,
+        conn: TBConnection,
+        created: list[CreatedTestCaseSet],
+    ) -> None:
+        """Create a test case set per idea below the theme, or warn if not permitted.
+
+        A 403 on the first set (typically a JWT without ``ModifyTestStructureElements``)
+        is no failure: the ideas are still written into the theme, and the job
+        carries a warning. Any other error is raised for the rollback.
+
+        Args:
+            test_ideas: The ideas after :func:`apply_guardrails`.
+            theme: The theme the sets are created under.
+            context: The resolved execution context.
+            conn: TestBench connection.
+            created: Receives every set created, for the rollback.
+        """
+        if not test_ideas.ideas or context.tov_key is None:
+            return
+        try:
+            await create_test_case_sets(
+                conn=conn,
+                project_key=context.project_key,
+                tov_key=context.tov_key,
+                theme_key=theme.base.key,
+                result=test_ideas,
+                language=context.language,
+                templates_dir=context.templates_dir,
+                created=created,
+            )
+        except TestCaseSetCreationForbiddenError as error:
+            logger.warning(
+                "Not permitted to create test case sets below theme '%s' (TestBench: %s); "
+                "writing text only. A JWT needs the permission ModifyTestStructureElements "
+                "(code %d) in the plugin's permission list.",
+                theme.base.name,
+                error,
+                PermissionWithCode.ModifyTestStructureElements.value,
+            )
+            await current_job().warn(
+                get_translation("requirement.job.test_case_sets_not_permitted", context.language)
+            )
 
     async def _generate_test_ideas(
         self,

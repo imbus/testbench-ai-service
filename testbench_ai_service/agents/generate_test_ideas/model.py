@@ -21,6 +21,12 @@ class RequirementAgentArgs(RmServiceArgs):
         gt=0,
         description="Keep at most this many test ideas per theme. Unset means no limit.",
     )
+    create_test_case_sets: bool = Field(
+        default=True,
+        description=(
+            "From TestBench 5.0, also create a test case set below the theme for every idea."
+        ),
+    )
 
 
 class ExistingTestCaseSet(BaseModel):

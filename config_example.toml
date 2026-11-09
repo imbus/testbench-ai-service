@@ -84,7 +84,8 @@ file = "defect_explainer/prompt.yaml"
 # batch_size = 256
 
 # Test idea generator (opt-in): generates test ideas for the requirements assigned below a test
-# theme and writes them into the theme's description.
+# theme and writes them into the theme's description. From TestBench 5.0 it also creates a test
+# case set per idea below the theme (needs the token permission ModifyTestStructureElements).
 # [testbench-ai-service.agents.requirement]
 # enabled = true
 # endpoint_path = "/requirement-test-ideas"
@@ -96,6 +97,7 @@ file = "defect_explainer/prompt.yaml"
 # [testbench-ai-service.agents.requirement.args]
 # max_requirements = 20
 # max_ideas_per_theme = 30
+# create_test_case_sets = false                 # TestBench 5.0+: only write the text, no sets
 # rm_service_url = "https://rm.example.com/api/"   # unset: requirements without description
 # rm_username = "rm-user"
 # rm_password = "rm-password"
