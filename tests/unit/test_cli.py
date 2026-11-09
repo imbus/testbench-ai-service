@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from testbench_ai_service import __version__
+from testbench_ai_service import __version__, log
 from testbench_ai_service.cli import (
     init_action,
     main,
@@ -105,6 +105,13 @@ class TestInitAction:
 
 
 class TestStartAction:
+    @pytest.fixture(autouse=True)
+    def restore_reloader_flag(self, monkeypatch):
+        """start_action sets the module-wide ``log.is_reloader_process``; with
+        ``--dev`` it stays True and every later test gets NullHandlers instead
+        of log files. monkeypatch puts the original value back afterwards."""
+        monkeypatch.setattr(log, "is_reloader_process", log.is_reloader_process)
+
     def _make_args(self, **overrides):
         defaults = {
             "config": "config.toml",
