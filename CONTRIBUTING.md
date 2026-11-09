@@ -47,6 +47,11 @@ pip install -e .[dev]
 pre-commit install
 ```
 
+The pre-commit hooks also format the web console with Prettier, using the
+version installed in `frontend/`. Run `npm install` there once (see
+[Web Console Frontend](#web-console-frontend)), or commits that touch
+`frontend/src` fail with a "module not found" error.
+
 ## Running Tests
 
 If you want to contribute code, it's important to ensure that everything works correctly. You can run the tests to make sure the code passes all the required checks.
@@ -83,6 +88,15 @@ running on `http://127.0.0.1:8010`, so start the service separately with
 npm test
 ```
 
+**Format the sources (Prettier):**
+```bash
+npm run format        # rewrite src/ in place
+npm run format:check  # only report files that differ
+```
+
+The style lives in `frontend/.prettierrc`. The pre-commit hook formats staged
+files automatically; if it rewrites any, stage them and commit again.
+
 **Build the console into the package:**
 ```bash
 npm run build
@@ -108,6 +122,9 @@ mypy src/
 ```
 
 Please ensure `ruff` and `mypy` pass with no errors before opening a pull request.
+
+The web console frontend is formatted with [Prettier](https://prettier.io/);
+`npm run format:check` in `frontend/` must pass as well.
 
 ## Branching & Pull Requests
 
