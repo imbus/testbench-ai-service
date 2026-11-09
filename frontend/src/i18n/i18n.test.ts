@@ -1,6 +1,6 @@
 import { de } from './de'
 import { en } from './en'
-import { i18n } from '.'
+import { i18n, storedLang } from '.'
 
 const placeholders = (text: string) => [...text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m[1]).sort()
 
@@ -40,4 +40,16 @@ test('counts pick the singular or plural form', () => {
   expect(i18n.t('inFlight', { count: 1 })).toBe('1 Agent-Lauf ist noch aktiv.')
   expect(i18n.t('inFlight', { count: 3 })).toBe('3 Agent-Läufe sind noch aktiv.')
   expect(i18n.t('overrideCount', { count: 1, lng: 'en' })).toBe('1 override')
+})
+
+test('the picked language is stored so it survives a reload', async () => {
+  await i18n.changeLanguage('en')
+  expect(storedLang()).toBe('en')
+  await i18n.changeLanguage('de')
+  expect(storedLang()).toBe('de')
+})
+
+test('an unknown stored language is ignored', () => {
+  localStorage.setItem('tbai-console-lang', 'fr')
+  expect(storedLang()).toBeNull()
 })
