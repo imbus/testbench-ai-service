@@ -259,8 +259,9 @@ The same distinction applies to every field on the agent screens: a field that
 is inherited shows what it inherits and from where, and **Clear override**
 returns it to inheriting.
 
-Per-project `llm_config` is not editable here. A project that already has one
-is shown read-only, and you can change it in `config.toml`. Note that **Remove
+Per-project `llm_config` is not shown here: pick a project's model per agent
+in the agent's expanded row on the Agents screen, and edit the rest of
+`llm_config` on the LLM screen. Note that **Remove
 all overrides** deletes the whole project block, so an `llm_config` the project
 carries goes with it — the preview diff shows exactly what would be removed.
 

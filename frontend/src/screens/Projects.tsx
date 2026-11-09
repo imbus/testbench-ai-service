@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Button } from 'primereact/button'
 import { Card } from 'primereact/card'
 import { InputText } from 'primereact/inputtext'
@@ -232,12 +231,6 @@ function ProjectCard({
 
   const block = valueAt(running, projectPath(name))
   const declared = block !== undefined
-  // `running` is a pydantic dump, so a project without an llm_config carries
-  // an explicit null here rather than nothing at all. Testing for `undefined`
-  // alone would put an "llm_config · edit in config.toml" panel reading
-  // `null` on every declared project.
-  const llmConfigValue = valueAt(running, projectPath(name, 'llm_config'))
-  const llmConfig = llmConfigValue === null ? undefined : llmConfigValue
   const globalLanguage = valueAt(running, 'language')
 
   // What the header chip counts: every key this project's block carries. The
@@ -426,42 +419,6 @@ function ProjectCard({
             )
           })}
         </div>
-
-        {/* The project's llm_config, summarised. Phase 4d made it editable on
-            the LLM screen; this stays as the at-a-glance view of what the
-            project overrides, and links there. */}
-        {llmConfig !== undefined && (
-          <div
-            data-testid="project-llm-config"
-            style={{
-              fontSize: 12,
-              padding: '8px 10px',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-divider)',
-              borderRadius: 4,
-            }}
-          >
-            <div style={{ marginBottom: 4 }}>
-              <strong>llm_config</strong> ·{' '}
-              {/* <Link>, never <a href>: a full page load bypasses the
-                  unsaved-changes guard and drops the operator's queued edits.
-                  encodeURIComponent, so a project called `Release 2.0` addresses
-                  itself on the other side rather than some other project. */}
-              <Link to={`/admin/llm?project=${encodeURIComponent(name)}`}>{t('editLlmConfig')}</Link>
-              <div className="text-muted" style={{ fontSize: 11 }}>{t('removedWithProject')}</div>
-            </div>
-            <pre
-              style={{
-                margin: 0,
-                whiteSpace: 'pre-wrap',
-                fontFamily: 'var(--font-code)',
-                fontSize: 11,
-              }}
-            >
-              {JSON.stringify(llmConfig, null, 2)}
-            </pre>
-          </div>
-        )}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <span className="card-meta" style={{ fontFamily: 'var(--font-code)' }}>

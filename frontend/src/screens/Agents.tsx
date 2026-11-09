@@ -354,7 +354,6 @@ function AgentTitle({
   )
 }
 
-/** The prompt's default model, from the same cached query `AgentTitle` reads. */
 /** The expanded row: every project the agent is active in, and why. */
 function ProjectList({
   agentKey,
@@ -385,40 +384,38 @@ function ProjectList({
         <div
           key={project}
           data-testid={`agent-project-${project}`}
-          // The same label/control grid as a settings field, so the model sits
-          // next to its project rather than at the far edge of the table.
+          // Project and model on the left, in fixed columns so the pickers
+          // line up down the list; whether the project overrides the agent or
+          // inherits it sits at the far right, as a status rather than a field.
           style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(180px, 260px) 1fr',
+            gridTemplateColumns: 'minmax(140px, 220px) auto 1fr auto',
             gap: 16,
             alignItems: 'center',
             fontSize: 13,
           }}
         >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-            <span style={{ overflowWrap: 'anywhere' }}>{project}</span>
-            {overridden ? (
-              <Tag value={t('override')} style={{ padding: '1px 6px', fontSize: 10 }} />
-            ) : (
-              <span className="text-muted" style={{ fontSize: 10 }}>
-                {t('inherit')}
-              </span>
+          <span style={{ minWidth: 0, overflowWrap: 'anywhere' }}>{project}</span>
+          <AgentModelPicker
+            agentKey={agentKey}
+            scope={{ kind: 'project', project }}
+            disk={disk}
+            running={running}
+            language={String(
+              valueAt(running, projectPath(project, 'language')) ??
+                valueAt(running, 'language') ??
+                'de',
             )}
-          </span>
-          <span>
-            <AgentModelPicker
-              agentKey={agentKey}
-              scope={{ kind: 'project', project }}
-              disk={disk}
-              running={running}
-              language={String(
-                valueAt(running, projectPath(project, 'language')) ??
-                  valueAt(running, 'language') ??
-                  'de',
-              )}
-              readOnly={!isAdmin}
-            />
-          </span>
+            readOnly={!isAdmin}
+          />
+          <span />
+          {overridden ? (
+            <Tag value={t('override')} style={{ padding: '1px 6px', fontSize: 10 }} />
+          ) : (
+            <span className="text-muted" style={{ fontSize: 10, paddingRight: 6 }}>
+              {t('inherit')}
+            </span>
+          )}
         </div>
       ))}
     </div>

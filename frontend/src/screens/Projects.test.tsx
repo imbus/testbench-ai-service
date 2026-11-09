@@ -232,35 +232,14 @@ describe('a project card', () => {
 // --- llm_config ---------------------------------------------------------
 
 describe('a project that carries an llm_config block', () => {
-  it('shows it read-only, and says where to edit it', async () => {
-    // A project that already has an llm_config must still be visible here --
-    // silently hiding it would misrepresent the file. Phase 4d moved "where
-    // to edit it" from the file to the LLM screen; the panel stays the
-    // at-a-glance view of what the project overrides.
+  it('leaves it to the LLM screen', async () => {
+    // The model is picked per agent on the Agents screen and the rest of
+    // llm_config on the LLM screen; the card does not repeat either.
     renderProjects()
     await ready()
     const card = screen.getByTestId('project-Modelled')
-    const llm = within(card).getByTestId('project-llm-config')
-    expect(llm.textContent).toMatch(/anthropic/)
-    expect(within(llm).getByRole('link', { name: /LLM/i })).toBeInTheDocument()
-  })
-
-  it('gives it no editable control', async () => {
-    renderProjects()
-    await ready()
-    const llm = within(screen.getByTestId('project-Modelled')).getByTestId(
-      'project-llm-config',
-    )
-    expect(within(llm).queryByRole('textbox')).not.toBeInTheDocument()
-    expect(within(llm).queryByRole('combobox')).not.toBeInTheDocument()
-  })
-
-  it('is absent for a project with no llm_config', async () => {
-    renderProjects()
-    await ready()
-    expect(
-      within(screen.getByTestId('project-Alpha')).queryByTestId('project-llm-config'),
-    ).not.toBeInTheDocument()
+    expect(within(card).queryByTestId('project-llm-config')).not.toBeInTheDocument()
+    expect(card.textContent).not.toContain('claude-x')
   })
 })
 
@@ -394,59 +373,6 @@ describe('a config payload with nothing in it', () => {
   })
 })
 
-// --- the payload the server actually sends -------------------------------
-
-describe('against a running config as pydantic dumps it', () => {
-  /** `model_dump(mode="json")` writes every unset optional field as null. */
-  const RUNNING = {
-    ...DISK,
-    projects: {
-      Alpha: { language: 'en', llm_config: null, agents: { reviewer: { enabled: false } } },
-      Legacy: { language: null, llm_config: null, agents: { explainer: { enabled: true } } },
-      Modelled: {
-        language: null,
-        llm_config: { provider: 'anthropic', model: 'claude-x' },
-        agents: null,
-      },
-    },
-  }
-
-  function renderDumped() {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url.startsWith('/admin/api/config'))
-        return ok({ running: RUNNING, disk: DISK, config_path: 'C:/svc/config.toml' })
-      if (url.startsWith('/admin/api/projects')) return ok(AVAILABLE)
-      return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
-    })
-    return render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <DraftProvider saved={DISK}>
-            <Projects isAdmin issues={[]} />
-            <Edits />
-          </DraftProvider>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-  }
-
-  it('shows no llm_config panel for a project that has none', async () => {
-    renderDumped()
-    await ready()
-    // A null llm_config is "not configured", not a block to display: the
-    // panel would render the literal text `null` on nearly every project.
-    expect(within(screen.getByTestId('project-Alpha')).queryByTestId('project-llm-config')).toBeNull()
-  })
-
-  it('still shows the panel for a project that really has one', async () => {
-    renderDumped()
-    await ready()
-    const panel = within(screen.getByTestId('project-Modelled')).getByTestId('project-llm-config')
-    expect(panel.textContent).toContain('claude-x')
-  })
-})
-
 // --- one draft, one meaning ---------------------------------------------
 
 describe('removing every override for a project', () => {
@@ -461,54 +387,5 @@ describe('removing every override for a project', () => {
     // Not both: the server refuses an overlay carrying a path and a prefix of
     // it, so preview and apply would 400 with no way back but Discard all.
     expect(edits()).toEqual({ 'projects.Alpha': null })
-  })
-})
-
-// --- the way into the LLM editor -----------------------------------------
-
-describe('the llm_config panel links into the LLM screen', () => {
-  it('links to that project, and still shows what it overrides', async () => {
-    renderProjects()
-    await ready()
-    const panel = within(screen.getByTestId('project-Modelled')).getByTestId('project-llm-config')
-    expect(within(panel).getByRole('link', { name: /LLM/i })).toHaveAttribute(
-      'href',
-      '/admin/llm?project=Modelled',
-    )
-    // The panel is still the at-a-glance view of the override, not just a link.
-    expect(panel.textContent).toContain('claude-x')
-  })
-
-  it('encodes a project name that is not URL-safe', async () => {
-    // A project may be called `Release 2.0`. Interpolating it raw would
-    // address a different project -- or none -- on the other side of the link.
-    const SPACED = {
-      ...DISK,
-      projects: { ...DISK.projects, 'Release 2.0': { llm_config: { model: 'gpt-5' } } },
-    }
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url.startsWith('/admin/api/config'))
-        return ok({ running: SPACED, disk: SPACED, config_path: 'C:/svc/config.toml' })
-      if (url.startsWith('/admin/api/projects')) return ok(AVAILABLE)
-      return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
-    })
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    render(
-      <QueryClientProvider client={client}>
-        <MemoryRouter>
-          <DraftProvider saved={SPACED}>
-            <Projects isAdmin issues={[]} />
-          </DraftProvider>
-        </MemoryRouter>
-      </QueryClientProvider>,
-    )
-    await ready()
-    const panel = within(screen.getByTestId('project-Release 2.0')).getByTestId(
-      'project-llm-config',
-    )
-    expect(within(panel).getByRole('link', { name: /LLM/i })).toHaveAttribute(
-      'href',
-      '/admin/llm?project=Release%202.0',
-    )
   })
 })
