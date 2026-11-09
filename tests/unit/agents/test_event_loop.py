@@ -160,9 +160,7 @@ class TestRunKeepsTheLoopFree:
 
         with (
             patch(f"{DESCRIBER}.get_test_case_set_catalog", slow_helper({"TCS1": make_tcs()})),
-            patch.object(
-                TestCaseSetDescriber, "_generate_test_case_set_description", AsyncMock()
-            ),
+            patch.object(TestCaseSetDescriber, "_generate_test_case_set_description", AsyncMock()),
         ):
             stall = await worst_loop_stall(
                 agent.run(

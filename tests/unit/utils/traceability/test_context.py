@@ -111,7 +111,9 @@ async def test_the_context_holds_the_linked_test_cases_with_their_calls(monkeypa
 
     monkeypatch.setattr(context_module, "fetch_requirement_details", _details)
 
-    loaded = await load_requirement_context(SimpleNamespace(), RmServiceArgs(), "7", "42", REQ, None)
+    loaded = await load_requirement_context(
+        SimpleNamespace(), RmServiceArgs(), "7", "42", REQ, None
+    )
 
     assert loaded.requirement.key == REQ
     assert loaded.requirement_ref == "EXT-1"

@@ -653,6 +653,4 @@ class TestTb2rfAnchors:
         )
 
         assert "The card number is wrong." in result
-        assert re.search(
-            r"data-tb-role='message'.*?The card number is wrong\.", result, re.DOTALL
-        )
+        assert re.search(r"data-tb-role='message'.*?The card number is wrong\.", result, re.DOTALL)

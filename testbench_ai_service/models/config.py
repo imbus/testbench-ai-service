@@ -7,7 +7,6 @@ from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider, RoutingF
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.validators import raise_field_validation_error, validate_class_path
 
-
 ALLOWED_ROUTING: dict[LLMProvider, frozenset[RoutingFamily]] = {
     LLMProvider.OPENAI: frozenset(
         {RoutingFamily.CHAT, RoutingFamily.REASONING, RoutingFamily.FALLBACK}

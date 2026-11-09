@@ -554,9 +554,7 @@ class TestAgentModels:
         assert merged.model == "gpt-4.1"
 
     def test_the_project_merges_per_agent(self):
-        merged = get_llm_config(
-            self._config(), project_name="Release 2.0", agent_key="describer"
-        )
+        merged = get_llm_config(self._config(), project_name="Release 2.0", agent_key="describer")
 
         assert merged.model == "claude-sonnet-5"
         assert merged.agent_models == {"reviewer": "gpt-4.1", "describer": "claude-sonnet-5"}

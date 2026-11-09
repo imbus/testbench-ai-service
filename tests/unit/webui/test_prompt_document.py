@@ -117,4 +117,3 @@ def test_the_context_skeleton_covers_step_templates(tmp_path):
     )
     doc = read_prompt_document(agent / "prompt.yaml", tmp_path, "de", "finder")
     assert doc.agent_context_skeleton == {"requirement": ""}
-
