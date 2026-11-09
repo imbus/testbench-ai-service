@@ -12,6 +12,7 @@ const job: JobSummary = {
   project_key: 'p-1',
   project_name: 'Shop',
   root_key: null,
+  root_uid: null,
   item_ids: [],
   status: 'succeeded',
   progress: null,

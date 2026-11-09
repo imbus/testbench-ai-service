@@ -314,6 +314,7 @@ const JOB_BASE = {
   project_key: 'KP',
   project_name: 'Kundenportal',
   root_key: null,
+  root_uid: null,
   error: null,
   warnings: [],
   progress: null,

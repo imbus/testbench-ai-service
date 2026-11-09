@@ -24,6 +24,7 @@ class JobSummary(BaseModel):
     project_key: str
     project_name: str
     root_key: str | None
+    root_uid: str | None = None
     item_ids: list[str]
     status: JobStatus
     progress: JobProgress | None

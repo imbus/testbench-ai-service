@@ -11,6 +11,7 @@ const JOB: JobDetail = {
   project_key: 'p-1',
   project_name: 'Shop',
   root_key: 'REQ-1',
+  root_uid: null,
   item_ids: [],
   status: 'failed',
   progress: null,

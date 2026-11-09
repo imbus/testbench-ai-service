@@ -320,6 +320,8 @@ export interface JobSummary {
   project_key: string
   project_name: string
   root_key: string | null
+  /** Unique ID of the tree root the job was started on; null for jobs from before it was kept. */
+  root_uid: string | null
   item_ids: string[]
   status: JobStatus
   progress: JobProgress | null

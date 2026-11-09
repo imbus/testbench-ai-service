@@ -161,6 +161,7 @@ The request needs the same `Authorization` header as the agent endpoints. Exampl
   "project_key": "PRJ-1",
   "project_name": "Dream Car",
   "root_key": "REQ-12",
+  "root_uid": "iTB-RQ-1234",
   "item_ids": [],
   "status": "running",
   "progress": {"done": 3, "total": 7, "text": "Interpreting test case sets"},
@@ -176,6 +177,7 @@ The request needs the same `Authorization` header as the agent endpoints. Exampl
 
 | Field                              | Description                                                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `root_key`, `root_uid`            | Key and unique ID of the element the agent was triggered on, as sent in the trigger. Either may be `null`.  |
 | `status`                           | `running`, `succeeded` or `failed`. These are the only values.                                               |
 | `progress`                         | `done` of `total` steps plus an optional `text`; `null` while the agent reports none.                        |
 | `error`                            | Why the job `failed`, in the language of the run. `null` otherwise.                                          |

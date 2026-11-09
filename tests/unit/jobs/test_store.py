@@ -3,6 +3,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 
 import pytest
+import sqlalchemy as sa
 
 from testbench_ai_service.jobs import store as store_module
 from testbench_ai_service.jobs.models import JobProgress, JobSummary
@@ -38,6 +39,59 @@ def test_create_then_get_returns_running_job(store):
     assert job.report is None
     assert job.item_ids == ["i1"]
     assert job.warnings == ["w"]
+
+
+def test_root_uid_is_kept_and_defaults_to_none(store):
+    _create(store, "j1", "u1")
+    store.create(
+        "j2",
+        agent_key="a",
+        user_key="u1",
+        project_key="p",
+        project_name="P",
+        root_key="REQ-1",
+        root_uid="iTB-RQ-7",
+        item_ids=[],
+        warnings=[],
+    )
+    assert store.get("j1", "u1").root_uid is None
+    assert store.get("j2", "u1").root_uid == "iTB-RQ-7"
+    assert {job.job_id: job.root_uid for job in store.list_for_user("u1")} == {
+        "j1": None,
+        "j2": "iTB-RQ-7",
+    }
+
+
+def test_file_from_before_root_uid_gets_the_column(tmp_path):
+    path = tmp_path / "usage.sqlite"
+    engine = sa.create_engine(f"sqlite:///{path}")
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "CREATE TABLE agent_jobs (id VARCHAR PRIMARY KEY, agent_key VARCHAR NOT NULL,"
+                " user_key VARCHAR NOT NULL, project_key VARCHAR NOT NULL,"
+                " project_name VARCHAR NOT NULL, root_key VARCHAR, item_ids JSON NOT NULL,"
+                " status VARCHAR NOT NULL, error VARCHAR, progress_done INTEGER,"
+                " progress_total INTEGER, progress_text VARCHAR, warnings JSON NOT NULL,"
+                " report_type VARCHAR, report JSON, created_at VARCHAR NOT NULL,"
+                " updated_at VARCHAR NOT NULL, finished_at VARCHAR)"
+            )
+        )
+        conn.execute(
+            sa.text(
+                "INSERT INTO agent_jobs (id, agent_key, user_key, project_key, project_name,"
+                " root_key, item_ids, status, warnings, created_at, updated_at) VALUES"
+                " ('old', 'a', 'u1', 'p', 'P', 'REQ-1', '[]', 'succeeded', '[]',"
+                " '2026-11-01T00:00:00.000000+00:00', '2026-11-01T00:00:00.000000+00:00')"
+            )
+        )
+    engine.dispose()
+
+    store = JobStore(path)
+    old = store.get("old", "u1")
+    assert (old.root_key, old.root_uid) == ("REQ-1", None)
+    _create(store, "new", "u1")
+    assert store.get("new", "u1") is not None
 
 
 def test_get_other_users_job_returns_none(store):

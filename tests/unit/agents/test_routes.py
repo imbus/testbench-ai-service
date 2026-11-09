@@ -166,6 +166,7 @@ class TestTriggerTestCaseSetReviews:
         assert job is not None
         assert job.status in ("running", "succeeded")
         assert job.agent_key == "test_case_set_reviewer"
+        assert job.root_uid == "iTB-TT-4091"
 
     def test_failed_precheck_creates_no_job(self):
         self.mock_reviewer.precheck.return_value = PrecheckResult(passed=False, warnings=["no"])

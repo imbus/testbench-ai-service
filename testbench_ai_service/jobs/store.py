@@ -38,6 +38,7 @@ _jobs = sa.Table(
     sa.Column("project_key", sa.String, nullable=False),
     sa.Column("project_name", sa.String, nullable=False),
     sa.Column("root_key", sa.String, nullable=True),
+    sa.Column("root_uid", sa.String, nullable=True),
     sa.Column("item_ids", sa.JSON, nullable=False),
     sa.Column("status", sa.String, nullable=False),
     sa.Column("error", sa.String, nullable=True),
@@ -53,6 +54,20 @@ _jobs = sa.Table(
 )
 
 _SUMMARY_COLUMNS = [c for c in _jobs.c if c.name != "report"]
+
+# Columns added after the table first shipped. ``create_all`` does not touch a
+# table that already exists, so a file from before gets them added on open.
+_ADDED_COLUMNS = ("root_uid",)
+
+
+def _add_missing_columns(engine: Engine) -> None:
+    present = {column["name"] for column in sa.inspect(engine).get_columns(_jobs.name)}
+    with engine.begin() as conn:
+        for name in _ADDED_COLUMNS:
+            if name not in present:
+                column = _jobs.c[name]
+                ddl = column.type.compile(dialect=engine.dialect)
+                conn.execute(sa.text(f"ALTER TABLE {_jobs.name} ADD COLUMN {name} {ddl}"))
 
 
 def _now() -> datetime:
@@ -75,6 +90,7 @@ def _summary_fields(row: Row[Any]) -> dict[str, Any]:
         "project_key": row.project_key,
         "project_name": row.project_name,
         "root_key": row.root_key,
+        "root_uid": row.root_uid,
         "item_ids": row.item_ids,
         "status": row.status,
         "progress": progress,
@@ -104,6 +120,7 @@ class JobStore:
                 )
                 try:
                     _metadata.create_all(engine)
+                    _add_missing_columns(engine)
                 except Exception:
                     engine.dispose()
                     raise
@@ -130,6 +147,7 @@ class JobStore:
         root_key: str | None,
         item_ids: list[str],
         warnings: list[str],
+        root_uid: str | None = None,
     ) -> None:
         """Insert a new job in state ``running``."""
         now = _iso(_now())
@@ -144,6 +162,7 @@ class JobStore:
                         project_key=project_key,
                         project_name=project_name,
                         root_key=root_key,
+                        root_uid=root_uid,
                         item_ids=item_ids,
                         status="running",
                         warnings=warnings,

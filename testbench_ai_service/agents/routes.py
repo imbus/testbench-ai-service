@@ -221,6 +221,7 @@ async def trigger_agent_execution(
         project_key=context.project_key,
         project_name=context.project_name,
         root_key=context.root_key,
+        root_uid=context.root_uid,
         item_ids=precheck_result.items,
         warnings=precheck_result.warnings,
     )
