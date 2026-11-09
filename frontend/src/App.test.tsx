@@ -232,7 +232,7 @@ it('marks the invalid field after a preview rejects the draft', async () => {
 
   renderApp({ isAdmin: true, route: '/admin/service' })
   await screen.findByRole('navigation')
-  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Prüfen & übernehmen…' }))
 
   const dialog = await screen.findByRole('dialog')
   expect(within(dialog).getByText(/Input should be a valid integer/)).toBeInTheDocument()
@@ -249,13 +249,13 @@ it('clears the marker after a successful apply', async () => {
   renderApp({ isAdmin: true, route: '/admin/service' })
   await screen.findByRole('navigation')
 
-  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Prüfen & übernehmen…' }))
   expect(await screen.findByLabelText('port')).toHaveAttribute('aria-invalid', 'true')
   await userEvent.click(screen.getByRole('button', { name: 'Schließen' }))
 
   // Reopening mounts a fresh DiffDialog, which re-previews -- this time the
   // draft is reported valid, so Apply is offered.
-  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Prüfen & übernehmen…' }))
   // Scoped to the dialog: the pending banner carries an Apply of its own
   // (it opens this dialog), so the name is ambiguous page-wide.
   await userEvent.click(
@@ -280,13 +280,13 @@ it('a later VALID preview clears a marker an earlier invalid preview set (FIX 2)
   renderApp({ isAdmin: true, route: '/admin/service' })
   await screen.findByRole('navigation')
 
-  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Prüfen & übernehmen…' }))
   expect(await screen.findByLabelText('port')).toHaveAttribute('aria-invalid', 'true')
   await userEvent.click(screen.getByRole('button', { name: 'Schließen' }))
 
   // Reopening mounts a fresh DiffDialog, which re-previews -- this time the
   // draft is reported valid. The marker must clear without applying.
-  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Prüfen & übernehmen…' }))
 
   await waitFor(() =>
     expect(screen.getByLabelText('port')).not.toHaveAttribute('aria-invalid', 'true'),
@@ -300,10 +300,11 @@ it('clears the marker when the draft is discarded', async () => {
   renderApp({ isAdmin: true, route: '/admin/service' })
   await screen.findByRole('navigation')
 
-  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Prüfen & übernehmen…' }))
   expect(await screen.findByLabelText('port')).toHaveAttribute('aria-invalid', 'true')
   await userEvent.click(screen.getByRole('button', { name: 'Schließen' }))
 
+  await userEvent.click(screen.getByRole('button', { name: 'Verwerfen…' }))
   await userEvent.click(screen.getByRole('button', { name: 'Verwerfen' }))
 
   await waitFor(() =>
@@ -348,7 +349,7 @@ it('a structured 422 apply rejection does not loop the renderer (regression for 
 
   renderApp({ isAdmin: true, route: '/admin/service' })
   await screen.findByRole('navigation')
-  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Prüfen & übernehmen…' }))
   // Scoped to the dialog: the pending banner carries an Apply of its own
   // (it opens this dialog), so the name is ambiguous page-wide.
   await userEvent.click(
@@ -420,7 +421,7 @@ it('clears the marker when the session ends', async () => {
   )
 
   await screen.findByRole('navigation')
-  await userEvent.click(screen.getByRole('button', { name: 'Diff anzeigen' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Prüfen & übernehmen…' }))
   expect(await screen.findByLabelText('port')).toHaveAttribute('aria-invalid', 'true')
 
   // The session ends -- an expired session surfaces as `session` becoming

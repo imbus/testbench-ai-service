@@ -69,11 +69,13 @@ something refuses a non-admin regardless of what the browser sends.
 Edits are queued, reviewed, then written — nothing is saved as you type.
 
 1. Change fields on the **Service**, **LLM provider** or **Logging** screen. A
-   strip appears at the top of the console counting the queued changes.
-2. **View diff** shows the exact unified diff that would be written, the file
-   it would be written to, and whether the change needs a service restart.
-3. **Apply** validates the result, writes `config.toml` atomically, and reloads
-   the service in place. **Discard** throws the queued changes away.
+   strip appears at the top of the console counting the queued changes for
+   each screen; click a screen's count to go back to it.
+2. **Review & apply…** opens the exact unified diff that would be written, the
+   file it would be written to, and whether the change needs a service restart.
+3. **Apply** in that dialog validates the result, writes `config.toml`
+   atomically, and reloads the service in place. **Discard…** on the strip
+   throws the queued changes away after you confirm.
 
 Queued changes live in your browser, so they survive a page reload and are not
 visible to anyone else. Two administrators editing at once do not clobber each
