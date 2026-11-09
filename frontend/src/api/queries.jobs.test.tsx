@@ -1,5 +1,5 @@
 import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { focusManager, QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { ReactNode } from 'react'
 import { useJob, useJobs } from './queries'
 import { apiFetch } from './client'
@@ -15,6 +15,7 @@ const summary = (status: JobStatus): JobSummary => ({
   project_key: 'p-1',
   project_name: 'Shop',
   root_key: null,
+  root_uid: null,
   item_ids: [],
   status,
   progress: null,
@@ -27,7 +28,10 @@ const summary = (status: JobStatus): JobSummary => ({
 })
 
 function wrapper({ children }: { children: ReactNode }) {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  // Same defaults as main.tsx, so per-hook overrides are what is tested.
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+  })
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>
 }
 
@@ -36,7 +40,10 @@ beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true })
 })
 
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  focusManager.setFocused(undefined)
+  vi.useRealTimers()
+})
 
 async function advance(ms: number) {
   await vi.advanceTimersByTimeAsync(ms)
@@ -58,25 +65,71 @@ describe.each([
     expect(fetchMock).toHaveBeenCalledTimes(3)
   })
 
+})
+
+describe('useJob polling', () => {
+  const detail = (s: JobStatus) => ({ ...summary(s), report: null }) as JobDetail
+
   it.each(['succeeded', 'failed'] as const)('stops once the job is %s', async (status) => {
-    fetchMock.mockResolvedValue(payload(status) as never)
-    const { result } = renderHook(() => useHook(), { wrapper })
+    fetchMock.mockResolvedValue(detail(status) as never)
+    const { result } = renderHook(() => useJob('j1'), { wrapper })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    await advance(10_000)
+    await advance(30_000)
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 
   it('stops polling after the job finishes', async () => {
     fetchMock
-      .mockResolvedValueOnce(payload('running') as never)
-      .mockResolvedValue(payload('succeeded') as never)
-    const { result } = renderHook(() => useHook(), { wrapper })
+      .mockResolvedValueOnce(detail('running') as never)
+      .mockResolvedValue(detail('succeeded') as never)
+    const { result } = renderHook(() => useJob('j1'), { wrapper })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     await advance(3_100)
     expect(fetchMock).toHaveBeenCalledTimes(2)
-    await advance(10_000)
+    await advance(30_000)
     expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('useJobs idle refresh', () => {
+  it.each([
+    ['nothing runs', [summary('succeeded')]],
+    ['the list is empty', []],
+  ])('polls every 10 seconds when %s, so new jobs show up', async (_case, jobs) => {
+    fetchMock.mockResolvedValue(jobs as never)
+    const { result } = renderHook(() => useJobs({}), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    await advance(9_000)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await advance(1_100)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('falls back to the idle interval after the last job finishes', async () => {
+    fetchMock
+      .mockResolvedValueOnce([summary('running')] as never)
+      .mockResolvedValue([summary('succeeded')] as never)
+    const { result } = renderHook(() => useJobs({}), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    await advance(3_100)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await advance(9_000)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    await advance(1_100)
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('refetches when the window regains focus', async () => {
+    fetchMock.mockResolvedValue([summary('succeeded')] as never)
+    const { result } = renderHook(() => useJobs({}), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    focusManager.setFocused(false)
+    focusManager.setFocused(true)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
   })
 })

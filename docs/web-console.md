@@ -166,7 +166,7 @@ instead.
 
 ## Jobs
 
-The **Jobs** screen lists the agent runs you triggered, newest first, with their status and progress. Select one to see its detail on the right: project, element, warnings, the error of a failed run and, if the agent stores one, its report. The list refreshes while a job runs. You only ever see your own jobs, administrators included. Jobs are deleted after `retention_days` (see [Configuration](configuration.md#jobs)).
+The **Jobs** screen lists the agent runs you triggered, newest first, with their status and progress. Select one to see its detail on the right: project, element, warnings, the error of a failed run and, if the agent stores one, its report. The list refreshes every few seconds while a job runs, otherwise every ten seconds and whenever you switch back to the tab, so jobs you start from TestBench show up without a reload. You only ever see your own jobs, administrators included. Jobs are deleted after `retention_days` (see [Configuration](configuration.md#jobs)).
 
 ## Agents
 

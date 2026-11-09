@@ -43,9 +43,12 @@ export function useJobs(filters: { agent?: string; status?: JobStatus } = {}, li
   return useQuery({
     queryKey: ['jobs', filters.agent ?? null, filters.status ?? null, limit],
     queryFn: () => apiFetch<JobSummary[]>(`/jobs?${params}`),
-    // Poll only while something is in progress.
+    // Fast while something runs, so progress moves; slow otherwise, so jobs
+    // that TestBench starts meanwhile still show up without a reload.
     refetchInterval: (query) =>
-      query.state.data?.some((job) => job.status === 'running') ? 3_000 : false,
+      query.state.data?.some((job) => job.status === 'running') ? 3_000 : 10_000,
+    // Coming back from TestBench should show the current list right away.
+    refetchOnWindowFocus: true,
   })
 }
 
