@@ -57,7 +57,10 @@ def _resolve_project_name(conn: TBConnection, project_key: str | None) -> str | 
 
 
 @router.get("/", include_in_schema=False)
-async def redirect_to_docs(request: Request):
+async def redirect_to_start_page(request: Request):
+    """Send the browser to the web console, or to Swagger when it is disabled."""
+    if request.app.state.config.admin_ui.enabled:
+        return RedirectResponse(url="/admin/")
     return RedirectResponse(url=request.app.docs_url)
 
 

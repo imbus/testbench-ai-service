@@ -57,11 +57,11 @@ def _make_unauthenticated_client():
 
 
 class TestRootRedirect:
-    def test_root_redirects_to_docs(self):
+    def test_root_redirects_to_console(self):
         client, _, _ = _make_test_client()
         response = client.get("/")
         assert response.status_code in (301, 302, 307, 308)
-        assert "docs" in response.headers.get("location", "")
+        assert response.headers.get("location") == "/admin/"
 
 
 class TestGetAgents:

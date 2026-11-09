@@ -44,8 +44,16 @@ def test_console_absent_when_disabled():
     assert "/agents" in app.openapi()["paths"]
 
 
-def test_existing_root_redirect_still_works():
+def test_root_redirects_to_console():
     app = _app()
+    with TestClient(app) as client:
+        response = client.get("/", follow_redirects=False)
+        assert response.status_code in (307, 302)
+        assert response.headers["location"] == "/admin/"
+
+
+def test_root_redirects_to_docs_when_console_disabled():
+    app = _app(admin_ui=AdminUiConfig(enabled=False))
     with TestClient(app) as client:
         response = client.get("/", follow_redirects=False)
         assert response.status_code in (307, 302)

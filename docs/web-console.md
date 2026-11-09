@@ -12,6 +12,8 @@ http://<host>:<port>/admin
 ```
 
 With the default `host` and `port` that is <http://127.0.0.1:8010/admin>.
+The service root `/` redirects there too; with the console disabled it
+redirects to the Swagger UI at `/docs` instead.
 
 The console shows the current service status, a tail of the log file, and the
 effective Service, LLM and Logging configuration.
