@@ -111,14 +111,15 @@ already built.
 
 This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, and [mypy](https://mypy-lang.org/) for static type checking.
 
-**Check linting:**
+**Check linting and formatting:**
 ```bash
-ruff check src/
+ruff check .
+ruff format --check .
 ```
 
 **Check types:**
 ```bash
-mypy src/
+mypy testbench_ai_service
 ```
 
 Please ensure `ruff` and `mypy` pass with no errors before opening a pull request.
