@@ -44,14 +44,18 @@ describe('status colors', () => {
   ])
 
   it.each(TOKENS)('defines %s for the light theme', (token) => {
-    const root = industry.slice(industry.indexOf(':root {'), industry.indexOf('}', industry.indexOf(':root {')))
+    const root = industry.slice(
+      industry.indexOf(':root {'),
+      industry.indexOf('}', industry.indexOf(':root {')),
+    )
     expect(root).toContain(`${token}:`)
   })
 
   it.each(TOKENS.filter((token) => !token.endsWith('-soft')))(
     'redefines %s for the dark theme',
     (token) => {
-      const start = industry.indexOf('[data-theme=dark] {')
+      // Quoted or not: Prettier writes the attribute value quoted.
+      const start = industry.search(/\[data-theme=['"]?dark['"]?\] \{/)
       expect(start, 'a [data-theme=dark] { … } token block').toBeGreaterThan(-1)
       expect(industry.slice(start, industry.indexOf('}', start))).toContain(`${token}:`)
     },
