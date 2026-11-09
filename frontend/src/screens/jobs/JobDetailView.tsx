@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { ProgressBar } from 'primereact/progressbar'
 import { useTranslation } from 'react-i18next'
 import type {
@@ -26,13 +27,70 @@ export const STATUS_LABELS: Record<JobStatus, keyof Translations> = {
 
 export const LOCALES: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
 
+/** Shape as well as color, so the status reads without telling red from green. */
+const STATUS_ICONS: Record<JobStatus, string> = {
+  running: '●',
+  succeeded: '✓',
+  failed: '✕',
+}
+
 export function StatusLabel({ job }: { job: JobSummary }) {
   const { t } = useTranslation()
+  const color = STATUS_COLORS[job.status]
   return (
-    <span style={{ color: STATUS_COLORS[job.status], fontWeight: 500 }}>
+    <span
+      data-status={job.status}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        // Wide enough for the longest label in either language, so the pills
+        // line up down the column.
+        minWidth: '9.5em',
+        padding: '2px 8px',
+        fontSize: 12,
+        fontWeight: 600,
+        color,
+        background: `color-mix(in srgb, ${color} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 35%, transparent)`,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <span aria-hidden="true" style={{ width: '1em', textAlign: 'center' }}>
+        {STATUS_ICONS[job.status]}
+      </span>
       {t(STATUS_LABELS[job.status])}
     </span>
   )
+}
+
+/** "42s", "1m 38s", "1h 05m": the smaller unit is padded so a column lines up. */
+export function formatDuration(seconds: number): string {
+  const total = Math.max(0, Math.floor(seconds))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  if (hours) return `${hours}h ${String(minutes).padStart(2, '0')}m`
+  if (minutes) return `${minutes}m ${String(secs).padStart(2, '0')}s`
+  return `${secs}s`
+}
+
+/** How long a job ran: to its finish, or up to `now` while it is still running. */
+export function jobSeconds(job: JobSummary, now: Date): number {
+  const end = job.finished_at ? new Date(job.finished_at) : now
+  return (end.getTime() - new Date(job.created_at).getTime()) / 1000
+}
+
+/** A job's duration, ticking once a second while the job is running. */
+export function Duration({ job }: { job: JobSummary }) {
+  const running = job.status === 'running' && !job.finished_at
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    if (!running) return
+    const timer = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(timer)
+  }, [running])
+  return <>{formatDuration(jobSeconds(job, now))}</>
 }
 
 export function Progress({ job }: { job: JobSummary }) {

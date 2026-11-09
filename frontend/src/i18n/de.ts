@@ -17,6 +17,7 @@ export const de = {
   jobProject: 'Projekt',
   jobStarted: 'Gestartet',
   jobFinished: 'Beendet',
+  jobDuration: 'Dauer',
   jobError: 'Fehler',
   jobWarnings: 'Warnungen',
   jobViewExpired:

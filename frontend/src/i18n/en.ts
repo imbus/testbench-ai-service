@@ -17,6 +17,7 @@ export const en = {
   jobProject: 'Project',
   jobStarted: 'Started',
   jobFinished: 'Finished',
+  jobDuration: 'Duration',
   jobError: 'Error',
   jobWarnings: 'Warnings',
   jobViewExpired: 'This link has expired or was already used. Open the job again from TestBench.',

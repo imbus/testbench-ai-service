@@ -124,6 +124,15 @@ test('each job row is a real link to its job, keeping the filters', async () => 
   expect(link).toHaveAttribute('href', '/admin/jobs/j2?status=failed')
 })
 
+test('the list shows how long each job took', async () => {
+  list = [FAILED]
+  renderJobs()
+  await screen.findByText('link_finder')
+  expect(screen.getByRole('columnheader', { name: 'Dauer' })).toBeInTheDocument()
+  // 10:00:00 to 10:02:00
+  expect(screen.getByText('2m 00s')).toBeInTheDocument()
+})
+
 test('the job table has no row selection', async () => {
   const { container } = renderJobs()
   await screen.findByText('link_finder')

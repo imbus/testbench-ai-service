@@ -11,6 +11,7 @@ import { useLang } from '../i18n'
 import { useSession } from '../state/session'
 import { formatActivityTime } from './Status'
 import {
+  Duration,
   JobDetailView,
   LOCALES,
   Progress,
@@ -150,6 +151,12 @@ function JobList({
                 <Progress job={job} />
               </div>
             )}
+          />
+          <Column
+            header={t('jobDuration')}
+            align="right"
+            style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+            body={(job: JobSummary) => <Duration job={job} />}
           />
         </DataTable>
       )}
