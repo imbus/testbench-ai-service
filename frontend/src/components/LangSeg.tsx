@@ -1,6 +1,6 @@
 import { SelectButton } from 'primereact/selectbutton'
 import { useTranslation } from 'react-i18next'
-import { useLang } from '../i18n'
+import { pickLang, useLang } from '../i18n'
 
 const OPTIONS = (['de', 'en'] as const).map((code) => ({ label: code.toUpperCase(), value: code }))
 
@@ -11,7 +11,7 @@ const OPTIONS = (['de', 'en'] as const).map((code) => ({ label: code.toUpperCase
  * so clicking the current language cannot leave the console without one.
  */
 export function LangSeg({ compact = false }: { compact?: boolean }) {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const lang = useLang()
   return (
     <SelectButton
@@ -20,7 +20,7 @@ export function LangSeg({ compact = false }: { compact?: boolean }) {
       options={OPTIONS}
       allowEmpty={false}
       onChange={(event) => {
-        if (event.value) void i18n.changeLanguage(event.value)
+        if (event.value) void pickLang(event.value)
       }}
       pt={compact ? { button: { style: { padding: '4px 10px' } } } : undefined}
     />

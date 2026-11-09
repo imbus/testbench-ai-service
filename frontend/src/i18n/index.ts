@@ -34,13 +34,21 @@ void i18n.use(initReactI18next).init({
   interpolation: { escapeValue: false },
 })
 
-i18n.on('languageChanged', (lng) => {
+/**
+ * Switch to the language the viewer picked and remember it for the next load.
+ *
+ * Only a viewer's pick is stored. A page that sets the language itself, like
+ * the job view following its TestBench ticket, calls `i18n.changeLanguage`
+ * and leaves the console's remembered pick alone (same origin, same storage).
+ */
+export async function pickLang(lng: Lang): Promise<void> {
+  await i18n.changeLanguage(lng)
   try {
     localStorage.setItem(STORAGE_KEY, lng)
   } catch {
     // A private window or blocked storage must not break switching.
   }
-})
+}
 
 /** The active UI language, for what `t` does not cover (locales, data picks). */
 export function useLang(): Lang {

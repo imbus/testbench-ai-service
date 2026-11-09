@@ -1,6 +1,6 @@
 import { de } from './de'
 import { en } from './en'
-import { i18n, storedLang } from '.'
+import { i18n, pickLang, storedLang } from '.'
 
 const placeholders = (text: string) =>
   [...text.matchAll(/\{\{\s*(\w+)\s*\}\}/g)].map((m) => m[1]).sort()
@@ -44,10 +44,19 @@ test('counts pick the singular or plural form', () => {
 })
 
 test('the picked language is stored so it survives a reload', async () => {
-  await i18n.changeLanguage('en')
+  await pickLang('en')
+  expect(i18n.resolvedLanguage).toBe('en')
   expect(storedLang()).toBe('en')
-  await i18n.changeLanguage('de')
+  await pickLang('de')
   expect(storedLang()).toBe('de')
+})
+
+test('a language set by the page, not picked by the viewer, is not stored', async () => {
+  // The job view switches to the language of its TestBench ticket; that must
+  // not overwrite the console language the viewer picked in the same browser.
+  await pickLang('en')
+  await i18n.changeLanguage('de')
+  expect(storedLang()).toBe('en')
 })
 
 test('an unknown stored language is ignored', () => {
