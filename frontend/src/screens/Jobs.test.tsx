@@ -11,6 +11,7 @@ const base = {
   project_key: 'p-1',
   project_name: 'Shop',
   root_key: null,
+  root_uid: null,
   item_ids: ['REQ-1'],
   warnings: [],
   report_type: null,
@@ -93,8 +94,9 @@ test('lists jobs with agent, status and progress', async () => {
   await waitFor(() => expect(screen.getByText('coverage_checker')).toBeInTheDocument())
   expect(screen.getByText('link_finder')).toBeInTheDocument()
   expect(screen.getByText('3/7')).toBeInTheDocument()
-  expect(screen.getByText('Läuft')).toBeInTheDocument()
-  expect(screen.getByText('Fehlgeschlagen')).toBeInTheDocument()
+  const table = screen.getByRole('table')
+  expect(within(table).getByText('Läuft')).toBeInTheDocument()
+  expect(within(table).getByText('Fehlgeschlagen')).toBeInTheDocument()
 })
 
 test('the list shows item, project and start of each job', async () => {
@@ -142,10 +144,30 @@ test('the job table has no row selection', async () => {
 test('a chosen filter is kept in the URL', async () => {
   renderJobs()
   await screen.findByText('link_finder')
-  await userEvent.click(screen.getByRole('button', { name: 'Status' }))
-  await userEvent.click(await screen.findByRole('option', { name: 'Fehlgeschlagen', hidden: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Fehlgeschlagen' }))
   await waitFor(() =>
     expect(screen.getByTestId('where')).toHaveTextContent('/admin/jobs?status=failed'),
+  )
+})
+
+test('the status chips show the chosen status, and All clears it', async () => {
+  renderJobs('/admin/jobs?status=failed&agent=link_finder')
+  const chips = await screen.findByRole('group', { name: 'Status' })
+  expect(within(chips).getByRole('button', { name: 'Fehlgeschlagen' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  )
+  expect(within(chips).getByRole('button', { name: 'Alle' })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  )
+  await userEvent.click(within(chips).getByRole('button', { name: 'Alle' }))
+  await waitFor(() =>
+    expect(screen.getByTestId('where')).toHaveTextContent(/^\/admin\/jobs\?agent=link_finder$/),
+  )
+  expect(within(chips).getByRole('button', { name: 'Alle' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
   )
 })
 
@@ -189,8 +211,7 @@ test('opens the job named in the URL', async () => {
 test('filtering by status asks the backend', async () => {
   renderJobs()
   await screen.findByText('link_finder')
-  await userEvent.click(screen.getByRole('button', { name: 'Status' }))
-  await userEvent.click(await screen.findByRole('option', { name: 'Fehlgeschlagen', hidden: true }))
+  await userEvent.click(screen.getByRole('button', { name: 'Fehlgeschlagen' }))
   await waitFor(() =>
     expect(fetchMock.mock.calls.some(([url]) => url.endsWith('/jobs?status=failed&limit=50'))).toBe(
       true,
@@ -262,6 +283,17 @@ test('a session without a TestBench user key explains why there are no jobs', as
     ).toBeInTheDocument(),
   )
   expect(screen.queryByText('Noch keine Jobs.')).not.toBeInTheDocument()
+})
+
+test('a list row names its item by unique ID, falling back to the key', async () => {
+  list = [
+    { ...RUNNING, root_key: 'REQ-ROOT', root_uid: 'iTB-RQ-7', item_ids: ['x'] },
+    { ...FAILED, root_key: 'REQ-OLD', root_uid: null, item_ids: ['y'] },
+  ]
+  renderJobs()
+  expect(await screen.findByText('iTB-RQ-7')).toBeInTheDocument()
+  expect(screen.queryByText('REQ-ROOT')).not.toBeInTheDocument()
+  expect(screen.getByText('REQ-OLD')).toBeInTheDocument()
 })
 
 test('a list row names the requirement the job is for', async () => {

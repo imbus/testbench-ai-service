@@ -13,7 +13,7 @@ import { formatActivityTime } from '../Status'
 import { CoverageReport } from './CoverageReport'
 import { LinkFinderReport } from './LinkFinderReport'
 
-const STATUS_COLORS: Record<JobStatus, string> = {
+export const STATUS_COLORS: Record<JobStatus, string> = {
   succeeded: 'var(--color-success)',
   running: 'var(--color-warning)',
   failed: 'var(--color-danger)',
@@ -28,7 +28,7 @@ export const STATUS_LABELS: Record<JobStatus, keyof Translations> = {
 export const LOCALES: Record<Lang, string> = { de: 'de-DE', en: 'en-GB' }
 
 /** Shape as well as color, so the status reads without telling red from green. */
-const STATUS_ICONS: Record<JobStatus, string> = {
+export const STATUS_ICONS: Record<JobStatus, string> = {
   running: '●',
   succeeded: '✓',
   failed: '✕',
