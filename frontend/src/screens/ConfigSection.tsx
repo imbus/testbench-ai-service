@@ -9,7 +9,7 @@ import { useConfig, useModels, useProjects } from '../api/queries'
 import { Field } from '../components/Field'
 import { ModelTable } from '../components/ModelTable'
 import { ReadOnlyField } from '../components/ReadOnlyField'
-import { ScopeTabs } from '../components/ScopeTabs'
+import { ScopeTabs, scopeAddLabels } from '../components/ScopeTabs'
 import { useTranslation } from 'react-i18next'
 import { LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt, type FieldSpec } from './fields'
 
@@ -163,7 +163,7 @@ export function ConfigSection({
               setParams(next === null ? {} : { project: next })
             }}
             globalLabel={t('globalScope')}
-            addLabel={t('addProjectOverride')}
+            addLabels={scopeAddLabels(t)}
           />
           {project !== null && (
             <div className="text-muted" style={{ fontSize: 12 }}>

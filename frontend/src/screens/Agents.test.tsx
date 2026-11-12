@@ -10,7 +10,7 @@ import { DraftProvider, useDraft } from '../state/draft'
 import type { ConfigResponse, ProjectsResponse, PromptMeta } from '../api/types'
 import { Agents } from './Agents'
 import { i18n } from '../i18n'
-import { chooseOption, dropdownValue } from '../test/prime'
+import { openPicker, pickFrom } from '../test/pickers'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -82,6 +82,11 @@ beforeEach(() => {
             provider: 'anthropic',
             key_present: true,
             models: [{ id: 'claude-opus-5', routing: 'adaptive', source: 'builtin' }],
+          },
+          {
+            provider: 'openai',
+            key_present: false,
+            models: [{ id: 'gpt-4.1', routing: 'chat', source: 'builtin' }],
           },
         ],
       })
@@ -362,25 +367,72 @@ describe('a config payload with nothing in it', () => {
 // --- the model column ---------------------------------------------------
 
 describe('the model column', () => {
-  it('shows the model the agent inherits', async () => {
+  it('shows the model the agent inherits as a value with its source', async () => {
     renderAgents()
-    await waitFor(() =>
-      expect(dropdownValue(screen.getByLabelText('reviewer · Model'))).toBe('Inherited (gpt-5.5)'),
-    )
+    const value = await screen.findByRole('button', { name: 'reviewer · Model' })
+    await waitFor(() => expect(value).toHaveTextContent('gpt-5.5'))
+    expect(value).toHaveTextContent('from the prompt')
+    expect(value).toHaveAttribute('data-state', 'inherit')
+    expect(value).not.toHaveClass('p-dropdown')
   })
 
   it('writes a pick to the global agent_models table', async () => {
     renderAgents()
-    const field = await screen.findByLabelText('reviewer · Model')
-    await chooseOption(userEvent.setup(), field, 'claude-opus-5')
+    const value = await screen.findByRole('button', { name: 'reviewer · Model' })
+    await pickFrom(userEvent.setup(), value, 'claude-opus-5')
     expect(edits()).toEqual({ 'llm_config.agent_models.reviewer': 'claude-opus-5' })
-    expect(dropdownValue(field)).toBe('claude-opus-5')
+    expect(value).toHaveTextContent('claude-opus-5')
+    expect(value).toHaveTextContent('own value')
+    expect(value).toHaveAttribute('data-state', 'override')
+  })
+
+  it('offers Inherit first, with the model it would fall back to', async () => {
+    renderAgents()
+    const value = await screen.findByRole('button', { name: 'reviewer · Model' })
+    const popup = await openPicker(userEvent.setup(), value)
+    const entries = within(popup).getAllByRole('button')
+    expect(entries[0]).toHaveTextContent('Inherit (gpt-5.5)')
+    expect(entries[0]).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('queues the removal of an own entry when Inherit is picked', async () => {
+    renderAgents()
+    const user = userEvent.setup()
+    const value = await screen.findByRole('button', { name: 'reviewer · Model' })
+    await pickFrom(user, value, 'claude-opus-5')
+    await pickFrom(user, value, /^Inherit/)
+    expect(edits()).toEqual({})
+    expect(value).toHaveAttribute('data-state', 'inherit')
+  })
+
+  it('warns at a provider without an API key', async () => {
+    renderAgents()
+    const value = await screen.findByRole('button', { name: 'reviewer · Model' })
+    const popup = await openPicker(userEvent.setup(), value)
+    await waitFor(() => expect(popup).toHaveTextContent('no API key'))
+    expect(within(popup).getByRole('button', { name: 'gpt-4.1' })).toHaveAttribute(
+      'title',
+      expect.stringMatching(/API key/),
+    )
+  })
+
+  it('filters by search and picks the first match on Enter', async () => {
+    renderAgents()
+    const user = userEvent.setup()
+    const value = await screen.findByRole('button', { name: 'reviewer · Model' })
+    const popup = await openPicker(user, value)
+    await waitFor(() => within(popup).getByRole('button', { name: 'gpt-4.1' }))
+    await user.type(within(popup).getByRole('searchbox'), '4.1')
+    expect(within(popup).queryByRole('button', { name: 'claude-opus-5' })).not.toBeInTheDocument()
+    await user.keyboard('{Enter}')
+    expect(edits()).toEqual({ 'llm_config.agent_models.reviewer': 'gpt-4.1' })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('is plain text for a viewer', async () => {
     renderAgents({ isAdmin: false })
-    await waitFor(() => expect(screen.getAllByText('Inherited (gpt-5.5)')).toHaveLength(2))
-    expect(screen.queryByLabelText('reviewer · Model')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getAllByText('gpt-5.5')).toHaveLength(2))
+    expect(screen.queryByRole('button', { name: 'reviewer · Model' })).not.toBeInTheDocument()
   })
 })
 
@@ -392,9 +444,9 @@ describe('the model of an agent per project', () => {
       within(screen.getByTestId('agent-row-reviewer')).getByRole('button', { name: /overrides/i }),
     )
     const row = screen.getByTestId('agent-project-Release 2.0')
-    await chooseOption(
+    await pickFrom(
       userEvent.setup(),
-      within(row).getByLabelText('reviewer · Model'),
+      within(row).getByRole('button', { name: 'reviewer · Model' }),
       'claude-opus-5',
     )
     expect(edits()).toEqual({

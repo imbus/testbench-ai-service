@@ -12,6 +12,7 @@ import type { ConfigResponse, ProjectsResponse, PromptForkResponse, PromptMeta }
 import { AgentDetail } from './AgentDetail'
 import { i18n } from '../i18n'
 import { chooseOption, openDropdown } from '../test/prime'
+import { pickFrom } from '../test/pickers'
 
 // The assertions match the English copy.
 beforeEach(() => i18n.changeLanguage('en'))
@@ -214,14 +215,22 @@ async function ready() {
 
 /**
  * `renderDetail` plus the setup the fork tests need: a settled scope (global,
- * or a named project reached through the add-override picker -- exactly the
+ * or a named project reached through the "+" picker -- exactly the
  * path an operator takes, and one that writes no edit by itself, per "switches
  * to a newly picked project without writing anything yet" above) and,
  * optionally, one queued edit so `draft.changeCount` is nonzero.
  */
-/** ScopeTabs' "add a project override" Dropdown, named by its `ariaLabel`. */
-function addOverridePicker(): HTMLElement {
-  return screen.getByLabelText('Add a project override')
+/** Open ScopeTabs' "+" picker and return its popup. */
+async function openOverridePicker(user = userEvent.setup()): Promise<HTMLElement> {
+  await user.click(screen.getByRole('button', { name: 'Override for a project' }))
+  return screen.getByRole('dialog', { name: 'Override for a project' })
+}
+
+/** Reach `project` through the "+" picker, the way an operator does. */
+async function pickProject(project: string): Promise<void> {
+  const user = userEvent.setup()
+  const picker = await openOverridePicker(user)
+  await user.click(within(picker).getByRole('button', { name: project }))
 }
 
 async function renderAgentDetail({
@@ -238,7 +247,7 @@ async function renderAgentDetail({
   renderDetail({ agentKey, isAdmin })
   await ready()
   if (project) {
-    await chooseOption(userEvent.setup(), addOverridePicker(), project)
+    await pickProject(project)
   }
   if (dirty) {
     await userEvent.click(screen.getByRole('switch', { name: 'enabled' }))
@@ -263,23 +272,19 @@ describe('the scope switcher', () => {
   })
 
   it('does not offer a tab for a project with no override yet', async () => {
-    // It is reachable through "add a project override", but it does not
+    // It is reachable through the "+" picker, but it does not
     // deserve a tab: there is nothing there to look at.
     renderDetail()
     await ready()
     expect(screen.queryByRole('tab', { name: 'Untouched' })).not.toBeInTheDocument()
   })
 
-  it('offers the projects with no override yet in the add-override picker', async () => {
+  it('offers the projects with no override yet in the "+" picker', async () => {
     renderDetail()
     await ready()
-    const picker = await openDropdown(userEvent.setup(), addOverridePicker())
-    expect(
-      within(picker).getByRole('option', { name: 'Untouched', hidden: true }),
-    ).toBeInTheDocument()
-    expect(
-      within(picker).queryByRole('option', { name: 'Alpha', hidden: true }),
-    ).not.toBeInTheDocument()
+    const picker = await openOverridePicker()
+    expect(within(picker).getByRole('button', { name: 'Untouched' })).toBeInTheDocument()
+    expect(within(picker).queryByRole('button', { name: 'Alpha' })).not.toBeInTheDocument()
   })
 
   it('switches to a project scope when its tab is chosen', async () => {
@@ -295,7 +300,7 @@ describe('the scope switcher', () => {
     // asked for.
     renderDetail()
     await ready()
-    await chooseOption(userEvent.setup(), addOverridePicker(), 'Untouched')
+    await pickProject('Untouched')
     expect(screen.getByRole('tab', { name: 'Untouched' })).toHaveAttribute('aria-selected', 'true')
     expect(edits()).toEqual({})
   })
@@ -705,7 +710,11 @@ describe('the agent model', () => {
   it('writes the global agent_models entry in global scope', async () => {
     renderDetail()
     await ready()
-    await chooseOption(userEvent.setup(), 'reviewer · Model', 'gpt-4.1')
+    await pickFrom(
+      userEvent.setup(),
+      screen.getByRole('button', { name: 'reviewer · Model' }),
+      'gpt-4.1',
+    )
     expect(edits()).toEqual({ 'llm_config.agent_models.reviewer': 'gpt-4.1' })
   })
 
@@ -713,7 +722,11 @@ describe('the agent model', () => {
     renderDetail()
     await ready()
     await userEvent.click(screen.getByRole('tab', { name: 'Alpha' }))
-    await chooseOption(userEvent.setup(), 'reviewer · Model', 'gpt-4.1')
+    await pickFrom(
+      userEvent.setup(),
+      screen.getByRole('button', { name: 'reviewer · Model' }),
+      'gpt-4.1',
+    )
     expect(edits()).toEqual({ 'projects.Alpha.llm_config.agent_models.reviewer': 'gpt-4.1' })
   })
 })

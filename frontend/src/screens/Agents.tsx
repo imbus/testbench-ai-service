@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button } from 'primereact/button'
 import { Column } from 'primereact/column'
 import { DataTable } from 'primereact/datatable'
 import { InputSwitch } from 'primereact/inputswitch'
@@ -236,16 +235,26 @@ function AgentList({
               ·
             </span>
           ) : (
-            <Button
+            // A plain button: Prime's icon-only button is a fixed 3rem circle,
+            // wider than this column, and keeps a focus ring after a click.
+            <button
               type="button"
-              text
-              rounded
-              size="small"
+              className="tb-expander"
               aria-expanded={expanded[row.agentKey] === true}
               aria-label={`${t('activeIn')} ${row.active.length} · ${t('overrideCount', { count: row.overriders.length })}`}
-              icon={<span style={{ fontSize: 12 }}>{expanded[row.agentKey] ? '▾' : '▸'}</span>}
               onClick={() => toggle(row.agentKey)}
-            />
+            >
+              <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                <path
+                  d="M6 4l4 4-4 4"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
           )
         }
       />
@@ -368,7 +377,7 @@ function ProjectList({
   return (
     <div
       data-testid={`agent-overrides-${agentKey}`}
-      style={{ padding: '4px 0 4px 44px', display: 'flex', flexDirection: 'column', gap: 6 }}
+      style={{ padding: '4px 0 4px 44px', display: 'flex', flexDirection: 'column', gap: 2 }}
     >
       <div
         className="text-muted"
@@ -379,6 +388,7 @@ function ProjectList({
       {active.map(({ project, overridden }) => (
         <div
           key={project}
+          className="tb-subrow"
           data-testid={`agent-project-${project}`}
           // Project and model on the left, in fixed columns so the pickers
           // line up down the list; whether the project overrides the agent or

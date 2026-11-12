@@ -204,6 +204,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   `gpt-4o*-search-preview` models and the o-series (`o1*`, `o3*`, `o4-mini*`); also
   `claude-opus-4-1*`. These names now take the fallback request unless `model_routing` maps them.
 
+- In the console's agent and LLM screens, a project without an override is reached through a
+  **+** tab after the last scope tab instead of the "Add a project override" select. It opens a
+  searchable project list; picking a project still only opens it, nothing is written until a
+  field is changed and applied.
+
+- The agent model in the console's Agents list and agent screen is shown as a value instead of
+  a select: an inherited model is dashed and names its source (global entry, project or LLM
+  default, prompt), an own value is bold. Clicking it opens a searchable list per provider that
+  marks providers without an API key and offers **Inherit** first.
+
 ### Fixed
 
 - A run whose `llm_config.model` names a model of another provider than the prompt's model now

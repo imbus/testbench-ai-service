@@ -219,23 +219,39 @@ function modelName(value: unknown): string | undefined {
  *
  * `read` looks a path up -- through the draft, so a pending pick shows before
  * it is applied. `own` is what the scope itself states; `inherited` is what
- * would apply without it.
+ * would apply without it, and `source` where that inherited model is set.
  */
 export function effectiveAgentModel(
   read: (path: string) => unknown,
   scope: Scope,
   agentKey: string,
   promptModel: string | undefined,
-): { own: string | undefined; inherited: string | undefined } {
+): {
+  own: string | undefined
+  inherited: string | undefined
+  source: InheritedModelSource | undefined
+} {
   const global: Scope = { kind: 'global' }
-  const candidates =
+  const candidates: [InheritedModelSource, unknown][] =
     scope.kind === 'global'
-      ? [read(joinPath(['llm_config', 'model']))]
+      ? [['llmModel', read(joinPath(['llm_config', 'model']))]]
       : [
-          read(agentModelPath(global, agentKey)),
-          read(projectLlmPath(scope.project, 'model')),
-          read(joinPath(['llm_config', 'model'])),
+          ['globalAgent', read(agentModelPath(global, agentKey))],
+          ['projectModel', read(projectLlmPath(scope.project, 'model'))],
+          ['llmModel', read(joinPath(['llm_config', 'model']))],
         ]
-  const inherited = candidates.map(modelName).find((model) => model !== undefined) ?? promptModel
-  return { own: modelName(read(agentModelPath(scope, agentKey))), inherited }
+  if (promptModel) candidates.push(['prompt', promptModel])
+  const found = candidates.find(([, value]) => modelName(value) !== undefined)
+  return {
+    own: modelName(read(agentModelPath(scope, agentKey))),
+    inherited: found ? modelName(found[1]) : undefined,
+    source: found?.[0],
+  }
 }
+
+/**
+ * Where an agent's inherited model is set: the global `agent_models` entry,
+ * the project's `llm_config.model`, the global `llm_config.model`, or the
+ * prompt variant.
+ */
+export type InheritedModelSource = 'globalAgent' | 'projectModel' | 'llmModel' | 'prompt'

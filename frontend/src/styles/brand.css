@@ -223,6 +223,206 @@ a:hover {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+/* Not from the artboard: one line inside an expanded table row, such as a
+   project under an agent. It takes the hover itself, so only the line under
+   the pointer lights up; the negative margin keeps the text where it was. */
+.tb-subrow {
+  padding: 4px 6px;
+  margin: 0 -6px;
+}
+.tb-subrow:hover {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+/* Not from the artboard: the chevron that expands a table row. Small and
+   quiet at rest; it turns down when open and shows a ring only for keyboard
+   focus. */
+.tb-expander {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  cursor: pointer;
+}
+.tb-expander svg {
+  transition: transform 0.15s ease;
+}
+.tb-expander[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+.tb-expander:hover,
+.tb-expander[aria-expanded='true'] {
+  color: var(--color-accent-fg);
+}
+.tb-expander:hover {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.tb-expander:focus-visible {
+  outline: 2px solid var(--color-accent-fg);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-expander svg {
+    transition: none;
+  }
+}
+/* Not from the artboard: the "+" tab of ScopeTabs. */
+.scope-add:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent) !important;
+}
+.scope-add:focus-visible {
+  outline: 2px solid var(--color-accent-fg);
+  outline-offset: -2px;
+}
+
+/* Not from the artboard: SearchPopover, the searchable pick list of the "+"
+   tab and of the agent model. */
+.tb-popover {
+  position: fixed;
+  z-index: 1100;
+  max-width: min(360px, 90vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+  text-align: left;
+}
+.tb-popover > input {
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: transparent;
+  color: var(--color-text);
+  outline-offset: -2px;
+}
+.tb-popover > ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.tb-popover-foot {
+  font-size: 11px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--color-divider);
+}
+.tb-popover-empty {
+  padding: 6px 12px;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.tb-popover-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.tb-popover-group .warn {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-danger);
+}
+.tb-popover-item {
+  font: inherit;
+  font-size: 13px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tb-popover-item:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.tb-popover-item:focus-visible {
+  outline: 2px solid var(--color-accent-fg);
+  outline-offset: -2px;
+}
+.tb-popover-item[aria-current='true'] {
+  color: var(--color-accent-fg);
+  font-weight: 600;
+}
+.tb-popover-item .check {
+  width: 12px;
+  flex: none;
+  color: var(--color-accent-fg);
+}
+
+/* Not from the artboard: the agent model as an inline value (AgentModelPicker).
+   Inherited reads dashed with its source; an own entry bold on the accent. */
+.model-inline {
+  font: inherit;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+button.model-inline {
+  cursor: pointer;
+}
+.model-inline .name {
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-text) 45%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-inline[data-state='override'] .name {
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-accent);
+}
+.model-inline .src {
+  font-size: 11px;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.model-inline[data-state='override'] .src {
+  color: var(--color-accent-fg);
+}
+.model-inline .chev {
+  font-size: 10px;
+  opacity: 0;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  transition: opacity 0.12s;
+}
+.model-inline:hover .chev,
+.model-inline:focus-visible .chev,
+.model-inline[aria-expanded='true'] .chev {
+  opacity: 1;
+}
+.model-inline:focus-visible {
+  outline: 2px solid var(--color-accent-fg);
+  outline-offset: 2px;
+}
+.model-inline .name.missing {
+  border-bottom-style: dotted;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
 .tb-row-link {
   color: inherit;
   text-decoration: none;

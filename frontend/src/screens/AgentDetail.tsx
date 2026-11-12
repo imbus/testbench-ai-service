@@ -19,7 +19,7 @@ import type { ConfigIssue, PromptForkResponse, PromptVarDefinition } from '../ap
 import { Field } from '../components/Field'
 import { Modal } from '../components/Modal'
 import { ReadOnlyField } from '../components/ReadOnlyField'
-import { ScopeTabs } from '../components/ScopeTabs'
+import { ScopeTabs, scopeAddLabels } from '../components/ScopeTabs'
 import { AgentModelPicker } from '../components/AgentModelPicker'
 import type { TFunction } from 'i18next'
 import { useTranslation } from 'react-i18next'
@@ -190,7 +190,7 @@ export function AgentDetail({
         addable={addable}
         onSelect={setProject}
         globalLabel={t('globalScope')}
-        addLabel={t('addProjectOverride')}
+        addLabels={scopeAddLabels(t)}
       />
 
       {meta.isError && (

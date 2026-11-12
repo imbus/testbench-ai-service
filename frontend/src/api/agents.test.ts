@@ -331,25 +331,35 @@ describe('effectiveAgentModel', () => {
     expect(effectiveAgentModel(read, { kind: 'global' }, 'reviewer', 'gpt-5')).toEqual({
       own: 'claude-haiku-5',
       inherited: 'gpt-4o',
+      source: 'llmModel',
     })
   })
 
   it('in a project, the global agent entry beats the project model', () => {
     expect(
       effectiveAgentModel(read, { kind: 'project', project: 'Plain' }, 'reviewer', 'gpt-5'),
-    ).toEqual({ own: undefined, inherited: 'claude-haiku-5' })
+    ).toEqual({ own: undefined, inherited: 'claude-haiku-5', source: 'globalAgent' })
   })
 
   it('in a project, the project model beats the global one', () => {
     expect(
       effectiveAgentModel(read, { kind: 'project', project: 'Release 2.0' }, 'describer', 'gpt-5'),
-    ).toEqual({ own: 'gpt-4.1', inherited: 'o3' })
+    ).toEqual({ own: 'gpt-4.1', inherited: 'o3', source: 'projectModel' })
   })
 
   it('falls back to the prompt model', () => {
     expect(effectiveAgentModel(() => null, { kind: 'global' }, 'reviewer', 'gpt-5')).toEqual({
       own: undefined,
       inherited: 'gpt-5',
+      source: 'prompt',
+    })
+  })
+
+  it('names no source when nothing states a model', () => {
+    expect(effectiveAgentModel(() => null, { kind: 'global' }, 'reviewer', undefined)).toEqual({
+      own: undefined,
+      inherited: undefined,
+      source: undefined,
     })
   })
 })

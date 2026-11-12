@@ -174,6 +174,13 @@ The **Agents** screen lists every agent the service knows about, with a switch
 for each one, its endpoint path, and how many projects override it. Expanding a
 row names those projects.
 
+The **Model** column shows the model each agent runs on. An inherited model is
+underlined with a dashed line and names where it comes from: the global entry,
+the project's or the global LLM default, or the prompt. A model set for this
+agent is bold and marked as an own value. Clicking the model opens a searchable
+list per provider; a provider without an API key is marked, since runs with its
+models fail. **Inherit** at the top removes the agent's own entry again.
+
 The **Matrix** view is the same information as a grid of agents against
 projects, which is the only place the whole override picture is visible at once.
 
@@ -184,9 +191,10 @@ every other agent alone.
 ### Agent detail
 
 Selecting an agent opens its own screen, with a scope switcher across the top:
-**Global**, then one tab per project that overrides this agent, plus a picker
-for adding an override to a project that does not have one yet. Choosing a scope
-only changes what you are looking at — nothing is written until you apply.
+**Global**, then one tab per project that overrides this agent. The **+** tab
+after them opens a searchable list of the projects that have no override yet;
+picking one opens that project's scope. Choosing a scope only changes what you
+are looking at — nothing is written until you change a field and apply.
 
 In each scope you can set:
 
