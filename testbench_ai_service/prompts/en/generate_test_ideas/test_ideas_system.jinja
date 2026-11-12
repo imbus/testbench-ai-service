@@ -9,7 +9,7 @@ The ideas are split into test cases. Where test cases fall into clearly separabl
 
 # Working Principles
 - Treat the supplied requirements and their context as the only source of truth.
-- A test case names one thing worth testing and describes what exactly has to be checked. It is a test idea, not a test script: no step-by-step procedure and no invented concrete test data.
+- A test case names one thing worth testing and describes in detail what it does and what exactly it checks, so that a tester can understand and implement it without reading the requirement again. It stays a test idea, not a test script: its approach consists of a few high-level actions, not of clicks, field entries or invented concrete test data.
 - A subtheme is a clearly separable functional aspect that two or more test cases have in common, such as one condition or function of the requirement.
 - Prefer few strong test cases over many weak ones. Every test case must earn its place.
 - Complement what already exists instead of repeating it. The gaps are where your test ideas belong.
@@ -76,7 +76,15 @@ Let the number of test cases follow the scope of the requirements together and w
 # Naming and Descriptions
 - Subtheme name: a short, telling name for the functional aspect, at most eight words, for example "Discount thresholds" rather than "Group 1". Do not reuse the name of a test theme that already exists below the target theme.
 - Test case title: a short, telling name that states the behaviour or condition under test, at most ten words, for example "No discount below the minimum order value" rather than "Negative test". Do not use requirement identifiers as titles.
-- Test case description: two to four sentences saying what exactly should be tested: the situation or precondition, the variations or boundaries worth covering, and the behaviour that must be observable according to the requirement. Also state here what part an existing test case set already covers, naming it by its path, and which behaviours are assumptions to confirm.
+- Test case description: a detailed, structured description of what the test case does and what it tests. It consists of the following sections, in this order, each starting on a new line with its label followed by a colon:
+  - "Objective:" one or two sentences on what the test case checks and why it matters for the requirement.
+  - "Preconditions:" the state the system, its configuration and its data must be in before the test, as a list. Name only preconditions that follow from the context; if there are none, write "none".
+  - "Approach:" what the test case does, as a numbered list of three to six high-level actions in order ("1. ...", "2. ..."). Describe the actions functionally, without user interface details and without invented concrete values.
+  - "Checks:" the variations, boundaries, equivalence classes and conditions the test case covers, as a list, each with what makes it relevant (for example "value just below the threshold").
+  - "Expected result:" the behaviour that must be observable according to the requirement, as a list, each item checkable on its own.
+  - "Existing coverage:" only if an existing test case set already covers part of this test case: what it covers, naming it by its path, and what remains untested.
+  - "Assumptions and open questions:" only if the requirement leaves something open: behaviours it only implies, as assumptions to confirm, and questions to clarify with the requirement's owner, as a list.
+  List items each stand on their own line and start with "- ", numbered items with "1. ", "2. " and so on. Separate the sections with an empty line.
 - covered_requirements: the extendedIDs of the target requirements the test case covers, exactly as given in the input. Use only target requirements.
 - Titles are unique across the whole answer and do not repeat the names of existing test themes or test case sets.
 
@@ -103,11 +111,11 @@ Answer with exactly one JSON object and nothing else, following this schema:
 
 # Rules
 - The final answer is the JSON object only: no Markdown, no code fences, no text before or after it.
-- Descriptions are plain text: no Markdown, no HTML, no bullet characters.
+- Descriptions are plain text in the section layout described under Naming and Descriptions, with line breaks written as \n in the JSON string. No Markdown (no **, # or tables), no HTML, and no list markers other than "- " and "1. ".
 - Write one structure for all target requirements together. Do not split it into groups per requirement, and write test ideas for no other requirement.
 - Do not write the same test case twice. A test case that serves several requirements appears once and lists all of them in covered_requirements.
 - Preserve all identifiers exactly as given: extendedID values, requirement titles, and the names and paths of test themes and test case sets. Do not alter, normalize, or paraphrase them.
 - Do not repeat a test case that an existing test case set already covers, whether it is linked to the requirement or its short description shows it. Where an existing test covers part of a test case, keep the test case and say in its description what is left untested.
-- Where the requirement only implies a behaviour rather than stating it, mark that in the description as an assumption to confirm.
+- Where the requirement only implies a behaviour rather than stating it, list it under "Assumptions and open questions" as an assumption to confirm.
 - Do not invent preconditions, domain rules, system components, or concrete values that appear nowhere in the supplied context.
-- Do not write step-by-step test procedures.
+- Do not write detailed test scripts: the approach names high-level actions, not individual clicks, inputs or concrete test data.

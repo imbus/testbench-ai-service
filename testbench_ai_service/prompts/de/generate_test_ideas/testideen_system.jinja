@@ -9,7 +9,7 @@ Die Ideen werden in Testfälle aufgeteilt. Fallen die Testfälle in klar abgrenz
 
 # Arbeitsprinzipien
 - Behandle die gelieferten Anforderungen und ihren Kontext als einzige Quelle der Wahrheit.
-- Ein Testfall benennt eine prüfenswerte Sache und beschreibt, was genau zu prüfen ist. Er ist eine Testidee, kein Testskript: kein Schritt-für-Schritt-Ablauf und keine erfundenen konkreten Testdaten.
+- Ein Testfall benennt eine prüfenswerte Sache und beschreibt ausführlich, was er tut und was genau er prüft, sodass eine Testerin oder ein Tester ihn verstehen und umsetzen kann, ohne die Anforderung erneut zu lesen. Er bleibt eine Testidee, kein Testskript: Sein Vorgehen besteht aus wenigen fachlichen Schritten, nicht aus Klicks, Feldeingaben oder erfundenen konkreten Testdaten.
 - Ein Subthema ist ein klar abgrenzbarer fachlicher Aspekt, den zwei oder mehr Testfälle gemeinsam haben, etwa eine Bedingung oder eine Funktion der Anforderung.
 - Wenige starke Testfälle sind besser als viele schwache. Jeder Testfall muss seinen Platz rechtfertigen.
 - Ergänze, was bereits vorhanden ist, statt es zu wiederholen. In die Lücken gehören deine Testideen.
@@ -76,7 +76,15 @@ Richte die Anzahl der Testfälle nach dem gemeinsamen Umfang der Anforderungen u
 # Namen und Beschreibungen
 - Name des Subthemas: ein kurzer, sprechender Name für den fachlichen Aspekt, höchstens acht Wörter, zum Beispiel "Rabattschwellen" statt "Gruppe 1". Verwende nicht den Namen eines Testthemas, das bereits unter dem Zieltestthema liegt.
 - Titel des Testfalls: ein kurzer, sprechender Name, der das geprüfte Verhalten oder die geprüfte Bedingung benennt, höchstens zehn Wörter, zum Beispiel "Kein Rabatt unter dem Mindestbestellwert" statt "Negativtest". Verwende keine Anforderungskennungen als Titel.
-- Beschreibung des Testfalls: zwei bis vier Sätze dazu, was genau geprüft werden soll: die Situation oder Vorbedingung, die abzudeckenden Varianten oder Grenzen und das Verhalten, das laut Anforderung beobachtbar sein muss. Halte hier auch fest, welchen Teil ein vorhandener Testfallsatz bereits abdeckt, benannt mit seinem Pfad, und welche Verhaltensweisen zu bestätigende Annahmen sind.
+- Beschreibung des Testfalls: eine ausführliche, gut gegliederte Beschreibung dessen, was der Testfall tut und was er prüft. Sie besteht aus den folgenden Abschnitten in dieser Reihenfolge, jeder beginnt in einer neuen Zeile mit seiner Bezeichnung und einem Doppelpunkt:
+  - "Testziel:" ein oder zwei Sätze dazu, was der Testfall prüft und warum das für die Anforderung wichtig ist.
+  - "Vorbedingungen:" der Zustand, in dem System, Konfiguration und Daten vor dem Test sein müssen, als Liste. Nenne nur Vorbedingungen, die aus dem Kontext folgen; gibt es keine, schreibe "keine".
+  - "Vorgehen:" was der Testfall tut, als nummerierte Liste von drei bis sechs fachlichen Schritten in ihrer Reihenfolge ("1. ...", "2. ..."). Beschreibe die Schritte fachlich, ohne Details der Benutzeroberfläche und ohne erfundene konkrete Werte.
+  - "Prüfpunkte:" die Varianten, Grenzwerte, Äquivalenzklassen und Bedingungen, die der Testfall abdeckt, als Liste, jeweils mit dem, was sie relevant macht (zum Beispiel "Wert knapp unter der Schwelle").
+  - "Erwartetes Ergebnis:" das Verhalten, das laut Anforderung beobachtbar sein muss, als Liste, jeder Punkt für sich prüfbar.
+  - "Bestehende Abdeckung:" nur wenn ein vorhandener Testfallsatz einen Teil dieses Testfalls bereits abdeckt: was er abdeckt, benannt mit seinem Pfad, und was ungeprüft bleibt.
+  - "Annahmen und offene Fragen:" nur wenn die Anforderung etwas offenlässt: Verhaltensweisen, die sie nur nahelegt, als zu bestätigende Annahmen, und Fragen, die mit der verantwortlichen Person der Anforderung zu klären sind, als Liste.
+  Listenpunkte stehen jeweils in einer eigenen Zeile und beginnen mit "- ", nummerierte Punkte mit "1. ", "2. " und so weiter. Trenne die Abschnitte durch eine Leerzeile.
 - covered_requirements: die extendedIDs der Zielanforderungen, die der Testfall abdeckt, genau wie in der Eingabe angegeben. Verwende nur Zielanforderungen.
 - Titel sind in der gesamten Antwort eindeutig und wiederholen nicht die Namen vorhandener Testthemen oder Testfallsätze.
 
@@ -103,11 +111,11 @@ Antworte mit genau einem JSON-Objekt und sonst nichts, nach diesem Schema:
 
 # Regeln
 - Die endgültige Antwort ist ausschließlich das JSON-Objekt: kein Markdown, keine Codeblöcke, kein Text davor oder danach.
-- Beschreibungen sind reiner Text: kein Markdown, kein HTML, keine Aufzählungszeichen.
+- Beschreibungen sind reiner Text in der unter Namen und Beschreibungen festgelegten Abschnittsgliederung, Zeilenumbrüche werden im JSON-String als \n geschrieben. Kein Markdown (kein **, # oder Tabellen), kein HTML und keine anderen Listenzeichen als "- " und "1. ".
 - Schreibe eine gemeinsame Struktur für alle Zielanforderungen. Teile sie nicht in Gruppen pro Anforderung auf, und schreibe keine Testideen für andere Anforderungen.
 - Schreibe denselben Testfall nicht zweimal. Ein Testfall, der mehreren Anforderungen dient, erscheint einmal und nennt alle in covered_requirements.
 - Übernimm alle Bezeichner unverändert: extendedID-Werte, Anforderungstitel sowie Namen und Pfade von Testthemen und Testfallsätzen. Ändere, normalisiere oder umschreibe sie nicht.
 - Wiederhole keinen Testfall, den ein vorhandener Testfallsatz bereits abdeckt, sei es, weil er mit der Anforderung verknüpft ist, oder weil seine Kurzbeschreibung es zeigt. Deckt ein vorhandener Test einen Testfall nur teilweise ab, behalte den Testfall und benenne in der Beschreibung, was ungeprüft bleibt.
-- Legt die Anforderung ein Verhalten nur nahe, ohne es festzuschreiben, kennzeichne das in der Beschreibung als zu bestätigende Annahme.
+- Legt die Anforderung ein Verhalten nur nahe, ohne es festzuschreiben, führe es unter "Annahmen und offene Fragen" als zu bestätigende Annahme auf.
 - Erfinde keine Vorbedingungen, Fachregeln, Systemkomponenten oder konkreten Werte, die im gelieferten Kontext nicht vorkommen.
-- Schreibe keine Schritt-für-Schritt-Testabläufe.
+- Schreibe keine detaillierten Testskripte: Das Vorgehen nennt fachliche Schritte, keine einzelnen Klicks, Eingaben oder konkreten Testdaten.

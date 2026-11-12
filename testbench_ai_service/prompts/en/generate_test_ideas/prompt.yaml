@@ -11,7 +11,7 @@ default_model: "gpt-5.5"
 default_variant: "Test Ideas"
 variants:
   - name: "Test Ideas"
-    description: "Derives test ideas from the requirements and their context, structured like a TestBench test structure: test cases, grouped under test themes where they share a topic, each with a telling name and a description of what exactly should be tested."
+    description: "Derives test ideas from the requirements and their context, structured like a TestBench test structure: test cases, grouped under test themes where they share a topic, each with a telling name and a detailed, structured description: objective, preconditions, approach, checks, expected result, existing coverage, and open assumptions."
     model: "gpt-5.5"
     messages:
       - role: "system"

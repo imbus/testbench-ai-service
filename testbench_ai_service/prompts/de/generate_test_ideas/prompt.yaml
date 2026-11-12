@@ -11,7 +11,7 @@ default_model: "gpt-5.5"
 default_variant: "Testideen"
 variants:
   - name: "Testideen"
-    description: "Leitet Testideen aus den Anforderungen und ihrem Kontext ab, strukturiert wie eine Teststruktur in TestBench: Testfälle, bei gemeinsamem Thema unter Testthemen gruppiert, jeweils mit sprechendem Namen und einer Beschreibung, was genau geprüft werden soll."
+    description: "Leitet Testideen aus den Anforderungen und ihrem Kontext ab, strukturiert wie eine Teststruktur in TestBench: Testfälle, bei gemeinsamem Thema unter Testthemen gruppiert, jeweils mit sprechendem Namen und einer ausführlichen, gegliederten Beschreibung: Testziel, Vorbedingungen, Vorgehen, Prüfpunkte, erwartetes Ergebnis, bestehende Abdeckung und offene Annahmen."
     model: "gpt-5.5"
     messages:
       - role: "system"
