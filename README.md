@@ -8,21 +8,21 @@ An asynchronous REST API service that connects [imbus TestBench](https://www.tes
 
 ## Features
 
-- **Multiple Agents:** test case set reviews, description generation, and defect explanations, each configurable independently
+- **Multiple Agents:** test case set reviews, description generation and defect explanations, plus opt-in agents for test ideas, test planning, requirement coverage checks and missing-link suggestions, each configurable independently
 - **Pluggable LLM providers:** ships with OpenAI, Azure OpenAI, and Anthropic support; implement a custom `LLMClient` to bring your own
 - **Automatic provider routing:** model names starting with `gpt-*` and o-series (`o1`, `o3`, `o4-mini`, …) are routed to OpenAI, `claude-*` to Anthropic — regardless of the global provider setting
 - **Configurable prompts:** YAML-based templates with Jinja2 variables and per-project overrides
 - **Per-project configuration:** language, LLM provider, prompt variant, and enabled agents can be overridden per TestBench project
 - **Localization:** built-in English and German translations for AI-generated output
 - **JWT authentication:** every request is validated against the TestBench REST API using a JWT token; no separate credential management
-- **Async processing:** Agents run as background tasks so the API responds immediately
+- **Async processing:** Agents run as background tasks so the API responds immediately; every run is tracked as a job with status, progress and report
 - **Swagger UI:** interactive API docs at `/docs`
-- **Web console:** read-only service status and configuration at `/admin`, signed in with TestBench credentials
+- **Web console:** service status, configuration, agents, projects, prompts and your own jobs at `/admin`, signed in with TestBench credentials; administrators can edit
 - **SSL/TLS & reverse proxy support:** optional HTTPS with mTLS and trusted-proxy headers
 
 ## Installation
 
-**With pip** (Python 3.10–3.14 required):
+**With pip** (Python 3.11–3.14 required):
 
 ```bash
 pip install testbench-ai-service

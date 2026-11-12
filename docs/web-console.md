@@ -51,6 +51,13 @@ every request that changes state.
 A session ends after 60 minutes without activity, after 8 hours in total, or as
 soon as you sign out — whichever comes first.
 
+If the sign-in fails, the console names the likely cause — wrong credentials,
+TestBench not reachable, an invalid `tb_server_url`, or the service itself not
+answering — with a hint what to check. The raw error message is kept under
+**Details**.
+
+The language you pick (DE/EN) and the theme are remembered in the browser.
+
 ### Roles
 
 The console reads your global TestBench roles at sign-in:
@@ -166,7 +173,11 @@ instead.
 
 ## Jobs
 
-The **Jobs** screen lists the agent runs you triggered, newest first, with their status and progress. Select one to see its detail on the right: project, element, warnings, the error of a failed run and, if the agent stores one, its report. The list refreshes every few seconds while a job runs, otherwise every ten seconds and whenever you switch back to the tab, so jobs you start from TestBench show up without a reload. You only ever see your own jobs, administrators included. Jobs are deleted after `retention_days` (see [Configuration](configuration.md#jobs)).
+The **Jobs** screen lists the agent runs you triggered, newest first: agent, item (the unique ID of the element the agent was triggered on), project, start time, status and duration. The duration ticks every second while a job runs. Narrow the list by agent, and by status with the chips **All**, **Running**, **Succeeded** and **Failed**.
+
+Each row is a link to the job's own page, `/admin/jobs/<job id>`, so you can open a job in a new tab, copy its link or compare two reports side by side. The page shows project, element, progress, warnings, the error of a failed run and, if the agent stores one, its report. **Newer job** and **Older job** step through the filtered list; **All jobs** returns to it with the filters kept. The same view opens outside the console when the TestBench plugin links to a job (see [Agents](agents/index.md)).
+
+The list refreshes every few seconds while a job runs, otherwise every ten seconds and whenever you switch back to the tab, so jobs you start from TestBench show up without a reload. You only ever see your own jobs, administrators included. Jobs are deleted after `retention_days` (see [Configuration](configuration.md#jobs)).
 
 ## Agents
 

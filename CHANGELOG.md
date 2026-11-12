@@ -10,6 +10,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- Four opt-in agents, each documented under `docs/agents/`:
+  - **Test Idea Generator** (`requirement`): writes test ideas for the requirements below a test
+    theme into the theme's description. From TestBench 5.0 it also creates one test case set per
+    idea, all or nothing; `create_test_case_sets = false` switches that off, and a token without
+    `ModifyTestStructureElements` falls back to the description with a job warning.
+  - **Test Planner** (`test_planner`): plans the most diverse test selection of a cycle via
+    embeddings and sets the selected test cases to Planned.
+  - **Coverage Checker** (`coverage_checker`): checks whether the test case sets linked to a
+    requirement prove all its aspects and writes the result into their review comments.
+  - **Link Finder** (`link_finder`): suggests unlinked test case sets that test a requirement,
+    with a hint in each candidate's review comment. Links are never set.
+- Multi-step prompt variants. A variant may carry `steps` -- one message list per named step --
+  instead of `messages`, for agents that ask the model several times. `prompt.schema.json`
+  accepts them, and the console's prompt editor edits and renders each step's messages; steps
+  cannot be added, removed or renamed there. Documented in `docs/prompts.md`.
+- A job can be opened in the browser. `POST /jobs/{job_id}/view-ticket` hands the job's owner a
+  one-time ticket for `/jobs/{job_id}/view`, a standalone page that shows the job and refreshes
+  while it runs; the JWT never reaches the browser. Each job now also keeps the `root_uid` of the
+  element it was triggered on. Documented in `docs/agents/index.md`.
+- The console's Jobs screen filters by status with chips, shows each job's duration and a status
+  pill, names the item by its unique ID, and opens every job on its own page
+  (`/admin/jobs/<job id>`) with a real link. Documented in `docs/web-console.md`.
+- The service root `/` redirects to the web console, or to the Swagger UI when the console is
+  disabled.
+- A failed console sign-in names the likely cause (wrong credentials, TestBench unreachable,
+  invalid `tb_server_url`, service down) with a hint; the raw message stays under **Details**.
+  The console remembers the picked language across reloads.
+
 - A model per agent. `[testbench-ai-service.llm_config.agent_models]` maps agent keys to models
   and takes precedence over `model`; a project's `llm_config.agent_models` overrides it agent by
   agent. The web console's Agents screen picks the global model in the model column, which now
@@ -144,6 +172,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Changed
 
+- **Python 3.11 or newer is required.** Python 3.10 is no longer supported.
+
 - **Saving a prompt from the console rewrites the whole `prompt.yaml` and does not preserve
   hand-written comments.** The prompt editor writes YAML with `PyYAML` rather than a
   comment-preserving library — unlike the configuration editor's `config.toml` writer. Key
@@ -215,6 +245,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   marks providers without an API key and offers **Inherit** first.
 
 ### Fixed
+
+- Write-back templates and prompt message templates are now rendered in a sandboxed Jinja
+  environment at run time, as the console's preview already was. Before, an edited template
+  could reach Python internals and run code in the service process.
+- A `port` of 0, a negative one or one above 65535 is now rejected when the configuration is
+  validated -- also in the console's preview -- instead of failing when the server binds.
 
 - A run whose `llm_config.model` names a model of another provider than the prompt's model now
   reaches that provider's client. The client was chosen by the prompt's model.

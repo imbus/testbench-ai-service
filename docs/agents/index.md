@@ -25,12 +25,12 @@ Execution-level agents, such as the Defect Explainer, do not support XML-based t
 | [`test_case_set_reviewer`](test-case-set-reviewer.md)   | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification.                  |
 | [`test_case_set_describer`](test-case-set-describer.md) | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
 | [`defect_explainer`](defect-explainer.md)               | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview.     |
-| [`requirement`](generate-test-ideas.md) (opt-in)         | AI-generated test ideas for the requirements assigned below a test theme. Results are added to the description of the test theme. Not registered by default. |
 
 Opt-in (not part of the default agents, enable it in the `config.toml`):
 
 | Agent key                             | Description                                                                                                         |
 | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [`requirement`](generate-test-ideas.md) | AI-generated test ideas for the requirements assigned below a test theme. Results are added to the description of the test theme; from TestBench 5.0 every idea also becomes a test case set. |
 | [`test_planner`](test-planner.md)     | Plans the most diverse test selection of a cycle via embeddings: sets the selected test cases to Planned and logs the result. |
 | [`coverage_checker`](coverage-checker.md) | Checks whether the tests linked to a requirement prove all its aspects. Results are added to the review comment of every linked test case set. |
 | [`link_finder`](link-finder.md) | Finds test case sets that test a requirement but are not linked to it. Every candidate gets a hint in its review comment; links are never set. |

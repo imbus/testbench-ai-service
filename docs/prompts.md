@@ -139,7 +139,31 @@ Each message must have **either** `text` (inline template) **or** `file` (path t
 | `description` | String | Human-readable description.                                                                          | No       |
 | `model`       | String | LLM model to use (e.g.,`"gpt-5.5"`, `"claude-opus-5-5"`). Falls back to `default_model` if not set.         | No       |
 | `vars`        | Object | Declared user-provided variables for this variant (see [Variable declarations](#variable-declarations)). | No       |
-| `messages`    | List[Message]   | Ordered list of message blocks.                                                                      | Yes      |
+| `messages`    | List[Message]   | Ordered list of message blocks. Empty (`[]`) when the variant uses `steps`.                          | Yes      |
+| `steps`       | Object | Named message lists for agents that ask the model several times (see [Multi-step variants](#multi-step-variants)). | No       |
+
+#### Multi-step variants
+
+Some agents, such as the [Coverage Checker](agents/coverage-checker.md) and the [Link Finder](agents/link-finder.md), ask the model several times in one run. Their variants carry `steps` instead of `messages`: one message list per named step. A variant uses either `messages` or `steps`, never both, and every step needs at least one message.
+
+```yaml
+variants:
+  - name: "Link search"
+    messages: []
+    steps:
+      aspects:
+        - role: "system"
+          file: "aspects_system.jinja"
+        - role: "user"
+          file: "aspects_user.jinja"
+      prefilter:
+        - role: "system"
+          file: "prefilter_system.jinja"
+        - role: "user"
+          file: "prefilter_user.jinja"
+```
+
+The step names are fixed by the agent's code: every variant of the prompt must offer each step the agent renders, otherwise the service refuses to start. You can change the text of a step's messages, but not add, remove or rename steps.
 
 #### Message fields
 
