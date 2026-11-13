@@ -1,0 +1,35 @@
+name: Version & Changelog
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Version & changelog check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install packaging
+        run: pip install packaging
+
+      - name: Check version and CHANGELOG.md
+        env:
+          BASE_REF: origin/${{ github.base_ref }}
+          # Label "skip-changelog" or Dependabot PRs skip the "CHANGELOG.md changed" rule.
+          SKIP_CHANGELOG: ${{ contains(github.event.pull_request.labels.*.name, 'skip-changelog') || github.event.pull_request.user.login == 'dependabot[bot]' }}
+        run: python .github/scripts/check_version_changelog.py
