@@ -54,7 +54,7 @@ export function UploadDialog({
         </div>
       )}
 
-      {upload.isError && <PackageError error={upload.error} />}
+      {upload.isError && <PackageError error={upload.error} upload />}
 
       {uploaded && (
         <>

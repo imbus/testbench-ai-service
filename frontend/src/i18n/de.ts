@@ -392,7 +392,8 @@ export const de = {
   packagesDefaultDirs:
     'Agenten aus einem Paket brauchen eigene Prompt- und Template-Ordner, der Dienst verwendet aber die mitgelieferten. Kopieren Sie diese mit `testbench-ai-service init --prompts-dir prompts --templates-dir templates` (oder setzen Sie prompts_dir und templates_dir in der config.toml) und starten Sie den Dienst neu.',
   packagesFileConflicts:
-    'Einige Prompt- oder Template-Dateien gibt es schon mit anderem Inhalt. Wählen Sie, welche die Paketversion ersetzt, und senden Sie erneut.',
+    'Einige Prompt- oder Template-Dateien gibt es schon mit anderem Inhalt. Entscheiden Sie je Datei, ob Sie Ihre behalten oder durch die Paketversion ersetzen, und senden Sie erneut.',
+  packagesKeepFile: 'meine Datei behalten',
   packagesReplaceFile: 'durch Paketversion ersetzen',
   packagesViewDiff: 'Diff ansehen',
   packagesCurrent: 'Aktuelle Datei',
@@ -414,6 +415,8 @@ export const de = {
   packagesErrorTooLarge:
     'Die Datei ist größer, als der Server annimmt (agent_packages.max_upload_mb).',
   packagesErrorInvalid: 'Das Paket wurde abgelehnt.',
+  packagesErrorForbidden:
+    'Sie dürfen das nicht, oder Ihre Sitzung ist abgelaufen. Melden Sie sich erneut mit einem Admin-Konto an.',
   packagesErrorGeneric: 'Die Aktion ist fehlgeschlagen.',
 } as const
 

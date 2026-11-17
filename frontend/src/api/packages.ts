@@ -106,15 +106,19 @@ export function useRegisterAgents() {
       version,
       agents,
       overwrite = [],
+      keep = [],
     }: {
       name: string
       version: string
       agents: RegisterAgentRequest[]
+      /** Conflicting files the package version replaces. */
       overwrite?: string[]
+      /** Conflicting files that stay as they are. */
+      keep?: string[]
     }) =>
       apiFetch<RegisterResult>(`${versionPath(name, version)}/register`, {
         method: 'POST',
-        body: JSON.stringify({ agents, overwrite }),
+        body: JSON.stringify({ agents, overwrite, keep }),
       }),
     onSuccess: refresh,
   })
@@ -128,14 +132,16 @@ export function useActivateVersion() {
       name,
       version,
       overwrite = [],
+      keep = [],
     }: {
       name: string
       version: string
       overwrite?: string[]
+      keep?: string[]
     }) =>
       apiFetch<RegisterResult>(`${versionPath(name, version)}/activate`, {
         method: 'POST',
-        body: JSON.stringify({ overwrite }),
+        body: JSON.stringify({ overwrite, keep }),
       }),
     onSuccess: refresh,
   })
@@ -172,13 +178,20 @@ function detailCode(detail: unknown): string | undefined {
 /**
  * The translation for a failed package call. The backend's `detail` is English
  * only, so the console names the case by status and `detail.code`, and shows
- * the backend text as secondary information.
+ * the backend text as secondary information. A 403 means "uploading is off"
+ * only for the upload call (or when the server says so); otherwise the session
+ * lacks the admin role or has expired.
  */
-export function packageErrorKey(error: unknown): keyof Translations {
+export function packageErrorKey(
+  error: unknown,
+  { upload = false }: { upload?: boolean } = {},
+): keyof Translations {
   if (!(error instanceof ApiError)) return 'packagesErrorGeneric'
   switch (error.status) {
     case 403:
-      return 'packagesErrorUploadDisabled'
+      return upload || /allow_upload/.test(error.message)
+        ? 'packagesErrorUploadDisabled'
+        : 'packagesErrorForbidden'
     case 404:
       return 'packagesErrorNotFound'
     case 409: {

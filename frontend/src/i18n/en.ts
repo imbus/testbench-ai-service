@@ -390,7 +390,8 @@ export const en = {
   packagesDefaultDirs:
     'Agents from a package need your own prompt and template folders, but the service uses the shipped ones. Copy them with `testbench-ai-service init --prompts-dir prompts --templates-dir templates` (or set prompts_dir and templates_dir in config.toml) and restart the service.',
   packagesFileConflicts:
-    'Some prompt or template files already exist with other content. Choose which ones the package version replaces, then submit again.',
+    'Some prompt or template files already exist with other content. For each file, keep yours or replace it with the package version, then submit again.',
+  packagesKeepFile: 'keep my file',
   packagesReplaceFile: 'replace with package version',
   packagesViewDiff: 'View diff',
   packagesCurrent: 'Current file',
@@ -411,5 +412,7 @@ export const en = {
   packagesErrorTooLarge:
     'The file is larger than the server accepts (agent_packages.max_upload_mb).',
   packagesErrorInvalid: 'The package was rejected.',
+  packagesErrorForbidden:
+    'You are not allowed to do this, or your session has expired. Sign in again with an admin account.',
   packagesErrorGeneric: 'The action failed.',
 } as const

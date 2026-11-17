@@ -77,12 +77,18 @@ describe('useRegisterAgents', () => {
       { entry_point: 'risk', agent_key: 'risk', endpoint_path: '/risk', enabled: true },
     ]
 
-    result.current.mutate({ name: 'acme', version: '1.0', agents, overwrite: ['prompts/x'] })
+    result.current.mutate({
+      name: 'acme',
+      version: '1.0',
+      agents,
+      overwrite: ['prompts/x'],
+      keep: ['prompts/y'],
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/admin/api/agent-packages/acme/1.0/register')
-    expect(JSON.parse(init.body)).toEqual({ agents, overwrite: ['prompts/x'] })
+    expect(JSON.parse(init.body)).toEqual({ agents, overwrite: ['prompts/x'], keep: ['prompts/y'] })
     const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey)
     expect(keys).toEqual(expect.arrayContaining([['packages'], ['config'], ['status']]))
   })
@@ -128,12 +134,12 @@ describe('the other mutations', () => {
     fetchMock.mockResolvedValue(jsonResponse(RESULT))
     const { result } = renderHook(() => useActivateVersion(), { wrapper })
 
-    result.current.mutate({ name: 'acme', version: '1.1', overwrite: [] })
+    result.current.mutate({ name: 'acme', version: '1.1', keep: ['prompts/x'] })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('/admin/api/agent-packages/acme/1.1/activate')
-    expect(JSON.parse(init.body)).toEqual({ overwrite: [] })
+    expect(JSON.parse(init.body)).toEqual({ overwrite: [], keep: ['prompts/x'] })
   })
 
   it('deletes a version', async () => {
@@ -161,7 +167,15 @@ describe('the other mutations', () => {
 
 describe('packageErrorKey', () => {
   it('maps the status and detail code to a translation key', () => {
-    expect(packageErrorKey(new ApiError('x', 403))).toBe('packagesErrorUploadDisabled')
+    expect(packageErrorKey(new ApiError('x', 403), { upload: true })).toBe(
+      'packagesErrorUploadDisabled',
+    )
+    expect(packageErrorKey(new ApiError('Not an admin', 403))).toBe('packagesErrorForbidden')
+    expect(
+      packageErrorKey(
+        new ApiError('Uploading ... is disabled (agent_packages.allow_upload).', 403),
+      ),
+    ).toBe('packagesErrorUploadDisabled')
     expect(packageErrorKey(new ApiError('x', 413))).toBe('packagesErrorTooLarge')
     expect(packageErrorKey(new ApiError('x', 422))).toBe('packagesErrorInvalid')
     expect(packageErrorKey(new ApiError('x', 404))).toBe('packagesErrorNotFound')

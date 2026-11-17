@@ -3,6 +3,7 @@ import { Button } from 'primereact/button'
 import { Checkbox } from 'primereact/checkbox'
 import { InputText } from 'primereact/inputtext'
 import { Message } from 'primereact/message'
+import { RadioButton } from 'primereact/radiobutton'
 import { useTranslation } from 'react-i18next'
 import { conflictsOf, useActivateVersion, useRegisterAgents } from '../../api/packages'
 import type { FileConflict, PackageVersion } from '../../api/types'
@@ -53,21 +54,28 @@ function FileDiffDialog({ conflict, onClose }: { conflict: FileConflict; onClose
   )
 }
 
+type Choice = 'keep' | 'overwrite'
+
 /**
- * The files that exist with other content, each with a "replace" choice and
- * a way to compare both versions. Unchecked files keep their content.
+ * The files that exist with other content, each with an explicit choice --
+ * keep the operator's file or replace it with the package version -- and a way
+ * to compare both. The server refuses a file nobody decided on.
  */
 function ConflictList({
   conflicts,
-  overwrite,
-  onToggle,
+  choices,
+  onChoose,
 }: {
   conflicts: FileConflict[]
-  overwrite: string[]
-  onToggle: (path: string) => void
+  choices: Record<string, Choice>
+  onChoose: (path: string, choice: Choice) => void
 }) {
   const { t } = useTranslation()
   const [shown, setShown] = useState<FileConflict | null>(null)
+  const options: { choice: Choice; label: string }[] = [
+    { choice: 'keep', label: t('packagesKeepFile') },
+    { choice: 'overwrite', label: t('packagesReplaceFile') },
+  ]
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <Message
@@ -75,45 +83,76 @@ function ConflictList({
         style={{ justifyContent: 'flex-start' }}
         text={t('packagesFileConflicts')}
       />
-      {conflicts.map((conflict, index) => {
-        const id = `conflict-${index}`
-        return (
-          <div key={conflict.path} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Checkbox
-              inputId={id}
-              checked={overwrite.includes(conflict.path)}
-              onChange={() => onToggle(conflict.path)}
-              aria-label={`${conflict.path} ${t('packagesReplaceFile')}`}
-            />
-            <label htmlFor={id} style={{ fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>
-              <code>{conflict.path}</code>{' '}
-              <span className="text-muted">{t('packagesReplaceFile')}</span>
-            </label>
-            <span style={{ flex: 1 }} />
-            <Button
-              type="button"
-              text
-              size="small"
-              label={t('packagesViewDiff')}
-              aria-label={`${t('packagesViewDiff')} ${conflict.path}`}
-              onClick={() => setShown(conflict)}
-            />
-          </div>
-        )
-      })}
+      {conflicts.map((conflict, index) => (
+        <div
+          key={conflict.path}
+          role="radiogroup"
+          aria-label={conflict.path}
+          style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}
+        >
+          <code style={{ fontSize: 13, minWidth: 0, overflowWrap: 'anywhere' }}>
+            {conflict.path}
+          </code>
+          <span style={{ flex: 1 }} />
+          {options.map(({ choice, label }) => {
+            const id = `conflict-${index}-${choice}`
+            return (
+              <span key={choice} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <RadioButton
+                  inputId={id}
+                  name={`conflict-${index}`}
+                  value={choice}
+                  checked={choices[conflict.path] === choice}
+                  onChange={() => onChoose(conflict.path, choice)}
+                  aria-label={`${conflict.path} ${label}`}
+                />
+                <label htmlFor={id} style={{ fontSize: 12 }}>
+                  {label}
+                </label>
+              </span>
+            )
+          })}
+          <Button
+            type="button"
+            text
+            size="small"
+            label={t('packagesViewDiff')}
+            aria-label={`${t('packagesViewDiff')} ${conflict.path}`}
+            onClick={() => setShown(conflict)}
+          />
+        </div>
+      ))}
       {shown && <FileDiffDialog conflict={shown} onClose={() => setShown(null)} />}
     </div>
   )
 }
 
-/** The conflict choices a register or activate call collects across retries. */
-function useOverwrite() {
-  const [overwrite, setOverwrite] = useState<string[]>([])
-  const toggle = (path: string) =>
-    setOverwrite((current) =>
-      current.includes(path) ? current.filter((entry) => entry !== path) : [...current, path],
-    )
-  return { overwrite, toggle }
+/**
+ * The file conflicts a register or activate call met, collected across
+ * retries, and the operator's choice for each.
+ */
+function useConflicts() {
+  const [conflicts, setConflicts] = useState<FileConflict[]>([])
+  const [choices, setChoices] = useState<Record<string, Choice>>({})
+  const decided = (choice: Choice) =>
+    conflicts.filter((conflict) => choices[conflict.path] === choice).map(({ path }) => path)
+  return {
+    conflicts,
+    choices,
+    choose: (path: string, choice: Choice) =>
+      setChoices((current) => ({ ...current, [path]: choice })),
+    /** Add the conflicts a failed call reports; other errors change nothing. */
+    learn: (error: unknown) => {
+      const found = conflictsOf(error)
+      if (found.length === 0) return
+      setConflicts((current) => [
+        ...current.filter((known) => !found.some((entry) => entry.path === known.path)),
+        ...found,
+      ])
+    },
+    undecided: conflicts.some((conflict) => choices[conflict.path] === undefined),
+    files: () => ({ overwrite: decided('overwrite'), keep: decided('keep') }),
+  }
 }
 
 /** A suggested agent key: the entry point in the form `agent_key` accepts. */
@@ -155,7 +194,7 @@ export function RegisterDialog({
 }) {
   const { t } = useTranslation()
   const register = useRegisterAgents()
-  const { overwrite, toggle } = useOverwrite()
+  const files = useConflicts()
   const taken = new Set(Object.values(registered))
   const agents = Object.values(version.report.agents)
   const failed = agents.filter((agent) => !agent.ok)
@@ -177,7 +216,6 @@ export function RegisterDialog({
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...change } : row)))
 
   const selected = rows.filter((row) => row.include)
-  const conflicts = conflictsOf(register.error)
   const title = t('packagesRegisterTitle', { name, version: version.version })
 
   const submit = () =>
@@ -186,9 +224,9 @@ export function RegisterDialog({
         name,
         version: version.version,
         agents: selected.map(({ include: _include, ...agent }) => agent),
-        overwrite,
+        ...files.files(),
       },
-      { onSuccess: onClose },
+      { onSuccess: onClose, onError: files.learn },
     )
 
   return (
@@ -264,10 +302,12 @@ export function RegisterDialog({
         </div>
       ))}
 
-      {conflicts.length > 0 && (
-        <ConflictList conflicts={conflicts} overwrite={overwrite} onToggle={toggle} />
+      {files.conflicts.length > 0 && (
+        <ConflictList conflicts={files.conflicts} choices={files.choices} onChoose={files.choose} />
       )}
-      {register.isError && conflicts.length === 0 && <PackageError error={register.error} />}
+      {register.isError && conflictsOf(register.error).length === 0 && (
+        <PackageError error={register.error} />
+      )}
 
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <Button type="button" outlined label={t('cancel')} onClick={onClose} />
@@ -275,7 +315,7 @@ export function RegisterDialog({
           type="button"
           label={t('packagesRegister')}
           onClick={submit}
-          disabled={defaultDirs || selected.length === 0 || register.isPending}
+          disabled={defaultDirs || selected.length === 0 || files.undecided || register.isPending}
         />
       </div>
     </Modal>
@@ -284,39 +324,55 @@ export function RegisterDialog({
 
 /**
  * Switch the active version of a package. Its agents stay configured; the
- * version is loaded at the next start. File conflicts are resolved as in
- * `RegisterDialog`.
+ * version is loaded at the next start. The version's files are copied for the
+ * configured agents too, so the default folders block it and file conflicts
+ * are resolved as in `RegisterDialog`.
  */
 export function ActivateDialog({
   name,
   version,
+  defaultDirs,
   onClose,
 }: {
   name: string
   version: string
+  defaultDirs: boolean
   onClose: () => void
 }) {
   const { t } = useTranslation()
   const activate = useActivateVersion()
-  const { overwrite, toggle } = useOverwrite()
-  const conflicts = conflictsOf(activate.error)
+  const files = useConflicts()
   const title = t('packagesActivateTitle', { name, version })
 
   return (
     <Modal label={title} width={760} maxHeight="85vh">
       <h3 style={{ margin: 0 }}>{title}</h3>
       <div style={{ fontSize: 13 }}>{t('packagesActivateHint')}</div>
-      {conflicts.length > 0 && (
-        <ConflictList conflicts={conflicts} overwrite={overwrite} onToggle={toggle} />
+      {defaultDirs && (
+        <Message
+          severity="warn"
+          style={{ justifyContent: 'flex-start' }}
+          text={t('packagesDefaultDirs')}
+        />
       )}
-      {activate.isError && conflicts.length === 0 && <PackageError error={activate.error} />}
+      {files.conflicts.length > 0 && (
+        <ConflictList conflicts={files.conflicts} choices={files.choices} onChoose={files.choose} />
+      )}
+      {activate.isError && conflictsOf(activate.error).length === 0 && (
+        <PackageError error={activate.error} />
+      )}
       <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <Button type="button" outlined label={t('cancel')} onClick={onClose} />
         <Button
           type="button"
           label={t('packagesActivate')}
-          disabled={activate.isPending}
-          onClick={() => activate.mutate({ name, version, overwrite }, { onSuccess: onClose })}
+          disabled={defaultDirs || files.undecided || activate.isPending}
+          onClick={() =>
+            activate.mutate(
+              { name, version, ...files.files() },
+              { onSuccess: onClose, onError: files.learn },
+            )
+          }
         />
       </div>
     </Modal>

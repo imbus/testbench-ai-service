@@ -125,7 +125,12 @@ export function AgentPackages({ isAdmin }: { isAdmin: boolean }) {
         />
       )}
       {dialog?.kind === 'activate' && (
-        <ActivateDialog name={dialog.pkg} version={dialog.version} onClose={close} />
+        <ActivateDialog
+          name={dialog.pkg}
+          version={dialog.version}
+          defaultDirs={data.default_dirs}
+          onClose={close}
+        />
       )}
       {dialog?.kind === 'delete' && (
         <DeleteDialog name={dialog.pkg} version={dialog.version} onClose={close} />
@@ -346,9 +351,9 @@ function DeleteDialog({
   )
 }
 
-/** The projects of the running config that override any of `keys`. */
-function projectsUsing(running: Record<string, unknown> | undefined, keys: string[]): string[] {
-  const projects = (running?.projects ?? {}) as Record<string, { agents?: unknown }>
+/** The projects of the config file that override any of `keys`: what removing drops. */
+function projectsUsing(disk: Record<string, unknown> | undefined, keys: string[]): string[] {
+  const projects = (disk?.projects ?? {}) as Record<string, { agents?: unknown }>
   return Object.keys(projects)
     .filter((project) => {
       const agents = projects[project]?.agents
@@ -366,7 +371,7 @@ function RemoveDialog({ pkg, onClose }: { pkg: AgentPackage; onClose: () => void
   const remove = useRemovePackage()
   const config = useConfig()
   const keys = Object.keys(pkg.registered).sort()
-  const projects = projectsUsing(config.data?.running, keys)
+  const projects = projectsUsing(config.data?.disk, keys)
   const title = t('packagesRemoveTitle', { name: pkg.name })
   return (
     <Modal label={title}>

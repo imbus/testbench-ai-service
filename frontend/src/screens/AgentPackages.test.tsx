@@ -16,15 +16,19 @@ import { ok, packages, pkg, version } from './packages/fixtures'
 
 beforeEach(() => i18n.changeLanguage('en'))
 
+// Removing drops the overrides in the config FILE; the running config may lag
+// behind it (Gamma's override was already removed on disk).
 const CONFIG = {
   running: {
+    projects: { Gamma: { agents: { acme_risk_rater: { enabled: true } } } },
+  },
+  disk: {
     agents: { acme_risk_rater: { package: 'acme-tb-agents', class_path: 'acme.risk:RiskRater' } },
     projects: {
       Alpha: { agents: { acme_risk_rater: { enabled: false } } },
       Beta: { agents: { other: { enabled: true } } },
     },
   },
-  disk: {},
   config_path: 'config.toml',
 }
 
@@ -133,7 +137,7 @@ describe('agent packages screen', () => {
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('agent_packages'))
     const [url, init] = calls('POST')[0]
     expect(url).toBe('/admin/api/agent-packages/acme-tb-agents/1.1.0/activate')
-    expect(JSON.parse(init.body)).toEqual({ overwrite: [] })
+    expect(JSON.parse(init.body)).toEqual({ overwrite: [], keep: [] })
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -159,6 +163,7 @@ describe('agent packages screen', () => {
     expect(dialog).toHaveTextContent('acme_risk_rater')
     expect(dialog).toHaveTextContent('Alpha')
     expect(dialog).not.toHaveTextContent('Beta')
+    expect(dialog).not.toHaveTextContent('Gamma')
     expect(dialog).toHaveTextContent(
       'Prompt and template files and the uploaded versions are kept.',
     )

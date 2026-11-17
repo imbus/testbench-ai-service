@@ -84,7 +84,7 @@ export function ReportView({
  * A failed package call: the translated case first, the backend's English
  * detail and any issues below it as secondary information.
  */
-export function PackageError({ error }: { error: unknown }) {
+export function PackageError({ error, upload }: { error: unknown; upload?: boolean }) {
   const { t } = useTranslation()
   const detail = error instanceof Error ? error.message : undefined
   const issues = issuesOf(error)
@@ -95,7 +95,7 @@ export function PackageError({ error }: { error: unknown }) {
       style={{ justifyContent: 'flex-start' }}
       content={
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div>{t(packageErrorKey(error))}</div>
+          <div>{t(packageErrorKey(error, { upload }))}</div>
           {detail && (
             <div className="text-muted" style={{ fontSize: 12 }}>
               {detail}
