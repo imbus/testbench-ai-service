@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -78,6 +79,17 @@ class TestBuildExecutionContextSessionToken:
         assert ctx.tov_key == "TOV1"
         assert ctx.cycle_key == "CYCLE1"
         assert ctx.language == "en"
+
+    def test_context_carries_the_agent_key(self, resolved_mocks, base_request):
+        ctx = build_execution_context(
+            "my_key",
+            base_request,
+            MagicMock(),
+            MagicMock(templates_dir=Path("templates")),
+            _session_auth(),
+        )
+
+        assert ctx.agent_key == "my_key"
 
     def test_user_key_comes_from_auth_info(self, resolved_mocks, base_request):
         ctx = build_execution_context(

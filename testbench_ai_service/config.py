@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator, model_v
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
     AgentConfig,
+    AgentPackagesConfig,
     JobsConfig,
     LLMConfig,
     ProjectConfig,
@@ -175,6 +176,7 @@ class AppConfig(BaseModel):
         description="Browser console served at /admin",
     )
     jobs: JobsConfig = Field(default_factory=JobsConfig)
+    agent_packages: AgentPackagesConfig = Field(default_factory=AgentPackagesConfig)
     agents: dict[str, AgentConfig] = DEFAULT_AGENTS
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
     loaded_from: Path | None = Field(

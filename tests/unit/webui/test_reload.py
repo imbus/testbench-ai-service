@@ -124,7 +124,7 @@ def test_a_new_agent_needs_a_restart():
         }
     )
 
-    assert restart_required(old, new) == ["agents.explainer"]
+    assert restart_required(old, new) == ["agents.explainer.class_path"]
 
 
 def test_a_removed_agent_needs_a_restart():
@@ -310,3 +310,16 @@ class TestHotReload:
         assert app.state.config is new
         assert app.state.llm_factory is broken_factory
         assert app.state.llm_factory is not old_factory
+
+
+def test_restart_required_for_new_agent():
+    old = make_config(agents={"reviewer": agent()})
+    new = make_config(agents={"reviewer": agent(), "acme": agent("/acme")})
+
+    assert "agents.acme.class_path" in restart_required(old, new)
+
+
+def test_restart_required_for_agent_packages_dir():
+    new = make_config(agent_packages={"dir": "elsewhere"})
+
+    assert "agent_packages.dir" in restart_required(make_config(), new)

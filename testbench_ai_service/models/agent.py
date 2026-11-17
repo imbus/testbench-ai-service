@@ -79,6 +79,7 @@ class TriggerAgentResponse(BaseModel):
 class ExecutionContext(BaseModel):
     """Holds all resolved data and configuration for a single agent execution."""
 
+    agent_key: str
     user_key: str
     project_name: str
     project_key: str

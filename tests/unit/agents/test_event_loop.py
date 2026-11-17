@@ -83,6 +83,7 @@ def slow_helper(return_value):
 
 def make_context(**overrides) -> ExecutionContext:
     defaults = {
+        "agent_key": "test_agent",
         "user_key": "U1",
         "project_key": "P1",
         "project_name": "Project",

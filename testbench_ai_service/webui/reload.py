@@ -43,6 +43,7 @@ RESTART_FIELDS: tuple[str, ...] = (
     "trusted_proxies",
     "admin_ui.enabled",
     "usage_file",
+    "agent_packages.dir",
 )
 
 RESTART_AGENT_FIELDS: tuple[str, ...] = ("endpoint_path", "class_path")
@@ -77,7 +78,8 @@ def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
 
     old_keys = set(old.agents)
     new_keys = set(new.agents)
-    changed.extend(join_path(["agents", key]) for key in old_keys ^ new_keys)
+    changed.extend(join_path(["agents", key]) for key in old_keys - new_keys)
+    changed.extend(join_path(["agents", key, "class_path"]) for key in new_keys - old_keys)
 
     for key in sorted(old_keys & new_keys):
         for field in RESTART_AGENT_FIELDS:

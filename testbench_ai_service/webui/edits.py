@@ -90,6 +90,8 @@ def _validate_single_path(path: str, value: Any) -> list[str]:
     if not isinstance(path, str) or not path.strip():
         _reject("An edit path must be a non-empty string")
     segments = _tokenize(path)
+    if segments[0] == "agent_packages" or (segments[0] == "agents" and segments[2:] == ["package"]):
+        _reject(f"'{path}' can only be changed in config.toml on the server")
     if len(segments) > MAX_PATH_SEGMENTS:
         _reject(f"Edit path {path!r} is nested deeper than {MAX_PATH_SEGMENTS} levels")
     if _contains_sentinel(value):

@@ -328,3 +328,14 @@ def test_a_quoted_path_that_is_too_deep_is_still_refused():
         validate_edit_paths({path: 1})
 
     assert exc.value.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["agent_packages.allow_upload", "agent_packages.dir", "agents.reviewer.package"],
+)
+def test_edit_paths_reject_package_settings(path):
+    with pytest.raises(HTTPException) as e:
+        validate_edit_paths({path: True})
+    assert e.value.status_code == 400
+    assert "can only be changed in config.toml on the server" in e.value.detail

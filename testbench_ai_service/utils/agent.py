@@ -133,6 +133,7 @@ def build_execution_context(
     )
 
     return ExecutionContext(
+        agent_key=agent_key,
         user_key=auth_info.user_key,
         project_name=project_name,
         project_key=project_key,

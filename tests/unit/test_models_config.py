@@ -1,8 +1,17 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
+from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.base import LLMProvider, RoutingFamily
-from testbench_ai_service.models.config import ExtraModel, LLMConfig
+from testbench_ai_service.models.config import (
+    AgentConfig,
+    AgentPackagesConfig,
+    ExtraModel,
+    LLMConfig,
+    PromptConfig,
+)
 
 
 def test_timeout_zero_rejected():
@@ -117,3 +126,27 @@ class TestExtraModelStandalone:
     def test_requires_both_fields(self):
         with pytest.raises(ValidationError):
             ExtraModel(provider="openai")
+
+
+def test_agent_packages_defaults():
+    # AppConfig() itself fails in some environments (prompt variable check), so read the default
+    packages = AppConfig.model_fields["agent_packages"].get_default(call_default_factory=True)
+    assert packages.allow_upload is False
+    assert packages.dir == Path("data/agent_packages")
+    assert packages.max_upload_mb == 20
+
+
+@pytest.mark.parametrize("value", [0, 501])
+def test_agent_packages_max_upload_mb_is_bounded(value):
+    with pytest.raises(ValidationError):
+        AgentPackagesConfig(max_upload_mb=value)
+
+
+def test_agent_config_package_defaults_to_none():
+    agent = AgentConfig(
+        enabled=True,
+        endpoint_path="/x",
+        class_path="a.B",
+        prompt=PromptConfig(file=Path("x/prompt.yaml")),
+    )
+    assert agent.package is None

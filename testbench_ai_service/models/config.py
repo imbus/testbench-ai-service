@@ -182,12 +182,33 @@ class JobsConfig(BaseModel):
     )
 
 
+DEFAULT_AGENT_PACKAGES_DIR = Path("data/agent_packages")
+
+
+class AgentPackagesConfig(BaseModel):
+    allow_upload: bool = Field(
+        default=False,
+        description="Let admins upload agent packages (Python wheels) in the console.",
+    )
+    dir: Path = Field(
+        default=DEFAULT_AGENT_PACKAGES_DIR,
+        description="Directory the uploaded agent packages are stored in.",
+    )
+    max_upload_mb: int = Field(
+        default=20, ge=1, le=500, description="Largest accepted package upload in megabytes."
+    )
+
+
 class AgentConfig(BaseModel):
     enabled: bool
     endpoint_path: str
     class_path: str
     prompt: PromptConfig
     args: dict[str, Any] = Field(default_factory=dict)
+    package: str | None = Field(
+        default=None,
+        description="Name of the uploaded agent package that provides class_path.",
+    )
 
 
 class ProjectAgentConfig(BaseModel):
