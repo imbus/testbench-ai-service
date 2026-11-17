@@ -357,11 +357,18 @@ class AppConfig(BaseModel):
         # Imported here: agent_packages.manifest -> webui.security -> this module.
         from testbench_ai_service.agent_packages.agent_info import (  # noqa: PLC0415
             AgentUnavailable,
+            UnknownAgentClass,
             agent_info,
         )
 
         try:
             return agent_info(agent, self.agent_packages.dir)
+        except UnknownAgentClass as e:
+            # A typo in class_path of a loaded package: reject like any other typo.
+            raise_field_validation_error(
+                self, ("agents", agent_key, "class_path"), ValueError(str(e))
+            )
+            return None  # unreachable: the call above raises
         except AgentUnavailable as e:
             logger.log(
                 logging.WARNING if warn else logging.DEBUG,

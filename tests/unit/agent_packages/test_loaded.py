@@ -85,10 +85,24 @@ def test_reset_removes_own_path_entries_and_failures(tmp_path):
     install_package(packages_dir)
     loaded.activate_packages(packages_dir)
     loaded.mark_failed("other", "boom")
+    loaded.mark_agent_failed("acme", "boom")
     site = str(site_dir(packages_dir, PACKAGE, "1.0.0"))
 
     loaded.reset()
 
     assert site not in sys.path
     assert not loaded.is_loaded(PACKAGE)
+    assert loaded.failures() == {}
+    assert loaded.agent_failures() == {}
+
+
+def test_mark_agent_failed_keeps_the_package_loaded(tmp_path):
+    packages_dir = tmp_path / "packages"
+    install_package(packages_dir)
+    loaded.activate_packages(packages_dir)
+
+    loaded.mark_agent_failed("acme", "boom")
+
+    assert loaded.agent_failures() == {"acme": "boom"}
+    assert loaded.is_loaded(PACKAGE)
     assert loaded.failures() == {}

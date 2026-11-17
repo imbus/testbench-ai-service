@@ -27,6 +27,8 @@ _CHUNK = 1024 * 1024
 _loaded: dict[str, tuple[str, str]] = {}
 #: package name -> reason it is not usable
 _failures: dict[str, str] = {}
+#: agent key -> reason its class failed to import at startup
+_agent_failures: dict[str, str] = {}
 
 
 def _sha256(path: Path) -> str:
@@ -103,13 +105,23 @@ def loaded_version(name: str) -> str | None:
 
 
 def mark_failed(name: str, reason: str) -> None:
-    """Record that *name* cannot be used (e.g. its import failed) until a restart."""
+    """Record that package *name* could not be loaded at startup (e.g. hash mismatch)."""
     _failures[name] = reason
 
 
 def failures() -> dict[str, str]:
     """Package name to the reason it is not usable."""
     return dict(_failures)
+
+
+def mark_agent_failed(agent_key: str, reason: str) -> None:
+    """Record that the class of agent *agent_key* failed to import at startup."""
+    _agent_failures[agent_key] = reason
+
+
+def agent_failures() -> dict[str, str]:
+    """Agent key to the reason its class failed to import at startup."""
+    return dict(_agent_failures)
 
 
 def reset() -> None:
@@ -129,3 +141,4 @@ def reset() -> None:
                 del sys.modules[module_name]
     _loaded.clear()
     _failures.clear()
+    _agent_failures.clear()

@@ -6,9 +6,20 @@ from pathlib import Path
 import pytest
 
 from testbench_ai_service.agent_packages import loaded
-from testbench_ai_service.agent_packages.agent_info import AgentUnavailable, agent_info
+from testbench_ai_service.agent_packages.agent_info import (
+    AgentUnavailable,
+    UnknownAgentClass,
+    agent_info,
+)
 from testbench_ai_service.models.config import AgentConfig, PromptConfig
-from tests.helpers.packages import CLASS_PATH, PACKAGE, install_package, rater_report
+from tests.helpers.packages import (
+    BROKEN_CLASS_PATH,
+    CLASS_PATH,
+    PACKAGE,
+    install_package,
+    install_two_agent_package,
+    rater_report,
+)
 
 REVIEWER = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
 
@@ -104,11 +115,27 @@ def test_agent_info_uses_the_report_of_a_version_activated_after_startup(tmp_pat
     assert loaded.failures() == {}
 
 
-def test_agent_info_marks_a_failing_import_of_a_loaded_package(tmp_path):
+def test_agent_info_rejects_a_class_the_loaded_version_lacks(tmp_path):
     install_package(tmp_path)
     loaded.activate_packages(tmp_path)
 
-    with pytest.raises(AgentUnavailable):
+    with pytest.raises(UnknownAgentClass):
         agent_info(cfg_agent("acme.rater.agent.Missing"), tmp_path)
 
-    assert PACKAGE in loaded.failures()
+    assert loaded.is_loaded(PACKAGE)
+    assert loaded.failures() == {}
+    assert loaded.agent_failures() == {}
+
+
+def test_agent_info_turns_sys_exit_on_import_into_unavailable(tmp_path):
+    install_two_agent_package(tmp_path)
+    loaded.activate_packages(tmp_path)
+
+    with pytest.raises(AgentUnavailable) as exc_info:
+        agent_info(cfg_agent(BROKEN_CLASS_PATH), tmp_path)
+
+    assert not isinstance(exc_info.value, UnknownAgentClass)
+    assert "SystemExit" in str(exc_info.value)
+    assert loaded.is_loaded(PACKAGE)
+    assert loaded.failures() == {}
+    assert loaded.agent_failures() == {}

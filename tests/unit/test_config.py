@@ -30,7 +30,14 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
-from tests.helpers.packages import CLASS_PATH, PACKAGE, install_package, rater_report
+from tests.helpers.packages import (
+    BROKEN_CLASS_PATH,
+    CLASS_PATH,
+    PACKAGE,
+    install_package,
+    install_two_agent_package,
+    rater_report,
+)
 
 
 def _make_app_config(**kwargs):
@@ -682,3 +689,31 @@ class TestPackageAgents:
         # ``title``, which does not cover the reviewer prompt's variables.
         with pytest.raises(ValidationError, match="variables are incompatible"):
             self._config(tmp_path)
+
+    @pytest.mark.parametrize("enabled", [True, False])
+    def test_appconfig_rejects_a_class_the_loaded_package_lacks(self, tmp_path, enabled):
+        install_package(tmp_path)
+        loaded.activate_packages(tmp_path)
+        agent = self._agent(class_path="acme.rater.agent.Typo", enabled=enabled)
+
+        with pytest.raises(ValidationError) as exc_info:
+            self._config(tmp_path, agent=agent)
+
+        assert exc_info.value.errors()[0]["loc"] == ("agents", "acme", "class_path")
+        assert loaded.is_loaded(PACKAGE)
+        assert loaded.failures() == {}
+        assert loaded.agent_failures() == {}
+
+    def test_appconfig_skips_a_loaded_agent_whose_import_exits(self, tmp_path, caplog):
+        install_two_agent_package(tmp_path)
+        loaded.activate_packages(tmp_path)
+        agent = self._agent(class_path=BROKEN_CLASS_PATH)
+
+        with caplog.at_level(logging.WARNING, logger="testbench_ai_service"):
+            cfg = self._config(tmp_path, agent=agent)
+
+        assert "acme" in cfg.agents
+        assert "SystemExit" in caplog.text
+        assert loaded.is_loaded(PACKAGE)
+        assert loaded.failures() == {}
+        assert loaded.agent_failures() == {}

@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import ValidationError
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agent_packages import loaded
@@ -74,25 +75,51 @@ TRIGGER_AGENT_ROUTE_KWARGS: dict = {
 }
 
 
-def load_agent(config: AgentConfig) -> Agent:
+def _unavailable(detail: str) -> HTTPException:
+    logger.error(detail)
+    return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+
+
+def _load_package_agent(config: AgentConfig, agent_key: str | None) -> Agent:
+    """Instantiate an agent from an uploaded package; 503 if that is not possible."""
+    if not loaded.is_loaded(config.package or ""):
+        # Never import package code the service did not load at startup.
+        raise _unavailable(
+            f"Agent package '{config.package}' is not loaded. Restart the service to load it."
+        )
+    failure = loaded.agent_failures().get(agent_key or "")
+    if failure is not None:
+        raise _unavailable(f"Agent '{agent_key}' is unavailable: {failure}")
+    try:
+        agent_class = load_class_from_path(config.class_path)
+        agent: Agent = agent_class()
+    except (Exception, SystemExit) as e:  # package code may even call sys.exit()
+        raise _unavailable(f"Cannot load agent class '{config.class_path}': {e!r}") from e
+    args_class = getattr(agent_class, "ARGS_CLASS", AgentArgs)
+    if config.args or args_class is not AgentArgs:
+        try:
+            agent.args = args_class.model_validate(config.args)
+        except ValidationError as e:
+            raise _unavailable(f"Invalid args for agent class '{config.class_path}': {e}") from e
+    return agent
+
+
+def load_agent(config: AgentConfig, agent_key: str | None = None) -> Agent:
     """Instantiate an agent from the provided configuration.
 
     Args:
         config: The configuration for the agent.
+        agent_key: The agent's key, to refuse an agent whose import failed at startup.
 
     Returns:
         An instance of the agent.
 
     Raises:
-        HTTPException: If the agent class cannot be imported, or its package was
-            not loaded at startup.
+        HTTPException: 500 if the agent class cannot be imported; 503 for a
+            package agent that is not loaded, failed at startup or has invalid args.
     """
-    if config.package is not None and not loaded.is_loaded(config.package):
-        # Never import package code the service did not load at startup.
-        logger.error(
-            "Agent package '%s' is not loaded; restart the service to load it", config.package
-        )
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
+    if config.package is not None:
+        return _load_package_agent(config, agent_key)
     try:
         agent_class = load_class_from_path(config.class_path)
         agent: Agent = agent_class()
@@ -110,8 +137,6 @@ def load_agent(config: AgentConfig) -> Agent:
         return agent
     except ImportError as e:
         logger.error(f"Failed to import agent class from '{config.class_path}': {e}")
-        if config.package is not None:
-            loaded.mark_failed(config.package, f"cannot import '{config.class_path}': {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) from e
 
 
@@ -170,7 +195,7 @@ async def trigger_agent_execution(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
-    agent = load_agent(agent_config)
+    agent = load_agent(agent_config, agent_key)
 
     if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
         auth_info.token, agent.REQUIRED_PERMISSIONS
@@ -356,7 +381,11 @@ def create_agent_router(
 
 
 def _package_agent_routable(agent_key: str, agent: AgentConfig, app_config: AppConfig) -> bool:
-    """Whether the package of *agent* was loaded at startup and its class imports."""
+    """Whether the package of *agent* was loaded at startup and its class imports.
+
+    An import failure is recorded for this agent only; the package's other
+    agents keep their routes.
+    """
     package = agent.package or ""
     if not loaded.is_loaded(package):
         logger.warning(
@@ -368,8 +397,9 @@ def _package_agent_routable(agent_key: str, agent: AgentConfig, app_config: AppC
         return False
     try:
         agent_info(agent, app_config.agent_packages.dir)
-    except AgentUnavailable as e:
-        logger.warning("Agent '%s' gets no route: %s", agent_key, e)
+    except AgentUnavailable as e:  # agent_info also turns SystemExit into this
+        logger.error("Agent '%s' gets no route: %s", agent_key, e)
+        loaded.mark_agent_failed(agent_key, str(e))
         return False
     return True
 

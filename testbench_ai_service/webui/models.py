@@ -121,6 +121,8 @@ class AgentSummary(BaseModel):
     projects: int
     # Agent package name -> why it is not in use (failed, or needs a restart).
     unloaded_packages: dict[str, str] = {}
+    # Agent key -> why its class failed to import at startup (it has no route).
+    failed_agents: dict[str, str] = {}
 
 
 class ModelUsageEntry(BaseModel):

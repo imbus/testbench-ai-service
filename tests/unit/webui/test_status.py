@@ -41,7 +41,34 @@ def test_status_lists_unloaded_package_agent(make_app, tmp_path):
 
 
 def test_status_lists_no_loaded_package(make_app):
-    assert agent_summary(make_app().state.config).unloaded_packages == {}
+    summary = agent_summary(make_app().state.config)
+    assert summary.unloaded_packages == {}
+    assert summary.failed_agents == {}
+
+
+def test_status_says_a_package_missing_from_the_manifest_is_missing(make_app, tmp_path):
+    agent = AgentConfig(
+        enabled=True,
+        endpoint_path="/acme",
+        class_path=CLASS_PATH,
+        prompt=PromptConfig(file="test_case_set_reviewer/prompt.yaml"),
+        package="gone-pkg",
+    )
+    app = make_app(
+        agents={**DEFAULT_AGENTS, "acme": agent}, agent_packages={"dir": tmp_path / "packages"}
+    )
+
+    summary = agent_summary(app.state.config)
+
+    assert "missing" in summary.unloaded_packages["gone-pkg"]
+
+
+def test_status_lists_agents_that_failed_at_startup(make_app):
+    loaded.mark_agent_failed("acme_broken", "cannot import 'acme.broken.BrokenAgent'")
+
+    summary = agent_summary(make_app().state.config)
+
+    assert summary.failed_agents == {"acme_broken": "cannot import 'acme.broken.BrokenAgent'"}
 
 
 def _status(client):

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 
 from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.agent_packages.manifest import ManifestError, load_manifest
+from testbench_ai_service.agent_packages.models import AgentReport, Manifest, PackageVersion
 from testbench_ai_service.models.config import AgentConfig
 from testbench_ai_service.webui.agent_context import agent_data_sample
 
@@ -32,6 +33,10 @@ class AgentInfo:
 
 class AgentUnavailable(Exception):  # noqa: N818 - name fixed by the plan's interface
     """A package agent without inspection report, or whose import failed."""
+
+
+class UnknownAgentClass(AgentUnavailable):
+    """The loaded version of the package has no agent with this ``class_path``."""
 
 
 def import_agent_class(class_path: str) -> type:
@@ -78,60 +83,65 @@ def _from_class(agent_class: type) -> AgentInfo:
     )
 
 
-def _from_report(agent: AgentConfig, packages_dir: Path) -> AgentInfo:
-    package = agent.package
-    try:
-        version = load_manifest(packages_dir).active(package or "")
-    except ManifestError as e:
-        raise AgentUnavailable(str(e)) from e
-    if version is None:
-        raise AgentUnavailable(f"agent package '{package}' has no active version")
+def _report_for(version: PackageVersion, class_path: str) -> AgentReport | None:
     for report in version.report.agents.values():
-        if report.class_path == agent.class_path:
-            return AgentInfo(
-                data_fields=list(report.data_fields),
-                step_fields={step: list(fields) for step, fields in report.step_fields.items()},
-                args_schema=report.args_schema,
-                context_sample=dict(report.context_sample),
-                agent_class=None,
-            )
-    raise AgentUnavailable(
-        f"agent package '{package}' {version.version} has no agent '{agent.class_path}'"
+        if report.class_path == class_path:
+            return report
+    return None
+
+
+def _from_report(agent: AgentConfig, version: PackageVersion | None) -> AgentInfo:
+    if version is None:
+        raise AgentUnavailable(f"agent package '{agent.package}' has no active version")
+    report = _report_for(version, agent.class_path)
+    if report is None:
+        raise AgentUnavailable(
+            f"agent package '{agent.package}' {version.version} has no agent '{agent.class_path}'"
+        )
+    return AgentInfo(
+        data_fields=list(report.data_fields),
+        step_fields={step: list(fields) for step, fields in report.step_fields.items()},
+        args_schema=report.args_schema,
+        context_sample=dict(report.context_sample),
+        agent_class=None,
     )
-
-
-def _newer_version_active(package: str, packages_dir: Path) -> bool:
-    """Whether another version of the loaded *package* was activated since startup.
-
-    Its agents are then described by that version's report: the loaded code is
-    the old version, and importing the new one needs a restart.
-    """
-    try:
-        active = load_manifest(packages_dir).active(package)
-    except ManifestError:
-        return False
-    return active is not None and active.version != loaded.loaded_version(package)
 
 
 def agent_info(agent: AgentConfig, packages_dir: Path) -> AgentInfo:
     """Describe the agent class of *agent*.
 
     Without ``package`` the class is imported and import errors pass through as
-    ``ValueError``. A loaded package is imported too, unless another version
-    was activated since startup; a failing import marks the package failed. A
-    package that is not loaded is never imported.
+    ``ValueError``. A package that is not loaded, or whose active version
+    changed since startup, is described by the active version's report and
+    never imported. A loaded package is imported, but only for a class its
+    loaded version's report lists. Never changes the state in ``loaded``.
 
     Raises:
         ValueError: A built-in or ``class_path`` agent cannot be imported.
+        UnknownAgentClass: The loaded version of the package has no such agent.
         AgentUnavailable: A package agent has no report or cannot be imported.
     """
     if agent.package is None:
         return _from_class(import_agent_class(agent.class_path))
-    if not loaded.is_loaded(agent.package) or _newer_version_active(agent.package, packages_dir):
-        return _from_report(agent, packages_dir)
+    package = agent.package
+    loaded_version = loaded.loaded_version(package) if loaded.is_loaded(package) else None
+    try:
+        manifest: Manifest | None = load_manifest(packages_dir)
+    except ManifestError as e:
+        if loaded_version is None:
+            raise AgentUnavailable(str(e)) from e
+        manifest = None
+    active = manifest.active(package) if manifest is not None else None
+    if loaded_version is None or (active is not None and active.version != loaded_version):
+        # Not loaded, or a newer version waits for a restart: its code must not run.
+        return _from_report(agent, active)
+
+    loaded_entry = manifest.packages.get(package, {}).get(loaded_version) if manifest else None
+    if loaded_entry is not None and _report_for(loaded_entry, agent.class_path) is None:
+        raise UnknownAgentClass(
+            f"agent package '{package}' {loaded_version} has no agent '{agent.class_path}'"
+        )
     try:
         return _from_class(import_agent_class(agent.class_path))
-    except Exception as e:
-        reason = f"cannot import '{agent.class_path}': {e}"
-        loaded.mark_failed(agent.package, reason)
-        raise AgentUnavailable(reason) from e
+    except (Exception, SystemExit) as e:  # package code may even call sys.exit() on import
+        raise AgentUnavailable(f"cannot import '{agent.class_path}': {e!r}") from e

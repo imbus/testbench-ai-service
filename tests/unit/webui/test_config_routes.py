@@ -6,6 +6,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.agent_packages.manifest import site_dir
 from testbench_ai_service.webui.config_io import REDACTED_SENTINEL, read_config_file
 from testbench_ai_service.webui.routes import _plan_change
@@ -831,3 +832,36 @@ def test_apply_other_change_while_package_unloaded(file_client, admin, config_fi
     assert response.status_code == 200, response.text
     assert "enabled = false" in config_file.read_text(encoding="utf-8")
     assert "acme" not in sys.modules
+
+
+@pytest.mark.parametrize("action", ["preview", "apply"])
+def test_a_class_path_typo_on_a_loaded_package_is_refused(
+    file_client, admin, config_file, tmp_path, action
+):
+    """A typo must be rejected like any other, and never disable the loaded package."""
+    packages_dir = tmp_path / "packages"
+    install_package(packages_dir)
+    loaded.activate_packages(packages_dir)
+    config_file.write_text(_package_agent_toml(packages_dir), encoding="utf-8")
+    before = config_file.read_text(encoding="utf-8")
+    admin()
+
+    response = file_client.post(
+        f"/admin/api/config/{action}",
+        json={"edits": {"agents.acme.class_path": "acme.rater.agent.Typo"}},
+        headers=csrf(file_client),
+    )
+
+    body = response.json()
+    if action == "apply":
+        assert response.status_code == 422, response.text
+        issues = body["detail"]["issues"]
+    else:  # preview reports validity in its body
+        assert response.status_code == 200, response.text
+        assert body["valid"] is False
+        issues = body["issues"]
+    assert [issue["path"] for issue in issues] == ["agents.acme.class_path"]
+    assert config_file.read_text(encoding="utf-8") == before
+    assert loaded.is_loaded(PACKAGE)
+    assert loaded.failures() == {}
+    assert loaded.agent_failures() == {}

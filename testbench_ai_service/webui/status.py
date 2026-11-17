@@ -10,6 +10,7 @@ import requests
 
 from testbench_ai_service import __version__
 from testbench_ai_service.agent_packages import loaded
+from testbench_ai_service.agent_packages.manifest import ManifestError, load_manifest
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.usage import UsageStore
@@ -77,18 +78,39 @@ def agent_summary(config: AppConfig) -> AgentSummary:
         len(project.agents or {}) + (1 if project.language else 0)
         for project in config.projects.values()
     )
-    unloaded = loaded.failures()
-    for agent in config.agents.values():
-        package = agent.package
-        if package is not None and package not in unloaded and not loaded.is_loaded(package):
-            unloaded[package] = "Not loaded yet. Restart the service to load it."
     return AgentSummary(
         total=len(config.agents),
         enabled=sum(1 for agent in config.agents.values() if agent.enabled),
         project_overrides=overrides,
         projects=len(config.projects),
-        unloaded_packages=unloaded,
+        unloaded_packages=_unloaded_packages(config),
+        failed_agents=loaded.agent_failures(),
     )
+
+
+def _unloaded_packages(config: AppConfig) -> dict[str, str]:
+    """Package name -> why the package's agents are not in use."""
+    unloaded = loaded.failures()
+    pending = {
+        agent.package
+        for agent in config.agents.values()
+        if agent.package is not None
+        and agent.package not in unloaded
+        and not loaded.is_loaded(agent.package)
+    }
+    if not pending:
+        return unloaded
+    try:
+        known: set[str] | None = set(load_manifest(config.agent_packages.dir).packages)
+    except ManifestError as e:
+        logger.warning("Cannot read the agent package manifest for the status: %s", e)
+        known = None
+    for package in sorted(pending):
+        if known is not None and package not in known:
+            unloaded[package] = "The package is missing: it was never uploaded or was deleted."
+        else:
+            unloaded[package] = "Not loaded yet. Restart the service to load it."
+    return unloaded
 
 
 async def read_token_usage(store: UsageStore) -> UsageSummary:
