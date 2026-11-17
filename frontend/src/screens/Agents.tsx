@@ -14,7 +14,8 @@ import {
   projectAgentPath,
   projectPath,
 } from '../api/agents'
-import { useConfig, useProjects, usePromptMeta } from '../api/queries'
+import { usePackages } from '../api/packages'
+import { useConfig, useProjects, usePromptMeta, useStatus } from '../api/queries'
 import { AgentModelPicker } from '../components/AgentModelPicker'
 import { AgentSwitch } from '../components/AgentSwitch'
 import { IconToggle, ListIcon, MatrixIcon } from '../components/IconToggle'
@@ -137,6 +138,8 @@ function AgentList({
   const { t } = useTranslation()
   const draft = useDraft()
   const projects = useProjects()
+  const packages = usePackages()
+  const status = useStatus()
   // Keyed by agent, the shape Prime's `expandedRows` takes with a `dataKey`.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
@@ -166,8 +169,18 @@ function AgentList({
       return { project, overridden, active: overridden ? own : enabled }
     })
     const promptFile = agent.prompt?.file
+    const pkg = valueAt(running, agentPath(agentKey, 'package'))
+    const packageName = typeof pkg === 'string' ? pkg : undefined
     return {
       agentKey,
+      packageName,
+      packageVersion: packages.data?.packages
+        .find((entry) => entry.name === packageName)
+        ?.versions.find((entry) => entry.active)?.version,
+      // Why the agent has no route in the running service, if it has none.
+      notLoaded:
+        status.data?.agents?.failed_agents?.[agentKey] ??
+        (packageName ? status.data?.agents?.unloaded_packages?.[packageName] : undefined),
       enabledPath,
       enabled,
       promptFile: typeof promptFile === 'string' ? promptFile : undefined,
@@ -261,7 +274,14 @@ function AgentList({
       <Column
         header="Agent"
         body={(row: Row) => (
-          <AgentTitle agentKey={row.agentKey} language={language} promptFile={row.promptFile} />
+          <>
+            <AgentTitle agentKey={row.agentKey} language={language} promptFile={row.promptFile} />
+            <PackageBadge
+              name={row.packageName}
+              version={row.packageVersion}
+              notLoaded={row.notLoaded}
+            />
+          </>
         )}
       />
       <Column
@@ -356,6 +376,42 @@ function AgentTitle({
         </div>
       )}
     </Link>
+  )
+}
+
+/**
+ * Where a package agent comes from (package and active version), and whether
+ * the running service has it at all. `class_path` stays read-only here.
+ */
+function PackageBadge({
+  name,
+  version,
+  notLoaded,
+}: {
+  name: string | undefined
+  version: string | undefined
+  notLoaded: string | undefined
+}) {
+  const { t } = useTranslation()
+  if (!name && notLoaded === undefined) return null
+  return (
+    <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+      {name && (
+        <Tag
+          data-testid="agent-package"
+          value={version ? `${name} ${version}` : name}
+          style={{ padding: '1px 6px', fontSize: 10, fontFamily: 'var(--font-code)' }}
+        />
+      )}
+      {notLoaded !== undefined && (
+        <Tag
+          severity="warning"
+          value={t('packagesNotLoaded')}
+          title={notLoaded}
+          style={{ padding: '1px 6px', fontSize: 10 }}
+        />
+      )}
+    </div>
   )
 }
 

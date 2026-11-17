@@ -42,7 +42,9 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
   const method = (init.method ?? 'GET').toUpperCase()
   const headers = new Headers(init.headers)
 
-  if (init.body && !headers.has('Content-Type')) {
+  // A FormData body gets no explicit type: the browser sets the multipart one
+  // with its boundary, which a hand-set header would lack.
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
   if (!SAFE_METHODS.has(method)) {

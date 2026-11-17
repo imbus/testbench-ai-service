@@ -31,6 +31,10 @@ export interface AgentSummary {
   enabled: number
   project_overrides: number
   projects: number
+  /** Agent package name -> why it is not in use (failed, or waits for a restart). */
+  unloaded_packages?: Record<string, string>
+  /** Agent key -> why its class failed to import at startup (it has no route). */
+  failed_agents?: Record<string, string>
 }
 
 export interface ModelUsageEntry {
@@ -424,4 +428,74 @@ export interface LinkFinderResult {
   reduced_mode: boolean
   incomplete: boolean
   set_paths: Record<string, string>
+}
+
+/** Inspection result for one agent entry point of an uploaded package. */
+export interface PackageAgentReport {
+  entry_point: string
+  class_path: string
+  ok: boolean
+  errors: string[]
+  warnings: string[]
+  uses_llm: boolean
+  default_endpoint_path: string | null
+}
+
+/** Inspection result for a whole package version. */
+export interface PackageReport {
+  ok: boolean
+  errors: string[]
+  warnings: string[]
+  /** Entry point -> its report. */
+  agents: Record<string, PackageAgentReport>
+}
+
+/** One uploaded wheel. */
+export interface PackageVersion {
+  name: string
+  version: string
+  filename: string
+  sha256: string
+  size: number
+  uploaded_at: string
+  uploaded_by: string | null
+  active: boolean
+  report: PackageReport
+}
+
+export interface AgentPackage {
+  name: string
+  /** Newest upload first. */
+  versions: PackageVersion[]
+  /** Agent key -> entry point, for the agents of this package in config.toml. */
+  registered: Record<string, string>
+  loaded: boolean
+  load_error: string | null
+}
+
+export interface PackagesResponse {
+  allow_upload: boolean
+  /** The shipped prompt or template directory is in use: registering is refused. */
+  default_dirs: boolean
+  packages: AgentPackage[]
+}
+
+export interface RegisterAgentRequest {
+  entry_point: string
+  agent_key: string
+  endpoint_path: string
+  enabled: boolean
+}
+
+export interface RegisterResult {
+  written: string[]
+  backup: string | null
+  restart_required: string[]
+}
+
+/** A prompt or template file that exists with other content than the package's. */
+export interface FileConflict {
+  path: string
+  current: string
+  incoming: string
 }
