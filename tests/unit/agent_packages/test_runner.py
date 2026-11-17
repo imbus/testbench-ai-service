@@ -24,10 +24,15 @@ def test_inspection_command_from_source(monkeypatch):
 
 
 def test_run_inspection_times_out(tmp_path):
-    files = {**VALID_AGENT_FILES, "acme/rater/agent.py": "while True:\n    pass\n"}
-    report = run_inspection(extracted(tmp_path, files), timeout=2)
+    marker = tmp_path / "loop-started"
+    source = f"from pathlib import Path\nPath({str(marker)!r}).touch()\nwhile True:\n    pass\n"
+    files = {**VALID_AGENT_FILES, "acme/rater/agent.py": source}
+    # Long enough for the child to import the service before it reaches the loop.
+    report = run_inspection(extracted(tmp_path, files), timeout=10)
     assert not report.ok
     assert "timed out" in report.errors[0]
+    # The child reached the agent's module, so it was the loop that timed out.
+    assert marker.exists()
 
 
 def test_run_inspection_reports_failed_process(monkeypatch):

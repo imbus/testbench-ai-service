@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import sys
+
+from testbench_ai_service.agent_packages.inspector import inspect_site
 from testbench_ai_service.agent_packages.runner import run_inspection
 from tests.helpers.wheels import VALID_AGENT_FILES, extracted
 
@@ -133,6 +136,28 @@ def test_inspect_accepts_met_requirements(tmp_path):
     )
     report = run_inspection(site)
     assert report.ok, report
+
+
+def test_inspect_only_warns_about_unverifiable_requirement_in_binary(tmp_path, monkeypatch):
+    # In-process is safe: without entry points the package's code is never imported.
+    site = extracted(
+        tmp_path, VALID_AGENT_FILES, entry_points={}, requires_dist=["nonexistent-pkg>=1"]
+    )
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    path_before = list(sys.path)
+    report = inspect_site(site)
+    assert report.warnings == ["cannot verify 'nonexistent-pkg>=1' in the binary"]
+    assert not any("nonexistent-pkg" in e for e in report.errors)
+    assert sys.path == path_before
+
+
+def test_inspect_reports_malformed_entry_point(tmp_path):
+    site = extracted(tmp_path, VALID_AGENT_FILES, entry_points={"acme_rater": "a-b:c"})
+    report = run_inspection(site)
+    assert not report.ok
+    agent = report.agents["acme_rater"]
+    assert not agent.ok
+    assert any("not of the form 'module:Class'" in e for e in agent.errors)
 
 
 def test_inspect_reports_missing_entry_point(tmp_path):

@@ -79,8 +79,14 @@ def _requires_dist(dist_info: Path | None) -> list[str]:
     return metadata.get_all("Requires-Dist") or []
 
 
-def _requirement_errors(requirements: list[str]) -> list[str]:
+def _requirement_errors(requirements: list[str], warnings: list[str]) -> list[str]:
+    """Errors for requirements the service does not meet.
+
+    In the binary, PyInstaller may not ship a bundled library's metadata, so a missing
+    distribution is only a warning there (added to *warnings*).
+    """
     errors = []
+    frozen = bool(getattr(sys, "frozen", False))
     for line in requirements:
         try:
             requirement = Requirement(line)
@@ -96,6 +102,9 @@ def _requirement_errors(requirements: list[str]) -> list[str]:
                 installed = version(requirement.name)
             except PackageNotFoundError:
                 installed = None
+        if installed is None and frozen:
+            warnings.append(f"cannot verify '{line}' in the binary")
+            continue
         if installed is None:
             errors.append(f"requires '{line}', which is not installed")
             continue
@@ -167,9 +176,17 @@ def _check_args(agent_class: type[Agent], report: AgentReport) -> None:
 
 def _inspect_agent(name: str, value: str) -> AgentReport:
     entry_point = EntryPoint(name=name, value=value, group=ENTRY_POINT_GROUP)
+    match = EntryPoint.pattern.match(value)
+    if match is None or not match.group("attr"):
+        return AgentReport(
+            entry_point=value,
+            class_path="",
+            ok=False,
+            errors=[f"entry point '{name} = {value}' is not of the form 'module:Class'"],
+        )
     report = AgentReport(
         entry_point=value,
-        class_path=f"{entry_point.module}.{entry_point.attr}",
+        class_path=f"{match.group('module')}.{match.group('attr')}",
         ok=False,
     )
     try:
@@ -219,7 +236,8 @@ def inspect_site(site_dir: Path) -> InspectionReport:
     # Before site_dir is on sys.path, so find_spec only sees what the service has.
     conflicts = _module_conflicts(_top_level_modules(site_dir, dist_info))
     errors += conflicts
-    errors += _requirement_errors(_requires_dist(dist_info))
+    warnings: list[str] = []
+    errors += _requirement_errors(_requires_dist(dist_info), warnings)
     try:
         entry_points = _entry_points(dist_info)
     except configparser.Error as e:
@@ -230,11 +248,11 @@ def inspect_site(site_dir: Path) -> InspectionReport:
 
     agents: dict[str, AgentReport] = {}
     # A conflicting module would shadow the service's own code, so nothing is imported then.
-    if not conflicts and dist_info is not None:
+    if not conflicts and entry_points:
         sys.path.insert(0, str(site_dir))
         agents = {name: _inspect_agent(name, value) for name, value in entry_points.items()}
     ok = not errors and bool(agents) and all(agent.ok for agent in agents.values())
-    return InspectionReport(ok=ok, errors=errors, agents=agents)
+    return InspectionReport(ok=ok, errors=errors, warnings=warnings, agents=agents)
 
 
 def main(argv: list[str]) -> int:

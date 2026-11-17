@@ -49,6 +49,8 @@ def test_spec_bundles_the_package_inspector():
     spec = (Path(__file__).parents[2] / "testbench-ai-service.spec").read_text(encoding="utf-8")
     assert '"testbench_ai_service.agent_packages.inspector"' in spec
     assert 'collect_submodules("packaging")' in spec
+    assert 'copy_metadata("testbench-ai-service", recursive=True)' in spec
+    assert "+ metadata_datas" in spec
 
 
 def test_absent_frontend_directory_aborts(tmp_path: Path):

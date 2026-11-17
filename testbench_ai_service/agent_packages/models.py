@@ -29,6 +29,7 @@ class InspectionReport(BaseModel):
 
     ok: bool
     errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     agents: dict[str, AgentReport] = Field(default_factory=dict)
 
 

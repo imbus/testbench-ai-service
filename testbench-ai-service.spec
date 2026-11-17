@@ -10,7 +10,12 @@
 #
 # Output: dist/testbench-ai-service/  (onedir)
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import (
+    collect_all,
+    collect_data_files,
+    collect_submodules,
+    copy_metadata,
+)
 
 # Collect everything from packages that use dynamic internal imports or
 # have data files / lazy-loaded sub-packages.
@@ -21,8 +26,13 @@ sqlalchemy_datas, sqlalchemy_binaries, sqlalchemy_hiddenimports = collect_all("s
 # Package data files (prompts YAML/schema, locale JSON files)
 pkg_datas = collect_data_files("testbench_ai_service")
 
+# Distribution metadata of the service and all its dependencies: the agent package
+# inspection checks a package's Requires-Dist with importlib.metadata.version().
+metadata_datas = copy_metadata("testbench-ai-service", recursive=True)
+
 datas = (
     pkg_datas
+    + metadata_datas
     + uvicorn_datas
     + fastapi_datas
     + sqlalchemy_datas
