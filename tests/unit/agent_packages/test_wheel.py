@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
+import zipfile
 
 import pytest
 
@@ -29,7 +32,7 @@ def test_read_wheel_returns_metadata(tmp_path):
 @pytest.mark.parametrize("entry", ["../evil.py", "/abs.py", "C:/abs.py", "a/../../b.py"])
 def test_read_wheel_rejects_unsafe_paths(tmp_path, entry):
     whl = build_wheel(tmp_path, files={"acme/__init__.py": ""}, extra_entries={entry: b"x"})
-    with pytest.raises(WheelError):
+    with pytest.raises(WheelError, match="unsafe path"):
         read_wheel(whl)
 
 
@@ -68,14 +71,14 @@ def test_read_wheel_rejects_foreign_tag(tmp_path):
 def test_read_wheel_rejects_non_zip(tmp_path):
     path = tmp_path / "acme-1.0.0-py3-none-any.whl"
     path.write_bytes(b"not a zip")
-    with pytest.raises(WheelError):
+    with pytest.raises(WheelError, match="not a valid wheel"):
         read_wheel(path)
 
 
 def test_read_wheel_rejects_bad_filename(tmp_path):
     path = tmp_path / "nonsense.whl"
     path.write_bytes(b"x")
-    with pytest.raises(WheelError):
+    with pytest.raises(WheelError, match="file name"):
         read_wheel(path)
 
 
@@ -91,5 +94,85 @@ def test_extract_wheel_is_atomic(tmp_path):
     extract_wheel(whl, target)
     assert (target / "acme" / "__init__.py").read_text() == "x = 1\n"
     assert not target.with_name("pkg.tmp").exists()
-    with pytest.raises(WheelError):
+    with pytest.raises(WheelError, match="already exists"):
         extract_wheel(whl, target)
+
+
+DIST_INFO = "acme_tb_agents-1.0.0.dist-info"
+
+
+def _metadata(name: str, version: str) -> bytes:
+    return f"Metadata-Version: 2.1\nName: {name}\nVersion: {version}\n".encode()
+
+
+@pytest.mark.parametrize("name", ["../evil", "a/b", "-x"])
+def test_read_wheel_rejects_malicious_metadata_name(tmp_path, name):
+    whl = build_wheel(
+        tmp_path,
+        files={"acme/__init__.py": ""},
+        extra_entries={f"{DIST_INFO}/METADATA": _metadata(name, "1.0.0")},
+    )
+    with pytest.raises(WheelError, match="invalid name"):
+        read_wheel(whl)
+
+
+@pytest.mark.parametrize("version", ["1/../..", "not a version"])
+def test_read_wheel_rejects_malicious_metadata_version(tmp_path, version):
+    whl = build_wheel(
+        tmp_path,
+        files={"acme/__init__.py": ""},
+        extra_entries={f"{DIST_INFO}/METADATA": _metadata("acme-tb-agents", version)},
+    )
+    with pytest.raises(WheelError, match="invalid version"):
+        read_wheel(whl)
+
+
+@pytest.mark.parametrize(("name", "version"), [("other", "1.0.0"), ("acme-tb-agents", "2.0")])
+def test_read_wheel_rejects_filename_metadata_mismatch(tmp_path, name, version):
+    whl = build_wheel(
+        tmp_path,
+        files={"acme/__init__.py": ""},
+        extra_entries={f"{DIST_INFO}/METADATA": _metadata(name, version)},
+    )
+    with pytest.raises(WheelError, match="does not match its file name"):
+        read_wheel(whl)
+
+
+def test_read_wheel_accepts_equivalent_name_and_version_spelling(tmp_path):
+    whl = build_wheel(
+        tmp_path,
+        files={"acme/__init__.py": ""},
+        extra_entries={f"{DIST_INFO}/METADATA": _metadata("Acme.TB_Agents", "1.0.0")},
+    )
+    assert read_wheel(whl).name == "acme-tb-agents"
+
+
+def test_read_wheel_rejects_unsafe_directory_entry(tmp_path):
+    whl = build_wheel(tmp_path, files={"acme/__init__.py": ""}, extra_entries={"../x/": b""})
+    with pytest.raises(WheelError, match="unsafe path"):
+        read_wheel(whl)
+
+
+def test_read_wheel_rejects_colon_in_path_segment(tmp_path):
+    whl = build_wheel(
+        tmp_path, files={"acme/__init__.py": ""}, extra_entries={"acme/a.py:stream": b"x"}
+    )
+    with pytest.raises(WheelError, match="unsafe path"):
+        read_wheel(whl)
+
+
+def test_read_wheel_rejects_empty_record_hash(tmp_path):
+    whl = build_wheel(tmp_path, files={"acme/__init__.py": "x"})
+    with zipfile.ZipFile(whl) as zf:
+        items = {i.filename: zf.read(i) for i in zf.infolist()}
+    record_name = f"{DIST_INFO}/RECORD"
+    rows = list(csv.reader(io.StringIO(items[record_name].decode())))
+    rows[0][1] = ""
+    out = io.StringIO()
+    csv.writer(out, lineterminator="\n").writerows(rows)
+    items[record_name] = out.getvalue().encode()
+    with zipfile.ZipFile(whl, "w") as zf:
+        for name, data in items.items():
+            zf.writestr(name, data)
+    with pytest.raises(WheelError, match="no hash"):
+        read_wheel(whl)

@@ -11,6 +11,7 @@ import configparser
 import csv
 import hashlib
 import io
+import re
 import shutil
 import stat
 import zipfile
@@ -20,12 +21,14 @@ from pathlib import Path, PurePosixPath
 
 from packaging.tags import sys_tags
 from packaging.utils import InvalidWheelFilename, canonicalize_name, parse_wheel_filename
+from packaging.version import InvalidVersion, Version
 
 ENTRY_POINT_GROUP = "testbench_ai_service.agents"
 MAX_UNPACKED_BYTES = 200 * 1024 * 1024
 MAX_FILES = 5000
 _CHUNK = 1024 * 1024
 _RECORD_COLUMNS = 3
+_NAME_RE = re.compile(r"^([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$", re.IGNORECASE)
 _SIGNATURE_FILES = {"RECORD.jws", "RECORD.p7s"}
 
 
@@ -47,10 +50,8 @@ class WheelInfo:
 
 def _check_path(name: str) -> None:
     normalized = name.replace("\\", "/")
-    if (
-        normalized.startswith("/")
-        or (len(normalized) > 1 and normalized[1] == ":")
-        or ".." in normalized.split("/")
+    if normalized.startswith("/") or any(
+        part == ".." or ":" in part for part in normalized.split("/")
     ):
         raise WheelError(f"The wheel contains an unsafe path: {name!r}.")
 
@@ -78,6 +79,18 @@ def _read_text(zf: zipfile.ZipFile, name: str) -> str:
         raise WheelError(f"{name} is not valid UTF-8.") from exc
 
 
+def _check_all_listed(
+    members: dict[str, zipfile.ZipInfo], listed: set[str], record_name: str
+) -> None:
+    for path in members:
+        if (
+            path != record_name
+            and path not in listed
+            and path.rsplit("/", 1)[-1] not in _SIGNATURE_FILES
+        ):
+            raise WheelError(f"{path!r} is in the wheel but not in the RECORD file.")
+
+
 def _verify_record(
     zf: zipfile.ZipFile, dist_info: str, members: dict[str, zipfile.ZipInfo]
 ) -> None:
@@ -90,8 +103,10 @@ def _verify_record(
             raise WheelError("The RECORD file is malformed.")
         path, hash_spec, _size = row
         listed.add(path)
-        if path == record_name or not hash_spec:
+        if path == record_name or path.rsplit("/", 1)[-1] in _SIGNATURE_FILES:
             continue
+        if not hash_spec:
+            raise WheelError(f"The RECORD file has no hash for {path!r}.")
         member = members.get(path)
         if member is None:
             raise WheelError(f"The RECORD file lists {path!r}, which is not in the wheel.")
@@ -101,13 +116,7 @@ def _verify_record(
         actual, _total = _hash_member(zf, member, algorithm)
         if actual != expected.rstrip("="):
             raise WheelError(f"The RECORD hash of {path!r} does not match its content.")
-    for path in members:
-        if (
-            path != record_name
-            and path not in listed
-            and path.rsplit("/", 1)[-1] not in _SIGNATURE_FILES
-        ):
-            raise WheelError(f"{path!r} is in the wheel but not in the RECORD file.")
+    _check_all_listed(members, listed, record_name)
 
 
 def _top_level_modules(
@@ -143,9 +152,10 @@ def _entry_points(
     return {key: value.strip() for key, value in parser.items(ENTRY_POINT_GROUP)}
 
 
-def _check_compatible(filename: str) -> None:
+def _check_compatible(filename: str) -> tuple[str, str]:
+    """Validate the file name and tags. Returns the normalized name and version."""
     try:
-        _name, _version, _build, tags = parse_wheel_filename(filename)
+        name, version, _build, tags = parse_wheel_filename(filename)
     except InvalidWheelFilename as exc:
         raise WheelError(f"{filename!r} is not a valid wheel file name.") from exc
     if not tags & set(sys_tags()):
@@ -153,6 +163,7 @@ def _check_compatible(filename: str) -> None:
             f"The wheel {filename!r} is not compatible with this service's Python "
             "version or platform."
         )
+    return str(name), str(version)
 
 
 def _collect_members(zf: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
@@ -161,9 +172,9 @@ def _collect_members(zf: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
     members: dict[str, zipfile.ZipInfo] = {}
     total = 0
     for info in zf.infolist():
+        _check_path(info.filename)
         if info.is_dir():
             continue
-        _check_path(info.filename)
         if _is_symlink(info):
             raise WheelError(f"The wheel contains a symlink: {info.filename!r}.")
         total += info.file_size
@@ -173,9 +184,29 @@ def _collect_members(zf: zipfile.ZipFile) -> dict[str, zipfile.ZipInfo]:
     return members
 
 
+def _validate_identity(
+    name: str | None, version: str | None, file_name: str, file_version: str
+) -> tuple[str, str]:
+    if not name or not version:
+        raise WheelError("The wheel METADATA has no Name or Version.")
+    if not _NAME_RE.fullmatch(name):
+        raise WheelError(f"The wheel METADATA has an invalid name: {name!r}.")
+    try:
+        parsed = str(Version(version))
+    except InvalidVersion as exc:
+        raise WheelError(f"The wheel METADATA has an invalid version: {version!r}.") from exc
+    normalized = str(canonicalize_name(name))
+    if normalized != file_name or parsed != file_version:
+        raise WheelError(
+            "The wheel METADATA does not match its file name "
+            f"({normalized} {parsed} vs. {file_name} {file_version})."
+        )
+    return normalized, parsed
+
+
 def read_wheel(path: Path) -> WheelInfo:
     """Validate a wheel and return its metadata. Raises ``WheelError``."""
-    _check_compatible(path.name)
+    file_name, file_version = _check_compatible(path.name)
 
     try:
         zf = zipfile.ZipFile(path)
@@ -197,10 +228,9 @@ def read_wheel(path: Path) -> WheelInfo:
         _verify_record(zf, dist_info, members)
         metadata = Parser().parsestr(_read_text(zf, f"{dist_info}/METADATA"))
         name, version = metadata.get("Name"), metadata.get("Version")
-        if not name or not version:
-            raise WheelError("The wheel METADATA has no Name or Version.")
+        name, version = _validate_identity(name, version, file_name, file_version)
         return WheelInfo(
-            name=str(canonicalize_name(name)),
+            name=name,
             version=version,
             filename=path.name,
             sha256=_file_sha256(path),
