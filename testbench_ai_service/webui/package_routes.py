@@ -21,6 +21,7 @@ from testbench_ai_service.agent_packages.service import (
     PackageConflict,
     PackageInvalid,
     PackageNotFound,
+    PackageTooLarge,
     RegisterAgent,
     RegisterResult,
     activate_version,
@@ -28,8 +29,9 @@ from testbench_ai_service.agent_packages.service import (
     register_agents,
     remove_package,
     store_upload,
+    uses_default_dirs,
 )
-from testbench_ai_service.config import PROMPTS_DIR, TEMPLATES_DIR, AppConfig
+from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.log import logger
 from testbench_ai_service.webui.auth import (
@@ -107,9 +109,8 @@ def _http_error(exc: Exception) -> HTTPException:
     if isinstance(exc, PackageNotFound):
         return HTTPException(status.HTTP_404_NOT_FOUND, detail=str(exc))
     if isinstance(exc, PackageInvalid):
-        too_large = str(exc).startswith("larger than")
         return HTTPException(
-            413 if too_large else 422,
+            413 if isinstance(exc, PackageTooLarge) else 422,
             detail={
                 "message": str(exc),
                 "issues": [issue.model_dump() for issue in exc.issues],
@@ -138,15 +139,6 @@ async def _run(func: Callable[..., _T], *args: Any) -> _T:
         ManifestError,
     ) as e:
         raise _http_error(e) from e
-
-
-def _uses_default_dirs(config: AppConfig) -> bool:
-    return (
-        config.prompts_dir is None
-        or config.templates_dir is None
-        or config.prompts_dir.resolve() == PROMPTS_DIR
-        or config.templates_dir.resolve() == TEMPLATES_DIR
-    )
 
 
 def _registered(manifest: Manifest, name: str, disk_agents: dict[str, Any]) -> dict[str, str]:
@@ -181,7 +173,7 @@ def _read_packages(config: AppConfig, config_path: Path) -> PackagesResponse:
     ]
     return PackagesResponse(
         allow_upload=config.agent_packages.allow_upload,
-        default_dirs=_uses_default_dirs(config),
+        default_dirs=uses_default_dirs(config),
         packages=packages,
     )
 

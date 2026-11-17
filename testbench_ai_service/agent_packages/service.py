@@ -47,6 +47,10 @@ class PackageInvalid(Exception):  # noqa: N818
         self.issues = issues or []
 
 
+class PackageTooLarge(PackageInvalid):
+    """The upload exceeds the size limit."""
+
+
 class PackageNotFound(LookupError):  # noqa: N818
     """The package or version is not in the manifest."""
 
@@ -62,7 +66,7 @@ def _stream_to_temp(data: BinaryIO, tmp_dir: Path, filename: str, max_bytes: int
             while chunk := data.read(_CHUNK_SIZE):
                 total += len(chunk)
                 if total > max_bytes:
-                    raise PackageInvalid(f"larger than {max_bytes // (1024 * 1024)} MB")
+                    raise PackageTooLarge(f"larger than {max_bytes // (1024 * 1024)} MB")
                 out.write(chunk)
     except BaseException:
         shutil.rmtree(work_dir, ignore_errors=True)
@@ -182,14 +186,19 @@ class RegisterResult(BaseModel):
     restart_required: list[str]
 
 
+def uses_default_dirs(config: AppConfig) -> bool:
+    """Whether the shipped prompt or template directory is in use (or none is set)."""
+    return (
+        config.prompts_dir is None
+        or config.templates_dir is None
+        or config.prompts_dir.resolve() == PROMPTS_DIR
+        or config.templates_dir.resolve() == TEMPLATES_DIR
+    )
+
+
 def _custom_dirs(config: AppConfig) -> tuple[Path, Path]:
     prompts_dir, templates_dir = config.prompts_dir, config.templates_dir
-    if (
-        prompts_dir is None
-        or templates_dir is None
-        or prompts_dir.resolve() == PROMPTS_DIR
-        or templates_dir.resolve() == TEMPLATES_DIR
-    ):
+    if prompts_dir is None or templates_dir is None or uses_default_dirs(config):
         raise DefaultDirs(
             "set prompts_dir and templates_dir to your own directories before configuring "
             "agents from a package"

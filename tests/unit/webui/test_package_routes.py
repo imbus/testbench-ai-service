@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from unittest.mock import patch
 
@@ -244,15 +245,86 @@ def test_delete_version(pkg_client, admin, env):
     assert "2.0.0" not in load_manifest(env.packages).packages[PACKAGE]
 
 
-@pytest.mark.parametrize("name", ["%2E%2E", "..%2F..", "a%2F..", "bad..name"])
-def test_unsafe_names_are_rejected(pkg_client, admin, name):
+@pytest.mark.parametrize("name", ["%2E%2E", "bad..name", "..x", ".hidden"])
+def test_unsafe_names_are_rejected_with_400(pkg_client, admin, name):
     headers = admin()
-    response = pkg_client.delete(f"{URL}/{name}/1.0.0", headers=headers)
-    assert response.status_code in (400, 404, 405)
-    response = pkg_client.delete(f"{URL}/{name}", headers=headers)
-    assert response.status_code in (400, 404, 405)
+    assert pkg_client.delete(f"{URL}/{name}", headers=headers).status_code == 400
+    assert pkg_client.delete(f"{URL}/{name}/1.0.0", headers=headers).status_code == 400
+    assert pkg_client.delete(f"{URL}/{PACKAGE}/{name}", headers=headers).status_code == 400
 
 
-def test_unsafe_name_in_a_matching_route_is_400(pkg_client, admin):
+@pytest.mark.parametrize("name", ["..%2F..", "a%2F.."])
+def test_encoded_slashes_are_refused(pkg_client, admin, name):
+    """Depending on how the router splits the path this is 400 (segment check) or 404/405."""
     headers = admin()
-    assert pkg_client.delete(f"{URL}/..x/1.0.0", headers=headers).status_code == 400
+    for url in (f"{URL}/{name}", f"{URL}/{name}/1.0.0"):
+        assert pkg_client.delete(url, headers=headers).status_code in (400, 404, 405)
+
+
+# --- serialisation of console writes ---------------------------------------------------
+
+PROMPT_URL = "/admin/api/prompts/en/some_agent"
+LOCKED_WRITES = {
+    "apply_config": ("POST", "/admin/api/config/apply", {"edits": {}}),
+    "fork_prompt": (
+        "POST",
+        f"{PROMPT_URL}/fork",
+        {"project": "p", "directory": "d"},
+    ),
+    "save_prompt": ("PUT", PROMPT_URL, {}),
+    "package_delete": ("DELETE", f"{URL}/{PACKAGE}", None),
+    "package_activate": ("POST", f"{URL}/{PACKAGE}/1.0.0/activate", {}),
+    "package_register": ("POST", f"{URL}/{PACKAGE}/1.0.0/register", REGISTER),
+    "package_upload": ("POST", URL, None),
+}
+
+
+def _request_in_thread(client, method, url, json, headers):
+    result: dict = {}
+
+    def run() -> None:
+        kwargs: dict = {"headers": headers}
+        if method == "POST" and url == URL:
+            kwargs["files"] = {"file": ("x.txt", b"x")}
+        elif json is not None:
+            kwargs["json"] = json
+        result["response"] = client.request(method, url, **kwargs)
+
+    thread = threading.Thread(target=run)
+    thread.start()
+    return thread, result
+
+
+@pytest.mark.parametrize("route", sorted(LOCKED_WRITES))
+def test_writes_wait_for_the_config_write_lock(pkg_client, admin, route):
+    headers = admin()
+    method, url, json = LOCKED_WRITES[route]
+    lock = pkg_client.app.state.config_write_lock
+    pkg_client.portal.call(lock.acquire)
+    try:
+        thread, result = _request_in_thread(pkg_client, method, url, json, headers)
+        thread.join(1.0)
+        assert thread.is_alive(), f"{route} finished while the write lock was held"
+    finally:
+        pkg_client.portal.call(lock.release)
+    thread.join(30)
+    assert not thread.is_alive()
+    assert result["response"].status_code != 500
+
+
+@pytest.mark.parametrize("route", sorted(LOCKED_WRITES))
+def test_rejected_requests_do_not_wait_for_the_lock(pkg_client, admin, route):
+    method, url, json = LOCKED_WRITES[route]
+    lock = pkg_client.app.state.config_write_lock
+    good = admin()
+    pkg_client.portal.call(lock.acquire)
+    try:
+        # Without the CSRF header, then as a non-admin: both are refused at once.
+        for headers in ({}, admin(roles=["Tester"])):
+            thread, result = _request_in_thread(pkg_client, method, url, json, headers)
+            thread.join(10)
+            assert not thread.is_alive(), f"{route} waited for the lock before refusing"
+            assert result["response"].status_code == 403
+    finally:
+        pkg_client.portal.call(lock.release)
+    assert good  # the admin session itself was valid

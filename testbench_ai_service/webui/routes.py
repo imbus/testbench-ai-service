@@ -775,6 +775,7 @@ def save_prompt(
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
     _log: Session = Depends(bind_log_user),
+    _lock: None = Depends(hold_write_lock),
 ) -> PromptSaveResponse:
     """Validate and write the prompt document and its templates."""
     prompts_dir = _require_prompts_dir(config)
