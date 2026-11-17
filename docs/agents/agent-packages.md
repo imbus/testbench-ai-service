@@ -29,7 +29,7 @@ max_upload_mb = 20                   # largest accepted wheel
 
 | Field | Description |
 |---|---|
-| `allow_upload` | Enables upload, registration and removal of packages in the console. |
+| `allow_upload` | Enables the upload of wheels in the console. Registering, activating, deleting and removing already uploaded packages work regardless. |
 | `dir` | Storage directory for the uploaded wheels and the manifest. Changing it needs a restart. |
 | `max_upload_mb` | Size limit of one wheel. |
 
@@ -123,7 +123,7 @@ The wheel appears in `dist/`.
 
 ### Limits
 
-- **Self-contained wheels only.** The service does not install dependencies. `Requires-Dist` entries are checked: every requirement must already be satisfied by the service's environment, otherwise the upload is refused. In the binary distribution the metadata of the bundled libraries may be missing; there the check only warns.
+- **Self-contained wheels only.** The service does not install dependencies. `Requires-Dist` entries are checked: every requirement must already be satisfied by the service's environment, otherwise the upload is refused. In the binary distribution the metadata of a bundled library may be missing; a requirement whose metadata cannot be found only produces a warning there, while a version mismatch still fails.
 - **Wheel tags must fit the service's interpreter.** A pure-Python wheel (`py3-none-any`) always fits. A wheel with compiled code must match the Python version, platform and architecture of the running service, which in the binary distribution is the bundled interpreter.
 - **No clashing module names.** No top-level module of the wheel may have the name of a module the service already contains (for example `testbench_ai_service`, `fastapi` or `jinja2`).
 
@@ -140,10 +140,8 @@ After the restart the agent behaves like any other agent: enable it per project,
 ### Updating to a new version
 
 1. Upload the new version of the wheel.
-2. **Activate** it. This is refused if the new version lacks a class a registered agent uses.
+2. **Activate** it. This is refused if the new version lacks a class a registered agent uses, and also while `prompts_dir`/`templates_dir` are the defaults. Activation copies the new version's prompt and template files for every configured agent of the package, like registration does. If a target file already exists and differs, the console lists the conflicts and you decide per file whether to keep the existing file or replace it. Activation proceeds only once every differing file is decided.
 3. Restart.
-
-Activating a version only switches the code. The prompt and template files copied at registration stay as they are.
 
 ### Removing
 

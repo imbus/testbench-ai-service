@@ -26,6 +26,8 @@ class RaterAgent(Agent):
     USES_LLM = False
 
     async def precheck(self, context, conn):
+        # The returned item is a placeholder. A real agent returns the IDs of the TestBench
+        # items it will process (e.g. test case sets) and checks permissions here.
         return PrecheckResult(passed=True, items=[context.root_uid or "item"])
 
     async def run(self, context, conn, llm_client, item_ids):

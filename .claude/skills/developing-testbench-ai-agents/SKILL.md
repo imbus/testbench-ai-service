@@ -216,8 +216,10 @@ key): an agent may be registered under another key than its own name.
 - Entry-point group `testbench_ai_service.agents`: `<name> = "<module>:<Class>"`; optional class
   attribute `DEFAULT_ENDPOINT_PATH`.
 - Prompts in `<module dir>/prompts/{en,de}/prompt.yaml` (+ `.jinja`), templates in
-  `<module dir>/templates/{en,de}/{started,failed,template}.*`. Registration copies them to
-  `prompts_dir`/`templates_dir/<lang>/<key>/` (custom dirs required), hence `context.agent_key`.
+  `<module dir>/templates/{en,de}/{started,failed,template}.*`. Registration and
+  activation of a new version copy them to `prompts_dir`/`templates_dir/<lang>/<key>/` (custom
+  dirs required, else 409; differing existing files give a 409 conflict list until each is decided
+  keep/replace), hence `context.agent_key`.
 - Self-contained wheel only: `Requires-Dist` must be satisfied by the service environment, wheel
   tags must match its interpreter, no top-level module may clash with one the service has.
 - Upload is inspected in a subprocess (30 s, `agent_info` for validation); the package is not
