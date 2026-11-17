@@ -1,0 +1,21 @@
+[build-system]
+requires = ["flit_core>=3.9,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "acme-rater"
+version = "1.0.0"
+description = "Example agent package for the TestBench AI Service"
+requires-python = ">=3.10"
+# The service does not install dependencies for you: a package is a self-contained wheel.
+# List only what the service environment already ships.
+dependencies = []
+
+# The service finds the agents of a package through this entry-point group.
+# <agent name> = "<module>.<submodule>:<AgentClass>"
+[project.entry-points."testbench_ai_service.agents"]
+acme_rater = "acme_rater.agent:RaterAgent"
+
+# flit packs everything in the module directory, including prompts/ and templates/.
+[tool.flit.module]
+name = "acme_rater"

@@ -207,6 +207,24 @@ copies the defaults there). `get_translation` only reads the service's own `loca
 and returns the bare key for unknown keys; a custom agent brings its own texts per
 `context.language`.
 
+Always resolve write-back templates with `agent_key=context.agent_key` (never a hard-coded
+key): an agent may be registered under another key than its own name.
+
+**Agent package** (a wheel an admin uploads in the console, `agent_packages/`; docs:
+`docs/agents/agent-packages.md`, example: `examples/agent_package/`). Contract:
+
+- Entry-point group `testbench_ai_service.agents`: `<name> = "<module>:<Class>"`; optional class
+  attribute `DEFAULT_ENDPOINT_PATH`.
+- Prompts in `<module dir>/prompts/{en,de}/prompt.yaml` (+ `.jinja`), templates in
+  `<module dir>/templates/{en,de}/{started,failed,template}.*`. Registration copies them to
+  `prompts_dir`/`templates_dir/<lang>/<key>/` (custom dirs required), hence `context.agent_key`.
+- Self-contained wheel only: `Requires-Dist` must be satisfied by the service environment, wheel
+  tags must match its interpreter, no top-level module may clash with one the service has.
+- Upload is inspected in a subprocess (30 s, `agent_info` for validation); the package is not
+  imported in the service before a restart. A broken package never stops startup: its agents get
+  no route and `/agents/{key}/trigger` answers 503. The manifest lives in `agent_packages.dir`.
+- Package code runs with the service's rights: uploads are off unless `allow_upload = true`.
+
 **Per project** (keyed by project **name**), switch an agent off or change its prompt:
 
 ```toml
