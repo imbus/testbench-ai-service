@@ -30,6 +30,7 @@ from testbench_ai_service.usage import UsageStore, resolve_usage_file
 from testbench_ai_service.utils.config import load_config_from_file
 from testbench_ai_service.utils.i18n import get_translation, load_translations
 from testbench_ai_service.webui.inflight import TaskRegistry
+from testbench_ai_service.webui.package_routes import router as package_router
 from testbench_ai_service.webui.prompt_test import SingleFlight
 from testbench_ai_service.webui.routes import router as webui_router
 from testbench_ai_service.webui.security import is_loopback
@@ -88,8 +89,10 @@ def init_webui(app: FastAPI):
         )
 
     app.state.webui_sessions = SessionStore()
+    app.state.config_write_lock = asyncio.Lock()
 
     app.include_router(webui_router)
+    app.include_router(package_router)
     mount_spa(app, STATIC_DIR)
 
 

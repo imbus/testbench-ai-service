@@ -89,6 +89,7 @@ from testbench_ai_service.webui.security import require_loopback
 from testbench_ai_service.webui.session import Session, SessionStore
 from testbench_ai_service.webui.status import build_status, read_token_usage
 from testbench_ai_service.webui.validate import validate_config_dict
+from testbench_ai_service.webui.write_lock import hold_write_lock
 
 router = APIRouter(
     prefix="/admin/api",
@@ -429,6 +430,7 @@ async def apply_config(
     _: Session = Depends(require_admin),
     __: None = Depends(require_csrf),
     _log: Session = Depends(bind_log_user),
+    _lock: None = Depends(hold_write_lock),
 ) -> ApplyResponse:
     """Validate the operator's edits, write them atomically, then reload.
 
@@ -801,6 +803,7 @@ async def fork_prompt(
     _csrf: None = Depends(require_csrf),
     config: AppConfig = Depends(get_app_config),
     _log: Session = Depends(bind_log_user),
+    _lock: None = Depends(hold_write_lock),
 ) -> PromptForkResponse:
     """Copy a prompt for one project and point that project at the copy.
 
