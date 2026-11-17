@@ -282,16 +282,26 @@ def _decode(data: bytes) -> str:
 
 
 def _files_to_write(
-    files: dict[Path, tuple[str, bytes]], overwrite: Iterable[str]
+    files: dict[Path, tuple[str, bytes]], overwrite: Iterable[str], keep: Iterable[str] = ()
 ) -> dict[Path, str | bytes]:
-    """Drop files already present with the same content; refuse unlisted overwrites."""
+    """Drop files already present with the same content or listed in *keep*; refuse
+    differing files listed in neither *keep* nor *overwrite*.
+
+    Raises:
+        PackageInvalid: A file is listed in both *keep* and *overwrite*.
+        FileConflicts: Every differing file that is in neither list.
+    """
     allowed = set(overwrite)
+    kept = set(keep)
+    both = sorted(allowed & kept)
+    if both:
+        raise PackageInvalid(f"files both kept and overwritten: {', '.join(both)}")
     to_write: dict[Path, str | bytes] = {}
     conflicts: list[FileConflict] = []
     for target, (label, content) in files.items():
         if target.is_file():
             current = target.read_bytes()
-            if current == content:
+            if current == content or label in kept:
                 continue
             if label not in allowed:
                 conflicts.append(
@@ -445,6 +455,7 @@ def register_agents(
     version: str,
     agents: list[RegisterAgent],
     overwrite: list[str],
+    keep: list[str] | None = None,
 ) -> RegisterResult:
     """Configure entry points of *name* *version* as agents and make the version active.
 
@@ -459,7 +470,8 @@ def register_agents(
             the resulting config would not be valid.
         PackageConflict: An agent key or endpoint path is taken, or another version
             of the package is active (switch with ``activate_version`` first).
-        FileConflicts: Files would be overwritten that are not listed in *overwrite*.
+        FileConflicts: Files differ that are listed in neither *overwrite* nor *keep*.
+            Files in *keep* are left as they are.
     """
     prompts_dir, templates_dir = _custom_dirs(config)
     packages_dir = config.agent_packages.dir
@@ -500,7 +512,7 @@ def register_agents(
             _package_files(site, report.class_path, item.agent_key, prompts_dir, templates_dir)
         )
         edits.update(_agent_edits(item, report, name))
-    to_write = _files_to_write(files, overwrite)
+    to_write = _files_to_write(files, overwrite, keep or [])
 
     new_manifest = manifest.model_copy(deep=True)
     new_manifest.set_active(name, version)
@@ -532,6 +544,7 @@ def activate_version(
     name: str,
     version: str,
     overwrite: list[str],
+    keep: list[str] | None = None,
 ) -> RegisterResult:
     """Make *version* the active version of *name*; it is loaded at the next start.
 
@@ -561,7 +574,7 @@ def activate_version(
         if report.class_path != class_path:
             edits[join_path(["agents", key, "class_path"])] = report.class_path
         files.update(_package_files(site, report.class_path, key, prompts_dir, templates_dir))
-    to_write = _files_to_write(files, overwrite)
+    to_write = _files_to_write(files, overwrite, keep or [])
 
     new_manifest = manifest.model_copy(deep=True)
     new_manifest.set_active(name, version)

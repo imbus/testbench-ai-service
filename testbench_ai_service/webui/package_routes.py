@@ -77,10 +77,12 @@ class PackagesResponse(BaseModel):
 class RegisterPackageRequest(BaseModel):
     agents: list[RegisterAgent] = Field(min_length=1)
     overwrite: list[str] = Field(default_factory=list)
+    keep: list[str] = Field(default_factory=list)
 
 
 class ActivatePackageRequest(BaseModel):
     overwrite: list[str] = Field(default_factory=list)
+    keep: list[str] = Field(default_factory=list)
 
 
 def _segment(value: str, what: str) -> str:
@@ -228,7 +230,14 @@ async def register_package_agents(
     config_path = Path(request.app.state.config_path)
     async with lock:
         result = await _run(
-            register_agents, config, config_path, name, version, body.agents, body.overwrite
+            register_agents,
+            config,
+            config_path,
+            name,
+            version,
+            body.agents,
+            body.overwrite,
+            body.keep,
         )
     logger.info(
         "Registered agents %s from agent package %s %s",
@@ -256,7 +265,9 @@ async def activate_package_version(
     _segment(version, "version")
     config_path = Path(request.app.state.config_path)
     async with lock:
-        result = await _run(activate_version, config, config_path, name, version, body.overwrite)
+        result = await _run(
+            activate_version, config, config_path, name, version, body.overwrite, body.keep
+        )
     logger.info("Activated agent package %s %s", name, version)
     return result
 

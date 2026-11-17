@@ -63,13 +63,28 @@ class Env:
 
     def register(self, version: str = "1.0.0", key: str = "rater2", **kwargs):
         overwrite = kwargs.pop("overwrite", [])
+        keep = kwargs.pop("keep", [])
         agents = kwargs.pop(
             "agents",
             [RegisterAgent(entry_point="acme_rater", agent_key=key, endpoint_path=f"/{key}")],
         )
         return register_agents(
-            self.running(), self.config_path, PACKAGE, version, agents, overwrite=overwrite
+            self.running(),
+            self.config_path,
+            PACKAGE,
+            version,
+            agents,
+            overwrite=overwrite,
+            keep=keep,
         )
+
+    def existing(self, label: str, content: str = "mine") -> Path:
+        """Create the file *label* (``prompts/…`` or ``templates/…``) with *content*."""
+        kind, rest = label.split("/", 1)
+        path = (self.prompts if kind == "prompts" else self.templates) / rest
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
 
 
 @pytest.fixture
@@ -151,6 +166,74 @@ def test_register_overwrites_listed_conflicts(env):
     env.register(overwrite=["templates/en/rater2/started.jinja"])
 
     assert existing.read_text(encoding="utf-8") == "<p>started</p>"
+
+
+STARTED = "templates/en/rater2/started.jinja"
+FAILED = "templates/en/rater2/failed.jinja"
+
+
+def test_register_keeps_listed_conflicts(env):
+    install_package(env.packages, active=False)
+    existing = env.existing(STARTED)
+
+    env.register(keep=[STARTED])
+
+    assert existing.read_text(encoding="utf-8") == "mine"
+    assert (env.prompts / "en" / "rater2" / "prompt.yaml").exists()
+    assert "rater2" in env.agents()
+
+
+def test_register_mixes_kept_and_overwritten_files(env):
+    install_package(env.packages, active=False)
+    started = env.existing(STARTED)
+    failed = env.existing(FAILED)
+
+    env.register(keep=[STARTED], overwrite=[FAILED])
+
+    assert started.read_text(encoding="utf-8") == "mine"
+    assert failed.read_text(encoding="utf-8") != "mine"
+
+
+def test_register_lists_every_undecided_conflict(env):
+    install_package(env.packages, active=False)
+    env.existing(STARTED)
+    env.existing(FAILED)
+    env.existing("prompts/en/rater2/prompt.yaml")
+
+    with pytest.raises(FileConflicts) as info:
+        env.register(keep=[STARTED])
+
+    assert [c.path for c in info.value.conflicts] == ["prompts/en/rater2/prompt.yaml", FAILED]
+    assert "rater2" not in env.agents()
+
+
+def test_register_refuses_a_file_both_kept_and_overwritten(env):
+    install_package(env.packages, active=False)
+    env.existing(STARTED)
+
+    with pytest.raises(PackageInvalid, match=r"started.jinja"):
+        env.register(keep=[STARTED], overwrite=[STARTED])
+
+    assert "rater2" not in env.agents()
+
+
+def test_activate_keeps_listed_conflicts(env):
+    install_package(env.packages, version="1.0.0", active=False)
+    env.register()
+    system = env.existing("prompts/en/rater2/system.jinja", "edited")
+    install_package(env.packages, version="2.0.0", active=False)
+
+    activate_version(
+        env.running(),
+        env.config_path,
+        PACKAGE,
+        "2.0.0",
+        overwrite=[],
+        keep=["prompts/en/rater2/system.jinja"],
+    )
+
+    assert system.read_text(encoding="utf-8") == "edited"
+    assert load_manifest(env.packages).active(PACKAGE).version == "2.0.0"
 
 
 def test_register_accepts_identical_existing_files(env):

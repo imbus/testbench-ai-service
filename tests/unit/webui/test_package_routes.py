@@ -211,6 +211,60 @@ def test_register_conflict_then_overwrite(pkg_client, admin, env):
     assert package["registered"] == {"rater2": "acme_rater"}
 
 
+def test_register_keeps_files_listed_in_keep(pkg_client, admin, env):
+    headers = admin()
+    install_package(env.packages, active=False)
+    prompt = env.prompts / "en" / "rater2" / "prompt.yaml"
+    started = env.templates / "en" / "rater2" / "started.jinja"
+    for path in (prompt, started):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("mine", encoding="utf-8")
+    register = f"{URL}/{PACKAGE}/1.0.0/register"
+
+    # One file decided, the other not: still a conflict, naming the undecided one.
+    body = {**REGISTER, "keep": ["prompts/en/rater2/prompt.yaml"]}
+    response = pkg_client.post(register, json=body, headers=headers)
+    assert response.status_code == 409
+    paths = [c["path"] for c in response.json()["detail"]["conflicts"]]
+    assert paths == ["templates/en/rater2/started.jinja"]
+
+    body["overwrite"] = ["templates/en/rater2/started.jinja"]
+    response = pkg_client.post(register, json=body, headers=headers)
+    assert response.status_code == 200, response.text
+    assert prompt.read_text(encoding="utf-8") == "mine"
+    assert started.read_text(encoding="utf-8") != "mine"
+
+
+def test_register_with_a_file_both_kept_and_overwritten_is_422(pkg_client, admin, env):
+    headers = admin()
+    install_package(env.packages, active=False)
+    label = "prompts/en/rater2/prompt.yaml"
+    body = {**REGISTER, "keep": [label], "overwrite": [label]}
+
+    response = pkg_client.post(f"{URL}/{PACKAGE}/1.0.0/register", json=body, headers=headers)
+
+    assert response.status_code == 422
+    assert label in response.json()["detail"]["message"]
+
+
+def test_activate_accepts_keep(pkg_client, admin, env):
+    headers = admin()
+    install_package(env.packages, version="1.0.0", active=False)
+    registered = pkg_client.post(f"{URL}/{PACKAGE}/1.0.0/register", json=REGISTER, headers=headers)
+    assert registered.status_code == 200, registered.text
+    system = env.prompts / "en" / "rater2" / "system.jinja"
+    system.write_text("edited", encoding="utf-8")
+    install_package(env.packages, version="2.0.0", active=False)
+    activate = f"{URL}/{PACKAGE}/2.0.0/activate"
+
+    assert pkg_client.post(activate, json={}, headers=headers).status_code == 409
+    body = {"keep": ["prompts/en/rater2/system.jinja"]}
+    response = pkg_client.post(activate, json=body, headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert system.read_text(encoding="utf-8") == "edited"
+
+
 def test_remove_deletes_the_agents_from_the_config(pkg_client, admin, env):
     headers = admin()
     install_package(env.packages, active=False)
