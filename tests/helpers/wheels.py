@@ -135,6 +135,45 @@ VALID_AGENT_FILES: dict[str, str | bytes] = {
 }
 
 
+_RUNNABLE_AGENT_PY = """\
+from jinja2 import Template
+
+from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.jobs.handle import current_job
+from testbench_ai_service.models.agent import AgentData, PrecheckResult
+from testbench_ai_service.utils.template_utils import resolve_template_path
+
+
+class RaterData(AgentData):
+    title: str
+
+
+class RaterAgent(Agent):
+    AGENT_DATA_CLASS = RaterData
+    USES_LLM = False
+
+    async def precheck(self, context, conn):
+        return PrecheckResult(passed=True, items=[context.root_uid or "item"])
+
+    async def run(self, context, conn, llm_client, item_ids):
+        path = resolve_template_path(
+            "template.jinja",
+            templates_dir=context.templates_dir,
+            language=context.language,
+            agent_key=context.agent_key,
+        )
+        html = Template(path.read_text(encoding="utf-8")).render(result="rated")
+        await current_job().set_report("rater", {"html": html, "template": str(path)})
+"""
+
+#: Like ``VALID_AGENT_FILES``, but the agent passes its precheck and its ``run()`` renders
+#: ``template.jinja`` (resolved by the configured agent key) into the job report.
+RUNNABLE_AGENT_FILES: dict[str, str | bytes] = {
+    **VALID_AGENT_FILES,
+    "acme/rater/agent.py": _RUNNABLE_AGENT_PY,
+}
+
+
 def extracted(tmp_path: Path, files: dict[str, str | bytes], **kwargs: Any) -> Path:
     """Build a wheel from *files* and unpack it into a fresh site directory.
 
