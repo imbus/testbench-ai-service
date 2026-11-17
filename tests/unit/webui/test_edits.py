@@ -339,3 +339,22 @@ def test_edit_paths_reject_package_settings(path):
         validate_edit_paths({path: True})
     assert e.value.status_code == 400
     assert "can only be changed in config.toml on the server" in e.value.detail
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        {"agents.reviewer": {"package": "x"}},
+        {"agents": {"r": {"package": "x"}}},
+        {"agents": {"r": {"enabled": True}, "s": {"package": "x"}}},
+        {"agent_packages": {"allow_upload": True}},
+    ],
+)
+def test_nested_values_cannot_smuggle_package_settings(edits):
+    with pytest.raises(HTTPException) as e:
+        validate_edit_paths(edits)
+    assert e.value.status_code == 400
+
+
+def test_a_nested_value_without_package_settings_is_accepted():
+    validate_edit_paths({"agents": {"r": {"enabled": True, "args": {"package": "x"}}}})

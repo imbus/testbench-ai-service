@@ -85,12 +85,29 @@ def _tokenize(path: str) -> list[str]:
         raise  # unreachable; _reject always raises
 
 
+def _reaches_server_only_setting(segments: list[str], value: Any) -> bool:
+    """True if *segments*, or any dict keys nested in *value*, reach a server-only setting.
+
+    ``agent_packages.*`` and ``agents.<key>.package`` are settable in config.toml only. A
+    dict value carries further path segments, so it is walked at every depth.
+    """
+    if segments[0] == "agent_packages" or (
+        segments[0] == "agents" and segments[2:3] == ["package"]
+    ):
+        return True
+    if isinstance(value, dict):
+        return any(
+            _reaches_server_only_setting([*segments, str(key)], sub) for key, sub in value.items()
+        )
+    return False
+
+
 def _validate_single_path(path: str, value: Any) -> list[str]:
     """Validate a single path and its value, returning its segments."""
     if not isinstance(path, str) or not path.strip():
         _reject("An edit path must be a non-empty string")
     segments = _tokenize(path)
-    if segments[0] == "agent_packages" or (segments[0] == "agents" and segments[2:] == ["package"]):
+    if _reaches_server_only_setting(segments, value):
         _reject(f"'{path}' can only be changed in config.toml on the server")
     if len(segments) > MAX_PATH_SEGMENTS:
         _reject(f"Edit path {path!r} is nested deeper than {MAX_PATH_SEGMENTS} levels")
