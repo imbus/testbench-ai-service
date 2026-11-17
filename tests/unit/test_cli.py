@@ -48,6 +48,23 @@ class TestMainParserSetup:
         assert exc_info.value.code == 0
 
 
+class TestInspectAgentPackageCommand:
+    def test_runs_the_inspector(self):
+        with (
+            patch("sys.argv", ["testbench-ai-service", "inspect-agent-package", "site"]),
+            patch("testbench_ai_service.agent_packages.inspector.main", return_value=0) as run,
+            pytest.raises(SystemExit) as exc_info,
+        ):
+            main()
+        run.assert_called_once_with(["site"])
+        assert exc_info.value.code == 0
+
+    def test_is_hidden_from_help(self, capsys):
+        with patch("sys.argv", ["testbench-ai-service", "--help"]), pytest.raises(SystemExit):
+            main()
+        assert "inspect-agent-package" not in capsys.readouterr().out
+
+
 class TestRegisterInitCommand:
     def _make_subparsers(self):
         parser = argparse.ArgumentParser()

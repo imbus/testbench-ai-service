@@ -10,6 +10,9 @@ import stat
 import zipfile
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
+
+from testbench_ai_service.agent_packages.wheel import extract_wheel
 
 
 def _record_hash(data: bytes) -> str:
@@ -70,3 +73,76 @@ def build_wheel(
             zf.writestr(info, b"target")
         zf.writestr(f"{dist_info}/RECORD", record.getvalue())
     return path
+
+
+VALID_ENTRY_POINTS = {"acme_rater": "acme.rater.agent:RaterAgent"}
+
+_AGENT_PY = """\
+from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.models.agent import AgentData
+
+
+class RaterData(AgentData):
+    title: str
+
+
+class RaterAgent(Agent):
+    AGENT_DATA_CLASS = RaterData
+
+    async def precheck(self, context, conn):
+        raise NotImplementedError
+
+    async def run(self, context, conn, llm_client, item_ids):
+        raise NotImplementedError
+"""
+
+_PROMPT_YAML = """\
+name: "Rater"
+summary: "Rate test case sets"
+description: "Rates test case sets."
+default_model: "gpt-5.5"
+default_variant: "Default"
+variants:
+  - name: "Default"
+    description: "Default rating."
+    model: "gpt-5.5"
+    messages:
+      - role: "system"
+        file: "system.jinja"
+      - role: "user"
+        file: "user.jinja"
+"""
+
+
+def _language_files(lang: str) -> dict[str, str | bytes]:
+    return {
+        f"acme/rater/prompts/{lang}/prompt.yaml": _PROMPT_YAML,
+        f"acme/rater/prompts/{lang}/system.jinja": "You rate test case sets.",
+        f"acme/rater/prompts/{lang}/user.jinja": "Rate {{ agent.title }}.",
+        f"acme/rater/templates/{lang}/started.jinja": "<p>started</p>",
+        f"acme/rater/templates/{lang}/failed.jinja": "<p>failed</p>",
+        f"acme/rater/templates/{lang}/template.jinja": "<p>{{ result }}</p>",
+    }
+
+
+#: A package with one valid agent ``acme_rater`` (entry points: ``VALID_ENTRY_POINTS``).
+VALID_AGENT_FILES: dict[str, str | bytes] = {
+    "acme/__init__.py": "",
+    "acme/rater/__init__.py": "",
+    "acme/rater/agent.py": _AGENT_PY,
+    **_language_files("en"),
+    **_language_files("de"),
+}
+
+
+def extracted(tmp_path: Path, files: dict[str, str | bytes], **kwargs: Any) -> Path:
+    """Build a wheel from *files* and unpack it into a fresh site directory.
+
+    Entry points default to ``VALID_ENTRY_POINTS``; other keyword arguments go to
+    :func:`build_wheel`.
+    """
+    kwargs.setdefault("entry_points", VALID_ENTRY_POINTS)
+    wheel = build_wheel(tmp_path, files=files, **kwargs)
+    site = tmp_path / "site"
+    extract_wheel(wheel, site)
+    return site

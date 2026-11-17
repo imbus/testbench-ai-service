@@ -35,10 +35,11 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("-v", "--version", action="version", version="%(prog)s " + __version__)
-    subparsers = parser.add_subparsers(title="commands", dest="command")
+    subparsers = parser.add_subparsers(title="commands", dest="command", metavar="{init,start}")
 
     register_init_command(subparsers)
     register_start_command(subparsers)
+    register_inspect_agent_package_command(subparsers)
 
     args = parser.parse_args()
     if hasattr(args, "func"):
@@ -114,6 +115,24 @@ def register_start_command(subparsers):
         help="Base URL of the TestBench REST API Server (e.g., https://localhost:9443/api/).",
     )
     start_parser.set_defaults(func=start_action)
+
+
+def register_inspect_agent_package_command(subparsers):
+    """Hidden: the service runs it in a subprocess to inspect an uploaded agent package.
+
+    No ``help`` on purpose: argparse lists every sub-command given one, even
+    ``argparse.SUPPRESS`` (as "==SUPPRESS=="). The parser's ``metavar`` leaves it out of
+    the usage line.
+    """
+    inspect_parser = subparsers.add_parser("inspect-agent-package")
+    inspect_parser.add_argument("site_dir", type=str)
+    inspect_parser.set_defaults(func=inspect_agent_package_action)
+
+
+def inspect_agent_package_action(args):
+    from testbench_ai_service.agent_packages import inspector  # noqa: PLC0415
+
+    sys.exit(inspector.main([args.site_dir]))
 
 
 def init_action(args):

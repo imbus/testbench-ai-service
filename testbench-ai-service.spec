@@ -48,7 +48,11 @@ hiddenimports = (
     + collect_submodules("aiohttp")
     + collect_submodules("msal")
     + collect_submodules("msal_extensions")
+    # The agent package inspection runs in a subprocess of the binary
+    # (`inspect-agent-package`); it imports the inspector lazily and needs packaging.
+    + collect_submodules("packaging")
     + [
+        "testbench_ai_service.agent_packages.inspector",
         # uvicorn server implementation modules loaded by string at runtime
         "uvicorn.lifespan.on",
         "uvicorn.lifespan.off",

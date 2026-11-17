@@ -45,6 +45,12 @@ def test_failing_build_aborts(frontend: Path):
         build_frontend(frontend)
 
 
+def test_spec_bundles_the_package_inspector():
+    spec = (Path(__file__).parents[2] / "testbench-ai-service.spec").read_text(encoding="utf-8")
+    assert '"testbench_ai_service.agent_packages.inspector"' in spec
+    assert 'collect_submodules("packaging")' in spec
+
+
 def test_absent_frontend_directory_aborts(tmp_path: Path):
     with pytest.raises(SystemExit):
         build_frontend(tmp_path / "nope")
