@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import requests
 
 from testbench_ai_service import __version__
+from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.usage import UsageStore
@@ -76,11 +77,17 @@ def agent_summary(config: AppConfig) -> AgentSummary:
         len(project.agents or {}) + (1 if project.language else 0)
         for project in config.projects.values()
     )
+    unloaded = loaded.failures()
+    for agent in config.agents.values():
+        package = agent.package
+        if package is not None and package not in unloaded and not loaded.is_loaded(package):
+            unloaded[package] = "Not loaded yet. Restart the service to load it."
     return AgentSummary(
         total=len(config.agents),
         enabled=sum(1 for agent in config.agents.values() if agent.enabled),
         project_overrides=overrides,
         projects=len(config.projects),
+        unloaded_packages=unloaded,
     )
 
 

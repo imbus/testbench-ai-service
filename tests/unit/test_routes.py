@@ -1,3 +1,5 @@
+import sys
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -5,11 +7,16 @@ import requests
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from testbench_ai_service.agent_packages import loaded
+from testbench_ai_service.agent_packages.manifest import site_dir
+from testbench_ai_service.agents.routes import get_agent_routers
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
-from testbench_ai_service.config import AppConfig
+from testbench_ai_service.config import DEFAULT_AGENTS, AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.main import create_app
+from testbench_ai_service.models.config import AgentConfig, PromptConfig
 from testbench_ai_service.routes import _resolve_project_name
+from tests.helpers.packages import CLASS_PATH, PACKAGE, install_package
 
 
 def _make_auth_info() -> AuthInfo:
@@ -143,3 +150,52 @@ class TestResolveProjectName:
         with pytest.raises(HTTPException) as exc_info:
             _resolve_project_name(MagicMock(), "1")
         assert exc_info.value.status_code == 502
+
+
+class TestPackageAgentRouters:
+    @staticmethod
+    def _config(packages_dir: Path, class_path: str = CLASS_PATH) -> AppConfig:
+        prompt = site_dir(packages_dir, PACKAGE, "1.0.0") / "acme/rater/prompts/en/prompt.yaml"
+        agent = AgentConfig(
+            enabled=True,
+            endpoint_path="/acme",
+            class_path=class_path,
+            prompt=PromptConfig(file=prompt),
+            package=PACKAGE,
+        )
+        with patch("testbench_ai_service.config.validate_tb_server_url"):
+            return AppConfig(
+                tb_server_url="https://localhost:9443/api/",
+                agents={**DEFAULT_AGENTS, "acme": agent},
+                agent_packages={"dir": packages_dir},
+            )
+
+    @staticmethod
+    def _paths(routers) -> set[str]:
+        return {route.path for router in routers for route in router.routes}
+
+    def test_routers_skip_unloaded_package_agent(self, tmp_path):
+        install_package(tmp_path)
+        config = self._config(tmp_path)
+
+        paths = self._paths(get_agent_routers(config))
+
+        assert "/acme" not in paths
+        assert "/test-case-set-reviews" in paths
+        assert "acme" not in sys.modules
+
+    def test_routers_include_loaded_package_agent(self, tmp_path):
+        install_package(tmp_path)
+        loaded.activate_packages(tmp_path)
+        config = self._config(tmp_path)
+
+        assert "/acme" in self._paths(get_agent_routers(config))
+
+    def test_routers_skip_package_agent_whose_import_fails(self, tmp_path):
+        install_package(tmp_path)
+        loaded.activate_packages(tmp_path)
+        config = self._config(tmp_path)
+        config.agents["acme"].class_path = "acme.rater.agent.Missing"
+
+        assert "/acme" not in self._paths(get_agent_routers(config))
+        assert PACKAGE in loaded.failures()

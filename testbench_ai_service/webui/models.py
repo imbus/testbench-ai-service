@@ -119,6 +119,8 @@ class AgentSummary(BaseModel):
     enabled: int
     project_overrides: int
     projects: int
+    # Agent package name -> why it is not in use (failed, or needs a restart).
+    unloaded_packages: dict[str, str] = {}
 
 
 class ModelUsageEntry(BaseModel):

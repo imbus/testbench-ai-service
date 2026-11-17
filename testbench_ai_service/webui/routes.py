@@ -620,7 +620,11 @@ def read_prompt_doc(
     prompts_dir = _require_prompts_dir(config)
     path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
     return read_prompt_document(
-        path, prompts_dir, lang, agent, agent_context_sample(config.agents, agent)
+        path,
+        prompts_dir,
+        lang,
+        agent,
+        agent_context_sample(config.agents, agent, config.agent_packages.dir),
     )
 
 

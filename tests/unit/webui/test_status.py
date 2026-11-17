@@ -3,11 +3,45 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
+from testbench_ai_service.agent_packages import loaded
+from testbench_ai_service.agent_packages.manifest import site_dir
+from testbench_ai_service.config import DEFAULT_AGENTS
 from testbench_ai_service.llm.base import TokenUsage
-from testbench_ai_service.models.config import ProjectAgentConfig, ProjectConfig
+from testbench_ai_service.models.config import (
+    AgentConfig,
+    ProjectAgentConfig,
+    ProjectConfig,
+    PromptConfig,
+)
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.usage import UsageStore
 from testbench_ai_service.webui.status import agent_summary
+from tests.helpers.packages import CLASS_PATH, PACKAGE, install_package
+
+
+def test_status_lists_unloaded_package_agent(make_app, tmp_path):
+    packages_dir = tmp_path / "packages"
+    install_package(packages_dir)
+    prompt = site_dir(packages_dir, PACKAGE, "1.0.0") / "acme/rater/prompts/en/prompt.yaml"
+    agent = AgentConfig(
+        enabled=True,
+        endpoint_path="/acme",
+        class_path=CLASS_PATH,
+        prompt=PromptConfig(file=prompt),
+        package=PACKAGE,
+    )
+    app = make_app(agents={**DEFAULT_AGENTS, "acme": agent}, agent_packages={"dir": packages_dir})
+    loaded.mark_failed("broken-pkg", "cannot import 'broken.Agent'")
+
+    summary = agent_summary(app.state.config)
+
+    assert set(summary.unloaded_packages) == {PACKAGE, "broken-pkg"}
+    assert summary.unloaded_packages["broken-pkg"] == "cannot import 'broken.Agent'"
+    assert "restart" in summary.unloaded_packages[PACKAGE].lower()
+
+
+def test_status_lists_no_loaded_package(make_app):
+    assert agent_summary(make_app().state.config).unloaded_packages == {}
 
 
 def _status(client):

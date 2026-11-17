@@ -1,8 +1,10 @@
 import importlib
 import inspect
+import logging
 from pathlib import Path
-from typing import Any, get_type_hints
+from typing import TYPE_CHECKING, Any, get_type_hints
 
+import jsonschema
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from testbench_ai_service.log import logger
@@ -25,6 +27,7 @@ from testbench_ai_service.transport import (
 )
 from testbench_ai_service.utils.prompt_utils import (
     step_agent_variable_errors,
+    step_field_errors,
     template_variables,
     validate_agent_variable,
 )
@@ -35,6 +38,9 @@ from testbench_ai_service.validators import (
     validate_prompt_file,
     validate_tb_server_url,
 )
+
+if TYPE_CHECKING:
+    from testbench_ai_service.agent_packages.agent_info import AgentInfo
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8010
@@ -344,52 +350,103 @@ class AppConfig(BaseModel):
                     )
         return self
 
+    def _package_agent_info(
+        self, agent_key: str, agent: AgentConfig, warn: bool = True
+    ) -> "AgentInfo | None":
+        """The info of a package agent, or ``None`` (logged) if it is unavailable."""
+        # Imported here: agent_packages.manifest -> webui.security -> this module.
+        from testbench_ai_service.agent_packages.agent_info import (  # noqa: PLC0415
+            AgentUnavailable,
+            agent_info,
+        )
+
+        try:
+            return agent_info(agent, self.agent_packages.dir)
+        except AgentUnavailable as e:
+            logger.log(
+                logging.WARNING if warn else logging.DEBUG,
+                "Agent '%s' from package '%s' is not validated: %s",
+                agent_key,
+                agent.package,
+                e,
+            )
+            return None
+
+    def _validate_package_agent(self, agent_key: str, agent: AgentConfig) -> None:
+        """Check the prompt of a package agent against its fields, without importing it
+        unless the package was loaded at startup."""
+        info = self._package_agent_info(agent_key, agent)
+        if info is None:
+            return
+        prompt_path = Path(self.prompts_dir, self.language.value, agent.prompt.file)  # type: ignore[arg-type]
+        user_variables = template_variables(prompt_file=prompt_path)
+        if not validate_agent_variable(user_variables, info.data_fields):
+            logger.error(
+                "Template validation failed. User variables: %s do not match agent data requirements.",
+                user_variables,
+            )
+            raise ValueError(
+                "Failed to validate template: variables are incompatible with the agent."
+            )
+        step_errors = step_field_errors(prompt_path, info.step_fields)
+        if step_errors:
+            raise ValueError(
+                f"Failed to validate the steps of '{prompt_path}': {' | '.join(step_errors)}"
+            )
+
     @model_validator(mode="after")
     def validate_config(self):
-        for _, agent in self.agents.items():
+        for agent_key, agent in self.agents.items():
             if not agent.enabled:
                 continue
 
             if not agent.class_path:
                 raise ValueError("'class_path' must be set.")
 
-            try:
-                module_path, class_name = agent.class_path.rsplit(".", 1)
-            except ValueError as e:
-                raise ValueError(
-                    "'class_path' must be a valid import path, e.g. 'package.module.ClassName'."
-                ) from e
-
-            try:
-                module = importlib.import_module(module_path)
-                getattr(module, class_name)
-            except (ImportError, AttributeError) as e:
-                raise ValueError(f"cannot import '{class_name}' from '{module_path}': {e}") from e
-
-            prompt_path = Path(self.prompts_dir, self.language.value, agent.prompt.file)
-            user_variables = template_variables(prompt_file=prompt_path)
-            agent_data = {}
-            for _, obj in inspect.getmembers(module):
-                if inspect.isclass(obj) and hasattr(obj, "AGENT_DATA_CLASS"):
-                    agent_data = get_type_hints(obj.AGENT_DATA_CLASS).keys()
-
-            if not validate_agent_variable(user_variables, agent_data):
-                logger.error(
-                    "Template validation failed. User variables: %s do not match agent data requirements.",
-                    user_variables,
-                )
-                raise ValueError(
-                    "Failed to validate template: variables are incompatible with the agent."
-                )
-            agent_class = getattr(module, class_name)
-            step_errors = step_agent_variable_errors(
-                prompt_path, getattr(agent_class, "STEP_DATA_CLASSES", {})
-            )
-            if step_errors:
-                raise ValueError(
-                    f"Failed to validate the steps of '{prompt_path}': {' | '.join(step_errors)}"
-                )
+            if agent.package is not None:
+                self._validate_package_agent(agent_key, agent)
+            else:
+                self._validate_imported_agent(agent)
         return self
+
+    def _validate_imported_agent(self, agent: AgentConfig) -> None:
+        """Import a built-in or ``class_path`` agent and check its prompt against it."""
+        try:
+            module_path, class_name = agent.class_path.rsplit(".", 1)
+        except ValueError as e:
+            raise ValueError(
+                "'class_path' must be a valid import path, e.g. 'package.module.ClassName'."
+            ) from e
+
+        try:
+            module = importlib.import_module(module_path)
+            getattr(module, class_name)
+        except (ImportError, AttributeError) as e:
+            raise ValueError(f"cannot import '{class_name}' from '{module_path}': {e}") from e
+
+        prompt_path = Path(self.prompts_dir, self.language.value, agent.prompt.file)  # type: ignore[arg-type]
+        user_variables = template_variables(prompt_file=prompt_path)
+        agent_data: Any = {}
+        for _, obj in inspect.getmembers(module):
+            if inspect.isclass(obj) and hasattr(obj, "AGENT_DATA_CLASS"):
+                agent_data = get_type_hints(obj.AGENT_DATA_CLASS).keys()
+
+        if not validate_agent_variable(user_variables, agent_data):
+            logger.error(
+                "Template validation failed. User variables: %s do not match agent data requirements.",
+                user_variables,
+            )
+            raise ValueError(
+                "Failed to validate template: variables are incompatible with the agent."
+            )
+        agent_class = getattr(module, class_name)
+        step_errors = step_agent_variable_errors(
+            prompt_path, getattr(agent_class, "STEP_DATA_CLASSES", {})
+        )
+        if step_errors:
+            raise ValueError(
+                f"Failed to validate the steps of '{prompt_path}': {' | '.join(step_errors)}"
+            )
 
     @model_validator(mode="after")
     def validate_agent_args(self):
@@ -399,8 +456,18 @@ class AppConfig(BaseModel):
         validated merged over it, so a project can only override keys.
         """
         for agent_key, agent in self.agents.items():
-            module_path, class_name = agent.class_path.rsplit(".", 1)
-            agent_class = getattr(importlib.import_module(module_path), class_name)
+            if agent.package is not None:
+                # validate_config already warned about an unavailable enabled agent.
+                info = self._package_agent_info(agent_key, agent, warn=not agent.enabled)
+                if info is None:
+                    continue
+                if info.agent_class is None:
+                    self._validate_args_against_schema(agent_key, agent, info.args_schema)
+                    continue
+                agent_class = info.agent_class
+            else:
+                module_path, class_name = agent.class_path.rsplit(".", 1)
+                agent_class = getattr(importlib.import_module(module_path), class_name)
             args_class = getattr(agent_class, "ARGS_CLASS", None)
             if args_class is None:
                 continue
@@ -421,3 +488,33 @@ class AppConfig(BaseModel):
                         self, ("projects", proj_key, "agents", agent_key, "args"), e
                     )
         return self
+
+    def _validate_args_against_schema(
+        self, agent_key: str, agent: AgentConfig, schema: dict[str, Any] | None
+    ) -> None:
+        """Validate the ``args`` of an agent that is not imported against the JSON
+        schema of its ``ARGS_CLASS`` from the inspection report."""
+        if schema is None:
+            return
+        targets: list[tuple[tuple[str, ...], dict[str, Any]]] = [
+            (("agents", agent_key, "args"), agent.args)
+        ]
+        for proj_key, project in self.projects.items():
+            agent_override = (project.agents or {}).get(agent_key)
+            if agent_override is None or agent_override.args is None:
+                continue
+            targets.append(
+                (
+                    ("projects", proj_key, "agents", agent_key, "args"),
+                    merge_agent_args(agent.args, agent_override.args),
+                )
+            )
+        for loc, args in targets:
+            try:
+                jsonschema.validate(args, schema)
+            except jsonschema.ValidationError as e:
+                raise_field_validation_error(self, loc, ValueError(e.message))
+            except jsonschema.SchemaError as e:
+                raise_field_validation_error(
+                    self, loc, ValueError(f"the package's args schema is invalid: {e.message}")
+                )

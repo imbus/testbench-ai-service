@@ -6,6 +6,8 @@ import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
+from testbench_ai_service.agent_packages import loaded
+from testbench_ai_service.agent_packages.agent_info import AgentUnavailable, agent_info
 from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
@@ -82,8 +84,15 @@ def load_agent(config: AgentConfig) -> Agent:
         An instance of the agent.
 
     Raises:
-        HTTPException: If the agent class cannot be imported.
+        HTTPException: If the agent class cannot be imported, or its package was
+            not loaded at startup.
     """
+    if config.package is not None and not loaded.is_loaded(config.package):
+        # Never import package code the service did not load at startup.
+        logger.error(
+            "Agent package '%s' is not loaded; restart the service to load it", config.package
+        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE)
     try:
         agent_class = load_class_from_path(config.class_path)
         agent: Agent = agent_class()
@@ -101,6 +110,8 @@ def load_agent(config: AgentConfig) -> Agent:
         return agent
     except ImportError as e:
         logger.error(f"Failed to import agent class from '{config.class_path}': {e}")
+        if config.package is not None:
+            loaded.mark_failed(config.package, f"cannot import '{config.class_path}': {e}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR) from e
 
 
@@ -344,12 +355,35 @@ def create_agent_router(
     return router
 
 
+def _package_agent_routable(agent_key: str, agent: AgentConfig, app_config: AppConfig) -> bool:
+    """Whether the package of *agent* was loaded at startup and its class imports."""
+    package = agent.package or ""
+    if not loaded.is_loaded(package):
+        logger.warning(
+            "Agent '%s' gets no route: its package '%s' is not loaded. "
+            "Restart the service to load it.",
+            agent_key,
+            package,
+        )
+        return False
+    try:
+        agent_info(agent, app_config.agent_packages.dir)
+    except AgentUnavailable as e:
+        logger.warning("Agent '%s' gets no route: %s", agent_key, e)
+        return False
+    return True
+
+
 def get_agent_routers(app_config: AppConfig) -> list[APIRouter]:
     """Create routers for all enabled agents based on the application configuration."""
     routers = []
     for agent_key, agent_config in app_config.agents.items():
         if not agent_config.enabled:
             logger.debug("Agent '%s' is disabled in config, skipping router creation", agent_key)
+            continue
+        if agent_config.package is not None and not _package_agent_routable(
+            agent_key, agent_config, app_config
+        ):
             continue
         logger.debug("Creating router for enabled agent '%s'", agent_key)
         try:
