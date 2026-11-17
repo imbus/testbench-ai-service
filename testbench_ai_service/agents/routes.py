@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 from typing import get_type_hints
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.agent_packages.agent_info import AgentUnavailable, agent_info
+from testbench_ai_service.agent_packages.manifest import load_manifest, site_dir, wheel_path
 from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
@@ -80,12 +82,41 @@ def _unavailable(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
 
 
-def _load_package_agent(config: AgentConfig, agent_key: str | None) -> Agent:
+def _waits_for_restart(name: str, packages_dir: Path | None) -> bool:
+    """Whether package *name* is intact and only needs a restart to be loaded.
+
+    False if it failed to load at startup, or its active version or files are gone.
+    Without *packages_dir* nothing can be checked; a restart is assumed.
+    """
+    if name in loaded.failures():
+        return False
+    if packages_dir is None:
+        return True
+    try:
+        active = load_manifest(packages_dir).active(name)
+        return (
+            active is not None
+            and wheel_path(packages_dir, active.filename).is_file()
+            and site_dir(packages_dir, name, active.version).is_dir()
+        )
+    except Exception:  # unreadable manifest, or a name resolve_within refuses
+        return False
+
+
+def _load_package_agent(
+    config: AgentConfig, agent_key: str | None, packages_dir: Path | None
+) -> Agent:
     """Instantiate an agent from an uploaded package; 503 if that is not possible."""
-    if not loaded.is_loaded(config.package or ""):
+    name = config.package or ""
+    if not loaded.is_loaded(name):
         # Never import package code the service did not load at startup.
+        if _waits_for_restart(name, packages_dir):
+            raise _unavailable(
+                f"Agent package '{name}' is not loaded yet. Restart the service to load it."
+            )
         raise _unavailable(
-            f"Agent package '{config.package}' is not loaded. Restart the service to load it."
+            f"Agent package '{name}' is missing or failed to load. Upload it again or fix it "
+            "in the web console."
         )
     failure = loaded.agent_failures().get(agent_key or "")
     if failure is not None:
@@ -104,12 +135,16 @@ def _load_package_agent(config: AgentConfig, agent_key: str | None) -> Agent:
     return agent
 
 
-def load_agent(config: AgentConfig, agent_key: str | None = None) -> Agent:
+def load_agent(
+    config: AgentConfig, agent_key: str | None = None, packages_dir: Path | None = None
+) -> Agent:
     """Instantiate an agent from the provided configuration.
 
     Args:
         config: The configuration for the agent.
         agent_key: The agent's key, to refuse an agent whose import failed at startup.
+        packages_dir: Where agent packages are stored, to tell a package that only
+            waits for a restart from one that is missing or failed to load.
 
     Returns:
         An instance of the agent.
@@ -119,7 +154,7 @@ def load_agent(config: AgentConfig, agent_key: str | None = None) -> Agent:
             package agent that is not loaded, failed at startup or has invalid args.
     """
     if config.package is not None:
-        return _load_package_agent(config, agent_key)
+        return _load_package_agent(config, agent_key, packages_dir)
     try:
         agent_class = load_class_from_path(config.class_path)
         agent: Agent = agent_class()
@@ -195,7 +230,7 @@ async def trigger_agent_execution(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
-    agent = load_agent(agent_config, agent_key)
+    agent = load_agent(agent_config, agent_key, app_config.agent_packages.dir)
 
     if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
         auth_info.token, agent.REQUIRED_PERMISSIONS

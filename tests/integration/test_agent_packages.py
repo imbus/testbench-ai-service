@@ -212,7 +212,7 @@ def test_service_starts_without_the_deleted_package_directory(env):
         # code the service did not load at startup (agents/routes._load_package_agent).
         response = trigger(client)
         assert response.status_code == status.HTTP_503_SERVICE_UNAVAILABLE
-        assert f"'{PACKAGE}' is not loaded" in response.json()["detail"]
+        assert f"'{PACKAGE}' is missing or failed to load" in response.json()["detail"]
 
         admin_login(client)
         with patch("testbench_ai_service.webui.status.requests.get"):

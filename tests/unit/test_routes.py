@@ -1,3 +1,4 @@
+import shutil
 import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -238,10 +239,41 @@ class TestLoadPackageAgent:
         install_package(tmp_path)
 
         with pytest.raises(HTTPException) as exc_info:
-            load_agent(self._agent(), "acme")
+            load_agent(self._agent(), "acme", tmp_path)
 
         assert exc_info.value.status_code == 503
         assert "acme" not in sys.modules
+        assert "Restart the service" in exc_info.value.detail
+
+    def test_tells_to_upload_again_when_the_package_is_missing(self, tmp_path):
+        with pytest.raises(HTTPException) as exc_info:
+            load_agent(self._agent(), "acme", tmp_path)
+
+        assert exc_info.value.status_code == 503
+        detail = exc_info.value.detail
+        assert "missing or failed to load" in detail
+        assert "Restart" not in detail
+
+    def test_tells_to_upload_again_when_the_package_files_are_missing(self, tmp_path):
+        install_package(tmp_path)
+        shutil.rmtree(site_dir(tmp_path, PACKAGE, "1.0.0"))
+
+        with pytest.raises(HTTPException) as exc_info:
+            load_agent(self._agent(), "acme", tmp_path)
+
+        assert "missing or failed to load" in exc_info.value.detail
+
+    def test_tells_to_fix_a_package_that_failed_at_startup(self, tmp_path):
+        install_package(tmp_path, sha256="0" * 64)
+        loaded.activate_packages(tmp_path)
+
+        with pytest.raises(HTTPException) as exc_info:
+            load_agent(self._agent(), "acme", tmp_path)
+
+        detail = exc_info.value.detail
+        assert "missing or failed to load" in detail
+        assert "Restart" not in detail
+        assert "hash" not in detail
 
     def test_refuses_an_agent_that_failed_at_startup(self, tmp_path):
         install_package(tmp_path)
