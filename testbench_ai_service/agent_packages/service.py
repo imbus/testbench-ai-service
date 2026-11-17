@@ -217,15 +217,21 @@ def _disk_agents(section: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {key: agent for key, agent in agents.items() if isinstance(agent, dict)}
 
 
-def _package_agents(section: dict[str, Any], config: AppConfig, name: str) -> dict[str, str]:
+def _package_agents(
+    section: dict[str, Any], name: str, running: AppConfig | None = None
+) -> dict[str, str]:
     """Agent key to ``class_path`` of every agent configured from package *name*.
 
-    Read from the file on disk as well: an agent registered since the start is not in
-    the running config until the restart.
+    *section* is the config file on disk, the source of truth: an agent registered or
+    removed since the start is not reflected in the running config until the restart.
+    With *running*, its agents of *name* are included too (only for removing, where an
+    extra key is harmless).
     """
-    agents = {
-        key: agent.class_path for key, agent in config.agents.items() if agent.package == name
-    }
+    agents: dict[str, str] = {}
+    if running is not None:
+        agents = {
+            key: agent.class_path for key, agent in running.agents.items() if agent.package == name
+        }
     for key, agent in _disk_agents(section).items():
         if agent.get("package") == name:
             agents[key] = str(agent.get("class_path", ""))
@@ -289,9 +295,9 @@ def _files_to_write(
     return to_write
 
 
-def _make_dirs(targets: Iterable[Path]) -> list[Path]:
-    """Create the parent directories of *targets*; return those created, outermost first."""
-    created: list[Path] = []
+def _make_dirs(targets: Iterable[Path], created: list[Path]) -> None:
+    """Create the parent directories of *targets*, appending each to *created*
+    (outermost first) as soon as it exists, so a partial failure can be undone."""
     for target in targets:
         missing: list[Path] = []
         parent = target.parent
@@ -301,11 +307,30 @@ def _make_dirs(targets: Iterable[Path]) -> list[Path]:
         for directory in reversed(missing):
             directory.mkdir()
             created.append(directory)
-    return created
 
 
-def _undo_files(result: MultiWriteResult | None, created_dirs: list[Path]) -> None:
-    """Restore what a completed ``write_all`` replaced and remove what it created."""
+def _backup_path(path: Path) -> Path:
+    return path.with_name(f"{path.name}.bak")  # the name write_all backs up to
+
+
+def _old_backups(targets: Iterable[Path]) -> dict[Path, bytes | None]:
+    """``.bak`` path to its current content (``None``: absent) for every existing target,
+    i.e. every backup ``write_all`` is about to create or overwrite."""
+    backups: dict[Path, bytes | None] = {}
+    for target in targets:
+        if target.is_file():
+            backup = _backup_path(target)
+            backups[backup] = backup.read_bytes() if backup.is_file() else None
+    return backups
+
+
+def _undo_files(
+    result: MultiWriteResult | None,
+    created_dirs: list[Path],
+    old_backups: dict[Path, bytes | None],
+) -> None:
+    """Restore what a completed ``write_all`` replaced, remove what it created and put
+    the ``.bak`` files back as they were before."""
     if result is not None:
         for path in result.written:
             backup = result.backups.get(path)
@@ -316,6 +341,14 @@ def _undo_files(result: MultiWriteResult | None, created_dirs: list[Path]) -> No
                     path.write_bytes(backup.read_bytes())
             except OSError as e:  # pragma: no cover - best effort, already failing
                 logger.error("Could not roll %s back: %s", path, e)
+    for backup, content in old_backups.items():
+        try:
+            if content is None:
+                backup.unlink(missing_ok=True)
+            else:
+                backup.write_bytes(content)
+        except OSError as e:  # pragma: no cover - best effort, already failing
+            logger.error("Could not restore %s: %s", backup, e)
     for directory in reversed(created_dirs):
         with contextlib.suppress(OSError):
             directory.rmdir()
@@ -341,8 +374,9 @@ def _apply(
     save_manifest(packages_dir, new_manifest)
     result: MultiWriteResult | None = None
     created_dirs: list[Path] = []
+    old_backups = _old_backups(files)
     try:
-        created_dirs = _make_dirs(files)
+        _make_dirs(files, created_dirs)
         result = write_all(files)
         preview, text, has_write = plan_change(edits, config_path, config, allow_server_only=True)
         if not preview.valid:
@@ -355,7 +389,7 @@ def _apply(
             )
         backup = write_atomic(config_path, text) if has_write else None
     except BaseException:
-        _undo_files(result, created_dirs)
+        _undo_files(result, created_dirs, old_backups)
         save_manifest(packages_dir, old_manifest)
         raise
     written = [str(path) for path in result.written]
@@ -510,7 +544,7 @@ def activate_version(
     site = site_dir(packages_dir, name, version)
     files: dict[Path, tuple[str, bytes]] = {}
     edits: dict[str, Any] = {}
-    configured = _package_agents(read_config_file(config_path), config, name)
+    configured = _package_agents(read_config_file(config_path), name)
     for key, class_path in sorted(configured.items()):
         report = _matching_report(entry, current, class_path)
         if report is None or not report.ok:
@@ -538,7 +572,7 @@ def remove_package(config: AppConfig, config_path: Path, name: str) -> RegisterR
     """
     manifest = load_manifest(config.agent_packages.dir)
     section = read_config_file(config_path)
-    keys = sorted(_package_agents(section, config, name))
+    keys = sorted(_package_agents(section, name, running=config))
     if name not in manifest.packages and not keys:
         raise PackageNotFound(f"{name} is not uploaded")
 

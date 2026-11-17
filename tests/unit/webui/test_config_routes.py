@@ -354,7 +354,7 @@ def test_preview_of_an_adjacent_edit_does_not_leak_the_secret_into_the_diff(
     assert REDACTED_SENTINEL in body["diffs"][0]["diff"]
 
 
-def testplan_change_still_writes_the_real_secret(credentialed_config_file, make_app):
+def test_plan_change_still_writes_the_real_secret(credentialed_config_file, make_app):
     """The tuple's second element is what ``apply`` (Task 12) writes to disk.
 
     It must stay the RAW rendered text, never the redacted display text --

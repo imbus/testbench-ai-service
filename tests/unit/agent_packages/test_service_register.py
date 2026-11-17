@@ -246,6 +246,50 @@ def test_register_rolls_back_when_validation_fails(env):
     assert not (env.templates / "de" / "rater2").exists()
 
 
+def test_register_rollback_restores_overwritten_files_and_backups(env):
+    install_package(env.packages, active=False, report=rater_report(data_fields=["other"]))
+    target_dir = env.templates / "en" / "rater2"
+    target_dir.mkdir(parents=True)
+    (target_dir / "started.jinja").write_text("mine", encoding="utf-8")
+    (target_dir / "started.jinja.bak").write_text("older", encoding="utf-8")
+    (target_dir / "failed.jinja").write_text("mine too", encoding="utf-8")
+
+    with pytest.raises(PackageInvalid):
+        env.register(
+            overwrite=["templates/en/rater2/started.jinja", "templates/en/rater2/failed.jinja"]
+        )
+
+    assert sorted(p.name for p in target_dir.iterdir()) == [
+        "failed.jinja",
+        "started.jinja",
+        "started.jinja.bak",
+    ]
+    assert (target_dir / "started.jinja").read_text(encoding="utf-8") == "mine"
+    assert (target_dir / "started.jinja.bak").read_text(encoding="utf-8") == "older"
+    assert (target_dir / "failed.jinja").read_text(encoding="utf-8") == "mine too"
+    assert not (env.prompts / "en" / "rater2").exists()
+
+
+def test_register_rolls_back_dirs_created_before_a_failing_mkdir(env, monkeypatch):
+    install_package(env.packages, active=False)
+    real_mkdir = Path.mkdir
+    calls = {"count": 0}
+
+    def flaky_mkdir(self, *args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 3:
+            raise OSError("no more dirs")
+        return real_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", flaky_mkdir)
+    with pytest.raises(OSError, match="no more dirs"):
+        env.register()
+    monkeypatch.undo()
+
+    assert list(env.prompts.iterdir()) == []
+    assert list(env.templates.iterdir()) == []
+
+
 def test_register_rolls_back_when_the_config_write_fails(env, monkeypatch):
     install_package(env.packages, active=False)
     config_before = env.config_path.read_text(encoding="utf-8")
@@ -318,6 +362,25 @@ def test_activate_updates_a_changed_class_path_and_copies_files(env):
     assert (env.prompts / "en" / "rater2" / "system.jinja").read_text() == (
         "You rate test case sets."
     )
+
+
+def test_activate_after_remove_ignores_agents_of_the_stale_running_config(env):
+    install_package(env.packages, version="1.0.0", active=False)
+    env.register()
+    stale = env.running()  # still has rater2 until the restart
+    remove_package(stale, env.config_path, PACKAGE)
+    install_package(
+        env.packages,
+        version="2.0.0",
+        active=False,
+        report=rater_report(class_path="acme.rater.agent.RaterAgent2"),
+    )
+
+    res = activate_version(stale, env.config_path, PACKAGE, "2.0.0", overwrite=[])
+
+    assert load_manifest(env.packages).active(PACKAGE).version == "2.0.0"
+    assert "rater2" not in env.agents()
+    assert res.written == []
 
 
 def test_remove_package_drops_agents_and_project_overrides(env):
