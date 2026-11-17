@@ -1,7 +1,7 @@
 import asyncio
 import os
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, Response, status
@@ -34,14 +34,7 @@ from testbench_ai_service.webui.auth import (
     set_session_cookies,
 )
 from testbench_ai_service.webui.catalogue import PROVIDER_KEY_NAMES, build_catalogue
-from testbench_ai_service.webui.config_io import (
-    build_config_response,
-    read_config_file,
-    redact_toml_text,
-)
-from testbench_ai_service.webui.diff import file_diff
-from testbench_ai_service.webui.document import apply_edits, load_document, render_document
-from testbench_ai_service.webui.edits import merge_edits, validate_edit_paths
+from testbench_ai_service.webui.config_io import build_config_response, read_config_file
 from testbench_ai_service.webui.fork import build_fork, rollback_fork
 from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 from testbench_ai_service.webui.models import (
@@ -74,6 +67,7 @@ from testbench_ai_service.webui.models import (
 )
 from testbench_ai_service.webui.multi_write import write_all
 from testbench_ai_service.webui.paths import join_path
+from testbench_ai_service.webui.plan import plan_change
 from testbench_ai_service.webui.projects import (
     fetch_projects_with_token,
     projects_response,
@@ -101,67 +95,6 @@ router = APIRouter(
     tags=["console"],
     dependencies=[Depends(require_loopback)],
 )
-
-
-def _plan_change(
-    edits: dict[str, Any],
-    config_path: Path,
-    running: AppConfig,
-) -> tuple[PreviewResponse, str, bool]:
-    """Work out what applying *edits* would do, without doing any of it.
-
-    Returns the preview payload, the rendered TOML text, and whether there is
-    anything to write, so ``apply`` can reuse exactly the text ``preview``
-    showed rather than re-deriving it and risking a different result.
-
-    Everything is computed against *config_path* as it is on disk right now,
-    which is what makes a second operator's diff show the first operator's
-    changes instead of silently reverting them (spec 6.1).
-    """
-    validate_edit_paths(edits)
-
-    document = load_document(config_path)
-    current_text = render_document(document)
-
-    merged = merge_edits(read_config_file(config_path), edits)
-    candidate, issues = validate_config_dict(merged)
-
-    if candidate is None:
-        return (
-            PreviewResponse(
-                valid=False,
-                issues=issues,
-                diffs=[],
-                restart_required=[],
-                in_flight_tasks=0,
-                toml=redact_toml_text(current_text),
-            ),
-            current_text,
-            False,
-        )
-
-    apply_edits(document, edits)
-    proposed_text = render_document(document)
-    diff = file_diff(
-        str(config_path.resolve()),
-        redact_toml_text(current_text),
-        redact_toml_text(proposed_text),
-    )
-
-    has_write = current_text != proposed_text
-
-    return (
-        PreviewResponse(
-            valid=True,
-            issues=[],
-            diffs=[diff] if diff is not None else [],
-            restart_required=restart_required(running, candidate),
-            in_flight_tasks=0,
-            toml=redact_toml_text(proposed_text),
-        ),
-        proposed_text,
-        has_write,
-    )
 
 
 @router.get("/meta", response_model=MetaResponse)
@@ -480,7 +413,7 @@ async def preview_config(
     it is gated exactly like ``apply`` rather than becoming a way for a
     non-admin to explore the config surface.
     """
-    preview, _text, _has_write = _plan_change(
+    preview, _text, _has_write = plan_change(
         body.edits, Path(request.app.state.config_path), config
     )
     preview.in_flight_tasks = registry.count
@@ -526,7 +459,7 @@ async def apply_config(
     raised -- the write already succeeded and the response must say so.
     """
     config_path = Path(request.app.state.config_path)
-    preview, proposed_text, has_write = _plan_change(body.edits, config_path, config)
+    preview, proposed_text, has_write = plan_change(body.edits, config_path, config)
 
     if not preview.valid:
         raise HTTPException(
@@ -924,7 +857,7 @@ async def fork_prompt(
         raise
 
     try:
-        preview, proposed_text, _has_write = _plan_change(edits, config_path, config)
+        preview, proposed_text, _has_write = plan_change(edits, config_path, config)
         if not preview.valid:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

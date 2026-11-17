@@ -358,3 +358,7 @@ def test_nested_values_cannot_smuggle_package_settings(edits):
 
 def test_a_nested_value_without_package_settings_is_accepted():
     validate_edit_paths({"agents": {"r": {"enabled": True, "args": {"package": "x"}}}})
+
+
+def test_server_side_edits_may_set_the_package():
+    validate_edit_paths({"agents.r.package": "acme"}, allow_server_only=True)

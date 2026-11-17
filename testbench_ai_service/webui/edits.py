@@ -102,12 +102,12 @@ def _reaches_server_only_setting(segments: list[str], value: Any) -> bool:
     return False
 
 
-def _validate_single_path(path: str, value: Any) -> list[str]:
+def _validate_single_path(path: str, value: Any, allow_server_only: bool) -> list[str]:
     """Validate a single path and its value, returning its segments."""
     if not isinstance(path, str) or not path.strip():
         _reject("An edit path must be a non-empty string")
     segments = _tokenize(path)
-    if _reaches_server_only_setting(segments, value):
+    if not allow_server_only and _reaches_server_only_setting(segments, value):
         _reject(f"'{path}' can only be changed in config.toml on the server")
     if len(segments) > MAX_PATH_SEGMENTS:
         _reject(f"Edit path {path!r} is nested deeper than {MAX_PATH_SEGMENTS} levels")
@@ -119,8 +119,11 @@ def _validate_single_path(path: str, value: Any) -> list[str]:
     return segments
 
 
-def validate_edit_paths(edits: ConfigEdits) -> None:
+def validate_edit_paths(edits: ConfigEdits, *, allow_server_only: bool = False) -> None:
     """Check every path and value in *edits* before anything acts on them.
+
+    ``allow_server_only`` is for edits the server makes itself (agent package
+    registration); the console's own edits never set it.
 
     Raises:
         HTTPException 400: too many edits, a malformed dotted path, or a value
@@ -129,7 +132,9 @@ def validate_edit_paths(edits: ConfigEdits) -> None:
     if len(edits) > MAX_EDITS:
         _reject(f"Too many edits in one request (limit {MAX_EDITS})")
 
-    tokenized = {path: _validate_single_path(path, value) for path, value in edits.items()}
+    tokenized = {
+        path: _validate_single_path(path, value, allow_server_only) for path, value in edits.items()
+    }
 
     _check_path_prefix_collisions(tokenized)
 

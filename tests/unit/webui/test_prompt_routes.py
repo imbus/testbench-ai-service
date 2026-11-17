@@ -592,7 +592,7 @@ def test_a_fork_producing_an_unloadable_config_removes_what_it_created(
             True,
         )
 
-    monkeypatch.setattr("testbench_ai_service.webui.routes._plan_change", invalid)
+    monkeypatch.setattr("testbench_ai_service.webui.routes.plan_change", invalid)
 
     response = admin_client.post("/admin/api/prompts/de/explainer/fork", json={"project": "Proj"})
     assert response.status_code == 422

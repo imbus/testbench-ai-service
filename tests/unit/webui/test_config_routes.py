@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 
 from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.agent_packages.manifest import site_dir
-from testbench_ai_service.webui.config_io import REDACTED_SENTINEL, read_config_file
-from testbench_ai_service.webui.routes import _plan_change
+from testbench_ai_service.webui.config_io import REDACTED_SENTINEL
+from testbench_ai_service.webui.plan import plan_change
 from tests.helpers.packages import CLASS_PATH, PACKAGE, install_package
 
 COMMENTED = """\
@@ -354,7 +354,7 @@ def test_preview_of_an_adjacent_edit_does_not_leak_the_secret_into_the_diff(
     assert REDACTED_SENTINEL in body["diffs"][0]["diff"]
 
 
-def test_plan_change_still_writes_the_real_secret(credentialed_config_file, make_app):
+def testplan_change_still_writes_the_real_secret(credentialed_config_file, make_app):
     """The tuple's second element is what ``apply`` (Task 12) writes to disk.
 
     It must stay the RAW rendered text, never the redacted display text --
@@ -366,7 +366,7 @@ def test_plan_change_still_writes_the_real_secret(credentialed_config_file, make
     app = make_app()
     running = app.state.config
 
-    _preview, text_to_write, _has_write = _plan_change(
+    _preview, text_to_write, _has_write = plan_change(
         {"llm_config.model": "gpt-4o"}, credentialed_config_file, running
     )
 
@@ -718,15 +718,10 @@ def test_apply_reports_a_post_write_reread_failure_without_raising(file_client, 
     normal 200 with the reason named in reload_detail, never a 4xx that
     would falsely imply the apply itself failed."""
     admin()
-    calls = {"count": 0}
 
     def flaky_read(path):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            # The read _plan_change makes before anything is written must
-            # still succeed, or nothing would ever get written to fail the
-            # re-read against in the first place.
-            return read_config_file(path)
+        # Only the re-read in the route fails: plan_change (webui.plan) reads
+        # the file through its own import, so something gets written first.
         raise HTTPException(status_code=400, detail="not valid TOML: boom")
 
     with patch("testbench_ai_service.webui.routes.read_config_file", side_effect=flaky_read):
