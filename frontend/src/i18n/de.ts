@@ -373,7 +373,7 @@ export const de = {
   agentPackages: 'Agenten-Pakete',
   packagesSub: 'Python-Wheels mit eigenen Agenten',
   packagesLoadError: 'Die Agenten-Pakete konnten nicht geladen werden',
-  packagesUpload: 'Wheel hochladen',
+  packagesUpload: 'Agent-Wheel importieren',
   packagesUploadDisabled:
     'Hochladen ist aus. Setzen Sie agent_packages.allow_upload = true in der config.toml auf dem Server und starten Sie den Dienst neu.',
   packagesEmpty: 'Noch kein Agenten-Paket hochgeladen.',

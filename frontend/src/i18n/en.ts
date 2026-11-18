@@ -372,7 +372,7 @@ export const en = {
   agentPackages: 'Agent packages',
   packagesSub: 'Python wheels with custom agents',
   packagesLoadError: 'Failed to load the agent packages',
-  packagesUpload: 'Upload wheel',
+  packagesUpload: 'Import agent wheel',
   packagesUploadDisabled:
     'Uploading is off. Set agent_packages.allow_upload = true in config.toml on the server and restart.',
   packagesEmpty: 'No agent package uploaded yet.',

@@ -8,10 +8,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PackagesResponse } from '../api/types'
-import { useNotedRestart } from '../api/packages'
+import { useNotedRestart, usePackages } from '../api/packages'
 import { RestartBanner } from '../components/RestartBanner'
 import { i18n } from '../i18n'
-import { AgentPackages } from './AgentPackages'
+import { AgentPackagesSection, PackageUploadButton, usePackageDialogs } from './AgentPackages'
 import { ok, packages, pkg, version } from './packages/fixtures'
 
 beforeEach(() => i18n.changeLanguage('en'))
@@ -56,6 +56,19 @@ function Banner() {
   return <RestartBanner fields={useNotedRestart(undefined)} />
 }
 
+/** The parts the agents screen puts together: header button, section, dialogs. */
+function AgentPackages({ isAdmin }: { isAdmin: boolean }) {
+  const packages = usePackages()
+  const dialogs = usePackageDialogs(packages.data)
+  return (
+    <>
+      {isAdmin && <PackageUploadButton data={packages.data} dialogs={dialogs} />}
+      <AgentPackagesSection packages={packages} dialogs={dialogs} isAdmin={isAdmin} />
+      {dialogs.element}
+    </>
+  )
+}
+
 function renderScreen({ isAdmin = true }: { isAdmin?: boolean } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
@@ -77,7 +90,7 @@ describe('agent packages screen', () => {
     body = packages({ allow_upload: false })
     renderScreen()
 
-    const button = await screen.findByRole('button', { name: 'Upload wheel' })
+    const button = await screen.findByRole('button', { name: 'Import agent wheel' })
     expect(button).toBeDisabled()
     expect(
       screen.getAllByText(/Set agent_packages.allow_upload = true in config.toml/).length,
@@ -121,7 +134,13 @@ describe('agent packages screen', () => {
     renderScreen({ isAdmin: false })
 
     await screen.findByTestId('package-acme-tb-agents')
-    for (const name of ['Upload wheel', 'Register agents', 'Activate', 'Delete', 'Remove package'])
+    for (const name of [
+      'Import agent wheel',
+      'Register agents',
+      'Activate',
+      'Delete',
+      'Remove package',
+    ])
       expect(screen.queryByRole('button', { name })).toBeNull()
   })
 

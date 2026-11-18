@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from 'primereact/button'
 import { Message } from 'primereact/message'
 import { Tag } from 'primereact/tag'
@@ -11,7 +11,7 @@ import { PackageError, ReportView } from './packages/parts'
 import { ActivateDialog, RegisterDialog } from './packages/RegisterDialog'
 import { UploadDialog } from './packages/UploadDialog'
 
-type Dialog =
+export type Dialog =
   | { kind: 'upload' }
   | { kind: 'register'; pkg: string; version: PackageVersion }
   | { kind: 'activate'; pkg: string; version: string }
@@ -23,33 +23,25 @@ function formatDate(iso: string, language: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleDateString(language)
 }
 
+export interface PackageDialogs {
+  open: (dialog: Dialog) => void
+  /** Register a version, or activate it when another version of its package is active. */
+  openVersion: (name: string, version: PackageVersion) => void
+  /** The open dialog, if any; render it once, anywhere on the page. */
+  element: ReactNode
+}
+
 /**
- * Uploaded agent packages (Python wheels), their check reports, and the
- * actions that put their agents to use. Every action is admin-only; a
- * non-admin reads the same page without them.
+ * The dialogs of the package actions, shared by the upload button in the
+ * agents header and the package cards below the agent table: an upload ends
+ * in the register dialog, so both have to open the same set.
  */
-export function AgentPackages({ isAdmin }: { isAdmin: boolean }) {
-  const { t } = useTranslation()
-  const packages = usePackages()
+export function usePackageDialogs(data: PackagesResponse | undefined): PackageDialogs {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const close = () => setDialog(null)
 
-  if (packages.isLoading) return <div style={{ padding: 28 }}>…</div>
-  if (packages.isError || !packages.data) {
-    return (
-      <div role="alert" style={{ padding: 28 }}>
-        <div>{t('packagesLoadError')}</div>
-        <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
-          {(packages.error as Error | null)?.message}
-        </div>
-      </div>
-    )
-  }
-  const data = packages.data
-
-  /** Register a version, or activate it when another version of its package is active. */
   const openVersion = (name: string, version: PackageVersion) => {
-    const other = data.packages
+    const other = data?.packages
       .find((entry) => entry.name === name)
       ?.versions.some((entry) => entry.active && entry.version !== version.version)
     setDialog(
@@ -59,56 +51,8 @@ export function AgentPackages({ isAdmin }: { isAdmin: boolean }) {
     )
   }
 
-  return (
-    <div style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-        <div>
-          <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
-            {t('agentPackages')}
-          </h2>
-          <div className="text-muted" style={{ fontSize: 12 }}>
-            {t('packagesSub')}
-          </div>
-        </div>
-        <div style={{ flex: 1 }} />
-        {isAdmin && (
-          // The wrapper carries the explanation: a disabled button takes no
-          // pointer events, so a title on the button itself never shows.
-          <span title={data.allow_upload ? undefined : t('packagesUploadDisabled')}>
-            <Button
-              type="button"
-              label={t('packagesUpload')}
-              disabled={!data.allow_upload}
-              onClick={() => setDialog({ kind: 'upload' })}
-            />
-          </span>
-        )}
-      </div>
-
-      {isAdmin && !data.allow_upload && (
-        <div className="text-muted" style={{ fontSize: 12 }}>
-          {t('packagesUploadDisabled')}
-        </div>
-      )}
-
-      {data.packages.length === 0 && (
-        <div className="text-muted" style={{ fontSize: 13 }}>
-          {t('packagesEmpty')}
-        </div>
-      )}
-
-      {data.packages.map((entry) => (
-        <PackageCard
-          key={entry.name}
-          pkg={entry}
-          isAdmin={isAdmin}
-          onUse={(version) => openVersion(entry.name, version)}
-          onActivate={(version) => setDialog({ kind: 'activate', pkg: entry.name, version })}
-          onDelete={(version) => setDialog({ kind: 'delete', pkg: entry.name, version })}
-          onRemove={() => setDialog({ kind: 'remove', pkg: entry })}
-        />
-      ))}
-
+  const element = data ? (
+    <>
       {dialog?.kind === 'upload' && (
         <UploadDialog
           onClose={close}
@@ -136,7 +80,114 @@ export function AgentPackages({ isAdmin }: { isAdmin: boolean }) {
         <DeleteDialog name={dialog.pkg} version={dialog.version} onClose={close} />
       )}
       {dialog?.kind === 'remove' && <RemoveDialog pkg={dialog.pkg} onClose={close} />}
-    </div>
+    </>
+  ) : null
+
+  return { open: setDialog, openVersion, element }
+}
+
+/**
+ * The admin's button that imports an agent wheel. Disabled, with the reason,
+ * while uploading is switched off in the config; absent until the package
+ * list has loaded, since the upload flow needs it.
+ */
+export function PackageUploadButton({
+  data,
+  dialogs,
+}: {
+  data: PackagesResponse | undefined
+  dialogs: PackageDialogs
+}) {
+  const { t } = useTranslation()
+  if (!data) return null
+  return (
+    // The wrapper carries the explanation: a disabled button takes no
+    // pointer events, so a title on the button itself never shows.
+    <span title={data.allow_upload ? undefined : t('packagesUploadDisabled')}>
+      <Button
+        type="button"
+        label={t('packagesUpload')}
+        disabled={!data.allow_upload}
+        onClick={() => dialogs.open({ kind: 'upload' })}
+      />
+    </span>
+  )
+}
+
+/**
+ * Uploaded agent packages (Python wheels), their check reports, and the
+ * actions that put their agents to use: a section of the agents screen.
+ * Every action is admin-only; a non-admin reads the same section without them.
+ */
+export function AgentPackagesSection({
+  packages,
+  dialogs,
+  isAdmin,
+}: {
+  packages: ReturnType<typeof usePackages>
+  dialogs: PackageDialogs
+  isAdmin: boolean
+}) {
+  const { t } = useTranslation()
+
+  let body: ReactNode
+  if (packages.isLoading) body = <div>…</div>
+  else if (packages.isError || !packages.data) {
+    body = (
+      <div role="alert">
+        <div>{t('packagesLoadError')}</div>
+        <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+          {(packages.error as Error | null)?.message}
+        </div>
+      </div>
+    )
+  } else {
+    const data = packages.data
+    // `?? []`: a payload without the list renders an empty section rather
+    // than taking the agents screen above it down.
+    const list = data.packages ?? []
+    body = (
+      <>
+        {isAdmin && !data.allow_upload && (
+          <div className="text-muted" style={{ fontSize: 12 }}>
+            {t('packagesUploadDisabled')}
+          </div>
+        )}
+        {list.length === 0 && (
+          <div className="text-muted" style={{ fontSize: 13 }}>
+            {t('packagesEmpty')}
+          </div>
+        )}
+        {list.map((entry) => (
+          <PackageCard
+            key={entry.name}
+            pkg={entry}
+            isAdmin={isAdmin}
+            onUse={(version) => dialogs.openVersion(entry.name, version)}
+            onActivate={(version) => dialogs.open({ kind: 'activate', pkg: entry.name, version })}
+            onDelete={(version) => dialogs.open({ kind: 'delete', pkg: entry.name, version })}
+            onRemove={() => dialogs.open({ kind: 'remove', pkg: entry })}
+          />
+        ))}
+      </>
+    )
+  }
+
+  return (
+    <section
+      aria-label={t('agentPackages')}
+      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
+      <div>
+        <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)', fontSize: 20 }}>
+          {t('agentPackages')}
+        </h3>
+        <div className="text-muted" style={{ fontSize: 12 }}>
+          {t('packagesSub')}
+        </div>
+      </div>
+      {body}
+    </section>
   )
 }
 

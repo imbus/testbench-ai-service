@@ -63,15 +63,6 @@ export const NAV_ITEMS: NavItem[] = [
     dividerBefore: true,
   },
   {
-    key: 'agentPackages',
-    path: '/admin/agent-packages',
-    labelKey: 'agentPackages',
-    icon: 'M16.5 9.4 7.5 4.2M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7zM3.3 7 12 12l8.7-5M12 22V12',
-    // Read-only for a non-admin, like Agents: the actions are gated on the
-    // screen itself.
-    adminOnly: false,
-  },
-  {
     key: 'projects',
     path: '/admin/projects',
     labelKey: 'projects',

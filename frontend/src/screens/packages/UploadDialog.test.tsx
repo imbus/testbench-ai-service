@@ -36,9 +36,9 @@ describe('UploadDialog', () => {
     const user = userEvent.setup()
     const onRegister = renderDialog()
 
-    expect(screen.getByRole('button', { name: 'Upload wheel' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Import agent wheel' })).toBeDisabled()
     await user.upload(screen.getByLabelText('Wheel file (.whl)'), WHEEL)
-    await user.click(screen.getByRole('button', { name: 'Upload wheel' }))
+    await user.click(screen.getByRole('button', { name: 'Import agent wheel' }))
 
     expect(await screen.findByTestId('package-agent-dup_finder')).toHaveTextContent(
       'prompts/de/prompt.yaml is missing',
@@ -66,7 +66,7 @@ describe('UploadDialog', () => {
     renderDialog()
 
     await user.upload(screen.getByLabelText('Wheel file (.whl)'), WHEEL)
-    await user.click(screen.getByRole('button', { name: 'Upload wheel' }))
+    await user.click(screen.getByRole('button', { name: 'Import agent wheel' }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('The package was rejected.')
@@ -80,7 +80,7 @@ describe('UploadDialog', () => {
     renderDialog()
 
     await user.upload(screen.getByLabelText('Wheel file (.whl)'), WHEEL)
-    await user.click(screen.getByRole('button', { name: 'Upload wheel' }))
+    await user.click(screen.getByRole('button', { name: 'Import agent wheel' }))
 
     await waitFor(() =>
       expect(screen.getByRole('alert')).toHaveTextContent('larger than the server accepts'),

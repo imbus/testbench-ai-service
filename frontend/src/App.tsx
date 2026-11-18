@@ -6,7 +6,6 @@ import { PendingBanner } from './components/PendingBanner'
 import { RestartBanner } from './components/RestartBanner'
 import { TopBar } from './components/TopBar'
 import { AgentDetail } from './screens/AgentDetail'
-import { AgentPackages } from './screens/AgentPackages'
 import { Agents } from './screens/Agents'
 import { ConfigSection } from './screens/ConfigSection'
 import { Jobs } from './screens/Jobs'
@@ -150,9 +149,11 @@ export function App() {
                 path="/admin/agents/:agentKey"
                 element={<AgentDetail isAdmin={session.is_admin} issues={issues} />}
               />
+              {/* The packages are a section of the agents screen now; the
+                  old address stays for bookmarks. */}
               <Route
                 path="/admin/agent-packages"
-                element={<AgentPackages isAdmin={session.is_admin} />}
+                element={<Navigate to="/admin/agents" replace />}
               />
               <Route
                 path="/admin/projects"

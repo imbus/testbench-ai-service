@@ -56,11 +56,11 @@ it('offers the agents and projects screens to an admin', () => {
   expect(screen.getByRole('link', { name: /Projekte/ })).toHaveAttribute('href', '/admin/projects')
 })
 
-it('offers the agent packages screen right after the agents', () => {
+it('has no entry of its own for the agent packages, a section of the agents screen', () => {
   renderNav(true)
 
   const links = screen.getAllByRole('link').map((link) => link.getAttribute('href'))
-  expect(links.indexOf('/admin/agent-packages')).toBe(links.indexOf('/admin/agents') + 1)
+  expect(links).not.toContain('/admin/agent-packages')
 })
 
 it('keeps agents and projects readable for a non-admin', () => {
@@ -69,7 +69,7 @@ it('keeps agents and projects readable for a non-admin', () => {
   // operator is allowed to see.
   renderNav(false)
 
-  for (const label of [/^Agenten$/, /Agenten-Pakete/, /Projekte/]) {
+  for (const label of [/^Agenten$/, /Projekte/]) {
     expect(screen.getByRole('link', { name: label })).not.toHaveAttribute('aria-disabled', 'true')
   }
 })

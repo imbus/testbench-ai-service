@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import type { ConfigResponse, ProjectsResponse, PromptMeta } from '../api/types'
 import { Agents } from './Agents'
+import { pkg, version } from './packages/fixtures'
 import { i18n } from '../i18n'
 import { openPicker, pickFrom } from '../test/pickers'
 
@@ -387,15 +388,7 @@ describe('agents from an agent package', () => {
         return ok({
           allow_upload: true,
           default_dirs: false,
-          packages: [
-            {
-              name: 'acme-tb-agents',
-              versions: [{ version: '1.2.0', active: true }],
-              registered: { rater: 'risk_rater' },
-              loaded: true,
-              load_error: null,
-            },
-          ],
+          packages: [pkg({ versions: [version()], registered: { rater: 'risk_rater' } })],
         })
       if (url === '/admin/api/status')
         return ok({
@@ -424,6 +417,24 @@ describe('agents from an agent package', () => {
     expect(
       within(screen.getByTestId('agent-row-reviewer')).queryByTestId('agent-package'),
     ).toBeNull()
+  })
+
+  it('puts the wheel import in the header and the packages below the agents', async () => {
+    serve()
+    renderAgents()
+
+    const button = await screen.findByRole('button', { name: 'Import agent wheel' })
+    expect(button).toBeEnabled()
+    const section = screen.getByRole('region', { name: 'Agent packages' })
+    expect(await within(section).findByTestId('package-acme-tb-agents')).toBeInTheDocument()
+  })
+
+  it('shows a non-admin the packages without the import button', async () => {
+    serve()
+    renderAgents({ isAdmin: false })
+
+    await screen.findByTestId('package-acme-tb-agents')
+    expect(screen.queryByRole('button', { name: 'Import agent wheel' })).toBeNull()
   })
 
   it('marks a package agent that is not loaded, and an agent that failed to import', async () => {
