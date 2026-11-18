@@ -6,6 +6,46 @@ import type { PackageReport } from '../../api/types'
 
 const LIST = { margin: '2px 0 0', paddingLeft: 18, fontSize: 12 } as const
 
+/** A stroke icon in the style of the nav rail's; `d` is the SVG path. */
+export function Icon({ d, size = 16, color }: { d: string; size?: number; color?: string }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color ?? 'currentColor'}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      style={{ flex: 'none' }}
+    >
+      <path d={d} />
+    </svg>
+  )
+}
+
+export const ICONS = {
+  upload: 'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12',
+  file: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
+  close: 'M18 6 6 18M6 6l12 12',
+  box: 'M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4a2 2 0 0 0 1-1.7zM3.3 7 12 12l8.7-5M12 22V12',
+  check: 'M20 6 9 17l-5-5',
+  warn: 'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01',
+}
+
+/** A bordered list whose rows are divided by hairlines, as in the cards. */
+export const LIST_GROUP = {
+  border: '1px solid var(--color-divider)',
+  borderRadius: 8,
+  overflow: 'hidden',
+} as const
+export const LIST_ROW = {
+  padding: '9px 14px',
+  borderTop: '1px solid var(--color-divider)',
+} as const
+
 /** Errors and warnings as two short lists, nothing when both are empty. */
 function Findings({ errors, warnings }: { errors: string[]; warnings: string[] }) {
   const { t } = useTranslation()
@@ -18,7 +58,7 @@ function Findings({ errors, warnings }: { errors: string[]; warnings: string[] }
         </li>
       ))}
       {warnings.map((warning) => (
-        <li key={`w-${warning}`} className="text-muted">
+        <li key={`w-${warning}`} style={{ color: 'var(--color-warning)' }}>
           {t('packagesWarning')}: {warning}
         </li>
       ))}
@@ -27,8 +67,8 @@ function Findings({ errors, warnings }: { errors: string[]; warnings: string[] }
 }
 
 /**
- * A version's check report: the package-level findings, then one line per
- * agent entry point. `registered` maps agent keys to entry points, so a line
+ * A version's check report: the package-level findings, then one row per
+ * agent entry point. `registered` maps agent keys to entry points, so a row
  * can say which key an entry point is configured under.
  */
 export function ReportView({
@@ -41,41 +81,74 @@ export function ReportView({
   const { t } = useTranslation()
   const agents = Object.entries(report.agents)
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <Findings errors={report.errors} warnings={report.warnings} />
-      {agents.length === 0 && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {(report.errors.length > 0 || report.warnings.length > 0) && (
+        <Message
+          severity={report.errors.length > 0 ? 'error' : 'warn'}
+          style={{ justifyContent: 'flex-start' }}
+          content={<Findings errors={report.errors} warnings={report.warnings} />}
+        />
+      )}
+      {agents.length === 0 ? (
         <div className="text-muted" style={{ fontSize: 13 }}>
           {t('packagesNoAgents')}
         </div>
+      ) : (
+        <div style={LIST_GROUP}>
+          {agents.map(([entryPoint, agent], index) => {
+            const keys = Object.keys(registered).filter((key) => registered[key] === entryPoint)
+            const color = agent.ok ? 'var(--color-success)' : 'var(--color-danger)'
+            return (
+              <div
+                key={entryPoint}
+                data-testid={`package-agent-${entryPoint}`}
+                style={{ ...LIST_ROW, ...(index === 0 ? { borderTop: 'none' } : {}) }}
+              >
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13 }}>
+                  <span
+                    role="img"
+                    aria-label={agent.ok ? 'ok' : t('packagesCheckFailed')}
+                    style={{ display: 'flex' }}
+                  >
+                    <Icon d={agent.ok ? ICONS.check : ICONS.close} color={color} />
+                  </span>
+                  <code style={{ fontWeight: 600 }}>{entryPoint}</code>
+                  {keys.length > 0 && (
+                    <span
+                      style={{
+                        fontSize: 12,
+                        padding: '1px 8px',
+                        borderRadius: 999,
+                        background: 'var(--color-success-soft)',
+                      }}
+                    >
+                      {t('packagesRegisteredAs')}{' '}
+                      <code style={{ fontSize: 12 }}>{keys.join(', ')}</code>
+                    </span>
+                  )}
+                  <span
+                    className="text-muted"
+                    style={{
+                      fontSize: 11,
+                      fontFamily: 'var(--font-code)',
+                      marginLeft: 'auto',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      minWidth: 0,
+                    }}
+                  >
+                    {agent.class_path}
+                  </span>
+                </div>
+                <div style={{ paddingLeft: 26 }}>
+                  <Findings errors={agent.errors} warnings={agent.warnings} />
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
-      {agents.map(([entryPoint, agent]) => {
-        const keys = Object.keys(registered).filter((key) => registered[key] === entryPoint)
-        return (
-          <div key={entryPoint} data-testid={`package-agent-${entryPoint}`}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
-              <span
-                aria-label={agent.ok ? 'ok' : t('packagesCheckFailed')}
-                style={{ color: agent.ok ? 'var(--color-success)' : 'var(--color-danger)' }}
-              >
-                {agent.ok ? '✔' : '✖'}
-              </span>
-              <code>{entryPoint}</code>
-              {keys.length > 0 && (
-                <span className="text-muted">
-                  {t('packagesRegisteredAs')} <code>{keys.join(', ')}</code>
-                </span>
-              )}
-              <span
-                className="text-muted"
-                style={{ fontSize: 11, fontFamily: 'var(--font-code)', marginLeft: 'auto' }}
-              >
-                {agent.class_path}
-              </span>
-            </div>
-            <Findings errors={agent.errors} warnings={agent.warnings} />
-          </div>
-        )
-      })}
     </div>
   )
 }

@@ -530,3 +530,62 @@
   padding: 0;
   border-top: 1px solid var(--color-divider);
 }
+
+/* Button severities: a destructive text action and a quiet icon button
+   (the agent package cards and the upload wizard). */
+.p-button.p-button-text.p-button-danger,
+.p-button.p-button-text.p-button-danger:not(:disabled):hover,
+.p-button.p-button-outlined.p-button-danger,
+.p-button.p-button-outlined.p-button-danger:not(:disabled):hover {
+  color: var(--color-danger);
+}
+.p-button.p-button-text.p-button-danger:not(:disabled):hover,
+.p-button.p-button-outlined.p-button-danger:not(:disabled):hover {
+  background: var(--color-danger-soft);
+}
+.p-button.p-button-outlined.p-button-danger {
+  border-color: color-mix(in srgb, var(--color-danger) 45%, transparent);
+}
+.p-button.p-button-text.p-button-secondary,
+.p-button.p-button-text.p-button-secondary:not(:disabled):hover {
+  color: var(--color-muted);
+}
+.p-button.p-button-text.p-button-secondary:not(:disabled):hover {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+
+.p-progressbar {
+  background: color-mix(in srgb, var(--color-text) 10%, transparent);
+  border-radius: 999px;
+}
+.p-progressbar .p-progressbar-value {
+  background: var(--color-accent);
+}
+
+.p-checkbox .p-checkbox-box,
+.p-radiobutton .p-radiobutton-box {
+  background: var(--color-surface);
+  border: 2px solid color-mix(in srgb, var(--color-text) 30%, transparent);
+}
+.p-checkbox:not(.p-disabled):hover .p-checkbox-box,
+.p-radiobutton:not(.p-disabled):hover .p-radiobutton-box {
+  border-color: var(--color-accent-fg);
+}
+.p-checkbox.p-highlight .p-checkbox-box,
+.p-radiobutton.p-highlight .p-radiobutton-box {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.p-checkbox.p-highlight .p-checkbox-box .p-checkbox-icon {
+  color: #1d1f20;
+}
+.p-radiobutton.p-highlight .p-radiobutton-box .p-radiobutton-icon {
+  background: #1d1f20;
+}
+[data-theme='dark'] .p-checkbox.p-highlight .p-checkbox-box .p-checkbox-icon {
+  color: #0f1215;
+}
+[data-theme='dark'] .p-radiobutton.p-highlight .p-radiobutton-box .p-radiobutton-icon {
+  background: #0f1215;
+}

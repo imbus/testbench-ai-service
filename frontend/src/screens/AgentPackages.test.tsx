@@ -119,6 +119,7 @@ describe('agent packages screen', () => {
   })
 
   it('offers activate and delete for an inactive version, register for the active one', async () => {
+    body = packages({ packages: [pkg({ registered: {} })] })
     renderScreen()
 
     const active = await screen.findByTestId('package-version-1.2.0')
@@ -203,6 +204,15 @@ describe('agent packages screen', () => {
     expect(
       screen.getByRole('dialog', { name: 'Register agents of acme-tb-agents 1.2.0' }),
     ).toBeInTheDocument()
+  })
+
+  it('offers no register when every agent that passed is registered already', async () => {
+    // The fixture registers risk_rater; dup_finder failed its check.
+    renderScreen()
+
+    const active = await screen.findByTestId('package-version-1.2.0')
+    expect(within(active).queryByRole('button', { name: 'Register agents' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Remove package' })).toBeInTheDocument()
   })
 
   it('offers register for a version when no version is active', async () => {

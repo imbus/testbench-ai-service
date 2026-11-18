@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button } from 'primereact/button'
 import { Checkbox } from 'primereact/checkbox'
 import { InputText } from 'primereact/inputtext'
@@ -172,25 +172,38 @@ interface Row {
   enabled: boolean
 }
 
+/** What a register form hands its footer: the submit action and whether it may run. */
+export interface RegisterFooter {
+  submit: () => void
+  disabled: boolean
+}
+
 /**
- * Configure the entry points of a package version as agents.
+ * Configure the entry points of a package version as agents: the form both
+ * the register dialog and the upload wizard's last step show.
  *
  * Only entry points that passed the check and are not configured yet are
  * offered. While the service uses the shipped prompt and template folders the
- * server refuses, so the dialog says so up front and cannot be submitted.
+ * server refuses, so the form says so up front and cannot be submitted.
+ * The caller draws the buttons through `footer`.
  */
-export function RegisterDialog({
+export function RegisterForm({
   name,
   version,
   registered,
   defaultDirs,
-  onClose,
+  onDone,
+  body = (content) => content,
+  footer,
 }: {
   name: string
   version: PackageVersion
   registered: Record<string, string>
   defaultDirs: boolean
-  onClose: () => void
+  onDone: () => void
+  /** Wraps the form's fields, e.g. into a body of fixed height; as-is by default. */
+  body?: (content: ReactNode) => ReactNode
+  footer: (props: RegisterFooter) => ReactNode
 }) {
   const { t } = useTranslation()
   const register = useRegisterAgents()
@@ -218,7 +231,6 @@ export function RegisterDialog({
     setRows((current) => current.map((row, i) => (i === index ? { ...row, ...change } : row)))
 
   const selected = rows.filter((row) => row.include)
-  const title = t('packagesRegisterTitle', { name, version: version.version })
 
   const submit = () =>
     register.mutate(
@@ -228,97 +240,159 @@ export function RegisterDialog({
         agents: selected.map(({ include: _include, ...agent }) => agent),
         ...files.files(),
       },
-      { onSuccess: onClose, onError: files.learn },
+      { onSuccess: onDone, onError: files.learn },
     )
 
   return (
+    <>
+      {body(
+        <>
+          {defaultDirs && (
+            <Message
+              severity="warn"
+              style={{ justifyContent: 'flex-start' }}
+              text={t('packagesDefaultDirs')}
+            />
+          )}
+
+          {rows.length === 0 && (
+            <div style={{ fontSize: 13 }}>{t('packagesNothingToRegister')}</div>
+          )}
+
+          {rows.length > 0 && (
+            <div
+              className="text-muted"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'auto minmax(0, 1fr) minmax(0, 1fr) auto',
+                gap: 10,
+                fontSize: 11,
+                letterSpacing: '.06em',
+                textTransform: 'uppercase',
+              }}
+            >
+              <span>{t('packagesColEntryPoint')}</span>
+              <span>agent_key</span>
+              <span>endpoint_path</span>
+              <span />
+            </div>
+          )}
+
+          {rows.map((row, index) => (
+            <div
+              key={row.entry_point}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'auto minmax(0, 1fr) minmax(0, 1fr) auto',
+                gap: 10,
+                alignItems: 'center',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Checkbox
+                  inputId={`include-${index}`}
+                  checked={row.include}
+                  onChange={() => update(index, { include: !row.include })}
+                  aria-label={`${row.entry_point} ${t('packagesInclude')}`}
+                />
+                <label htmlFor={`include-${index}`} style={{ fontSize: 13 }}>
+                  <code>{row.entry_point}</code>
+                </label>
+              </span>
+              <InputText
+                value={row.agent_key}
+                aria-label={`${row.entry_point} agent_key`}
+                onChange={(event) => update(index, { agent_key: event.target.value })}
+                style={{ fontFamily: 'var(--font-code)', fontSize: 13 }}
+              />
+              <InputText
+                value={row.endpoint_path}
+                aria-label={`${row.entry_point} endpoint_path`}
+                onChange={(event) => update(index, { endpoint_path: event.target.value })}
+                style={{ fontFamily: 'var(--font-code)', fontSize: 13 }}
+              />
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Checkbox
+                  inputId={`enabled-${index}`}
+                  checked={row.enabled}
+                  onChange={() => update(index, { enabled: !row.enabled })}
+                  aria-label={`${row.entry_point} ${t('packagesAgentEnabled')}`}
+                />
+                <label htmlFor={`enabled-${index}`} style={{ fontSize: 12 }} className="text-muted">
+                  {t('packagesAgentEnabled')}
+                </label>
+              </span>
+            </div>
+          ))}
+
+          {failed.map(([entryPoint, agent]) => (
+            <div
+              key={entryPoint}
+              data-testid={`not-registrable-${entryPoint}`}
+              className="text-muted"
+              style={{ fontSize: 12 }}
+            >
+              <code>{entryPoint}</code> — {t('packagesNotRegistrable')}: {agent.errors.join('; ')}
+            </div>
+          ))}
+
+          {files.conflicts.length > 0 && (
+            <ConflictList
+              conflicts={files.conflicts}
+              choices={files.choices}
+              onChoose={files.choose}
+            />
+          )}
+          {register.isError && conflictsOf(register.error).length === 0 && (
+            <PackageError error={register.error} />
+          )}
+        </>,
+      )}
+      {footer({
+        submit,
+        disabled: defaultDirs || selected.length === 0 || files.undecided || register.isPending,
+      })}
+    </>
+  )
+}
+
+/** The register form on its own, for a version that is already uploaded. */
+export function RegisterDialog({
+  name,
+  version,
+  registered,
+  defaultDirs,
+  onClose,
+}: {
+  name: string
+  version: PackageVersion
+  registered: Record<string, string>
+  defaultDirs: boolean
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  const title = t('packagesRegisterTitle', { name, version: version.version })
+  return (
     <Modal label={title} width={760} maxHeight="85vh">
       <h3 style={{ margin: 0 }}>{title}</h3>
-
-      {defaultDirs && (
-        <Message
-          severity="warn"
-          style={{ justifyContent: 'flex-start' }}
-          text={t('packagesDefaultDirs')}
-        />
-      )}
-
-      {rows.length === 0 && <div style={{ fontSize: 13 }}>{t('packagesNothingToRegister')}</div>}
-
-      {rows.map((row, index) => (
-        <div
-          key={row.entry_point}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'auto minmax(0, 1fr) minmax(0, 1fr) auto',
-            gap: 10,
-            alignItems: 'center',
-          }}
-        >
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Checkbox
-              inputId={`include-${index}`}
-              checked={row.include}
-              onChange={() => update(index, { include: !row.include })}
-              aria-label={`${row.entry_point} ${t('packagesInclude')}`}
+      <RegisterForm
+        name={name}
+        version={version}
+        registered={registered}
+        defaultDirs={defaultDirs}
+        onDone={onClose}
+        footer={({ submit, disabled }) => (
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Button type="button" outlined label={t('cancel')} onClick={onClose} />
+            <Button
+              type="button"
+              label={t('packagesRegister')}
+              onClick={submit}
+              disabled={disabled}
             />
-            <label htmlFor={`include-${index}`} style={{ fontSize: 13 }}>
-              <code>{row.entry_point}</code>
-            </label>
-          </span>
-          <InputText
-            value={row.agent_key}
-            aria-label={`${row.entry_point} agent_key`}
-            onChange={(event) => update(index, { agent_key: event.target.value })}
-            style={{ fontFamily: 'var(--font-code)', fontSize: 13 }}
-          />
-          <InputText
-            value={row.endpoint_path}
-            aria-label={`${row.entry_point} endpoint_path`}
-            onChange={(event) => update(index, { endpoint_path: event.target.value })}
-            style={{ fontFamily: 'var(--font-code)', fontSize: 13 }}
-          />
-          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Checkbox
-              inputId={`enabled-${index}`}
-              checked={row.enabled}
-              onChange={() => update(index, { enabled: !row.enabled })}
-              aria-label={`${row.entry_point} ${t('packagesAgentEnabled')}`}
-            />
-            <label htmlFor={`enabled-${index}`} style={{ fontSize: 12 }} className="text-muted">
-              {t('packagesAgentEnabled')}
-            </label>
-          </span>
-        </div>
-      ))}
-
-      {failed.map(([entryPoint, agent]) => (
-        <div
-          key={entryPoint}
-          data-testid={`not-registrable-${entryPoint}`}
-          className="text-muted"
-          style={{ fontSize: 12 }}
-        >
-          <code>{entryPoint}</code> — {t('packagesNotRegistrable')}: {agent.errors.join('; ')}
-        </div>
-      ))}
-
-      {files.conflicts.length > 0 && (
-        <ConflictList conflicts={files.conflicts} choices={files.choices} onChoose={files.choose} />
-      )}
-      {register.isError && conflictsOf(register.error).length === 0 && (
-        <PackageError error={register.error} />
-      )}
-
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-        <Button type="button" outlined label={t('cancel')} onClick={onClose} />
-        <Button
-          type="button"
-          label={t('packagesRegister')}
-          onClick={submit}
-          disabled={defaultDirs || selected.length === 0 || files.undecided || register.isPending}
-        />
-      </div>
+          </div>
+        )}
+      />
     </Modal>
   )
 }

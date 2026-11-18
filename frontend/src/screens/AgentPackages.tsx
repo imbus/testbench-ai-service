@@ -7,7 +7,7 @@ import { usePackages, useDeleteVersion, useRemovePackage } from '../api/packages
 import { useConfig } from '../api/queries'
 import type { AgentPackage, PackagesResponse, PackageVersion } from '../api/types'
 import { Modal } from '../components/Modal'
-import { PackageError, ReportView } from './packages/parts'
+import { Icon, ICONS, LIST_GROUP, LIST_ROW, PackageError, ReportView } from './packages/parts'
 import { ActivateDialog, RegisterDialog } from './packages/RegisterDialog'
 import { UploadDialog } from './packages/UploadDialog'
 
@@ -56,7 +56,10 @@ export function usePackageDialogs(data: PackagesResponse | undefined): PackageDi
       {dialog?.kind === 'upload' && (
         <UploadDialog
           onClose={close}
-          onRegister={(version) => openVersion(version.name, version)}
+          packages={data}
+          onActivate={(version) =>
+            setDialog({ kind: 'activate', pkg: version.name, version: version.version })
+          }
         />
       )}
       {dialog?.kind === 'register' && (
@@ -195,6 +198,13 @@ function registeredOf(data: PackagesResponse, name: string): Record<string, stri
   return data.packages.find((entry) => entry.name === name)?.registered ?? {}
 }
 
+const SECTION_LABEL = {
+  fontSize: 11,
+  letterSpacing: '.08em',
+  textTransform: 'uppercase',
+  color: 'var(--color-muted)',
+} as const
+
 function PackageCard({
   pkg,
   isAdmin,
@@ -223,122 +233,184 @@ function PackageCard({
       aria-label={pkg.name}
       style={{
         border: '1px solid var(--color-divider)',
-        borderRadius: 6,
-        padding: '14px 18px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
+        borderRadius: 10,
+        background: 'var(--color-bg)',
+        boxShadow: 'var(--shadow-sm)',
+        overflow: 'hidden',
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 17 }}>
-          {pkg.name}
-        </span>
-        {active ? (
-          <>
-            <span style={{ fontFamily: 'var(--font-code)', fontSize: 13 }}>{active.version}</span>
-            <Tag value={t('packagesActive')} style={{ padding: '1px 6px', fontSize: 10 }} />
-          </>
-        ) : (
-          <span className="text-muted" style={{ fontSize: 12 }}>
-            {t('packagesNoActiveVersion')}
-          </span>
-        )}
-        {inUse && (
-          <Tag
-            severity={pkg.loaded ? 'success' : 'warning'}
-            value={pkg.loaded ? t('packagesLoaded') : t('packagesNotLoaded')}
-            style={{ padding: '1px 6px', fontSize: 10 }}
-          />
-        )}
-        {shown && (
-          <span className="text-muted" style={{ fontSize: 12 }}>
-            <span style={{ fontFamily: 'var(--font-code)' }} title={shown.sha256}>
-              sha256 {shown.sha256.slice(0, 8)}…
-            </span>{' '}
-            ·{' '}
-            {shown.uploaded_by
-              ? t('packagesUploadedBy', { user: shown.uploaded_by, date })
-              : t('packagesUploadedAt', { date })}
-          </span>
-        )}
-      </div>
-
-      {pkg.load_error && (
-        <Message severity="warn" style={{ justifyContent: 'flex-start' }} text={pkg.load_error} />
-      )}
-
-      {shown && <ReportView report={shown.report} registered={pkg.registered} />}
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        <div
-          className="text-muted"
-          style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase' }}
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          padding: '14px 18px',
+          background: 'color-mix(in srgb, var(--color-surface) 60%, transparent)',
+          borderBottom: '1px solid var(--color-divider)',
+          flexWrap: 'wrap',
+        }}
+      >
+        <span
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            display: 'grid',
+            placeItems: 'center',
+            background: 'var(--color-bg)',
+            border: '1px solid var(--color-divider)',
+          }}
         >
-          {t('packagesVersions')}
-        </div>
-        {pkg.versions.map((entry) => (
-          <div
-            key={entry.version}
-            data-testid={`package-version-${entry.version}`}
-            style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 13 }}
-          >
-            <span style={{ fontFamily: 'var(--font-code)' }}>{entry.version}</span>
-            {entry.active && (
-              <Tag value={t('packagesActive')} style={{ padding: '1px 6px', fontSize: 10 }} />
-            )}
-            {!entry.report.ok && (
-              <span style={{ color: 'var(--color-danger)', fontSize: 12 }}>
-                ✖ {t('packagesCheckFailed')}
-              </span>
-            )}
-            <span className="text-muted" style={{ fontSize: 12 }}>
-              {formatDate(entry.uploaded_at, i18n.language)}
+          <Icon d={ICONS.box} size={20} color="var(--color-muted)" />
+        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0, flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 18 }}>
+              {pkg.name}
             </span>
-            <span style={{ flex: 1 }} />
-            {isAdmin && (
-              <VersionActions
-                version={entry}
-                otherActive={!!active && !entry.active}
-                onUse={() => onUse(entry)}
-                onActivate={() => onActivate(entry.version)}
-                onDelete={() => onDelete(entry.version)}
+            {active ? (
+              <>
+                <span style={{ fontFamily: 'var(--font-code)', fontSize: 13 }}>
+                  {active.version}
+                </span>
+                <Tag value={t('packagesActive')} style={{ padding: '1px 8px', fontSize: 11 }} />
+              </>
+            ) : (
+              <Tag
+                severity="secondary"
+                value={t('packagesNoActiveVersion')}
+                style={{ padding: '1px 8px', fontSize: 11 }}
+              />
+            )}
+            {inUse && (
+              <Tag
+                severity={pkg.loaded ? 'success' : 'warning'}
+                value={pkg.loaded ? t('packagesLoaded') : t('packagesNotLoaded')}
+                style={{ padding: '1px 8px', fontSize: 11 }}
               />
             )}
           </div>
-        ))}
-      </div>
-
-      {isAdmin && (inUse || active) && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          {shown && (
+            <span className="text-muted" style={{ fontSize: 12 }}>
+              {shown.uploaded_by
+                ? t('packagesUploadedBy', { user: shown.uploaded_by, date })
+                : t('packagesUploadedAt', { date })}{' '}
+              ·{' '}
+              <span style={{ fontFamily: 'var(--font-code)' }} title={shown.sha256}>
+                sha256 {shown.sha256.slice(0, 8)}…
+              </span>
+            </span>
+          )}
+        </div>
+        {isAdmin && (inUse || active) && (
           <Button
             type="button"
-            outlined
+            text
             severity="danger"
             size="small"
             label={t('packagesRemove')}
             onClick={onRemove}
           />
+        )}
+      </header>
+
+      <div style={{ padding: '14px 18px 18px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {pkg.load_error && (
+          <Message severity="warn" style={{ justifyContent: 'flex-start' }} text={pkg.load_error} />
+        )}
+
+        {shown && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={SECTION_LABEL}>{t('packagesAgentsOf', { version: shown.version })}</div>
+            <ReportView report={shown.report} registered={pkg.registered} />
+          </div>
+        )}
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={SECTION_LABEL}>{t('packagesVersions')}</div>
+          <div style={LIST_GROUP}>
+            {pkg.versions.map((entry, index) => (
+              <div
+                key={entry.version}
+                data-testid={`package-version-${entry.version}`}
+                style={{
+                  ...LIST_ROW,
+                  ...(index === 0 ? { borderTop: 'none' } : {}),
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: 13,
+                  padding: '6px 8px 6px 14px',
+                  minHeight: 42,
+                  ...(entry.active
+                    ? { background: 'color-mix(in srgb, var(--color-surface) 45%, transparent)' }
+                    : {}),
+                }}
+              >
+                <span style={{ fontFamily: 'var(--font-code)', fontWeight: 600, minWidth: 56 }}>
+                  {entry.version}
+                </span>
+                {entry.active && (
+                  <Tag value={t('packagesActive')} style={{ padding: '1px 8px', fontSize: 11 }} />
+                )}
+                {!entry.report.ok && (
+                  <Tag
+                    severity="danger"
+                    value={t('packagesCheckFailed')}
+                    style={{ padding: '1px 8px', fontSize: 11 }}
+                  />
+                )}
+                <span className="text-muted" style={{ fontSize: 12 }}>
+                  {formatDate(entry.uploaded_at, i18n.language)}
+                </span>
+                <span style={{ flex: 1 }} />
+                {isAdmin && (
+                  <VersionActions
+                    version={entry}
+                    otherActive={!!active && !entry.active}
+                    registrable={hasUnregistered(entry, pkg.registered)}
+                    onUse={() => onUse(entry)}
+                    onActivate={() => onActivate(entry.version)}
+                    onDelete={() => onDelete(entry.version)}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      </div>
     </section>
   )
 }
 
 /**
+ * Whether a version has agents left to register: an entry point that passed
+ * the check and is not configured under any agent key yet.
+ */
+function hasUnregistered(version: PackageVersion, registered: Record<string, string>): boolean {
+  const taken = new Set(Object.values(registered))
+  return Object.entries(version.report.agents).some(
+    ([entryPoint, agent]) => agent.ok && !taken.has(entryPoint),
+  )
+}
+
+/**
  * The actions of one version: an inactive version is activated while another
- * one is active (the server refuses registering then), registered otherwise;
- * only inactive versions can be deleted.
+ * one is active (the server refuses registering then); otherwise it offers
+ * registering, but only while it has agents left to register. Only inactive
+ * versions can be deleted.
  */
 function VersionActions({
   version,
   otherActive,
+  registrable,
   onUse,
   onActivate,
   onDelete,
 }: {
   version: PackageVersion
   otherActive: boolean
+  registrable: boolean
   onUse: () => void
   onActivate: () => void
   onDelete: () => void
@@ -349,13 +421,21 @@ function VersionActions({
       {otherActive ? (
         <Button
           type="button"
-          text
+          outlined
           size="small"
           label={t('packagesActivate')}
           onClick={onActivate}
         />
       ) : (
-        <Button type="button" text size="small" label={t('packagesRegister')} onClick={onUse} />
+        registrable && (
+          <Button
+            type="button"
+            outlined
+            size="small"
+            label={t('packagesRegister')}
+            onClick={onUse}
+          />
+        )
       )}
       {!version.active && (
         <Button
