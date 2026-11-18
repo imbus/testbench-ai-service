@@ -196,15 +196,17 @@ export function RegisterDialog({
   const register = useRegisterAgents()
   const files = useConflicts()
   const taken = new Set(Object.values(registered))
-  const agents = Object.values(version.report.agents)
-  const failed = agents.filter((agent) => !agent.ok)
+  // Keyed by entry point name, which the server expects; `agent.entry_point` is
+  // the entry point's value ("module:Class").
+  const agents = Object.entries(version.report.agents)
+  const failed = agents.filter(([, agent]) => !agent.ok)
   const [rows, setRows] = useState<Row[]>(() =>
     agents
-      .filter((agent) => agent.ok && !taken.has(agent.entry_point))
-      .map((agent) => {
-        const key = suggestedKey(agent.entry_point)
+      .filter(([entryPoint, agent]) => agent.ok && !taken.has(entryPoint))
+      .map(([entryPoint, agent]) => {
+        const key = suggestedKey(entryPoint)
         return {
-          entry_point: agent.entry_point,
+          entry_point: entryPoint,
           include: true,
           agent_key: key,
           endpoint_path: agent.default_endpoint_path ?? `/${key.replace(/_/g, '-')}`,
@@ -290,15 +292,14 @@ export function RegisterDialog({
         </div>
       ))}
 
-      {failed.map((agent) => (
+      {failed.map(([entryPoint, agent]) => (
         <div
-          key={agent.entry_point}
-          data-testid={`not-registrable-${agent.entry_point}`}
+          key={entryPoint}
+          data-testid={`not-registrable-${entryPoint}`}
           className="text-muted"
           style={{ fontSize: 12 }}
         >
-          <code>{agent.entry_point}</code> — {t('packagesNotRegistrable')}:{' '}
-          {agent.errors.join('; ')}
+          <code>{entryPoint}</code> — {t('packagesNotRegistrable')}: {agent.errors.join('; ')}
         </div>
       ))}
 

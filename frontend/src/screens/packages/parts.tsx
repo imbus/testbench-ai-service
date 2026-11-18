@@ -39,7 +39,7 @@ export function ReportView({
   registered?: Record<string, string>
 }) {
   const { t } = useTranslation()
-  const agents = Object.values(report.agents)
+  const agents = Object.entries(report.agents)
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <Findings errors={report.errors} warnings={report.warnings} />
@@ -48,10 +48,10 @@ export function ReportView({
           {t('packagesNoAgents')}
         </div>
       )}
-      {agents.map((agent) => {
-        const keys = Object.keys(registered).filter((key) => registered[key] === agent.entry_point)
+      {agents.map(([entryPoint, agent]) => {
+        const keys = Object.keys(registered).filter((key) => registered[key] === entryPoint)
         return (
-          <div key={agent.entry_point} data-testid={`package-agent-${agent.entry_point}`}>
+          <div key={entryPoint} data-testid={`package-agent-${entryPoint}`}>
             <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 13 }}>
               <span
                 aria-label={agent.ok ? 'ok' : t('packagesCheckFailed')}
@@ -59,7 +59,7 @@ export function ReportView({
               >
                 {agent.ok ? '✔' : '✖'}
               </span>
-              <code>{agent.entry_point}</code>
+              <code>{entryPoint}</code>
               {keys.length > 0 && (
                 <span className="text-muted">
                   {t('packagesRegisteredAs')} <code>{keys.join(', ')}</code>

@@ -16,9 +16,10 @@ export function version(overrides: Partial<PackageVersion> = {}): PackageVersion
       errors: [],
       warnings: ['Package warning: no README'],
       agents: {
+        // Keyed by entry point name; `entry_point` holds its value ("module:Class").
         risk_rater: {
-          entry_point: 'risk_rater',
-          class_path: 'acme.risk:RiskRater',
+          entry_point: 'acme.risk:RiskRater',
+          class_path: 'acme.risk.RiskRater',
           ok: true,
           errors: [],
           warnings: [],
@@ -26,8 +27,8 @@ export function version(overrides: Partial<PackageVersion> = {}): PackageVersion
           default_endpoint_path: '/acme-risk-rater',
         },
         dup_finder: {
-          entry_point: 'dup_finder',
-          class_path: 'acme.dup:DupFinder',
+          entry_point: 'acme.dup:DupFinder',
+          class_path: 'acme.dup.DupFinder',
           ok: false,
           errors: ['prompts/de/prompt.yaml is missing'],
           warnings: [],
