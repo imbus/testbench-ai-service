@@ -16,6 +16,7 @@ from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import get_log_level_int, log_context, logger
 from testbench_ai_service.models.config import LLMConfig
 from testbench_ai_service.models.logging import LogLevel
+from testbench_ai_service.restart import get_restart_controller
 from testbench_ai_service.usage import UsageRecordingClient, UsageStore, get_usage_store
 from testbench_ai_service.utils.config import get_llm_config
 from testbench_ai_service.utils.naming import normalize_project_name
@@ -62,6 +63,7 @@ from testbench_ai_service.webui.models import (
     RenderRequest,
     RenderResponse,
     ResolvedRoute,
+    RestartResponse,
     SessionResponse,
     StatusResponse,
 )
@@ -90,6 +92,9 @@ from testbench_ai_service.webui.session import Session, SessionStore
 from testbench_ai_service.webui.status import build_status, read_token_usage
 from testbench_ai_service.webui.validate import validate_config_dict
 from testbench_ai_service.webui.write_lock import hold_write_lock
+
+#: Lets the restart response reach the browser before the server shuts down.
+RESTART_DELAY_SECONDS = 0.5
 
 router = APIRouter(
     prefix="/admin/api",
@@ -242,6 +247,57 @@ async def read_status(
         registry.count,
         pending,
         token_usage,
+        can_restart=get_restart_controller(request) is not None,
+    )
+
+
+@router.post("/restart", response_model=RestartResponse, status_code=status.HTTP_202_ACCEPTED)
+async def restart_service(
+    request: Request,
+    registry: TaskRegistry = Depends(get_task_registry),
+    _: Session = Depends(require_admin),
+    __: None = Depends(require_csrf),
+    _log: Session = Depends(bind_log_user),
+) -> RestartResponse:
+    """Restart the service in this process with the configuration on disk.
+
+    Refuses with 422 and the field-addressed issues, like ``apply``, if the
+    file is one the service could not start with -- the serving loop would
+    fall back to the running configuration, but the operator should learn why
+    up front. Refuses with 409 when the service was not started by
+    ``testbench-ai-service start`` (``--dev`` auto-reload, an ASGI server of
+    one's own): nothing could start it again.
+
+    The restart begins shortly after the response is sent: open requests get
+    a grace period, running agent jobs end as "aborted by a service restart".
+    Console sessions survive. The response says where the restarted service
+    will listen, which may differ from where it does now.
+    """
+    controller = get_restart_controller(request)
+    if controller is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This service cannot restart itself: it was not started with "
+            "'testbench-ai-service start', or runs with auto-reload. Restart it by hand.",
+        )
+
+    new_config, issues = validate_config_dict(read_config_file(Path(request.app.state.config_path)))
+    if new_config is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "The configuration on disk is not valid; the service was not restarted.",
+                "issues": [issue.model_dump() for issue in issues],
+            },
+        )
+    controller.apply_overrides(new_config)
+
+    asyncio.get_running_loop().call_later(RESTART_DELAY_SECONDS, controller.request)
+    return RestartResponse(
+        host=new_config.host,
+        port=new_config.port,
+        tls=bool(new_config.ssl_cert),
+        in_flight_tasks=registry.count,
     )
 
 
@@ -444,7 +500,8 @@ async def apply_config(
     written, but the in-process swap is skipped: the file is the source of
     truth, and reporting a new port as live when the socket is still the old
     one would be a lie. The response names what needs a restart; the console
-    raises its banner. Nothing here ever restarts the service (spec 7).
+    raises its banner. Applying never restarts the service; the operator does,
+    through :func:`restart_service`.
 
     ``validate_config_dict`` also refuses a ``logging.file.file_name`` (and,
     while enabled, a ``logging.activity.file_name``) the process could not

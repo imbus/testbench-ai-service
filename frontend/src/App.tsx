@@ -95,7 +95,14 @@ export function App() {
           onSignOut={() => void signOut()}
         />
         {session.is_admin && <PendingBanner onIssues={setIssues} />}
-        <RestartBanner fields={restartFields} />
+        <RestartBanner
+          fields={restartFields}
+          restart={
+            session.is_admin && service?.can_restart
+              ? { startedAt: service.started_at, inFlight: status.data?.in_flight_tasks ?? 0 }
+              : undefined
+          }
+        />
         {!session.is_admin && (
           // The same full-width `Message` strip as RestartBanner, and for the
           // same reason a `status` rather than Message's own `alert`.

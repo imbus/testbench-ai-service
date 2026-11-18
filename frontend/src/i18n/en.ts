@@ -157,6 +157,21 @@ export const en = {
   invalidDraft: 'These changes were not written:',
   restartNeeded: 'Some changes need a service restart to take effect.',
   restartWhich: 'Needs a restart:',
+  restartNow: 'Restart now',
+  restartTitle: 'Restart the service?',
+  restartExplain:
+    'The service restarts in its process with the saved configuration and is unreachable for a few seconds. Open requests get up to 15 seconds to finish. You stay signed in.',
+  restartAbortsRuns_one:
+    '{{count}} agent run is still in flight and is cut short if it does not finish in time.',
+  restartAbortsRuns_other:
+    '{{count}} agent runs are still in flight and are cut short if they do not finish in time.',
+  restarting: 'Restarting the service…',
+  restartMoving: 'Restarting the service; it will then be reachable at',
+  restartDone: 'Service restarted.',
+  restartFailed: 'The restart could not be started.',
+  restartTimeout: 'The service does not answer after the restart. Check the service log.',
+  restartFellBack:
+    'The new configuration did not start; the service runs on with the previous one. The service log has the details.',
   inFlight_one: '{{count}} agent run is still in flight.',
   inFlight_other: '{{count}} agent runs are still in flight.',
   writesTo: 'Writes to',

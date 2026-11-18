@@ -133,7 +133,7 @@ The wheel appears in `dist/`.
 
 1. **Upload.** In the console's **Agent packages** section, upload the `.whl`. The wheel is examined in a separate process with a 30 second timeout. No package code runs inside the service during this check. The result lists the agents found and any errors or warnings.
 2. **Register.** Choose the key and the endpoint path of each agent. The console copies the prompt and template files to `prompts_dir/<lang>/<key>/` and `templates_dir/<lang>/<key>/`. If a target file already exists and differs, you decide per file whether to keep the existing file or replace it.
-3. **Restart the service.** The package code is not imported before the restart. Until then the agent has no route.
+3. **Restart the service.** The package code is not imported before the restart. Until then the agent has no route. An administrator can restart from the console's "restart needed" strip (**Restart now**); see [the web console](../web-console.md).
 
 After the restart the agent behaves like any other agent: enable it per project, edit its prompts in the console, trigger it from TestBench.
 

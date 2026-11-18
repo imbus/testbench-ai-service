@@ -13,6 +13,18 @@ export interface ServiceStatus {
   debug: boolean
   uptime_seconds: number
   language: string
+  /** When this run of the service started; a restart changes it. */
+  started_at: string
+  /** Whether the console can restart the service in its process. */
+  can_restart: boolean
+}
+
+/** Where the service will listen once the restart it accepted is done. */
+export interface RestartResponse {
+  host: string
+  port: number
+  tls: boolean
+  in_flight_tasks: number
 }
 
 export interface TestBenchStatus {

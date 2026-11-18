@@ -130,10 +130,30 @@ unlike its sibling `admin_ui.enabled`.
 
 Those are written to `config.toml` and then flagged: the console shows a
 "restart needed" strip naming the settings involved, and the service keeps
-running with its old values until you restart it. The console will not restart
-the service for you — that only works reliably under a supervisor. See
-[Windows service installation](windows-service-installation.md), or stop and
-start the process however you normally run it.
+running with its old values until it restarts.
+
+An administrator can restart it from that strip with **Restart now**. The
+restart happens inside the running process: the web server shuts down, the
+configuration and the agent packages are read again, and a new server starts
+with them. It therefore works the same in a terminal, from the executable and
+as a Windows service. While it restarts:
+
+- the service is unreachable for a few seconds; open requests get up to 15
+  seconds to finish, after which they are cancelled;
+- agent jobs still running end as "Aborted by a service restart";
+- console sessions survive, so you stay signed in; links to job views end;
+- if the service will listen on another host, port or scheme, the strip links
+  to the new address;
+- if the new configuration cannot start (the port is taken, a TLS file is
+  missing), the service starts again with the previous one and the strip says
+  so; the service log has the reason.
+
+The restart refuses a `config.toml` the service could not start with and names
+the problems instead. Command-line options such as `--port` still win over the
+file after a restart. A service started with `--dev` (auto-reload), or with
+`create_app` in an ASGI server of your own, offers no restart button; restart
+it the way you started it, or see
+[Windows service installation](windows-service-installation.md).
 
 ### Logging validation
 

@@ -133,6 +133,8 @@ def build_status(
     in_flight_tasks: int = 0,
     restart_required: list[str] | None = None,
     token_usage: UsageSummary | None = None,
+    *,
+    can_restart: bool = False,
 ) -> StatusResponse:
     uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
     return StatusResponse(
@@ -143,6 +145,8 @@ def build_status(
             debug=config.debug,
             uptime_seconds=max(uptime, 0.0),
             language=config.language.value,
+            started_at=started_at,
+            can_restart=can_restart,
         ),
         testbench=probe_testbench(config),
         api_keys=api_key_statuses(config),

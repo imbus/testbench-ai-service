@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- The console can restart the service. When a change needs a restart, an administrator clicks
+  **Restart now** in the "restart needed" strip. The restart runs inside the service process
+  (graceful shutdown, configuration and agent packages read again, new server), so it works in a
+  terminal, from the executable and as a Windows service alike. A new agent package version is
+  swapped in, console sessions survive, and a configuration that cannot start falls back to the
+  previous one. `POST /admin/api/restart`; documented in `docs/web-console.md`.
 - Four opt-in agents, each documented under `docs/agents/`:
   - **Test Idea Generator** (`requirement`): writes test ideas for the requirements below a test
     theme into the theme's description. From TestBench 5.0 it also creates one test case set per

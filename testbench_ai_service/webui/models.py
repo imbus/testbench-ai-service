@@ -99,6 +99,19 @@ class ServiceStatus(BaseModel):
     debug: bool
     uptime_seconds: float
     language: str
+    # When this app was built; a restart from the console changes it.
+    started_at: datetime
+    # Whether the console can restart the service (see testbench_ai_service.restart).
+    can_restart: bool = False
+
+
+class RestartResponse(BaseModel):
+    """Where the service will listen once the restart requested is done."""
+
+    host: str
+    port: int
+    tls: bool
+    in_flight_tasks: int = 0
 
 
 class TestBenchStatus(BaseModel):

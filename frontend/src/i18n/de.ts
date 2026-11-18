@@ -157,6 +157,21 @@ export const de = {
   invalidDraft: 'Diese Änderungen wurden nicht geschrieben:',
   restartNeeded: 'Einige Änderungen werden erst nach einem Neustart wirksam.',
   restartWhich: 'Neustart erforderlich:',
+  restartNow: 'Jetzt neu starten',
+  restartTitle: 'Service neu starten?',
+  restartExplain:
+    'Der Service startet im selben Prozess mit der gespeicherten Konfiguration neu und ist dabei einige Sekunden nicht erreichbar. Offene Anfragen dürfen bis zu 15 Sekunden zu Ende laufen. Sie bleiben angemeldet.',
+  restartAbortsRuns_one:
+    '{{count}} Agent-Lauf ist noch aktiv und wird abgebrochen, wenn er nicht rechtzeitig fertig wird.',
+  restartAbortsRuns_other:
+    '{{count}} Agent-Läufe sind noch aktiv und werden abgebrochen, wenn sie nicht rechtzeitig fertig werden.',
+  restarting: 'Service wird neu gestartet…',
+  restartMoving: 'Service wird neu gestartet und ist danach erreichbar unter',
+  restartDone: 'Service neu gestartet.',
+  restartFailed: 'Der Neustart konnte nicht angestoßen werden.',
+  restartTimeout: 'Der Service antwortet nach dem Neustart nicht. Prüfen Sie das Service-Log.',
+  restartFellBack:
+    'Die neue Konfiguration ließ sich nicht starten; der Service läuft mit der vorherigen weiter. Details stehen im Service-Log.',
   inFlight_one: '{{count}} Agent-Lauf ist noch aktiv.',
   inFlight_other: '{{count}} Agent-Läufe sind noch aktiv.',
   writesTo: 'Schreibt nach',

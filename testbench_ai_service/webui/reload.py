@@ -15,9 +15,10 @@ Two things cannot:
   re-classing an agent cannot change the live routing table.
 
 Those changes are still written to disk. They just raise the console's
-"restart needed" banner rather than pretending to take effect. There is no
-self-restart button: re-execing only works under a supervisor and would kill a
-bare terminal process outright (spec 7).
+"restart needed" banner rather than pretending to take effect. The banner's
+restart button rebuilds app and server inside the running process
+(``testbench_ai_service.restart``); re-execing would only work under a
+supervisor and would kill a bare terminal process outright.
 
 Note: ``admin_ui.require_loopback`` is deliberately NOT in the restart-required
 set because it is read per request through ``get_app_config`` and is genuinely

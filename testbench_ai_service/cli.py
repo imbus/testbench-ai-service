@@ -1,15 +1,18 @@
 import argparse
 import ssl
 import sys
+from collections.abc import Callable
+from typing import Any
 
 import uvicorn
 from dotenv import load_dotenv
 
 from testbench_ai_service import __title__, __version__, log
-from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT
+from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT, AppConfig
 from testbench_ai_service.log import get_log_config_dict, logger, setup_logging
 from testbench_ai_service.main import create_app
 from testbench_ai_service.models.logging import LogLevel
+from testbench_ai_service.restart import RestartController
 from testbench_ai_service.utils.config import (
     create_default_config_file,
     load_config_from_file,
@@ -141,21 +144,104 @@ def init_action(args):
     )
 
 
+def _override_function(args) -> Callable[[AppConfig], None]:
+    """Apply the command-line options, which win over the file, to a loaded config."""
+
+    def apply(config: AppConfig) -> None:
+        if "tb_server_url" in args and args.tb_server_url is not None:
+            config.tb_server_url = args.tb_server_url
+        if "host" in args and args.host is not None:
+            config.host = args.host
+        if "port" in args and args.port is not None:
+            config.port = args.port
+        config.debug = getattr(args, "dev", False) or config.debug
+
+        if config.debug:
+            config.logging.console.log_level = LogLevel.DEBUG
+            config.logging.file.log_level = LogLevel.DEBUG
+
+    return apply
+
+
+def server_options(config: AppConfig) -> dict[str, Any]:
+    """The uvicorn options a config asks for."""
+    options: dict[str, Any] = {
+        "host": config.host,
+        "port": config.port,
+        "log_config": get_log_config_dict(config.logging),
+        "ssl_certfile": config.ssl_cert,
+        "ssl_keyfile": config.ssl_key,
+    }
+    if config.ssl_ca_cert:
+        options["ssl_ca_certs"] = config.ssl_ca_cert
+        options["ssl_cert_reqs"] = ssl.CERT_REQUIRED
+    if config.trusted_proxies:
+        options["proxy_headers"] = True
+        options["forwarded_allow_ips"] = config.trusted_proxies
+    return options
+
+
+def serve(
+    config: AppConfig,
+    reload_config: Callable[[], AppConfig],
+    options: Callable[[AppConfig], dict[str, Any]],
+    controller: RestartController,
+) -> None:
+    """Serve *config*, and serve again whenever the console asks for a restart.
+
+    A restart reads the configuration again through *reload_config*. If that
+    fails, the running configuration is served again. If the new configuration
+    cannot start (its port is taken, a TLS file is missing, the app fails to
+    build or start up), the previous one is served again, so a restart from the
+    console never leaves the service down. Only the very first start may fail.
+
+    Console sessions are handed to the new app, so the operator who asked for
+    the restart stays signed in.
+    """
+    fallback: AppConfig | None = None
+    sessions = None
+    while True:
+        server: uvicorn.Server | None = None
+        try:
+            app = create_app(config)
+            app.state.restart_controller = controller
+            if sessions is not None and hasattr(app.state, "webui_sessions"):
+                app.state.webui_sessions = sessions
+            server = uvicorn.Server(uvicorn.Config(app, **options(config)))
+            controller.attach(server)
+            server.run()
+        except (Exception, SystemExit) as e:
+            if fallback is None or (server is not None and server.started):
+                raise
+            logger.error(
+                "The service could not start with the new configuration (%r); "
+                "starting again with the previous one.",
+                e,
+            )
+            config, fallback = fallback, None
+            continue
+
+        if not controller.requested:
+            return
+
+        logger.info("Restarting %s", __title__)
+        sessions = getattr(app.state, "webui_sessions", None)
+        try:
+            new_config = reload_config()
+        except (Exception, SystemExit) as e:
+            logger.error(
+                "Could not load the configuration for the restart (%r); "
+                "restarting with the running one.",
+                e,
+            )
+            new_config = config
+        fallback, config = config, new_config
+
+
 def start_action(args):
+    apply_overrides = _override_function(args)
     config = load_config_from_file(args.config)
-
-    # Apply CLI overrides
-    if "tb_server_url" in args and args.tb_server_url is not None:
-        config.tb_server_url = args.tb_server_url
-    if "host" in args and args.host is not None:
-        config.host = args.host
-    if "port" in args and args.port is not None:
-        config.port = args.port
-    config.debug = getattr(args, "dev", False) or config.debug
-
-    if config.debug:
-        config.logging.console.log_level = LogLevel.DEBUG
-        config.logging.file.log_level = LogLevel.DEBUG
+    apply_overrides(config)
 
     print_cli_banner()
 
@@ -168,32 +254,26 @@ def start_action(args):
     if config.debug and not use_reload:
         logger.warning("Auto-reload is not supported in the executable. Running without reload.")
 
-    # Server configuration
-    server_config = {
-        "host": config.host,
-        "port": config.port,
-        "log_config": get_log_config_dict(config.logging),
-        "ssl_certfile": config.ssl_cert,
-        "ssl_keyfile": config.ssl_key,
-    }
-    if config.ssl_ca_cert:
-        server_config["ssl_ca_certs"] = config.ssl_ca_cert
-        server_config["ssl_cert_reqs"] = ssl.CERT_REQUIRED
-    if config.trusted_proxies:
-        server_config["proxy_headers"] = True
-        server_config["forwarded_allow_ips"] = config.trusted_proxies
+    def reload_config() -> AppConfig:
+        reloaded = load_config_from_file(args.config)
+        apply_overrides(reloaded)
+        setup_logging(reloaded.logging)
+        return reloaded
 
     try:
         if use_reload:
+            # The reloader restarts on code changes; the console offers no
+            # restart here (no RestartController is attached).
             uvicorn.run(
                 "testbench_ai_service.main:create_app",
                 reload=True,
                 factory=True,
-                **server_config,
+                **server_options(config),
             )
         else:
-            app = create_app(config)
-            uvicorn.run(app, **server_config)
+            serve(config, reload_config, server_options, RestartController(apply_overrides))
+    except KeyboardInterrupt:
+        pass
     except Exception as e:
         logger.error("Server could not start: %s", e)
         sys.exit(1)
