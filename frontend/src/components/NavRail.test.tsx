@@ -52,8 +52,15 @@ it('marks the raw config screen restricted for a non-admin', () => {
 it('offers the agents and projects screens to an admin', () => {
   renderNav(true)
 
-  expect(screen.getByRole('link', { name: /Agenten/ })).toHaveAttribute('href', '/admin/agents')
+  expect(screen.getByRole('link', { name: /^Agenten$/ })).toHaveAttribute('href', '/admin/agents')
   expect(screen.getByRole('link', { name: /Projekte/ })).toHaveAttribute('href', '/admin/projects')
+})
+
+it('has no entry of its own for the agent packages, a section of the agents screen', () => {
+  renderNav(true)
+
+  const links = screen.getAllByRole('link').map((link) => link.getAttribute('href'))
+  expect(links).not.toContain('/admin/agent-packages')
 })
 
 it('keeps agents and projects readable for a non-admin', () => {
@@ -62,7 +69,7 @@ it('keeps agents and projects readable for a non-admin', () => {
   // operator is allowed to see.
   renderNav(false)
 
-  for (const label of [/Agenten/, /Projekte/]) {
+  for (const label of [/^Agenten$/, /Projekte/]) {
     expect(screen.getByRole('link', { name: label })).not.toHaveAttribute('aria-disabled', 'true')
   }
 })

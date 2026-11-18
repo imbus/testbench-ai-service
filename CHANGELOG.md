@@ -10,6 +10,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- The console can restart the service. When a change needs a restart, an administrator clicks
+  **Restart now** in the "restart needed" strip. The restart runs inside the service process
+  (graceful shutdown, configuration and agent packages read again, new server), so it works in a
+  terminal, from the executable and as a Windows service alike. A new agent package version is
+  swapped in, console sessions survive, and a configuration that cannot start falls back to the
+  previous one. `POST /admin/api/restart`; documented in `docs/web-console.md`.
 - Four opt-in agents, each documented under `docs/agents/`:
   - **Test Idea Generator** (`requirement`): writes test ideas for the requirements below a test
     theme into the theme's description. From TestBench 5.0 it also creates one test case set per
@@ -169,6 +175,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   The LLM clients are created on demand, so a missing credential surfaces on
   the first agent request instead of at startup — which means the console can
   be used to fix the provider configuration that is wrong.
+- Agent packages. An administrator can upload a Python wheel with custom agents in the web
+  console, register its agents (key, endpoint path) and restart the service, without touching
+  the server's Python environment. The wheel is checked in a separate process, so no package
+  code runs in the service before the restart; a broken or missing package never stops the
+  service from starting, its agents just answer `503`. Versions can be updated, activated and
+  deleted. Off by default: set `agent_packages.allow_upload = true` (`dir`, `max_upload_mb`,
+  not editable in the console) and use custom `prompts_dir`/`templates_dir`. Registered package
+  code runs with the service's rights, so enable it only for trusted administrators. Documented
+  in `docs/agents/agent-packages.md`, with a runnable example in `examples/agent_package/`.
+  - `ExecutionContext.agent_key` carries the key an agent is configured under. Custom agents
+    should resolve their write-back templates with `agent_key=context.agent_key`, so they keep
+    working when registered under another key.
 
 ### Changed
 

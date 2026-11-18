@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 import requests
 
 from testbench_ai_service import __version__
+from testbench_ai_service.agent_packages import loaded
+from testbench_ai_service.agent_packages.manifest import ManifestError, load_manifest
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.usage import UsageStore
@@ -81,7 +83,34 @@ def agent_summary(config: AppConfig) -> AgentSummary:
         enabled=sum(1 for agent in config.agents.values() if agent.enabled),
         project_overrides=overrides,
         projects=len(config.projects),
+        unloaded_packages=_unloaded_packages(config),
+        failed_agents=loaded.agent_failures(),
     )
+
+
+def _unloaded_packages(config: AppConfig) -> dict[str, str]:
+    """Package name -> why the package's agents are not in use."""
+    unloaded = loaded.failures()
+    pending = {
+        agent.package
+        for agent in config.agents.values()
+        if agent.package is not None
+        and agent.package not in unloaded
+        and not loaded.is_loaded(agent.package)
+    }
+    if not pending:
+        return unloaded
+    try:
+        known: set[str] | None = set(load_manifest(config.agent_packages.dir).packages)
+    except ManifestError as e:
+        logger.warning("Cannot read the agent package manifest for the status: %s", e)
+        known = None
+    for package in sorted(pending):
+        if known is not None and package not in known:
+            unloaded[package] = "The package is missing: it was never uploaded or was deleted."
+        else:
+            unloaded[package] = "Not loaded yet. Restart the service to load it."
+    return unloaded
 
 
 async def read_token_usage(store: UsageStore) -> UsageSummary:
@@ -104,6 +133,8 @@ def build_status(
     in_flight_tasks: int = 0,
     restart_required: list[str] | None = None,
     token_usage: UsageSummary | None = None,
+    *,
+    can_restart: bool = False,
 ) -> StatusResponse:
     uptime = (datetime.now(timezone.utc) - started_at).total_seconds()
     return StatusResponse(
@@ -114,6 +145,8 @@ def build_status(
             debug=config.debug,
             uptime_seconds=max(uptime, 0.0),
             language=config.language.value,
+            started_at=started_at,
+            can_restart=can_restart,
         ),
         testbench=probe_testbench(config),
         api_keys=api_key_statuses(config),

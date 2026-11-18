@@ -117,7 +117,7 @@ def apply_edits(document: tomlkit.TOMLDocument, edits: ConfigEdits) -> None:
     time, so a later edit in the same overlay that conflicts leaves the
     earlier edits already mutated into the document object. This route
     (`webui/routes.py`) never hits that case in practice, because
-    `_plan_change` runs `merge_edits` over the equivalent dict first, and that
+    `plan.plan_change` runs `merge_edits` over the equivalent dict first, and that
     raises on the same conflict before `apply_edits` is ever called -- but a
     caller that skips `merge_edits` would not be protected by that ordering.
 

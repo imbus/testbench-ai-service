@@ -27,6 +27,7 @@ from tests.unit.jobs.test_store import _create
 
 def _make_context(**overrides):
     defaults = {
+        "agent_key": "test_agent",
         "user_key": "U1",
         "project_key": "P1",
         "project_name": "Project",

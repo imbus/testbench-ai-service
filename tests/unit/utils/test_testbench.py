@@ -78,6 +78,7 @@ class TestGetProjectName:
 
 def _make_execution_context(**overrides):
     defaults = {
+        "agent_key": "test_agent",
         "user_key": "u1",
         "project_name": "Car Configurator",
         "project_key": "pk",

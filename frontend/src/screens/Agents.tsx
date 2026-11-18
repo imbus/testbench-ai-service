@@ -14,13 +14,15 @@ import {
   projectAgentPath,
   projectPath,
 } from '../api/agents'
-import { useConfig, useProjects, usePromptMeta } from '../api/queries'
+import { usePackages } from '../api/packages'
+import { useConfig, useProjects, usePromptMeta, useStatus } from '../api/queries'
 import { AgentModelPicker } from '../components/AgentModelPicker'
 import { AgentSwitch } from '../components/AgentSwitch'
 import { IconToggle, ListIcon, MatrixIcon } from '../components/IconToggle'
 import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 import { valueAt } from './fields'
+import { AgentPackagesSection, PackageUploadButton, usePackageDialogs } from './AgentPackages'
 
 /**
  * Prime marks the switch's wrapper up as a second, nameless
@@ -48,11 +50,15 @@ type View = 'list' | 'matrix'
  * Two views over the same data: a list, which is where an agent is switched on
  * or off globally and where its detail screen is reached from, and a matrix,
  * which is the only place the whole override picture is visible at once.
+ * Below them the uploaded agent packages; the header carries the admin's
+ * button that imports an agent wheel.
  */
 export function Agents({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation()
   const config = useConfig()
   const [view, setView] = useState<View>('list')
+  const packages = usePackages()
+  const dialogs = usePackageDialogs(packages.data)
 
   if (config.isLoading) return <div style={{ padding: 28 }}>…</div>
   if (config.isError || !config.data) {
@@ -98,6 +104,7 @@ export function Agents({ isAdmin }: { isAdmin: boolean }) {
           </div>
         </div>
         <div style={{ flex: 1 }} />
+        {isAdmin && <PackageUploadButton data={packages.data} dialogs={dialogs} />}
         {/* Two views of one table, so a segmented control rather than tabs. */}
         <IconToggle
           ariaLabel={t('agents')}
@@ -115,6 +122,9 @@ export function Agents({ isAdmin }: { isAdmin: boolean }) {
       ) : (
         <Matrix keys={keys} disk={disk} running={running} isAdmin={isAdmin} />
       )}
+
+      <AgentPackagesSection packages={packages} dialogs={dialogs} isAdmin={isAdmin} />
+      {dialogs.element}
     </div>
   )
 }
@@ -137,6 +147,8 @@ function AgentList({
   const { t } = useTranslation()
   const draft = useDraft()
   const projects = useProjects()
+  const packages = usePackages()
+  const status = useStatus()
   // Keyed by agent, the shape Prime's `expandedRows` takes with a `dataKey`.
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
@@ -166,8 +178,18 @@ function AgentList({
       return { project, overridden, active: overridden ? own : enabled }
     })
     const promptFile = agent.prompt?.file
+    const pkg = valueAt(running, agentPath(agentKey, 'package'))
+    const packageName = typeof pkg === 'string' ? pkg : undefined
     return {
       agentKey,
+      packageName,
+      packageVersion: packages.data?.packages
+        .find((entry) => entry.name === packageName)
+        ?.versions.find((entry) => entry.active)?.version,
+      // Why the agent has no route in the running service, if it has none.
+      notLoaded:
+        status.data?.agents?.failed_agents?.[agentKey] ??
+        (packageName ? status.data?.agents?.unloaded_packages?.[packageName] : undefined),
       enabledPath,
       enabled,
       promptFile: typeof promptFile === 'string' ? promptFile : undefined,
@@ -261,7 +283,14 @@ function AgentList({
       <Column
         header="Agent"
         body={(row: Row) => (
-          <AgentTitle agentKey={row.agentKey} language={language} promptFile={row.promptFile} />
+          <>
+            <AgentTitle agentKey={row.agentKey} language={language} promptFile={row.promptFile} />
+            <PackageBadge
+              name={row.packageName}
+              version={row.packageVersion}
+              notLoaded={row.notLoaded}
+            />
+          </>
         )}
       />
       <Column
@@ -356,6 +385,42 @@ function AgentTitle({
         </div>
       )}
     </Link>
+  )
+}
+
+/**
+ * Where a package agent comes from (package and active version), and whether
+ * the running service has it at all. `class_path` stays read-only here.
+ */
+function PackageBadge({
+  name,
+  version,
+  notLoaded,
+}: {
+  name: string | undefined
+  version: string | undefined
+  notLoaded: string | undefined
+}) {
+  const { t } = useTranslation()
+  if (!name && notLoaded === undefined) return null
+  return (
+    <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
+      {name && (
+        <Tag
+          data-testid="agent-package"
+          value={version ? `${name} ${version}` : name}
+          style={{ padding: '1px 6px', fontSize: 10, fontFamily: 'var(--font-code)' }}
+        />
+      )}
+      {notLoaded !== undefined && (
+        <Tag
+          severity="warning"
+          value={t('packagesNotLoaded')}
+          title={notLoaded}
+          style={{ padding: '1px 6px', fontSize: 10 }}
+        />
+      )}
+    </div>
   )
 }
 

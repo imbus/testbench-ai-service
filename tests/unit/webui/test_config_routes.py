@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -5,8 +6,11 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from testbench_ai_service.webui.config_io import REDACTED_SENTINEL, read_config_file
-from testbench_ai_service.webui.routes import _plan_change
+from testbench_ai_service.agent_packages import loaded
+from testbench_ai_service.agent_packages.manifest import site_dir
+from testbench_ai_service.webui.config_io import REDACTED_SENTINEL
+from testbench_ai_service.webui.plan import plan_change
+from tests.helpers.packages import CLASS_PATH, PACKAGE, install_package
 
 COMMENTED = """\
 [testbench-ai-service]
@@ -362,7 +366,7 @@ def test_plan_change_still_writes_the_real_secret(credentialed_config_file, make
     app = make_app()
     running = app.state.config
 
-    _preview, text_to_write, _has_write = _plan_change(
+    _preview, text_to_write, _has_write = plan_change(
         {"llm_config.model": "gpt-4o"}, credentialed_config_file, running
     )
 
@@ -714,15 +718,10 @@ def test_apply_reports_a_post_write_reread_failure_without_raising(file_client, 
     normal 200 with the reason named in reload_detail, never a 4xx that
     would falsely imply the apply itself failed."""
     admin()
-    calls = {"count": 0}
 
     def flaky_read(path):
-        calls["count"] += 1
-        if calls["count"] == 1:
-            # The read _plan_change makes before anything is written must
-            # still succeed, or nothing would ever get written to fail the
-            # re-read against in the first place.
-            return read_config_file(path)
+        # Only the re-read in the route fails: plan_change (webui.plan) reads
+        # the file through its own import, so something gets written first.
         raise HTTPException(status_code=400, detail="not valid TOML: boom")
 
     with patch("testbench_ai_service.webui.routes.read_config_file", side_effect=flaky_read):
@@ -795,3 +794,69 @@ def test_status_survives_an_invalid_file_on_disk(file_client, admin, config_file
 
     assert response.status_code == 200
     assert response.json()["restart_required"] == []
+
+
+def _package_agent_toml(packages_dir: Path) -> str:
+    prompt = site_dir(packages_dir, PACKAGE, "1.0.0") / "acme/rater/prompts/en/prompt.yaml"
+    return COMMENTED + (
+        "\n[testbench-ai-service.agent_packages]\n"
+        f"dir = '{packages_dir.as_posix()}'\n"
+        "\n[testbench-ai-service.agents.acme]\n"
+        "enabled = true\n"
+        'endpoint_path = "/acme"\n'
+        f'class_path = "{CLASS_PATH}"\n'
+        f'package = "{PACKAGE}"\n'
+        f"prompt = {{ file = '{prompt.as_posix()}' }}\n"
+    )
+
+
+def test_apply_other_change_while_package_unloaded(file_client, admin, config_file, tmp_path):
+    """A registered package that is not loaded yet must not block other edits,
+    and validating it must not import its code."""
+    packages_dir = tmp_path / "packages"
+    install_package(packages_dir)
+    config_file.write_text(_package_agent_toml(packages_dir), encoding="utf-8")
+    admin()
+
+    response = file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"agents.test_case_set_reviewer.enabled": False}},
+        headers=csrf(file_client),
+    )
+
+    assert response.status_code == 200, response.text
+    assert "enabled = false" in config_file.read_text(encoding="utf-8")
+    assert "acme" not in sys.modules
+
+
+@pytest.mark.parametrize("action", ["preview", "apply"])
+def test_a_class_path_typo_on_a_loaded_package_is_refused(
+    file_client, admin, config_file, tmp_path, action
+):
+    """A typo must be rejected like any other, and never disable the loaded package."""
+    packages_dir = tmp_path / "packages"
+    install_package(packages_dir)
+    loaded.activate_packages(packages_dir)
+    config_file.write_text(_package_agent_toml(packages_dir), encoding="utf-8")
+    before = config_file.read_text(encoding="utf-8")
+    admin()
+
+    response = file_client.post(
+        f"/admin/api/config/{action}",
+        json={"edits": {"agents.acme.class_path": "acme.rater.agent.Typo"}},
+        headers=csrf(file_client),
+    )
+
+    body = response.json()
+    if action == "apply":
+        assert response.status_code == 422, response.text
+        issues = body["detail"]["issues"]
+    else:  # preview reports validity in its body
+        assert response.status_code == 200, response.text
+        assert body["valid"] is False
+        issues = body["issues"]
+    assert [issue["path"] for issue in issues] == ["agents.acme.class_path"]
+    assert config_file.read_text(encoding="utf-8") == before
+    assert loaded.is_loaded(PACKAGE)
+    assert loaded.failures() == {}
+    assert loaded.agent_failures() == {}

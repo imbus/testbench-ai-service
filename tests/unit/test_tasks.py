@@ -95,6 +95,7 @@ class TestRunAgentReviewTask:
             config=self.app_config, project_name=self.project_name, request_config=None
         )
         self.context = ExecutionContext(
+            agent_key="test_agent",
             user_key=self.user_key,
             project_name=self.project_name,
             project_key=self.project_key,

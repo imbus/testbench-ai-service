@@ -99,6 +99,19 @@ class ServiceStatus(BaseModel):
     debug: bool
     uptime_seconds: float
     language: str
+    # When this app was built; a restart from the console changes it.
+    started_at: datetime
+    # Whether the console can restart the service (see testbench_ai_service.restart).
+    can_restart: bool = False
+
+
+class RestartResponse(BaseModel):
+    """Where the service will listen once the restart requested is done."""
+
+    host: str
+    port: int
+    tls: bool
+    in_flight_tasks: int = 0
 
 
 class TestBenchStatus(BaseModel):
@@ -119,6 +132,10 @@ class AgentSummary(BaseModel):
     enabled: int
     project_overrides: int
     projects: int
+    # Agent package name -> why it is not in use (failed, or needs a restart).
+    unloaded_packages: dict[str, str] = {}
+    # Agent key -> why its class failed to import at startup (it has no route).
+    failed_agents: dict[str, str] = {}
 
 
 class ModelUsageEntry(BaseModel):

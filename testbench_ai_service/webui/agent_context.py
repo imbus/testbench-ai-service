@@ -12,16 +12,15 @@ the type's name rather than failing the prompt document.
 """
 
 import dataclasses
-import importlib
 import types
 from collections.abc import Iterable, Mapping
-from pathlib import PurePath
+from pathlib import Path, PurePath
 from typing import Any, Literal, Union, get_args, get_origin, get_type_hints, is_typeddict
 
 from pydantic import BaseModel
 
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.config import AgentConfig
+from testbench_ai_service.models.config import DEFAULT_AGENT_PACKAGES_DIR, AgentConfig
 
 MAX_DEPTH = 5
 
@@ -111,14 +110,15 @@ def _prompt_dir(agent: AgentConfig) -> str | None:
     return parts[0] if len(parts) > 1 else None
 
 
-def _agent_data_class(class_path: str) -> type | None:
+def _agent_sample(agent: AgentConfig, packages_dir: Path) -> dict[str, Any]:
+    # Imported here: agent_info imports this module.
+    from testbench_ai_service.agent_packages.agent_info import agent_info  # noqa: PLC0415
+
     try:
-        module_path, class_name = class_path.rsplit(".", 1)
-        agent_class = getattr(importlib.import_module(module_path), class_name)
+        return agent_info(agent, packages_dir).context_sample
     except Exception as e:
-        logger.warning("Cannot import agent class '%s' for its context: %s", class_path, e)
-        return None
-    return getattr(agent_class, "AGENT_DATA_CLASS", None)
+        logger.warning("Cannot import agent class '%s' for its context: %s", agent.class_path, e)
+        return {}
 
 
 def _deep_union(into: dict[str, Any], other: Mapping[str, Any]) -> None:
@@ -129,17 +129,20 @@ def _deep_union(into: dict[str, Any], other: Mapping[str, Any]) -> None:
             into.setdefault(key, value)
 
 
-def agent_context_sample(agents: Mapping[str, AgentConfig], prompt_dir: str) -> dict[str, Any]:
+def agent_context_sample(
+    agents: Mapping[str, AgentConfig],
+    prompt_dir: str,
+    packages_dir: Path = DEFAULT_AGENT_PACKAGES_DIR,
+) -> dict[str, Any]:
     """The typed ``agent.*`` sample for the prompt in *prompt_dir*.
 
     Every configured agent whose prompt lives in that directory contributes,
-    so a prompt shared by two agents lists what either provides.
+    so a prompt shared by two agents lists what either provides. An agent of a
+    package that is not loaded contributes the sample of its inspection report.
     """
     sample: dict[str, Any] = {}
     for agent in agents.values():
         if _prompt_dir(agent) != prompt_dir:
             continue
-        data_class = _agent_data_class(agent.class_path)
-        if data_class is not None:
-            _deep_union(sample, agent_data_sample(data_class))
+        _deep_union(sample, _agent_sample(agent, packages_dir))
     return sample

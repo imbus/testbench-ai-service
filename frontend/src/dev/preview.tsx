@@ -31,6 +31,8 @@ const FIXTURES: Record<string, unknown> = {
       debug: false,
       uptime_seconds: 8040,
       language: 'de',
+      started_at: '2026-11-18T08:00:00Z',
+      can_restart: true,
     },
     testbench: { url: 'https://tb.example.com:9443/api/', reachable: true, detail: null },
     api_keys: [

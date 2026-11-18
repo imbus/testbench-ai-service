@@ -11,6 +11,7 @@ from testbench_ai_service.models.language import LanguageOption
 
 def _make_execution_context(**overrides):
     defaults = {
+        "agent_key": "test_agent",
         "user_key": "u1",
         "project_name": "Project",
         "project_key": "pk",

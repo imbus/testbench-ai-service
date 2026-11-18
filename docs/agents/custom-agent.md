@@ -7,6 +7,10 @@ title: Custom Agent
 
 The TestBench AI Service is built to be extended. By implementing the `Agent` base class and registering your class in `config.toml`, you can add any AI-driven workflow without modifying the service source code. Custom agents follow the same lifecycle as the built-in ones. They get their own endpoint, participate in the precheck/run pipeline, and can use all configured LLM providers.
 
+:::tip
+You can also ship a custom agent as a wheel and install it from the web console, without touching the server's Python environment. See [Agent Packages](agent-packages.md).
+:::
+
 ---
 
 ## How it works
@@ -276,6 +280,12 @@ The `class_path` is resolved with a standard Python import at service startup. M
 :::note
 If the class cannot be imported at startup, the service will log an error and refuse to register the agent. Check the log output for the exact import error.
 :::
+
+---
+
+## Looking up templates: `context.agent_key`
+
+`context.agent_key` is the key the agent is configured under. When your agent resolves write-back templates with `resolve_template_path(...)`, pass `agent_key=context.agent_key` instead of a hard-coded name. The agent then keeps working when it is registered under another key (always the case for [agent packages](agent-packages.md)).
 
 ---
 

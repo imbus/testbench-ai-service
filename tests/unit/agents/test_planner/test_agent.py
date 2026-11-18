@@ -25,6 +25,7 @@ _MODULE = "testbench_ai_service.agents.test_planner.agent"
 
 def _context(variant=None, variables=None, **overrides):
     fields = {
+        "agent_key": "test_agent",
         "user_key": "U1",
         "project_key": "P1",
         "project_name": "Project",
