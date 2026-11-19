@@ -235,6 +235,37 @@ describe('formatActivityTime', () => {
   })
 })
 
+describe('the LLM client of an uploaded package', () => {
+  function stubError(error: string | null) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(url.includes('/activity') ? [] : { ...STATUS, llm_client_error: error }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    )
+  }
+
+  test('says why it is not in use', async () => {
+    stubError("LLM client package 'acme-llm' is not loaded: the wheel is missing")
+    renderStatus()
+    expect(await screen.findByTestId('llm-client-error')).toHaveTextContent(
+      "LLM client package 'acme-llm' is not loaded: the wheel is missing",
+    )
+  })
+
+  test('says nothing when it runs', async () => {
+    stubError(null)
+    renderStatus()
+    await waitFor(() => expect(screen.getByText(/127\.0\.0\.1:8010/)).toBeInTheDocument())
+    expect(screen.queryByTestId('llm-client-error')).not.toBeInTheDocument()
+  })
+})
+
 describe('token usage', () => {
   function stubStatus(tokenUsage: StatusResponse['token_usage']) {
     vi.stubGlobal(

@@ -113,9 +113,12 @@ export function usePackageDialogs(data: PackagesResponse | undefined): PackageDi
 export function PackageUploadButton({
   data,
   dialogs,
+  label,
 }: {
   data: PackagesResponse | undefined
   dialogs: PackageDialogs
+  /** The button text; the agents screen's wording when omitted. */
+  label?: string
 }) {
   const { t } = useTranslation()
   if (!data) return null
@@ -125,7 +128,7 @@ export function PackageUploadButton({
     <span title={data.allow_upload ? undefined : t('packagesUploadDisabled')}>
       <Button
         type="button"
-        label={t('packagesUpload')}
+        label={label ?? t('packagesUpload')}
         disabled={!data.allow_upload}
         onClick={() => dialogs.open({ kind: 'upload' })}
       />

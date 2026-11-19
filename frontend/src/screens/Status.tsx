@@ -283,7 +283,7 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
     )
   }
 
-  const { service, testbench, api_keys, agents, token_usage } = status.data
+  const { service, testbench, api_keys, agents, token_usage, llm_client_error } = status.data
 
   return (
     <div
@@ -302,6 +302,20 @@ export function Status({ isAdmin }: { isAdmin: boolean }) {
           {t('statusSub')}
         </span>
       </div>
+
+      {llm_client_error && (
+        <Message
+          severity="warn"
+          data-testid="llm-client-error"
+          style={{ justifyContent: 'flex-start' }}
+          content={
+            <div>
+              <div>{t('statusLlmClientError')}</div>
+              <div style={{ fontSize: 12, marginTop: 4, opacity: 0.8 }}>{llm_client_error}</div>
+            </div>
+          }
+        />
+      )}
 
       <div
         style={{
