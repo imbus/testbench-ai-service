@@ -27,6 +27,7 @@ def build_wheel(
     version: str = "1.0.0",
     files: dict[str, str | bytes],
     entry_points: dict[str, str] | None = None,
+    llm_entry_points: dict[str, str] | None = None,
     requires_dist: Sequence[str] = (),
     tag: str = "py3-none-any",
     corrupt_record: bool = False,
@@ -45,9 +46,15 @@ def build_wheel(
     entries[f"{dist_info}/WHEEL"] = (
         f"Wheel-Version: 1.0\nGenerator: tests\nRoot-Is-Purelib: true\nTag: {tag}\n"
     ).encode()
-    if entry_points:
-        lines = ["[testbench_ai_service.agents]"]
-        lines += [f"{key} = {value}" for key, value in entry_points.items()]
+    lines: list[str] = []
+    for group, points in (
+        ("testbench_ai_service.agents", entry_points),
+        ("testbench_ai_service.llm_clients", llm_entry_points),
+    ):
+        if points:
+            lines.append(f"[{group}]")
+            lines += [f"{key} = {value}" for key, value in points.items()]
+    if lines:
         entries[f"{dist_info}/entry_points.txt"] = ("\n".join(lines) + "\n").encode()
     entries.update(extra_entries or {})
 
@@ -171,6 +178,31 @@ class RaterAgent(Agent):
 RUNNABLE_AGENT_FILES: dict[str, str | bytes] = {
     **VALID_AGENT_FILES,
     "acme/rater/agent.py": _RUNNABLE_AGENT_PY,
+}
+
+
+VALID_LLM_ENTRY_POINTS = {"acme_llm": "acme_llm.client:AcmeClient"}
+
+LLM_CLIENT_PY = """\
+from testbench_ai_service.llm.base import LLMClient
+
+
+class AcmeClient(LLMClient):
+    def __init__(self, api_key=None, *args, **kwargs):
+        self.api_key = api_key
+        self.kwargs = kwargs
+
+    async def query_llm(self, model, messages, *args, **kwargs):
+        return "acme"
+
+    async def close(self):
+        return None
+"""
+
+#: A package with one valid LLM client ``acme_llm`` (``VALID_LLM_ENTRY_POINTS``), no agent.
+VALID_LLM_CLIENT_FILES: dict[str, str | bytes] = {
+    "acme_llm/__init__.py": "",
+    "acme_llm/client.py": LLM_CLIENT_PY,
 }
 
 

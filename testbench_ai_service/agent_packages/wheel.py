@@ -24,6 +24,7 @@ from packaging.utils import InvalidWheelFilename, canonicalize_name, parse_wheel
 from packaging.version import InvalidVersion, Version
 
 ENTRY_POINT_GROUP = "testbench_ai_service.agents"
+LLM_CLIENT_ENTRY_POINT_GROUP = "testbench_ai_service.llm_clients"
 MAX_UNPACKED_BYTES = 200 * 1024 * 1024
 MAX_FILES = 5000
 _CHUNK = 1024 * 1024

@@ -16,6 +16,7 @@ from testbench_ai_service.agent_packages.manifest import (
 from testbench_ai_service.agent_packages.models import (
     AgentReport,
     InspectionReport,
+    LLMClientReport,
     PackageVersion,
 )
 from testbench_ai_service.agent_packages.wheel import extract_wheel
@@ -38,6 +39,16 @@ def rater_report(**overrides) -> AgentReport:
     return AgentReport(**values)
 
 
+LLM_CLASS_PATH = "acme_llm.client.AcmeClient"
+
+
+def llm_report(**overrides) -> LLMClientReport:
+    """The report the inspector would write for the ``acme_llm`` test client."""
+    values = {"entry_point": "acme_llm.client:AcmeClient", "class_path": LLM_CLASS_PATH, "ok": True}
+    values.update(overrides)
+    return LLMClientReport(**values)
+
+
 def install_package(
     packages_dir: Path,
     *,
@@ -49,6 +60,8 @@ def install_package(
     files: dict[str, str | bytes] | None = None,
     entry_points: dict[str, str] | None = None,
     reports: dict[str, AgentReport] | None = None,
+    llm_entry_points: dict[str, str] | None = None,
+    llm_clients: dict[str, LLMClientReport] | None = None,
 ) -> PackageVersion:
     """Store a wheel of the valid test agent, unpack it and record it in the manifest.
 
@@ -63,6 +76,7 @@ def install_package(
         version=version,
         files=files if files is not None else VALID_AGENT_FILES,
         entry_points=entry_points if entry_points is not None else VALID_ENTRY_POINTS,
+        llm_entry_points=llm_entry_points,
     )
     stored = wheel_path(packages_dir, built.name)
     stored.parent.mkdir(parents=True, exist_ok=True)
@@ -84,6 +98,7 @@ def install_package(
             agents=reports
             if reports is not None
             else {"acme_rater": report if report is not None else rater_report()},
+            llm_clients=llm_clients or {},
         ),
     )
     manifest = load_manifest(packages_dir)

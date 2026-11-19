@@ -10,6 +10,7 @@ from __future__ import annotations
 import configparser
 import contextlib
 import importlib.util
+import inspect
 import sys
 from email.parser import Parser
 from importlib.metadata import EntryPoint, PackageNotFoundError, version
@@ -22,9 +23,17 @@ from packaging.version import InvalidVersion
 from pydantic import BaseModel, ValidationError
 
 from testbench_ai_service import __version__
-from testbench_ai_service.agent_packages.models import AgentReport, InspectionReport
-from testbench_ai_service.agent_packages.wheel import ENTRY_POINT_GROUP
+from testbench_ai_service.agent_packages.models import (
+    AgentReport,
+    InspectionReport,
+    LLMClientReport,
+)
+from testbench_ai_service.agent_packages.wheel import (
+    ENTRY_POINT_GROUP,
+    LLM_CLIENT_ENTRY_POINT_GROUP,
+)
 from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.llm.base import LLMClient
 from testbench_ai_service.utils.prompt_utils import (
     step_agent_variable_errors,
     template_variables,
@@ -117,15 +126,15 @@ def _requirement_errors(requirements: list[str], warnings: list[str]) -> list[st
     return errors
 
 
-def _entry_points(dist_info: Path | None) -> dict[str, str]:
+def _entry_points(dist_info: Path | None, group: str) -> dict[str, str]:
     if dist_info is None or not (dist_info / "entry_points.txt").is_file():
         return {}
     parser = configparser.ConfigParser(delimiters=("=",), interpolation=None)
     parser.optionxform = str  # type: ignore[assignment,method-assign]
     parser.read_string((dist_info / "entry_points.txt").read_text(encoding="utf-8"))
-    if not parser.has_section(ENTRY_POINT_GROUP):
+    if not parser.has_section(group):
         return {}
-    return {key: value.strip() for key, value in parser.items(ENTRY_POINT_GROUP)}
+    return {key: value.strip() for key, value in parser.items(group)}
 
 
 def _field_names(data_class: Any) -> list[str]:
@@ -225,6 +234,41 @@ def _inspect_agent(name: str, value: str) -> AgentReport:
     return report
 
 
+def _inspect_llm_client(name: str, value: str) -> LLMClientReport:
+    entry_point = EntryPoint(name=name, value=value, group=LLM_CLIENT_ENTRY_POINT_GROUP)
+    match = EntryPoint.pattern.match(value)
+    if match is None or not match.group("attr"):
+        return LLMClientReport(
+            entry_point=value,
+            class_path="",
+            ok=False,
+            errors=[f"entry point '{name} = {value}' is not of the form 'module:Class'"],
+        )
+    report = LLMClientReport(
+        entry_point=value,
+        class_path=f"{match.group('module')}.{match.group('attr')}",
+        ok=False,
+    )
+    try:
+        client_class = entry_point.load()
+    except (Exception, SystemExit) as e:
+        report.errors.append(f"cannot import '{value}': {type(e).__name__}: {e}")
+        return report
+    if not (isinstance(client_class, type) and issubclass(client_class, LLMClient)):
+        report.errors.append(f"'{report.class_path}' is not a subclass of LLMClient")
+        return report
+    if inspect.isabstract(client_class):
+        missing = ", ".join(sorted(client_class.__abstractmethods__))
+        report.errors.append(f"'{report.class_path}' does not implement: {missing}")
+    try:
+        # What the service's client factory passes: the API key, then these keywords.
+        inspect.signature(client_class).bind(None, timeout=1.0, max_retries=1)
+    except (TypeError, ValueError) as e:
+        report.errors.append(f"the constructor must accept api_key, timeout and max_retries: {e}")
+    report.ok = not report.errors
+    return report
+
+
 def inspect_site(site_dir: Path) -> InspectionReport:
     """Check the package unpacked in *site_dir*. Imports its code: run it in a subprocess."""
     site_dir = Path(site_dir).resolve()
@@ -239,20 +283,34 @@ def inspect_site(site_dir: Path) -> InspectionReport:
     warnings: list[str] = []
     errors += _requirement_errors(_requires_dist(dist_info), warnings)
     try:
-        entry_points = _entry_points(dist_info)
+        entry_points = _entry_points(dist_info, ENTRY_POINT_GROUP)
+        llm_entry_points = _entry_points(dist_info, LLM_CLIENT_ENTRY_POINT_GROUP)
     except configparser.Error as e:
         errors.append(f"entry_points.txt is malformed: {e}")
-        entry_points = {}
-    if not entry_points:
-        errors.append(f"no entry point in group '{ENTRY_POINT_GROUP}'")
+        entry_points, llm_entry_points = {}, {}
+    if not entry_points and not llm_entry_points:
+        errors.append(
+            f"no entry point in group '{ENTRY_POINT_GROUP}' or '{LLM_CLIENT_ENTRY_POINT_GROUP}'"
+        )
 
     agents: dict[str, AgentReport] = {}
+    llm_clients: dict[str, LLMClientReport] = {}
     # A conflicting module would shadow the service's own code, so nothing is imported then.
-    if not conflicts and entry_points:
+    if not conflicts and (entry_points or llm_entry_points):
         sys.path.insert(0, str(site_dir))
         agents = {name: _inspect_agent(name, value) for name, value in entry_points.items()}
-    ok = not errors and bool(agents) and all(agent.ok for agent in agents.values())
-    return InspectionReport(ok=ok, errors=errors, warnings=warnings, agents=agents)
+        llm_clients = {
+            name: _inspect_llm_client(name, value) for name, value in llm_entry_points.items()
+        }
+    ok = (
+        not errors
+        and bool(agents or llm_clients)
+        and all(agent.ok for agent in agents.values())
+        and all(client.ok for client in llm_clients.values())
+    )
+    return InspectionReport(
+        ok=ok, errors=errors, warnings=warnings, agents=agents, llm_clients=llm_clients
+    )
 
 
 def main(argv: list[str]) -> int:

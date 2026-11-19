@@ -24,6 +24,16 @@ class AgentReport(BaseModel):
     default_endpoint_path: str | None = None
 
 
+class LLMClientReport(BaseModel):
+    """Inspection result for one LLM client entry point of a package."""
+
+    entry_point: str
+    class_path: str
+    ok: bool
+    errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
+
+
 class InspectionReport(BaseModel):
     """Inspection result for a whole package version."""
 
@@ -31,6 +41,7 @@ class InspectionReport(BaseModel):
     errors: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     agents: dict[str, AgentReport] = Field(default_factory=dict)
+    llm_clients: dict[str, LLMClientReport] = Field(default_factory=dict)
 
 
 class PackageVersion(BaseModel):

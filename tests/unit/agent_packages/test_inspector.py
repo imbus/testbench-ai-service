@@ -6,7 +6,14 @@ import sys
 
 from testbench_ai_service.agent_packages.inspector import inspect_site
 from testbench_ai_service.agent_packages.runner import run_inspection
-from tests.helpers.wheels import VALID_AGENT_FILES, extracted
+from tests.helpers.wheels import (
+    LLM_CLIENT_PY,
+    VALID_AGENT_FILES,
+    VALID_ENTRY_POINTS,
+    VALID_LLM_CLIENT_FILES,
+    VALID_LLM_ENTRY_POINTS,
+    extracted,
+)
 
 AGENT = "acme/rater/agent.py"
 
@@ -200,3 +207,82 @@ def test_inspect_survives_print_on_import(tmp_path):
     source = "print('junk on stdout')\n" + str(VALID_AGENT_FILES[AGENT])
     report = run_inspection(extracted(tmp_path, _with(**{AGENT: source})))
     assert report.ok, report
+
+
+# --- LLM clients ---------------------------------------------------------------------
+
+CLIENT = "acme_llm/client.py"
+
+
+def _llm_site(tmp_path, source: str | None = None):
+    files = dict(VALID_LLM_CLIENT_FILES)
+    if source is not None:
+        files[CLIENT] = source
+    return extracted(tmp_path, files, entry_points={}, llm_entry_points=VALID_LLM_ENTRY_POINTS)
+
+
+def test_inspect_valid_llm_client(tmp_path):
+    report = run_inspection(_llm_site(tmp_path))
+    assert report.ok, report
+    assert report.agents == {}
+    client = report.llm_clients["acme_llm"]
+    assert client.ok
+    assert client.entry_point == "acme_llm.client:AcmeClient"
+    assert client.class_path == "acme_llm.client.AcmeClient"
+    assert client.errors == []
+
+
+def test_inspect_llm_client_not_a_subclass(tmp_path):
+    report = run_inspection(_llm_site(tmp_path, "class AcmeClient:\n    pass\n"))
+    assert not report.ok
+    client = report.llm_clients["acme_llm"]
+    assert not client.ok
+    assert any("is not a subclass of LLMClient" in e for e in client.errors)
+
+
+def test_inspect_llm_client_abstract(tmp_path):
+    source = LLM_CLIENT_PY.replace("    async def close(self):\n        return None\n", "")
+    report = run_inspection(_llm_site(tmp_path, source))
+    client = report.llm_clients["acme_llm"]
+    assert not client.ok
+    assert any("close" in e for e in client.errors)
+
+
+def test_inspect_llm_client_constructor_rejects_factory_kwargs(tmp_path):
+    source = LLM_CLIENT_PY.replace(
+        "def __init__(self, api_key=None, *args, **kwargs):", "def __init__(self, api_key=None):"
+    ).replace("        self.kwargs = kwargs\n", "")
+    report = run_inspection(_llm_site(tmp_path, source))
+    client = report.llm_clients["acme_llm"]
+    assert not client.ok
+    assert any("timeout" in e for e in client.errors)
+
+
+def test_inspect_llm_client_import_error(tmp_path):
+    report = run_inspection(_llm_site(tmp_path, "raise RuntimeError('boom on import')\n"))
+    assert not report.ok
+    client = report.llm_clients["acme_llm"]
+    assert not client.ok
+    assert any("boom on import" in e for e in client.errors)
+
+
+def test_inspect_package_with_agent_and_llm_client(tmp_path):
+    site = extracted(
+        tmp_path,
+        {**VALID_AGENT_FILES, **VALID_LLM_CLIENT_FILES},
+        entry_points=VALID_ENTRY_POINTS,
+        llm_entry_points=VALID_LLM_ENTRY_POINTS,
+    )
+    report = run_inspection(site)
+    assert report.ok, report
+    assert report.agents["acme_rater"].ok
+    assert report.llm_clients["acme_llm"].ok
+
+
+def test_inspect_no_entry_points_names_both_groups(tmp_path):
+    report = run_inspection(extracted(tmp_path, VALID_LLM_CLIENT_FILES, entry_points={}))
+    assert not report.ok
+    assert any(
+        "testbench_ai_service.agents" in e and "testbench_ai_service.llm_clients" in e
+        for e in report.errors
+    )
