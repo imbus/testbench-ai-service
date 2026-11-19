@@ -176,6 +176,8 @@ disable_error_code = ["annotation-unchecked"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Prompt tests call a real LLM; run them on purpose with: pytest -m prompt_engineering
+addopts = "-m 'not prompt_engineering'"
 markers = [
   "prompt_engineering: Tests requiring real LLM API keys (expensive, excluded from CI)",
 ]
