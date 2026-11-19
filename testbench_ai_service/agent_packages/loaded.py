@@ -33,6 +33,8 @@ _loaded: dict[str, tuple[str, str]] = {}
 _failures: dict[str, str] = {}
 #: agent key -> reason its class failed to import at startup
 _agent_failures: dict[str, str] = {}
+#: why the LLM client a package provides could not be created, if it could not
+_llm_client_failure: list[str] = []
 
 
 def _sha256(path: Path) -> str:
@@ -100,6 +102,7 @@ def activate_packages(packages_dir: Path) -> list[str]:
     """
     _failures.clear()
     _agent_failures.clear()
+    _llm_client_failure.clear()
     try:
         manifest = load_manifest(packages_dir)
     except ManifestError as e:
@@ -163,6 +166,18 @@ def agent_failures() -> dict[str, str]:
     return dict(_agent_failures)
 
 
+def mark_llm_client_failed(reason: str | None) -> None:
+    """Record why the LLM client of a package could not be created; ``None`` clears it."""
+    _llm_client_failure.clear()
+    if reason is not None:
+        _llm_client_failure.append(reason)
+
+
+def llm_client_failure() -> str | None:
+    """Why the LLM client of a package could not be created, if it could not."""
+    return _llm_client_failure[0] if _llm_client_failure else None
+
+
 def reset() -> None:
     """Forget everything and undo the ``sys.path`` changes. Only for tests.
 
@@ -174,3 +189,4 @@ def reset() -> None:
     _loaded.clear()
     _failures.clear()
     _agent_failures.clear()
+    _llm_client_failure.clear()

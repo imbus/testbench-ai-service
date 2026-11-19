@@ -163,6 +163,10 @@ class StatusResponse(BaseModel):
     in_flight_tasks: int = 0
     restart_required: list[str] = []
     token_usage: UsageSummary = Field(default_factory=UsageSummary)
+    llm_client_error: str | None = Field(
+        default=None,
+        description="Why the LLM client an uploaded package provides is not in use.",
+    )
 
 
 class ConfigResponse(BaseModel):

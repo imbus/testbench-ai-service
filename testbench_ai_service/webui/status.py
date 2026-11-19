@@ -12,6 +12,7 @@ from testbench_ai_service import __version__
 from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.agent_packages.manifest import ManifestError, load_manifest
 from testbench_ai_service.config import AppConfig
+from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.log import logger
 from testbench_ai_service.usage import UsageStore
 from testbench_ai_service.webui.models import (
@@ -113,6 +114,19 @@ def _unloaded_packages(config: AppConfig) -> dict[str, str]:
     return unloaded
 
 
+def llm_client_error(config: AppConfig) -> str | None:
+    """Why the LLM client an uploaded package provides is not in use, if it is not."""
+    llm = config.llm_config
+    if llm.provider != LLMProvider.CUSTOM or llm.package is None:
+        return None
+    failure = loaded.failures().get(llm.package)
+    if failure is not None:
+        return failure
+    if not loaded.is_loaded(llm.package):
+        return "Not loaded yet. Restart the service to load it."
+    return loaded.llm_client_failure()
+
+
 async def read_token_usage(store: UsageStore) -> UsageSummary:
     """The per-model totals, or an explicit "unavailable" if the file cannot be read.
 
@@ -154,4 +168,5 @@ def build_status(
         in_flight_tasks=in_flight_tasks,
         restart_required=restart_required or [],
         token_usage=token_usage or UsageSummary(),
+        llm_client_error=llm_client_error(config),
     )
