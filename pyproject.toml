@@ -9,7 +9,7 @@ authors = [{ name = "imbus AG", email = "support@imbus.de" }]
 readme = "README.md"
 license = { file = "LICENSE" }
 dynamic = ["version"]
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.11,<3.16"
 keywords = [
   "testbench",
   "ai-proxy",
@@ -93,7 +93,7 @@ testbench-ai-service = "testbench_ai_service.cli:main"
 
 [tool.ruff]
 fix = false
-target-version = "py310"
+target-version = "py311"
 line-length = 100
 exclude = ["__pycache__", ".venv", "tools", "model"]
 
@@ -145,7 +145,7 @@ select = [
 "tests/**/*.py" = ["PLR2004"]
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 plugins = ["pydantic.mypy"]
 no_implicit_optional = true
 strict_optional = true
