@@ -8,6 +8,10 @@ import { DraftProvider } from '../state/draft'
 import { ConfigSection } from './ConfigSection'
 import { llmPkg, ok, packages } from './packages/fixtures'
 
+// Config first, then the package list: two round trips before the section shows,
+// which the default one second does not always cover in a full, parallel run.
+const WAIT = { timeout: 5000 }
+
 let disk: Record<string, unknown>
 
 beforeEach(async () => {
@@ -47,8 +51,8 @@ function renderLlm(url = '/admin/llm', section: 'llm' | 'logging' = 'llm') {
 
 test('the global LLM screen lists the provider packages', async () => {
   renderLlm()
-  expect(await screen.findByRole('region', { name: 'Provider packages' })).toBeInTheDocument()
-  expect(await screen.findByTestId('package-acme-llm')).toBeInTheDocument()
+  expect(await screen.findByRole('region', { name: 'Provider packages' }, WAIT)).toBeInTheDocument()
+  expect(await screen.findByTestId('package-acme-llm', {}, WAIT)).toBeInTheDocument()
 })
 
 test('a project scope has no provider packages', async () => {
@@ -73,12 +77,14 @@ test('says where the class path comes from while a package provides the client',
     },
   }
   renderLlm()
-  expect(await screen.findByText(/Comes from the uploaded package acme-llm/)).toBeInTheDocument()
+  expect(
+    await screen.findByText(/Comes from the uploaded package acme-llm/, {}, WAIT),
+  ).toBeInTheDocument()
 })
 
 test('says nothing about a package for a hand-written custom provider', async () => {
   disk = { llm_config: { provider: 'custom', class_path: 'my.Client' } }
   renderLlm()
-  await screen.findByRole('region', { name: 'Provider packages' })
+  await screen.findByRole('region', { name: 'Provider packages' }, WAIT)
   expect(screen.queryByText(/Comes from the uploaded package/)).not.toBeInTheDocument()
 })

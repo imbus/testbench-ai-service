@@ -38,13 +38,19 @@ function posted(): { url: string; body: unknown } {
 
 const SUBMIT = { name: 'Use as LLM provider' }
 
+/** Pasted, not typed key by key: the names are long and a full run is busy. */
+async function enter(user: ReturnType<typeof userEvent.setup>, text: string) {
+  await user.click(screen.getByLabelText('Model names'))
+  await user.paste(text)
+}
+
 describe('ProviderDialog', () => {
   it('sends the client, the models and the first model as the default', async () => {
     const user = userEvent.setup()
     const { onClose } = renderDialog()
 
     expect(screen.getByRole('button', SUBMIT)).toBeDisabled()
-    await user.type(screen.getByLabelText('Model names'), 'acme-large\nacme-small, acme-tiny')
+    await enter(user, 'acme-large\nacme-small, acme-tiny')
     await user.click(screen.getByRole('button', SUBMIT))
 
     await waitFor(() => expect(onClose).toHaveBeenCalled())
@@ -62,7 +68,7 @@ describe('ProviderDialog', () => {
     const user = userEvent.setup()
     const { onClose } = renderDialog()
 
-    await user.type(screen.getByLabelText('Model names'), 'acme-large')
+    await enter(user, 'acme-large')
     await user.click(screen.getByRole('checkbox'))
     await user.click(screen.getByRole('button', SUBMIT))
 
@@ -76,7 +82,7 @@ describe('ProviderDialog', () => {
       const user = userEvent.setup()
       renderDialog()
 
-      await user.type(screen.getByLabelText('Model names'), model)
+      await enter(user, model)
 
       expect(screen.getByRole('alert')).toHaveTextContent(model)
       expect(screen.getByRole('button', SUBMIT)).toBeDisabled()
@@ -102,7 +108,7 @@ describe('ProviderDialog', () => {
 
     expect(screen.getAllByRole('radio')).toHaveLength(2)
     await user.click(screen.getByRole('radio', { name: /acme_other/ }))
-    await user.type(screen.getByLabelText('Model names'), 'acme-large')
+    await enter(user, 'acme-large')
     await user.click(screen.getByRole('button', SUBMIT))
 
     await waitFor(() => expect(posted().body).toMatchObject({ entry_point: 'acme_other' }))
@@ -115,7 +121,7 @@ describe('ProviderDialog', () => {
     const user = userEvent.setup()
     const { onClose } = renderDialog()
 
-    await user.type(screen.getByLabelText('Model names'), 'acme-large')
+    await enter(user, 'acme-large')
     await user.click(screen.getByRole('button', SUBMIT))
 
     expect(await screen.findByRole('alert')).toHaveTextContent('The package was rejected.')
