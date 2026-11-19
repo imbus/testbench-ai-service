@@ -81,6 +81,8 @@ function useRefresh() {
     void queries.invalidateQueries({ queryKey: ['packages'] })
     void queries.invalidateQueries({ queryKey: ['config'] })
     void queries.invalidateQueries({ queryKey: ['status'] })
+    // An LLM client brings its own models, or takes them away again.
+    void queries.invalidateQueries({ queryKey: ['models'] })
   }
 }
 
@@ -165,6 +167,57 @@ export function useRemovePackage() {
       apiFetch<RegisterResult>(`${BASE}/${encodeURIComponent(name)}`, { method: 'DELETE' }),
     onSuccess: refresh,
   })
+}
+
+/**
+ * Make an LLM client of a version the service's custom provider; this
+ * activates the version. `default_model` also becomes the default model.
+ */
+export function useUseLlmClient() {
+  const refresh = useRefresh()
+  return useMutation({
+    mutationFn: ({
+      name,
+      version,
+      entry_point,
+      models,
+      default_model = null,
+    }: {
+      name: string
+      version: string
+      entry_point: string
+      models: string[]
+      default_model?: string | null
+    }) =>
+      apiFetch<RegisterResult>(`${versionPath(name, version)}/llm-client`, {
+        method: 'POST',
+        body: JSON.stringify({ entry_point, models, default_model }),
+      }),
+    onSuccess: refresh,
+  })
+}
+
+/** Stop using the LLM client of a package; the default provider takes over. */
+export function useClearLlmClient() {
+  const refresh = useRefresh()
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiFetch<RegisterResult>(`${BASE}/${encodeURIComponent(name)}/llm-client`, {
+        method: 'DELETE',
+      }),
+    onSuccess: refresh,
+  })
+}
+
+/**
+ * Why a model name cannot belong to an uploaded LLM client, mirroring the
+ * server's check: the client factory sends these names to OpenAI or Anthropic
+ * whatever the configured provider is.
+ */
+export function modelNameProblem(model: string): 'reserved' | 'invalid' | null {
+  if (/^(gpt-|claude-|o\d+)/.test(model)) return 'reserved'
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$/.test(model)) return 'invalid'
+  return null
 }
 
 // --- errors ------------------------------------------------------------------

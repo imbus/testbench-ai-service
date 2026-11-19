@@ -49,11 +49,14 @@ export function UploadDialog({
   packages,
   onClose,
   onActivate,
+  onUseProvider,
 }: {
   /** The package list, for what is registered already and the folder setting. */
   packages: PackagesResponse
   onClose: () => void
   onActivate: (version: PackageVersion) => void
+  /** Continue in the dialog that puts the version's LLM client to use. */
+  onUseProvider?: (version: PackageVersion) => void
 }) {
   const { t } = useTranslation()
   const upload = useUploadPackage()
@@ -61,6 +64,10 @@ export function UploadDialog({
   const [registering, setRegistering] = useState(false)
   const uploaded = upload.data
   const registrable = uploaded && Object.values(uploaded.report.agents).some((agent) => agent.ok)
+  const providable =
+    !!onUseProvider &&
+    !!uploaded &&
+    Object.values(uploaded.report.llm_clients ?? {}).some((client) => client.ok)
   const known = uploaded && (packages.packages ?? []).find((entry) => entry.name === uploaded.name)
   const otherActive =
     !!uploaded &&
@@ -174,13 +181,23 @@ export function UploadDialog({
                   onClick={() => onActivate(uploaded)}
                 />
               ) : (
-                registrable && (
-                  <Button
-                    type="button"
-                    label={t('packagesNextRegister')}
-                    onClick={() => setRegistering(true)}
-                  />
-                )
+                <>
+                  {providable && (
+                    <Button
+                      type="button"
+                      outlined={!!registrable}
+                      label={t('packagesNextProvider')}
+                      onClick={() => onUseProvider?.(uploaded)}
+                    />
+                  )}
+                  {registrable && (
+                    <Button
+                      type="button"
+                      label={t('packagesNextRegister')}
+                      onClick={() => setRegistering(true)}
+                    />
+                  )}
+                </>
               )
             ) : (
               <Button
@@ -441,12 +458,28 @@ function FileChip({ file, onRemove }: { file: File; onRemove?: () => void }) {
   )
 }
 
-type Row = PackageAgentReport & { entry: string }
+/** What the table shows of an agent's or an LLM client's report. */
+type Row = Pick<PackageAgentReport, 'class_path' | 'ok' | 'errors' | 'warnings'> & {
+  entry: string
+  /** Agents only. */
+  default_endpoint_path: string | null
+  /** An LLM client rather than an agent. */
+  client: boolean
+}
 
-/** The check report as a table: one row per agent entry point. */
+/** The check report as a table: one row per agent or LLM client entry point. */
 function ReportTable({ report }: { report: PackageReport }) {
   const { t } = useTranslation()
-  const rows: Row[] = Object.entries(report.agents).map(([entry, agent]) => ({ ...agent, entry }))
+  const rows: Row[] = [
+    ...Object.entries(report.agents).map(([entry, agent]) => ({ ...agent, entry, client: false })),
+    ...Object.entries(report.llm_clients ?? {}).map(([entry, client]) => ({
+      ...client,
+      // Prefixed: an agent and a client may share an entry point name.
+      entry: `llm:${entry}`,
+      default_endpoint_path: null,
+      client: true,
+    })),
+  ]
 
   return (
     <>
@@ -481,7 +514,16 @@ function ReportTable({ report }: { report: PackageReport }) {
             header={t('packagesColEntryPoint')}
             body={(row: Row) => (
               <div>
-                <div style={{ ...MONO, fontSize: 13 }}>{row.entry}</div>
+                <div style={{ ...MONO, fontSize: 13 }}>
+                  {row.client ? row.entry.slice('llm:'.length) : row.entry}
+                  {row.client && (
+                    <Tag
+                      severity="info"
+                      value={t('packagesLlmClient')}
+                      style={{ marginLeft: 8, fontSize: 11, padding: '1px 8px' }}
+                    />
+                  )}
+                </div>
                 <div style={{ ...MUTED, ...MONO, fontSize: 11 }}>{row.class_path}</div>
               </div>
             )}
@@ -499,7 +541,7 @@ function ReportTable({ report }: { report: PackageReport }) {
   )
 }
 
-function StatusTag({ agent }: { agent: PackageAgentReport }) {
+function StatusTag({ agent }: { agent: Row }) {
   const { t } = useTranslation()
   const [severity, label] = !agent.ok
     ? (['danger', t('packagesError')] as const)
@@ -509,7 +551,7 @@ function StatusTag({ agent }: { agent: PackageAgentReport }) {
   return <Tag severity={severity} value={label} style={{ fontSize: 11, padding: '2px 8px' }} />
 }
 
-function Findings({ agent }: { agent: PackageAgentReport }) {
+function Findings({ agent }: { agent: Row }) {
   if (agent.errors.length === 0 && agent.warnings.length === 0)
     return <span style={{ ...MUTED, fontSize: 12 }}>—</span>
   return (

@@ -450,4 +450,31 @@ export const en = {
   packagesErrorForbidden:
     'You are not allowed to do this, or your session has expired. Sign in again with an admin account.',
   packagesErrorGeneric: 'The action failed.',
+  packagesLlmClient: 'LLM client',
+  packagesLlmClientsOf: 'LLM clients in {{version}}',
+  packagesProviderInUse: 'active LLM provider',
+  packagesUseProvider: 'Use as LLM provider',
+  packagesStopProvider: 'Stop using as provider',
+  packagesNextProvider: 'Next: use as LLM provider',
+  packagesProviderTitle: 'Use the LLM client of {{name}} {{version}}',
+  packagesProviderHint:
+    'The service then uses this client as its custom provider, replacing a custom provider configured before. It takes effect after a restart.',
+  packagesProviderModels: 'Model names',
+  packagesProviderModelsHint:
+    'One name per line. Under these names the models of this provider can be selected for agents.',
+  packagesProviderModelReserved:
+    '"{{model}}" always goes to OpenAI or Anthropic (names starting with gpt-, claude- or o<digit>). Choose another name.',
+  packagesProviderModelInvalid: '"{{model}}" is not a valid model name.',
+  packagesProviderDefault: 'Set {{model}} as the default model',
+  packagesProviderDefaultNone: 'Set the first model as the default model',
+  packagesStopProviderTitle: 'Stop using {{name}} as LLM provider',
+  packagesStopProviderHint:
+    'The service returns to the default provider (OpenAI). The models of this package are removed from the configuration, including where they are set as default or agent model. It takes effect after a restart.',
+  providerPackages: 'Provider packages',
+  providerPackagesSub: 'Uploaded Python wheels with their own LLM client',
+  providerPackagesEmpty: 'No package with an LLM client has been uploaded yet.',
+  providerPackagesUpload: 'Import provider wheel',
+  llmClassPathFromPackage:
+    'Comes from the uploaded package {{name}}. Change the provider under "Provider packages" below.',
+  statusLlmClientError: 'The LLM client of the uploaded package is not in use',
 } as const

@@ -80,6 +80,8 @@ export function ReportView({
 }) {
   const { t } = useTranslation()
   const agents = Object.entries(report.agents)
+  // A package with LLM clients only has no agents to list, and says so nowhere.
+  const hasClients = Object.keys(report.llm_clients ?? {}).length > 0
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {(report.errors.length > 0 || report.warnings.length > 0) && (
@@ -90,9 +92,11 @@ export function ReportView({
         />
       )}
       {agents.length === 0 ? (
-        <div className="text-muted" style={{ fontSize: 13 }}>
-          {t('packagesNoAgents')}
-        </div>
+        !hasClients && (
+          <div className="text-muted" style={{ fontSize: 13 }}>
+            {t('packagesNoAgents')}
+          </div>
+        )
       ) : (
         <div style={LIST_GROUP}>
           {agents.map(([entryPoint, agent], index) => {
@@ -149,6 +153,76 @@ export function ReportView({
           })}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * The LLM clients of a version's check report, one row each. `inUse` is the
+ * entry point the service's configuration takes its custom provider from.
+ */
+export function LlmClientsView({
+  report,
+  inUse,
+}: {
+  report: PackageReport
+  inUse?: string | null
+}) {
+  const { t } = useTranslation()
+  const clients = Object.entries(report.llm_clients ?? {})
+  if (clients.length === 0) return null
+  return (
+    <div style={LIST_GROUP}>
+      {clients.map(([entryPoint, client], index) => {
+        const color = client.ok ? 'var(--color-success)' : 'var(--color-danger)'
+        return (
+          <div
+            key={entryPoint}
+            data-testid={`package-llm-client-${entryPoint}`}
+            style={{ ...LIST_ROW, ...(index === 0 ? { borderTop: 'none' } : {}) }}
+          >
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13 }}>
+              <span
+                role="img"
+                aria-label={client.ok ? 'ok' : t('packagesCheckFailed')}
+                style={{ display: 'flex' }}
+              >
+                <Icon d={client.ok ? ICONS.check : ICONS.close} color={color} />
+              </span>
+              <code style={{ fontWeight: 600 }}>{entryPoint}</code>
+              {inUse === entryPoint && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    padding: '1px 8px',
+                    borderRadius: 999,
+                    background: 'var(--color-success-soft)',
+                  }}
+                >
+                  {t('packagesProviderInUse')}
+                </span>
+              )}
+              <span
+                className="text-muted"
+                style={{
+                  fontSize: 11,
+                  fontFamily: 'var(--font-code)',
+                  marginLeft: 'auto',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  minWidth: 0,
+                }}
+              >
+                {client.class_path}
+              </span>
+            </div>
+            <div style={{ paddingLeft: 26 }}>
+              <Findings errors={client.errors} warnings={client.warnings} />
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

@@ -52,6 +52,44 @@ export function pkg(overrides: Partial<AgentPackage> = {}): AgentPackage {
   }
 }
 
+/** A wheel that provides one LLM client and no agent. */
+export function llmVersion(overrides: Partial<PackageVersion> = {}): PackageVersion {
+  return version({
+    name: 'acme-llm',
+    version: '1.0.0',
+    filename: 'acme_llm-1.0.0-py3-none-any.whl',
+    active: false,
+    report: {
+      ok: true,
+      errors: [],
+      warnings: [],
+      agents: {},
+      llm_clients: {
+        acme_llm: {
+          entry_point: 'acme_llm.client:AcmeClient',
+          class_path: 'acme_llm.client.AcmeClient',
+          ok: true,
+          errors: [],
+          warnings: [],
+        },
+      },
+    },
+    ...overrides,
+  })
+}
+
+export function llmPkg(overrides: Partial<AgentPackage> = {}): AgentPackage {
+  return {
+    name: 'acme-llm',
+    versions: [llmVersion()],
+    registered: {},
+    llm_client: null,
+    loaded: false,
+    load_error: null,
+    ...overrides,
+  }
+}
+
 export function packages(overrides: Partial<PackagesResponse> = {}): PackagesResponse {
   return { allow_upload: true, default_dirs: false, packages: [pkg()], ...overrides }
 }

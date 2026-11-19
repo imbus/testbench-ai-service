@@ -7,7 +7,16 @@ import { usePackages, useDeleteVersion, useRemovePackage } from '../api/packages
 import { useConfig } from '../api/queries'
 import type { AgentPackage, PackagesResponse, PackageVersion } from '../api/types'
 import { Modal } from '../components/Modal'
-import { Icon, ICONS, LIST_GROUP, LIST_ROW, PackageError, ReportView } from './packages/parts'
+import {
+  Icon,
+  ICONS,
+  LIST_GROUP,
+  LIST_ROW,
+  LlmClientsView,
+  PackageError,
+  ReportView,
+} from './packages/parts'
+import { ProviderDialog, StopProviderDialog } from './packages/ProviderDialog'
 import { ActivateDialog, RegisterDialog } from './packages/RegisterDialog'
 import { UploadDialog } from './packages/UploadDialog'
 
@@ -17,6 +26,8 @@ export type Dialog =
   | { kind: 'activate'; pkg: string; version: string }
   | { kind: 'delete'; pkg: string; version: string }
   | { kind: 'remove'; pkg: AgentPackage }
+  | { kind: 'provider'; pkg: string; version: PackageVersion }
+  | { kind: 'stopProvider'; pkg: string }
 
 function formatDate(iso: string, language: string): string {
   const date = new Date(iso)
@@ -60,6 +71,7 @@ export function usePackageDialogs(data: PackagesResponse | undefined): PackageDi
           onActivate={(version) =>
             setDialog({ kind: 'activate', pkg: version.name, version: version.version })
           }
+          onUseProvider={(version) => setDialog({ kind: 'provider', pkg: version.name, version })}
         />
       )}
       {dialog?.kind === 'register' && (
@@ -83,6 +95,10 @@ export function usePackageDialogs(data: PackagesResponse | undefined): PackageDi
         <DeleteDialog name={dialog.pkg} version={dialog.version} onClose={close} />
       )}
       {dialog?.kind === 'remove' && <RemoveDialog pkg={dialog.pkg} onClose={close} />}
+      {dialog?.kind === 'provider' && (
+        <ProviderDialog name={dialog.pkg} version={dialog.version} onClose={close} />
+      )}
+      {dialog?.kind === 'stopProvider' && <StopProviderDialog name={dialog.pkg} onClose={close} />}
     </>
   ) : null
 
@@ -170,6 +186,10 @@ export function AgentPackagesSection({
             onActivate={(version) => dialogs.open({ kind: 'activate', pkg: entry.name, version })}
             onDelete={(version) => dialogs.open({ kind: 'delete', pkg: entry.name, version })}
             onRemove={() => dialogs.open({ kind: 'remove', pkg: entry })}
+            onUseProvider={(version) =>
+              dialogs.open({ kind: 'provider', pkg: entry.name, version })
+            }
+            onStopProvider={() => dialogs.open({ kind: 'stopProvider', pkg: entry.name })}
           />
         ))}
       </>
@@ -205,13 +225,20 @@ const SECTION_LABEL = {
   color: 'var(--color-muted)',
 } as const
 
-function PackageCard({
+/** Whether any uploaded version of a package provides an LLM client. */
+export function hasLlmClient(pkg: AgentPackage): boolean {
+  return pkg.versions.some((entry) => Object.keys(entry.report.llm_clients ?? {}).length > 0)
+}
+
+export function PackageCard({
   pkg,
   isAdmin,
   onUse,
   onActivate,
   onDelete,
   onRemove,
+  onUseProvider,
+  onStopProvider,
 }: {
   pkg: AgentPackage
   isAdmin: boolean
@@ -219,12 +246,16 @@ function PackageCard({
   onActivate: (version: string) => void
   onDelete: (version: string) => void
   onRemove: () => void
+  onUseProvider: (version: PackageVersion) => void
+  onStopProvider: () => void
 }) {
   const { t, i18n } = useTranslation()
   const active = pkg.versions.find((entry) => entry.active)
   // The report shown is the active version's, or the newest upload's.
   const shown = active ?? pkg.versions[0]
-  const inUse = Object.keys(pkg.registered).length > 0
+  const provides = !!pkg.llm_client
+  const inUse = Object.keys(pkg.registered).length > 0 || provides
+  const shownClients = shown ? Object.keys(shown.report.llm_clients ?? {}).length : 0
   const date = shown ? formatDate(shown.uploaded_at, i18n.language) : ''
 
   return (
@@ -282,6 +313,13 @@ function PackageCard({
                 style={{ padding: '1px 8px', fontSize: 11 }}
               />
             )}
+            {provides && (
+              <Tag
+                severity="info"
+                value={t('packagesProviderInUse')}
+                style={{ padding: '1px 8px', fontSize: 11 }}
+              />
+            )}
             {inUse && (
               <Tag
                 severity={pkg.loaded ? 'success' : 'warning'}
@@ -302,7 +340,18 @@ function PackageCard({
             </span>
           )}
         </div>
-        {isAdmin && (inUse || active) && (
+        {isAdmin && provides && (
+          <Button
+            type="button"
+            text
+            severity="danger"
+            size="small"
+            label={t('packagesStopProvider')}
+            onClick={onStopProvider}
+          />
+        )}
+        {/* The server refuses removing a package while it provides the LLM client. */}
+        {isAdmin && !provides && (inUse || active) && (
           <Button
             type="button"
             text
@@ -319,10 +368,17 @@ function PackageCard({
           <Message severity="warn" style={{ justifyContent: 'flex-start' }} text={pkg.load_error} />
         )}
 
-        {shown && (
+        {shown && (Object.keys(shown.report.agents).length > 0 || shownClients === 0) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={SECTION_LABEL}>{t('packagesAgentsOf', { version: shown.version })}</div>
             <ReportView report={shown.report} registered={pkg.registered} />
+          </div>
+        )}
+
+        {shown && shownClients > 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={SECTION_LABEL}>{t('packagesLlmClientsOf', { version: shown.version })}</div>
+            <LlmClientsView report={shown.report} inUse={pkg.llm_client} />
           </div>
         )}
 
@@ -369,6 +425,8 @@ function PackageCard({
                     version={entry}
                     otherActive={!!active && !entry.active}
                     registrable={hasUnregistered(entry, pkg.registered)}
+                    providable={!provides && hasUsableClient(entry)}
+                    onUseProvider={() => onUseProvider(entry)}
                     onUse={() => onUse(entry)}
                     onActivate={() => onActivate(entry.version)}
                     onDelete={() => onDelete(entry.version)}
@@ -394,23 +452,33 @@ function hasUnregistered(version: PackageVersion, registered: Record<string, str
   )
 }
 
+/** Whether a version has an LLM client that passed the check. */
+function hasUsableClient(version: PackageVersion): boolean {
+  return Object.values(version.report.llm_clients ?? {}).some((client) => client.ok)
+}
+
 /**
  * The actions of one version: an inactive version is activated while another
  * one is active (the server refuses registering then); otherwise it offers
- * registering, but only while it has agents left to register. Only inactive
- * versions can be deleted.
+ * registering, but only while it has agents left to register, and using its
+ * LLM client as the provider, unless the package provides it already. Only
+ * inactive versions can be deleted.
  */
 function VersionActions({
   version,
   otherActive,
   registrable,
+  providable,
   onUse,
+  onUseProvider,
   onActivate,
   onDelete,
 }: {
   version: PackageVersion
   otherActive: boolean
   registrable: boolean
+  providable: boolean
+  onUseProvider: () => void
   onUse: () => void
   onActivate: () => void
   onDelete: () => void
@@ -427,15 +495,26 @@ function VersionActions({
           onClick={onActivate}
         />
       ) : (
-        registrable && (
-          <Button
-            type="button"
-            outlined
-            size="small"
-            label={t('packagesRegister')}
-            onClick={onUse}
-          />
-        )
+        <>
+          {registrable && (
+            <Button
+              type="button"
+              outlined
+              size="small"
+              label={t('packagesRegister')}
+              onClick={onUse}
+            />
+          )}
+          {providable && (
+            <Button
+              type="button"
+              outlined
+              size="small"
+              label={t('packagesUseProvider')}
+              onClick={onUseProvider}
+            />
+          )}
+        </>
       )}
       {!version.active && (
         <Button

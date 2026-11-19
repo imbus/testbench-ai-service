@@ -75,6 +75,8 @@ export interface StatusResponse {
   in_flight_tasks: number
   restart_required: string[]
   token_usage: UsageSummary
+  /** Why the LLM client an uploaded package provides is not in use, if it is not. */
+  llm_client_error?: string | null
 }
 
 export type ActivityScope = 'mine' | 'service' | 'all'
@@ -460,6 +462,17 @@ export interface PackageReport {
   warnings: string[]
   /** Entry point -> its report. */
   agents: Record<string, PackageAgentReport>
+  /** Entry point -> its report; absent in reports written before LLM clients were checked. */
+  llm_clients?: Record<string, PackageLlmClientReport>
+}
+
+/** Inspection result for one LLM client entry point of an uploaded package. */
+export interface PackageLlmClientReport {
+  entry_point: string
+  class_path: string
+  ok: boolean
+  errors: string[]
+  warnings: string[]
 }
 
 /** One uploaded wheel. */
@@ -481,6 +494,8 @@ export interface AgentPackage {
   versions: PackageVersion[]
   /** Agent key -> entry point, for the agents of this package in config.toml. */
   registered: Record<string, string>
+  /** Entry point of the LLM client config.toml takes from this package, if it does. */
+  llm_client?: string | null
   loaded: boolean
   load_error: string | null
 }

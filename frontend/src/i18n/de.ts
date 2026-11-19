@@ -453,6 +453,33 @@ export const de = {
   packagesErrorForbidden:
     'Sie dürfen das nicht, oder Ihre Sitzung ist abgelaufen. Melden Sie sich erneut mit einem Admin-Konto an.',
   packagesErrorGeneric: 'Die Aktion ist fehlgeschlagen.',
+  packagesLlmClient: 'LLM-Client',
+  packagesLlmClientsOf: 'LLM-Clients in {{version}}',
+  packagesProviderInUse: 'aktiver LLM-Provider',
+  packagesUseProvider: 'Als LLM-Provider verwenden',
+  packagesStopProvider: 'Provider deaktivieren',
+  packagesNextProvider: 'Weiter: Als LLM-Provider verwenden',
+  packagesProviderTitle: 'LLM-Client aus {{name}} {{version}} verwenden',
+  packagesProviderHint:
+    'Der Dienst verwendet danach diesen Client als Custom-Provider. Ein bisher eingetragener Custom-Provider wird ersetzt. Wirksam nach einem Neustart.',
+  packagesProviderModels: 'Modellnamen',
+  packagesProviderModelsHint:
+    'Ein Name pro Zeile. Unter diesen Namen lassen sich die Modelle dieses Providers für Agenten auswählen.',
+  packagesProviderModelReserved:
+    '„{{model}}“ wird immer an OpenAI oder Anthropic geleitet (Namen, die mit gpt-, claude- oder o<Ziffer> beginnen). Wählen Sie einen anderen Namen.',
+  packagesProviderModelInvalid: '„{{model}}“ ist kein gültiger Modellname.',
+  packagesProviderDefault: '{{model}} als Standardmodell setzen',
+  packagesProviderDefaultNone: 'Erstes Modell als Standardmodell setzen',
+  packagesStopProviderTitle: '{{name}} nicht mehr als LLM-Provider verwenden',
+  packagesStopProviderHint:
+    'Der Dienst verwendet wieder den Standard-Provider (OpenAI). Die Modelle dieses Pakets werden aus der Konfiguration entfernt, auch dort, wo sie als Standard- oder Agentenmodell eingetragen sind. Wirksam nach einem Neustart.',
+  providerPackages: 'Provider-Pakete',
+  providerPackagesSub: 'Hochgeladene Python-Wheels mit eigenem LLM-Client',
+  providerPackagesEmpty: 'Noch kein Paket mit LLM-Client hochgeladen.',
+  providerPackagesUpload: 'Provider-Wheel importieren',
+  llmClassPathFromPackage:
+    'Kommt aus dem hochgeladenen Paket {{name}}. Ändern Sie den Provider unten unter „Provider-Pakete“.',
+  statusLlmClientError: 'Der LLM-Client des hochgeladenen Pakets ist nicht in Betrieb',
 } as const
 
 // Widened to `string` per key (rather than `typeof de`'s literal German
