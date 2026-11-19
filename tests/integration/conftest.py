@@ -7,6 +7,7 @@ from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_llm_factory, get_tb_connection
 from testbench_ai_service.main import create_app
+from testbench_ai_service.utils.agent import MIN_TESTBENCH_VERSION
 
 PROJECT_KEY = "1"
 TOV_KEY = "2"
@@ -44,7 +45,8 @@ def app():
         conn=MagicMock(),
     )
     application.dependency_overrides[get_tb_connection] = lambda: MagicMock(
-        server_url=TB_SERVER_URL
+        server_url=TB_SERVER_URL,
+        server_version=list(MIN_TESTBENCH_VERSION),
     )
     application.dependency_overrides[get_llm_factory] = lambda: mock_llm_factory
 

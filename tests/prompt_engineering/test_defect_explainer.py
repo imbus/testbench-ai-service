@@ -41,7 +41,7 @@ class TestDefectExplanationsPromptingEnglish:
             """
         )
 
-        response = await self.explainer._get_ai_response(
+        response = await self.explainer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -67,7 +67,7 @@ class TestDefectExplanationsPromptingEnglish:
             """
         )
 
-        response = await self.explainer._get_ai_response(
+        response = await self.explainer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -94,7 +94,7 @@ class TestDefectExplanationsPromptingEnglish:
             """
         )
 
-        response = await self.explainer._get_ai_response(
+        response = await self.explainer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -138,7 +138,7 @@ class TestDefectExplanationsPromptingGerman:
             """
         )
 
-        response = await self.explainer._get_ai_response(
+        response = await self.explainer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -164,7 +164,7 @@ class TestDefectExplanationsPromptingGerman:
             """
         )
 
-        response = await self.explainer._get_ai_response(
+        response = await self.explainer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -191,7 +191,7 @@ class TestDefectExplanationsPromptingGerman:
             """
         )
 
-        response = await self.explainer._get_ai_response(
+        response = await self.explainer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,

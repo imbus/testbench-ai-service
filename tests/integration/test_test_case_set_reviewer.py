@@ -40,6 +40,9 @@ def patches(mocker):
         get_project_name=mocker.patch(_PATCH_GET_PROJECT_NAME, return_value=PROJECT_NAME),
         get_catalog=mocker.patch(_PATCH_GET_CATALOG, return_value=build_tcs_catalog()),
         get_tree=mocker.patch(_PATCH_GET_TREE, return_value=build_unlocked_structure_tree("spec")),
+        get_details=mocker.patch(
+            _PATCH_GET_DETAILS, return_value=build_tcs_catalog()["iTB-TC-66"].details
+        ),
         get_project_roles=mocker.patch(
             _PATCH_GET_PROJECT_ROLES,
             return_value=[ProjectRole.TestDesigner],
@@ -106,14 +109,17 @@ class TestErrorPaths:
     @pytest.mark.parametrize(
         ("name", "expected"),
         [
-            ("Jane Doe", "because Jane Doe is entered as the responsible person (UID: iTB-TC-66)"),
+            (
+                "Jane Doe",
+                "because 'Jane Doe' is entered as the responsible person (UID: iTB-TC-66)",
+            ),
             ("", "because someone else is entered as the responsible person (UID: iTB-TC-66)"),
         ],
     )
-    def test_responsible_other_user_returns_409(self, post, mocker, name, expected):
+    def test_responsible_other_user_returns_409(self, post, patches, mocker, name, expected):
         details = build_tcs_catalog()["iTB-TC-66"].details
         details.spec.responsible = UserReference(key="99", name=name)
-        mocker.patch(_PATCH_GET_DETAILS, return_value=details)
+        patches.get_details.return_value = details
         mocker.patch(
             "testbench_ai_service.agents.test_case_set_reviewer.agent.check_min_testbench_version",
             return_value=None,

@@ -9,6 +9,8 @@ from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.utils.agent import MIN_TESTBENCH_VERSION
+from testbench_ai_service.utils.i18n import load_translations
 
 
 def _make_context(**overrides):
@@ -30,6 +32,13 @@ def _make_context(**overrides):
 
 def _make_auth_info(auth_type=AuthType.SESSION_TOKEN, token="tok", user_key="U1"):
     return AuthInfo(auth_type=auth_type, token=token, user_key=user_key, conn=MagicMock())
+
+
+def _make_conn(server_version=None):
+    """TestBench connection mock reporting a supported server version by default."""
+    conn = MagicMock()
+    conn.server_version = list(server_version or MIN_TESTBENCH_VERSION)
+    return conn
 
 
 def _make_node(uid="TCS-1", key="K1"):
@@ -54,11 +63,54 @@ _AGENT_MODULE = "testbench_ai_service.agents.test_case_set_describer.agent"
 class TestTestCaseSetDescriberPrecheck:
     @pytest.fixture(autouse=True)
     def setup(self):
+        load_translations()
         self.service = TestCaseSetDescriber()
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_details") as self.mock_details:
+            self.mock_details.return_value.spec.responsible = None
+            yield
+
+    async def test_outdated_testbench_version_fails_before_any_lookup(self):
+        context = _make_context()
+        conn = _make_conn(server_version=[4, 0, 9])
+
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes") as mock_nodes:
+            result = await self.service.precheck(context, conn)
+
+        assert not result.passed
+        assert "4.0.9" in result.warnings[0]
+        mock_nodes.assert_not_called()
+
+    async def test_tcs_with_other_responsible_user_adds_warning_and_is_excluded(self):
+        context = _make_context()
+        conn = _make_conn()
+        node = _make_node("TCS-1", "K1")
+        responsible = self.mock_details.return_value.spec.responsible = MagicMock()
+        responsible.key = "OTHER_USER"
+        responsible.name = "Jane Doe"
+
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
+            result = await self.service.precheck(context, conn)
+
+        assert not result.passed
+        assert not result.items
+        assert len(result.warnings) == 1
+        assert "'Jane Doe' is entered as the responsible person (UID: TCS-1)" in result.warnings[0]
+
+    async def test_tcs_with_own_user_as_responsible_passes(self):
+        context = _make_context()
+        conn = _make_conn()
+        node = _make_node("TCS-1", "K1")
+        self.mock_details.return_value.spec.responsible = MagicMock(key="U1")
+
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
+            result = await self.service.precheck(context, conn)
+
+        assert result.passed
+        assert result.items == ["TCS-1"]
 
     async def test_unlocked_tcs_passes_and_uid_is_included(self):
         context = _make_context()
-        conn = MagicMock()
+        conn = _make_conn()
         node = _make_node("TCS-1", "K1")  # node.spec = None → not locked
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
@@ -69,7 +121,7 @@ class TestTestCaseSetDescriberPrecheck:
 
     async def test_locked_tcs_adds_warning_and_is_excluded(self):
         context = _make_context()
-        conn = MagicMock()
+        conn = _make_conn()
         node = _make_node("TCS-1", "K1")
         node.spec = MagicMock()
         node.spec.locker = MagicMock()
@@ -84,7 +136,7 @@ class TestTestCaseSetDescriberPrecheck:
 
     async def test_empty_nodes_returns_passed_false(self):
         context = _make_context()
-        conn = MagicMock()
+        conn = _make_conn()
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[]):
             result = await self.service.precheck(context, conn)

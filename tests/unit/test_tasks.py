@@ -26,11 +26,18 @@ from testbench_ai_service.utils.testbench_helpers import test_case_set_as_str as
 from tests.unit.helpers.data import get_test_data_path
 
 
+def _with_compact_review_comment(payload: dict) -> dict:
+    """Copy of a spec payload without the indentation and line breaks of the jinja templates."""
+    html = payload["reviewComment"]["html"]
+    compact_html = "".join(line.strip() for line in html.splitlines())
+    return {**payload, "reviewComment": {**payload["reviewComment"], "html": compact_html}}
+
+
 class TestRunAgentReviewTask:
     """run_agent runs the full review pipeline and writes back results via PATCH."""
 
     @pytest.fixture(autouse=True)
-    def setup(self):
+    def setup(self, mocker):
         # ── TB connection mock ────────────────────────────────────────────────
         self.mock_tb_connection = MagicMock()
         self.mock_tb_connection.server_url = "https://localhost:9443/api/"
@@ -42,11 +49,18 @@ class TestRunAgentReviewTask:
             self._tb_get_project_test_case_set_side_effect
         )
 
+        # ── Config ────────────────────────────────────────────────────────────
+        # Built before the reviewer class is patched: AppConfig validation inspects the
+        # agent module for its real agent class.
+        self.prompt_config = DEFAULT_AGENTS["test_case_set_reviewer"].prompt
+        with patch("testbench_ai_service.config.validate_tb_server_url"):
+            self.app_config = AppConfig(tb_server_url=self.mock_tb_connection.server_url)
+        self.app_config.agents["test_case_set_reviewer"].prompt = self.prompt_config
+
         # ── Reviewer mock ─────────────────────────────────────────────────────
-        reviewer_patcher = patch(
+        self.mock_reviewer_class = mocker.patch(
             "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
         )
-        self.mock_reviewer_class = reviewer_patcher.start()
         self.mock_reviewer = TestCaseSetReviewer()
         self.mock_reviewer.get_ai_response = AsyncMock(
             side_effect=self._reviewer_get_ai_response_side_effect
@@ -54,22 +68,12 @@ class TestRunAgentReviewTask:
         self.mock_reviewer_class.return_value = self.mock_reviewer
 
         # ── get_prompt_model mock ─────────────────────────────────────────────
-        prompt_model_patcher = patch(
-            "testbench_ai_service.tasks.get_prompt_model",
-            return_value="gpt-4o",
-        )
-        prompt_model_patcher.start()
+        mocker.patch("testbench_ai_service.tasks.get_prompt_model", return_value="gpt-4o")
 
         # ── LLM factory mock ──────────────────────────────────────────────────
         self.mock_llm_client = AsyncMock()
         self.mock_llm_factory = MagicMock()
         self.mock_llm_factory.get_client.return_value = self.mock_llm_client
-
-        # ── Config ────────────────────────────────────────────────────────────
-        self.prompt_config = DEFAULT_AGENTS["test_case_set_reviewer"].prompt
-        with patch("testbench_ai_service.config.validate_tb_server_url"):
-            self.app_config = AppConfig(tb_server_url=self.mock_tb_connection.server_url)
-        self.app_config.agents["test_case_set_reviewer"].prompt = self.prompt_config
 
         # ── Test identifiers ──────────────────────────────────────────────────
         self.user_key = "1"
@@ -122,11 +126,6 @@ class TestRunAgentReviewTask:
 
         load_translations()
 
-        yield
-
-        reviewer_patcher.stop()
-        prompt_model_patcher.stop()
-
     # ── Tests ─────────────────────────────────────────────────────────────────
 
     async def test_review_task_completes_and_patches_all_test_case_sets(self):
@@ -163,9 +162,7 @@ class TestRunAgentReviewTask:
                 reviewer=OptionalUser(optional=self.user_key),
                 reviewComment=RichTextInfo(html=expected_started_html, images=[]),
             ).model_dump(exclude_unset=True)
-            self.mock_tb_connection.session.patch.assert_any_call(
-                f"{self.patch_url_prefix}{tcs.details.spec.key}", json=started_payload
-            )
+            self._assert_spec_patched(tcs.details.spec.key, started_payload)
 
             heading = get_translation(
                 "test_case_set_reviewer.run.result_heading", self.context.language
@@ -194,9 +191,7 @@ class TestRunAgentReviewTask:
                 reviewer=OptionalUser(optional=self.user_key),
                 reviewComment=RichTextInfo(html=expected_result_html, images=[]),
             ).model_dump(exclude_unset=True)
-            self.mock_tb_connection.session.patch.assert_any_call(
-                f"{self.patch_url_prefix}{tcs.details.spec.key}", json=result_payload
-            )
+            self._assert_spec_patched(tcs.details.spec.key, result_payload)
 
     async def test_patch_failure_is_logged_as_error(self, caplog):
         """When a PATCH call raises, run_agent logs the error and continues."""
@@ -227,7 +222,7 @@ class TestRunAgentReviewTask:
             if has_visible_text(previous_comment):
                 failed_html = (
                     f"<html><body><b>{heading} - {current_time}</b>"
-                    f"<br/>{error_message}<br/>{previous_comment}</body></html>"
+                    f"<br/>{error_message}<br/><br/>{previous_comment}</body></html>"
                 )
             else:
                 failed_html = (
@@ -239,9 +234,7 @@ class TestRunAgentReviewTask:
                 reviewer=OptionalUser(optional=self.user_key),
                 reviewComment=RichTextInfo(html=failed_html, images=[]),
             ).model_dump(exclude_unset=True)
-            self.mock_tb_connection.session.patch.assert_any_call(
-                f"{self.patch_url_prefix}{tcs.details.spec.key}", json=failed_payload
-            )
+            self._assert_spec_patched(tcs.details.spec.key, failed_payload)
 
         self.mock_tb_connection.session.patch.side_effect = None
 
@@ -274,7 +267,7 @@ class TestRunAgentReviewTask:
             if has_visible_text(previous_comment):
                 failed_html = (
                     f"<html><body><b>{heading} - {current_time}</b>"
-                    f"<br/>{error_message}<br/>{previous_comment}</body></html>"
+                    f"<br/>{error_message}<br/><br/>{previous_comment}</body></html>"
                 )
             else:
                 failed_html = (
@@ -286,9 +279,20 @@ class TestRunAgentReviewTask:
                 reviewer=OptionalUser(optional=self.user_key),
                 reviewComment=RichTextInfo(html=failed_html, images=[]),
             ).model_dump(exclude_unset=True)
-            self.mock_tb_connection.session.patch.assert_any_call(
-                f"{self.patch_url_prefix}{tcs.details.spec.key}", json=failed_payload
-            )
+            self._assert_spec_patched(tcs.details.spec.key, failed_payload)
+
+    # ── Assertion helpers ─────────────────────────────────────────────────────
+
+    def _assert_spec_patched(self, spec_key: str, expected_payload: dict):
+        """Assert the specification was patched with the payload, ignoring template whitespace."""
+        url = f"{self.patch_url_prefix}{spec_key}"
+        expected = _with_compact_review_comment(expected_payload)
+        actual = [
+            _with_compact_review_comment(call.kwargs["json"])
+            for call in self.mock_tb_connection.session.patch.call_args_list
+            if call.args[0] == url
+        ]
+        assert expected in actual
 
     # ── Side-effect helpers ───────────────────────────────────────────────────
 
