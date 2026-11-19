@@ -25,10 +25,13 @@ from testbench_ai_service.agent_packages.service import (
     RegisterAgent,
     RegisterResult,
     activate_version,
+    clear_llm_client,
     delete_version,
+    package_llm_client,
     register_agents,
     remove_package,
     store_upload,
+    use_llm_client,
     uses_default_dirs,
 )
 from testbench_ai_service.config import AppConfig
@@ -64,6 +67,10 @@ class PackageView(BaseModel):
         default_factory=dict,
         description="Agent key to entry point, for the agents in config.toml on disk.",
     )
+    llm_client: str | None = Field(
+        default=None,
+        description="Entry point of the LLM client config.toml on disk takes from this package.",
+    )
     loaded: bool
     load_error: str | None = None
 
@@ -83,6 +90,12 @@ class RegisterPackageRequest(BaseModel):
 class ActivatePackageRequest(BaseModel):
     overwrite: list[str] = Field(default_factory=list)
     keep: list[str] = Field(default_factory=list)
+
+
+class UseLLMClientRequest(BaseModel):
+    entry_point: str
+    models: list[str] = Field(min_length=1, max_length=100)
+    default_model: str | None = None
 
 
 def _segment(value: str, what: str) -> str:
@@ -159,15 +172,29 @@ def _registered(manifest: Manifest, name: str, disk_agents: dict[str, Any]) -> d
     return result
 
 
+def _llm_client(manifest: Manifest, name: str, section: dict[str, Any]) -> str | None:
+    """Entry point of the LLM client the config file takes from *name*, if it does."""
+    class_path = package_llm_client(section, name)
+    if class_path is None:
+        return None
+    active = manifest.active(name)
+    for entry_point, report in (active.report.llm_clients if active else {}).items():
+        if report.class_path == class_path:
+            return entry_point
+    return class_path
+
+
 def _read_packages(config: AppConfig, config_path: Path) -> PackagesResponse:
     manifest = load_manifest(config.agent_packages.dir)
-    disk_agents = read_config_file(config_path).get("agents") or {}
+    section = read_config_file(config_path)
+    disk_agents = section.get("agents") or {}
     failures = loaded.failures()
     packages = [
         PackageView(
             name=name,
             versions=sorted(versions.values(), key=lambda v: v.uploaded_at, reverse=True),
             registered=_registered(manifest, name, disk_agents),
+            llm_client=_llm_client(manifest, name, section),
             loaded=loaded.is_loaded(name),
             load_error=failures.get(name),
         )
@@ -269,6 +296,63 @@ async def activate_package_version(
             activate_version, config, config_path, name, version, body.overwrite, body.keep
         )
     logger.info("Activated agent package %s %s", name, version)
+    return result
+
+
+@router.post("/{name}/{version}/llm-client", response_model=RegisterResult)
+async def use_package_llm_client(
+    name: str,
+    version: str,
+    body: UseLLMClientRequest,
+    request: Request,
+    _: Session = Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+    _log: Session = Depends(bind_log_user),
+    config: AppConfig = Depends(get_app_config),
+    lock: asyncio.Lock = Depends(get_write_lock),
+) -> RegisterResult:
+    """Make an LLM client of a package version the custom provider and activate the version."""
+    _segment(name, "name")
+    _segment(version, "version")
+    config_path = Path(request.app.state.config_path)
+    async with lock:
+        result = await _run(
+            use_llm_client,
+            config,
+            config_path,
+            name,
+            version,
+            body.entry_point,
+            body.models,
+            body.default_model,
+        )
+    logger.info(
+        "LLM client %s of agent package %s %s is now the custom provider (models: %s)",
+        body.entry_point,
+        name,
+        version,
+        ", ".join(body.models),
+    )
+    return result
+
+
+# Declared before the version delete below: ``llm-client`` would match ``{version}``.
+@router.delete("/{name}/llm-client", response_model=RegisterResult)
+async def clear_package_llm_client(
+    name: str,
+    request: Request,
+    _: Session = Depends(require_admin),
+    _csrf: None = Depends(require_csrf),
+    _log: Session = Depends(bind_log_user),
+    config: AppConfig = Depends(get_app_config),
+    lock: asyncio.Lock = Depends(get_write_lock),
+) -> RegisterResult:
+    """Stop using the LLM client of a package; the default provider takes over."""
+    _segment(name, "name")
+    config_path = Path(request.app.state.config_path)
+    async with lock:
+        result = await _run(clear_llm_client, config, config_path, name)
+    logger.info("The LLM client of agent package %s is no longer in use", name)
     return result
 
 

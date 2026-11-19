@@ -11,8 +11,14 @@ from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.agent_packages.manifest import load_manifest
 from testbench_ai_service.models.config import AgentPackagesConfig
 from testbench_ai_service.webui.config_io import read_config_file
-from tests.helpers.packages import PACKAGE, install_package
-from tests.helpers.wheels import VALID_AGENT_FILES, VALID_ENTRY_POINTS, build_wheel
+from tests.helpers.packages import PACKAGE, install_package, llm_report
+from tests.helpers.wheels import (
+    VALID_AGENT_FILES,
+    VALID_ENTRY_POINTS,
+    VALID_LLM_CLIENT_FILES,
+    VALID_LLM_ENTRY_POINTS,
+    build_wheel,
+)
 
 URL = "/admin/api/agent-packages"
 TB_URL = "https://localhost:9443/api/"
@@ -315,6 +321,119 @@ def test_encoded_slashes_are_refused(pkg_client, admin, name):
         assert pkg_client.delete(url, headers=headers).status_code in (400, 404, 405)
 
 
+# --- the LLM client of a package -------------------------------------------------------
+
+USE_CLIENT = {"entry_point": "acme_llm", "models": ["acme-large", "acme-small"]}
+CLIENT_URL = f"{URL}/{PACKAGE}/1.0.0/llm-client"
+
+
+def _install_llm(env, version: str = "1.0.0"):
+    return install_package(
+        env.packages,
+        version=version,
+        active=False,
+        files=VALID_LLM_CLIENT_FILES,
+        entry_points={},
+        llm_entry_points=VALID_LLM_ENTRY_POINTS,
+        reports={},
+        llm_clients={"acme_llm": llm_report()},
+    )
+
+
+def test_llm_client_routes_need_admin(pkg_client, admin):
+    headers = admin(roles=["Tester"])
+    assert pkg_client.post(CLIENT_URL, json=USE_CLIENT, headers=headers).status_code == 403
+    assert pkg_client.delete(f"{URL}/{PACKAGE}/llm-client", headers=headers).status_code == 403
+
+
+def test_llm_client_routes_need_csrf(pkg_client, admin):
+    admin()
+    assert pkg_client.post(CLIENT_URL, json=USE_CLIENT).status_code == 403
+    assert pkg_client.delete(f"{URL}/{PACKAGE}/llm-client").status_code == 403
+
+
+def test_use_llm_client_writes_the_config_and_lists_it(pkg_client, admin, env):
+    headers = admin()
+    _install_llm(env)
+
+    response = pkg_client.post(
+        CLIENT_URL, json={**USE_CLIENT, "default_model": "acme-large"}, headers=headers
+    )
+
+    assert response.status_code == 200, response.text
+    assert "agent_packages" in response.json()["restart_required"]
+    llm = read_config_file(env.config_path)["llm_config"]
+    assert llm["provider"] == "custom"
+    assert llm["package"] == PACKAGE
+    assert llm["model"] == "acme-large"
+    assert set(llm["extra_models"]) == {"acme-large", "acme-small"}
+    listed = pkg_client.get(URL).json()["packages"][0]
+    assert listed["llm_client"] == "acme_llm"
+    assert listed["versions"][0]["report"]["llm_clients"]["acme_llm"]["ok"] is True
+
+
+def test_a_package_not_in_use_lists_no_llm_client(pkg_client, admin, env):
+    admin()
+    _install_llm(env)
+    assert pkg_client.get(URL).json()["packages"][0]["llm_client"] is None
+
+
+def test_use_llm_client_with_a_reserved_model_name_is_422(pkg_client, admin, env):
+    headers = admin()
+    _install_llm(env)
+    body = {"entry_point": "acme_llm", "models": ["gpt-acme"]}
+
+    response = pkg_client.post(CLIENT_URL, json=body, headers=headers)
+
+    assert response.status_code == 422
+    assert "gpt-acme" in response.json()["detail"]["message"]
+    assert "llm_config" not in read_config_file(env.config_path)
+
+
+def test_use_llm_client_without_models_is_422(pkg_client, admin, env):
+    headers = admin()
+    _install_llm(env)
+    response = pkg_client.post(
+        CLIENT_URL, json={"entry_point": "acme_llm", "models": []}, headers=headers
+    )
+    assert response.status_code == 422
+
+
+def test_use_llm_client_of_an_unknown_version_is_404(pkg_client, admin):
+    headers = admin()
+    assert pkg_client.post(CLIENT_URL, json=USE_CLIENT, headers=headers).status_code == 404
+
+
+def test_clear_llm_client_restores_the_default_provider(pkg_client, admin, env):
+    headers = admin()
+    _install_llm(env)
+    assert pkg_client.post(CLIENT_URL, json=USE_CLIENT, headers=headers).status_code == 200
+
+    response = pkg_client.delete(f"{URL}/{PACKAGE}/llm-client", headers=headers)
+
+    assert response.status_code == 200, response.text
+    assert "agent_packages" in response.json()["restart_required"]
+    assert "provider" not in read_config_file(env.config_path).get("llm_config", {})
+    assert load_manifest(env.packages).active(PACKAGE) is None
+    # The version itself is still there: the clear route is not the version delete.
+    assert "1.0.0" in load_manifest(env.packages).packages[PACKAGE]
+
+
+def test_clear_llm_client_of_a_package_not_in_use_is_409(pkg_client, admin, env):
+    headers = admin()
+    _install_llm(env)
+    response = pkg_client.delete(f"{URL}/{PACKAGE}/llm-client", headers=headers)
+    assert response.status_code == 409
+    assert "1.0.0" in load_manifest(env.packages).packages[PACKAGE]
+
+
+def test_removing_a_package_in_use_as_llm_client_is_409(pkg_client, admin, env):
+    headers = admin()
+    _install_llm(env)
+    assert pkg_client.post(CLIENT_URL, json=USE_CLIENT, headers=headers).status_code == 200
+    assert pkg_client.delete(f"{URL}/{PACKAGE}", headers=headers).status_code == 409
+
+
 # --- serialisation of console writes ---------------------------------------------------
 
 PROMPT_URL = "/admin/api/prompts/en/some_agent"
@@ -330,6 +449,8 @@ LOCKED_WRITES = {
     "package_activate": ("POST", f"{URL}/{PACKAGE}/1.0.0/activate", {}),
     "package_register": ("POST", f"{URL}/{PACKAGE}/1.0.0/register", REGISTER),
     "package_upload": ("POST", URL, None),
+    "package_use_llm_client": ("POST", f"{URL}/{PACKAGE}/1.0.0/llm-client", USE_CLIENT),
+    "package_clear_llm_client": ("DELETE", f"{URL}/{PACKAGE}/llm-client", None),
 }
 
 
