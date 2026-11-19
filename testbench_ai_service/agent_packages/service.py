@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import re
 import shutil
 import tempfile
 from collections.abc import Iterable
@@ -19,7 +20,12 @@ from testbench_ai_service.agent_packages.manifest import (
     site_dir,
     wheel_path,
 )
-from testbench_ai_service.agent_packages.models import AgentReport, Manifest, PackageVersion
+from testbench_ai_service.agent_packages.models import (
+    AgentReport,
+    LLMClientReport,
+    Manifest,
+    PackageVersion,
+)
 from testbench_ai_service.agent_packages.runner import run_inspection
 from testbench_ai_service.agent_packages.wheel import WheelError, extract_wheel, read_wheel
 from testbench_ai_service.config import DEFAULT_AGENTS, PROMPTS_DIR, TEMPLATES_DIR, AppConfig
@@ -556,7 +562,11 @@ def activate_version(
         DefaultDirs, PackageNotFound, PackageInvalid, FileConflicts: As in
             ``register_agents``.
     """
-    prompts_dir, templates_dir = _custom_dirs(config)
+    section = read_config_file(config_path)
+    configured = _package_agents(section, name)
+    client_path = package_llm_client(section, name)
+    # Only agents bring prompt and template files; an LLM client needs no directories.
+    prompts_dir, templates_dir = _custom_dirs(config) if configured else (None, None)
     packages_dir = config.agent_packages.dir
     manifest = load_manifest(packages_dir)
     entry = _version(manifest, name, version)
@@ -566,14 +576,23 @@ def activate_version(
     site = site_dir(packages_dir, name, version)
     files: dict[Path, tuple[str, bytes]] = {}
     edits: dict[str, Any] = {}
-    configured = _package_agents(read_config_file(config_path), name)
     for key, class_path in sorted(configured.items()):
         report = _matching_report(entry, current, class_path)
         if report is None or not report.ok:
             raise PackageInvalid(f"{name} {version} has no usable agent for '{key}' ({class_path})")
         if report.class_path != class_path:
             edits[join_path(["agents", key, "class_path"])] = report.class_path
+        assert prompts_dir is not None and templates_dir is not None
         files.update(_package_files(site, report.class_path, key, prompts_dir, templates_dir))
+    if client_path is not None:
+        client = _matching_llm_report(entry, current, client_path)
+        if client is None or not client.ok:
+            raise PackageInvalid(
+                f"{name} {version} has no usable LLM client for '{client_path}', which the "
+                "service uses"
+            )
+        if client.class_path != client_path:
+            edits[join_path(["llm_config", "class_path"])] = client.class_path
     to_write = _files_to_write(files, overwrite, keep or [])
 
     new_manifest = manifest.model_copy(deep=True)
@@ -591,9 +610,13 @@ def remove_package(config: AppConfig, config_path: Path, name: str) -> RegisterR
     Raises:
         PackageNotFound: Neither the manifest nor the config knows *name*.
         PackageInvalid: The config without the agents would not be valid.
+        PackageConflict: The package provides the LLM client in use
+            (``clear_llm_client`` first).
     """
     manifest = load_manifest(config.agent_packages.dir)
     section = read_config_file(config_path)
+    if package_llm_client(section, name) is not None:
+        raise PackageConflict(f"{name} provides the LLM client; stop using it first")
     keys = sorted(_package_agents(section, name, running=config))
     if name not in manifest.packages and not keys:
         raise PackageNotFound(f"{name} is not uploaded")
@@ -616,6 +639,182 @@ def remove_package(config: AppConfig, config_path: Path, name: str) -> RegisterR
         new_manifest.set_active(name, None)
     result = _apply(config, config_path, manifest, new_manifest, {}, edits)
     return _with_packages_restart(result) if was_active else result
+
+
+# --- The LLM client of a package --------------------------------------------------------
+
+_CUSTOM = "custom"
+_MODEL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/@-]{0,127}$")
+#: Model names the client factory routes to OpenAI or Anthropic whatever the provider is.
+_ROUTED_ELSEWHERE = re.compile(r"^(gpt-|claude-|o\d+)")
+
+
+def _llm_section(section: dict[str, Any]) -> dict[str, Any]:
+    llm = section.get("llm_config")
+    return llm if isinstance(llm, dict) else {}
+
+
+def package_llm_client(section: dict[str, Any], name: str) -> str | None:
+    """The ``class_path`` of the LLM client the config file takes from package *name*.
+
+    *section* is the config file on disk. ``None`` unless its ``llm_config`` uses the
+    custom provider with ``package = name``.
+    """
+    llm = _llm_section(section)
+    if llm.get("provider") != _CUSTOM or llm.get("package") != name:
+        return None
+    return str(llm.get("class_path", ""))
+
+
+def _custom_models(section: dict[str, Any]) -> list[str]:
+    """The ``extra_models`` of the config file that belong to the custom provider."""
+    models = _llm_section(section).get("extra_models")
+    if not isinstance(models, dict):
+        return []
+    return [
+        model
+        for model, entry in models.items()
+        if isinstance(entry, dict) and entry.get("provider") == _CUSTOM
+    ]
+
+
+def _matching_llm_report(
+    entry: PackageVersion, current: PackageVersion | None, class_path: str
+) -> LLMClientReport | None:
+    """The report of *entry* for the LLM client configured with *class_path*; a class
+    moved to another module is followed through its entry point, as for agents."""
+    if current is not None:
+        for entry_point, report in current.report.llm_clients.items():
+            if report.class_path == class_path and entry_point in entry.report.llm_clients:
+                return entry.report.llm_clients[entry_point]
+    for report in entry.report.llm_clients.values():
+        if report.class_path == class_path:
+            return report
+    return None
+
+
+def _check_models(models: list[str], default_model: str | None) -> None:
+    from testbench_ai_service.llm.routing import builtin_routing  # noqa: PLC0415
+
+    if not models:
+        raise PackageInvalid("name at least one model the LLM client serves")
+    if len(set(models)) != len(models):
+        raise PackageInvalid("a model is listed twice")
+    for model in models:
+        if not _MODEL_NAME.match(model):
+            raise PackageInvalid(f"'{model}' is not a valid model name")
+        if _ROUTED_ELSEWHERE.match(model) or builtin_routing(model) is not None:
+            raise PackageInvalid(
+                f"'{model}' would never reach the client: names starting with 'gpt-', "
+                "'claude-' or 'o<digit>' always go to OpenAI or Anthropic"
+            )
+    if default_model is not None and default_model not in models:
+        raise PackageInvalid(f"the default model '{default_model}' is not one of the models")
+
+
+def use_llm_client(
+    config: AppConfig,
+    config_path: Path,
+    name: str,
+    version: str,
+    entry_point: str,
+    models: list[str],
+    default_model: str | None = None,
+) -> RegisterResult:
+    """Make an LLM client of *name* *version* the service's custom provider.
+
+    Sets ``llm_config.provider``, ``class_path`` and ``package``, lists *models* as the
+    custom provider's ``extra_models`` (replacing its previous ones) and makes the
+    version active. With *default_model*, ``llm_config.model`` is set to it. The client
+    is loaded at the next start. Callers serialise package operations.
+
+    Raises:
+        PackageNotFound: The version is not uploaded.
+        PackageInvalid: The version or the entry point failed the inspection, a model
+            name is unusable, or the resulting config would not be valid.
+        PackageConflict: Another version of the package is active.
+    """
+    packages_dir = config.agent_packages.dir
+    manifest = load_manifest(packages_dir)
+    entry = _version(manifest, name, version)
+    _require_ok(entry)
+    active = manifest.active(name)
+    if active is not None and active.version != version:
+        raise PackageConflict(
+            f"{name} {active.version} is active; switch to {version} before using its LLM client"
+        )
+    report = entry.report.llm_clients.get(entry_point)
+    if report is None or not report.ok:
+        raise PackageInvalid(f"entry point '{entry_point}' is not a usable LLM client")
+    _check_models(models, default_model)
+
+    def path(*segments: str) -> str:
+        return join_path(["llm_config", *segments])
+
+    edits: dict[str, Any] = {
+        path("provider"): _CUSTOM,
+        path("class_path"): report.class_path,
+        path("package"): name,
+    }
+    for stale in _custom_models(read_config_file(config_path)):
+        if stale not in models:
+            edits[path("extra_models", stale)] = None
+    for model in models:
+        edits[path("extra_models", model)] = {"provider": _CUSTOM, "routing": "fallback"}
+    if default_model is not None:
+        edits[path("model")] = default_model
+
+    new_manifest = manifest.model_copy(deep=True)
+    new_manifest.set_active(name, version)
+    return _with_packages_restart(_apply(config, config_path, manifest, new_manifest, {}, edits))
+
+
+def _remove_keys(edits: dict[str, Any], table: list[str], present: Any, remove: set[str]) -> None:
+    """Add edits that drop *remove* from the config table at *table*; the table itself
+    goes when nothing else is left in it."""
+    if not isinstance(present, dict) or not remove & set(present):
+        return
+    if set(present) <= remove:
+        edits[join_path(table)] = None
+        return
+    for key in sorted(remove & set(present)):
+        edits[join_path([*table, key])] = None
+
+
+def clear_llm_client(config: AppConfig, config_path: Path, name: str) -> RegisterResult:
+    """Stop using the LLM client of package *name*: back to the default provider.
+
+    Removes ``provider``, ``class_path`` and ``package`` from ``llm_config``, the custom
+    provider's ``extra_models``, and ``model`` and ``agent_models`` entries that name
+    one of them. A package without configured agents is deactivated. Project overrides
+    stay as they are.
+
+    Raises:
+        PackageConflict: The config file does not take the LLM client from *name*.
+        PackageInvalid: The config without the client would not be valid.
+    """
+    section = read_config_file(config_path)
+    if package_llm_client(section, name) is None:
+        raise PackageConflict(f"{name} does not provide the LLM client")
+    llm = _llm_section(section)
+    models = set(_custom_models(section))
+
+    edits: dict[str, Any] = {
+        join_path(["llm_config", key]): None for key in ("provider", "class_path", "package")
+    }
+    _remove_keys(edits, ["llm_config", "extra_models"], llm.get("extra_models"), models)
+    if llm.get("model") in models:
+        edits[join_path(["llm_config", "model"])] = None
+    agent_models = llm.get("agent_models")
+    if isinstance(agent_models, dict):
+        pointing = {agent for agent, model in agent_models.items() if model in models}
+        _remove_keys(edits, ["llm_config", "agent_models"], agent_models, pointing)
+
+    manifest = load_manifest(config.agent_packages.dir)
+    new_manifest = manifest.model_copy(deep=True)
+    if name in new_manifest.packages and not _package_agents(section, name):
+        new_manifest.set_active(name, None)
+    return _with_packages_restart(_apply(config, config_path, manifest, new_manifest, {}, edits))
 
 
 def delete_version(packages_dir: Path, name: str, version: str) -> None:
