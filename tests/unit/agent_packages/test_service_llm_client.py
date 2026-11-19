@@ -59,8 +59,7 @@ class Env:
             prompts.mkdir()
             templates.mkdir()
             dirs = (
-                f'prompts_dir = "{prompts.as_posix()}"\n'
-                f'templates_dir = "{templates.as_posix()}"\n'
+                f'prompts_dir = "{prompts.as_posix()}"\ntemplates_dir = "{templates.as_posix()}"\n'
             )
         self.config_path.write_text(
             "# operator comment: keep me\n"

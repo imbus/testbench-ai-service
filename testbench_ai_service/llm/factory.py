@@ -16,7 +16,7 @@ from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.naming import normalize_project_name
 
 
-class LLMClientUnavailable(RuntimeError):
+class LLMClientUnavailable(RuntimeError):  # noqa: N818
     """The LLM client an uploaded package provides cannot be used right now."""
 
 
@@ -241,7 +241,9 @@ class LLMFactory:
                 f"cannot import '{class_path}' from package '{package}': {e!r}"
             ) from e
         if not (isinstance(client_class, type) and issubclass(client_class, LLMClient)):
-            raise unavailable(f"'{class_path}' of package '{package}' is not a subclass of LLMClient")
+            raise unavailable(
+                f"'{class_path}' of package '{package}' is not a subclass of LLMClient"
+            )
         loaded.mark_llm_client_failed(None)
         return client_class
 

@@ -10,6 +10,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+- A custom LLM client can be uploaded as a package. A wheel lists its `LLMClient` classes in the
+  entry-point group `testbench_ai_service.llm_clients`; an administrator uploads it on the
+  console's **LLM** screen (section **Provider packages**), names the models it serves and uses
+  it as the LLM provider. The client is checked in a separate process at upload and loaded at
+  the next restart. It uses the agent-package store and its `agent_packages.allow_upload`
+  switch; a wheel may carry agents, LLM clients or both. There is one custom provider, set
+  globally. New `llm_config.package` (written by the console only), `POST
+  /admin/api/agent-packages/{name}/{version}/llm-client` and `DELETE
+  /admin/api/agent-packages/{name}/llm-client`; documented in
+  `docs/llm-providers/custom-client.md`, example in `examples/llm_client_package`.
 - The console can restart the service. When a change needs a restart, an administrator clicks
   **Restart now** in the "restart needed" strip. The restart runs inside the service process
   (graceful shutdown, configuration and agent packages read again, new server), so it works in a

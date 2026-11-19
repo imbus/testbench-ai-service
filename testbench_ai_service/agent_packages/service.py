@@ -566,7 +566,7 @@ def activate_version(
     configured = _package_agents(section, name)
     client_path = package_llm_client(section, name)
     # Only agents bring prompt and template files; an LLM client needs no directories.
-    prompts_dir, templates_dir = _custom_dirs(config) if configured else (None, None)
+    dirs = _custom_dirs(config) if configured else None
     packages_dir = config.agent_packages.dir
     manifest = load_manifest(packages_dir)
     entry = _version(manifest, name, version)
@@ -582,8 +582,8 @@ def activate_version(
             raise PackageInvalid(f"{name} {version} has no usable agent for '{key}' ({class_path})")
         if report.class_path != class_path:
             edits[join_path(["agents", key, "class_path"])] = report.class_path
-        assert prompts_dir is not None and templates_dir is not None
-        files.update(_package_files(site, report.class_path, key, prompts_dir, templates_dir))
+        assert dirs is not None  # set whenever the package has configured agents
+        files.update(_package_files(site, report.class_path, key, *dirs))
     if client_path is not None:
         client = _matching_llm_report(entry, current, client_path)
         if client is None or not client.ok:

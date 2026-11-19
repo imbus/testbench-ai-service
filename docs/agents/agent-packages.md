@@ -9,6 +9,8 @@ An agent package is a Python wheel (`.whl`) that carries one or more custom agen
 
 Use a package when the agent author and the service operator are different people, or when you cannot install into the service's Python environment. If you can, the plain [Custom Agent](custom-agent.md) route (`class_path` in `config.toml`) stays available and is unaffected.
 
+A wheel can also carry a custom LLM client, alone or next to agents, through the entry-point group `testbench_ai_service.llm_clients`. See [Custom LLM Client](../llm-providers/custom-client.md#upload-as-a-package).
+
 :::warning
 Registered package code runs inside the service with the service's rights: it can read the configuration, the environment (including API keys) and everything the service user can access. Turn on uploads only for administrators you trust, and only install packages from sources you trust.
 :::
