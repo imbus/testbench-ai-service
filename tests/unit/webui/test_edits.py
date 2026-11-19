@@ -362,3 +362,27 @@ def test_a_nested_value_without_package_settings_is_accepted():
 
 def test_server_side_edits_may_set_the_package():
     validate_edit_paths({"agents.r.package": "acme"}, allow_server_only=True)
+
+
+@pytest.mark.parametrize(
+    "edits",
+    [
+        {"llm_config.package": "x"},
+        {"llm_config": {"package": "x"}},
+        {"projects.P.llm_config.package": "x"},
+        {"projects.P": {"llm_config": {"package": "x"}}},
+        {"projects": {"P": {"llm_config": {"package": "x"}}}},
+    ],
+)
+def test_the_llm_client_package_cannot_be_set_from_the_console(edits):
+    with pytest.raises(HTTPException) as e:
+        validate_edit_paths(edits)
+    assert e.value.status_code == 400
+
+
+def test_server_side_edits_may_set_the_llm_client_package():
+    validate_edit_paths({"llm_config.package": "acme"}, allow_server_only=True)
+
+
+def test_other_llm_settings_stay_editable():
+    validate_edit_paths({"llm_config.model": "x", "projects.P.llm_config.model": "y"})

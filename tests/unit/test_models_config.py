@@ -150,3 +150,26 @@ def test_agent_config_package_defaults_to_none():
         prompt=PromptConfig(file=Path("x/prompt.yaml")),
     )
     assert agent.package is None
+
+
+def test_custom_with_package_is_not_imported():
+    config = LLMConfig(
+        provider=LLMProvider.CUSTOM, class_path="not_installed.mod.Client", package="acme"
+    )
+    assert config.package == "acme"
+
+
+def test_custom_with_package_needs_a_dotted_class_path():
+    with pytest.raises(ValidationError) as e:
+        LLMConfig(provider=LLMProvider.CUSTOM, class_path="Client", package="acme")
+    assert e.value.errors()[0]["loc"] == ("class_path",)
+
+
+def test_custom_without_package_still_imports():
+    with pytest.raises(ValidationError) as e:
+        LLMConfig(provider=LLMProvider.CUSTOM, class_path="not_installed.mod.Client")
+    assert "cannot import" in str(e.value)
+
+
+def test_llm_config_package_defaults_to_none():
+    assert LLMConfig().package is None

@@ -77,6 +77,16 @@ def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
         if _resolve_dotted_path(old, field) != _resolve_dotted_path(new, field):
             changed.append(field)
 
+    # An LLM client from an uploaded package is loaded at startup only. A hand-written
+    # class_path (no package) is importable already and is swapped in process.
+    if old.llm_config.package != new.llm_config.package:
+        changed.append("llm_config.package")
+    elif (
+        new.llm_config.package is not None
+        and old.llm_config.class_path != new.llm_config.class_path
+    ):
+        changed.append("llm_config.class_path")
+
     old_keys = set(old.agents)
     new_keys = set(new.agents)
     changed.extend(join_path(["agents", key]) for key in old_keys - new_keys)

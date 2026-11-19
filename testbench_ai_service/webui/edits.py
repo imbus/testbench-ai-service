@@ -88,11 +88,15 @@ def _tokenize(path: str) -> list[str]:
 def _reaches_server_only_setting(segments: list[str], value: Any) -> bool:
     """True if *segments*, or any dict keys nested in *value*, reach a server-only setting.
 
-    ``agent_packages.*`` and ``agents.<key>.package`` are settable in config.toml only. A
-    dict value carries further path segments, so it is walked at every depth.
+    ``agent_packages.*``, ``agents.<key>.package`` and ``llm_config.package`` (also of a
+    project) are settable in config.toml only. A dict value carries further path
+    segments, so it is walked at every depth.
     """
-    if segments[0] == "agent_packages" or (
-        segments[0] == "agents" and segments[2:3] == ["package"]
+    if (
+        segments[0] == "agent_packages"
+        or (segments[0] == "agents" and segments[2:3] == ["package"])
+        or segments[:2] == ["llm_config", "package"]
+        or (segments[0] == "projects" and segments[2:4] == ["llm_config", "package"])
     ):
         return True
     if isinstance(value, dict):
