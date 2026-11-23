@@ -21,6 +21,8 @@
     "requirement.precheck.not_a_test_theme": "Bitte den Testideen-Generator auf einem Testthema einer Testobjektversion auslösen.",
     "requirement.precheck.no_specification": "Das Testthema '{theme}' hat keine Spezifikation, in die die Testideen geschrieben werden können.",
     "requirement.precheck.locked": "Das Testthema '{theme}' ist von einem anderen Benutzer gesperrt.",
+    "requirement.precheck.responsible_other_user": "Der KI-Agent kann das Testthema '{theme}' nicht bearbeiten, da '{user}' als verantwortliche Person eingetragen ist.",
+    "requirement.precheck.responsible_unknown_user": "Der KI-Agent kann das Testthema '{theme}' nicht bearbeiten, da eine andere Person als verantwortliche Person eingetragen ist.",
     "requirement.precheck.no_requirements": "Unterhalb des Testthemas '{theme}' sind keine Anforderungen zugeordnet.",
     "requirement.precheck.too_many_requirements": "Das Testthema '{theme}' hat {count} Anforderungen, erlaubt sind höchstens {max}.",
     "requirement.job.theme_unreadable": "Das Testthema '{theme}' konnte nicht gelesen werden.",
