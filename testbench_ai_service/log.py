@@ -1,17 +1,132 @@
+import json
 import logging
 import logging.config
 import logging.handlers
+import os
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from datetime import datetime, timezone
 
 from testbench_ai_service.models.logging import LoggingConfig, LogLevel
 
+log_user_key: ContextVar[str | None] = ContextVar("log_user_key", default=None)
+log_username: ContextVar[str | None] = ContextVar("log_username", default=None)
+log_project_key: ContextVar[str | None] = ContextVar("log_project_key", default=None)
+log_run_id: ContextVar[str | None] = ContextVar("log_run_id", default=None)
+log_agent: ContextVar[str | None] = ContextVar("log_agent", default=None)
+log_in_request: ContextVar[bool] = ContextVar("log_in_request", default=False)
 
-class RequestIdFilter(logging.Filter):
-    """Provide a placeholder when a log record is outside an HTTP request."""
+_CONTEXT_VARS: dict[str, ContextVar] = {
+    "user_key": log_user_key,
+    "username": log_username,
+    "project_key": log_project_key,
+    "run_id": log_run_id,
+    "agent": log_agent,
+    "in_request": log_in_request,
+}
+
+_RECORD_FIELDS = ("user_key", "username", "project_key", "run_id", "agent")
+
+
+@contextmanager
+def log_context(**values: str | bool | None) -> Iterator[None]:
+    """Mark every record logged inside the block; restores the outer values on exit."""
+    unknown = set(values) - _CONTEXT_VARS.keys()
+    if unknown:
+        raise TypeError(f"Unknown log context field(s): {sorted(unknown)}")
+    tokens = [
+        (_CONTEXT_VARS[name], _CONTEXT_VARS[name].set(value)) for name, value in values.items()
+    ]
+    try:
+        yield
+    finally:
+        for var, token in reversed(tokens):
+            var.reset(token)
+
+
+class LogContextFilter(logging.Filter):
+    """Copy the log context onto the record and classify its scope (design D4).
+
+    ``user`` -- logged on behalf of a user; ``request`` -- inside an HTTP request
+    but tied to no user; ``service`` -- neither.
+    """
 
     def filter(self, record: logging.LogRecord) -> bool:
         if not hasattr(record, "request_id"):
             record.request_id = "-"
+        for name in _RECORD_FIELDS:
+            setattr(record, name, _CONTEXT_VARS[name].get())
+        if record.user_key is not None:
+            record.scope = "user"
+        elif log_in_request.get():
+            record.scope = "request"
+        else:
+            record.scope = "service"
         return True
+
+
+# Kept so existing imports keep working; the filter now does more than request ids.
+RequestIdFilter = LogContextFilter
+
+
+class ActivityRecordFilter(logging.Filter):
+    """Only user and service records reach the activity sink (design D4/D5).
+
+    A record without a scope -- LogContextFilter did not run -- counts as
+    ``request`` and is dropped: fail closed.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        return getattr(record, "scope", "request") in ("user", "service")
+
+
+_CREDENTIAL_NAME_MARKERS = ("API_KEY", "SECRET", "TOKEN", "PASSWORD")
+_MIN_CREDENTIAL_LENGTH = 8
+
+
+def _scrub_credentials(text: str) -> str:
+    """Replace every credential value from the environment in *text* with ``***``.
+
+    Read at call time so reloaded ``.env`` files and project-specific keys
+    (``<PROJECT>_OPENAI_API_KEY``) are covered. Longer values go first, so a
+    value containing another one is masked whole.
+    """
+    values = {
+        value
+        for name, value in os.environ.items()
+        if len(value) >= _MIN_CREDENTIAL_LENGTH
+        and any(marker in name.upper() for marker in _CREDENTIAL_NAME_MARKERS)
+    }
+    for value in sorted(values, key=len, reverse=True):
+        text = text.replace(value, "***")
+    return text
+
+
+class JsonLineFormatter(logging.Formatter):
+    """One JSON object per record and line; a traceback stays inside its record.
+
+    Credential values are masked in message and traceback: activity entries are
+    shown to users in the console, unlike the text file and the console output.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry: dict[str, str | None] = {
+            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(
+                timespec="milliseconds"
+            ),
+            "level": record.levelname,
+            "source": record.name,
+            "message": _scrub_credentials(record.getMessage()),
+            "scope": getattr(record, "scope", "request"),
+        }
+        for name in _RECORD_FIELDS:
+            entry[name] = getattr(record, name, None)
+        if record.exc_info:
+            entry["exc"] = _scrub_credentials(self.formatException(record.exc_info))
+        elif record.exc_text:
+            entry["exc"] = _scrub_credentials(record.exc_text)
+        return json.dumps(entry, ensure_ascii=False)
 
 
 class ColoredFormatter(logging.Formatter):
@@ -45,18 +160,67 @@ def create_file_handler(**kwargs) -> logging.Handler:
     return logging.handlers.RotatingFileHandler(**kwargs)
 
 
+def build_activity_handler(file_name: str, max_bytes: int, backup_count: int) -> logging.Handler:
+    """The activity sink, filters and formatter attached (dictConfig factory)."""
+    if is_reloader_process:
+        return logging.NullHandler()
+    handler = logging.handlers.RotatingFileHandler(
+        file_name, maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+    )
+    handler.addFilter(LogContextFilter())
+    handler.addFilter(ActivityRecordFilter())
+    handler.setFormatter(JsonLineFormatter())
+    return handler
+
+
 def setup_logging(config: LoggingConfig):
     dict_config = get_log_config_dict(config)
     logging.config.dictConfig(dict_config)
 
 
 def get_log_config_dict(config: LoggingConfig) -> dict:
+    activity = config.activity
+    sinks = ["console", "file"]
+    with_activity = [*sinks, "activity"] if activity.enabled else sinks
+
+    handlers: dict = {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": config.console.log_level.value,
+            "formatter": "console",
+            "filters": ["log_context"],
+            "stream": "ext://sys.stdout",
+        },
+        "file": {
+            "()": "testbench_ai_service.log.create_file_handler",
+            "level": config.file.log_level.value,
+            "formatter": "file",
+            "filters": ["log_context"],
+            "filename": config.file.file_name,
+            "mode": "a",
+            "maxBytes": 1 * 1024 * 1024,
+            "backupCount": 2,
+            "encoding": "utf_8",
+            "delay": False,
+        },
+    }
+    service_levels = [config.console.log_level.value, config.file.log_level.value]
+    if activity.enabled:
+        handlers["activity"] = {
+            "()": "testbench_ai_service.log.build_activity_handler",
+            "level": activity.log_level.value,
+            "file_name": activity.file_name,
+            "max_bytes": activity.max_bytes,
+            "backup_count": activity.backup_count,
+        }
+        service_levels.append(activity.log_level.value)
+
     return {
         "version": 1,
         "disable_existing_loggers": True,
         "filters": {
-            "request_id": {
-                "()": "testbench_ai_service.log.RequestIdFilter",
+            "log_context": {
+                "()": "testbench_ai_service.log.LogContextFilter",
             }
         },
         "formatters": {
@@ -66,58 +230,35 @@ def get_log_config_dict(config: LoggingConfig) -> dict:
             },
             "file": {"format": config.file.log_format},
         },
-        "handlers": {
-            "console": {
-                "class": "logging.StreamHandler",
-                "level": config.console.log_level.value,
-                "formatter": "console",
-                "filters": ["request_id"],
-                "stream": "ext://sys.stdout",
-            },
-            "file": {
-                "()": "testbench_ai_service.log.create_file_handler",
-                "level": config.file.log_level.value,
-                "formatter": "file",
-                "filters": ["request_id"],
-                "filename": config.file.file_name,
-                "mode": "a",
-                "maxBytes": 1 * 1024 * 1024,
-                "backupCount": 2,
-                "encoding": "utf_8",
-                "delay": False,
-            },
-        },
+        "handlers": handlers,
         "loggers": {
             "testbench_ai_service": {
-                "handlers": ["console", "file"],
-                "level": min(
-                    get_log_level_int(config.console.log_level.value),
-                    get_log_level_int(config.file.log_level.value),
-                ),
+                "handlers": with_activity,
+                "level": min(get_log_level_int(level) for level in service_levels),
                 "propagate": False,
             },
             "uvicorn": {
-                "handlers": ["console", "file"],
+                "handlers": with_activity,
                 "level": config.console.log_level.value,
                 "propagate": False,
             },
             "uvicorn.access": {
-                "handlers": ["console", "file"],
+                "handlers": sinks,
                 "level": config.console.log_level.value,
                 "propagate": False,
             },
             "uvicorn.error": {
-                "handlers": ["console", "file"],
+                "handlers": with_activity,
                 "level": config.console.log_level.value,
                 "propagate": False,
             },
             "uvicorn.asgi": {
-                "handlers": ["console", "file"],
+                "handlers": sinks,
                 "level": config.console.log_level.value,
                 "propagate": False,
             },
             "py.warnings": {
-                "handlers": ["console", "file"],
+                "handlers": sinks,
                 "level": LogLevel.WARNING.value,
             },
         },

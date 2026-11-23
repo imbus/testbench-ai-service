@@ -1,4 +1,7 @@
+from collections.abc import Callable, Mapping, Sequence
+from functools import partial
 from pathlib import Path
+from typing import get_type_hints
 
 import yaml
 from jinja2 import (
@@ -81,13 +84,20 @@ def _build_ast_path(node: nodes.Node) -> str | None:
     return None
 
 
-def template_variables(prompt_file: Path) -> set[str]:
+def template_variables(prompt_file: Path, step: str | None = None) -> set[str]:
+    """The ``agent.*`` paths the templates of *prompt_file* reference.
+
+    Without *step* the variants' ``messages`` are read; with one, that step's
+    templates of every variant that has it.
+    """
     prompt_definition = get_prompt_definition(prompt_file)
     base_path = Path(prompt_file).parent
     extracted_paths: set[str] = set()
     env = Environment()
     for variant in prompt_definition.variants:
-        for msg_template in variant.messages:
+        if step is not None and step not in variant.steps:
+            continue
+        for msg_template in variant.templates_for(step):
             try:
                 content = msg_template.get_content(base_path)
                 ast = env.parse(content)
@@ -155,3 +165,60 @@ def validate_agent_variable(
     if agent_variables:
         allowed_variables.update(f"agent.{var}" for var in agent_variables)
     return template_variables.issubset(allowed_variables)
+
+
+def step_agent_variable_errors(
+    prompt_file: Path, step_data_classes: Mapping[str, type]
+) -> list[str]:
+    """Check each step the agent asks for against the data class it renders it with.
+
+    Every variant must define each step, because the agent renders whichever
+    variant the trigger selects.
+
+    Args:
+        prompt_file: The prompt YAML.
+        step_data_classes: Step name to the ``AgentData`` TypedDict of that step.
+
+    Returns:
+        One readable error per problem; empty if the prompt fits the agent.
+    """
+    return _step_errors(
+        prompt_file,
+        {
+            step: partial(_type_hint_names, data_class)
+            for step, data_class in step_data_classes.items()
+        },
+    )
+
+
+def step_field_errors(prompt_file: Path, step_fields: Mapping[str, Sequence[str]]) -> list[str]:
+    """Like :func:`step_agent_variable_errors`, with each step's field names given directly.
+
+    Used for agents described by an inspection report instead of their imported class.
+    """
+    return _step_errors(
+        prompt_file,
+        {step: partial(list, fields) for step, fields in step_fields.items()},
+    )
+
+
+def _type_hint_names(cls: type) -> list[str]:
+    return list(get_type_hints(cls))
+
+
+def _step_errors(prompt_file: Path, steps: Mapping[str, Callable[[], list[str]]]) -> list[str]:
+    if not steps:
+        return []
+    definition = get_prompt_definition(prompt_file)
+    errors: list[str] = []
+    for step, declared_fields in steps.items():
+        lacking = [variant.name for variant in definition.variants if step not in variant.steps]
+        if lacking:
+            errors.append(f"Step '{step}' is missing in variant(s): {', '.join(lacking)}")
+            continue
+        used = template_variables(prompt_file, step=step)
+        declared = declared_fields()
+        if not validate_agent_variable(used, declared):
+            undeclared = sorted(used - {f"agent.{name}" for name in declared})
+            errors.append(f"Step '{step}' uses undeclared agent variables: {undeclared}")
+    return errors

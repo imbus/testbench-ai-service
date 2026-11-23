@@ -28,3 +28,14 @@ repos:
         language: python
         types_or: [python, pyi, jupyter]
         require_serial: true
+
+  # Prettier for the web console, using the version pinned in frontend/
+  # (needs `npm install` in frontend/ first)
+  - repo: local
+    hooks:
+      - id: prettier
+        name: prettier
+        description: 'Format the frontend sources with Prettier'
+        entry: node frontend/node_modules/prettier/bin/prettier.cjs --write
+        language: system
+        files: ^frontend/src/.*\.(ts|tsx|css)$

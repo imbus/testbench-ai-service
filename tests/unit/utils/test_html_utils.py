@@ -1,6 +1,7 @@
 from testbench_ai_service.utils.html_utils import (
     extract_text_from_html_body,
     strip_html_body_tags,
+    visible_text,
 )
 
 
@@ -72,3 +73,15 @@ class TestExtractTextFromHtmlBody:
 
     def test_no_body_tag_returns_empty(self):
         assert extract_text_from_html_body("<p>No body here</p>") == ""
+
+
+def test_visible_text_leaves_out_the_head():
+    html = (
+        "<html><head><style>p { color: red }</style></head><body><p>Login  works</p></body></html>"
+    )
+
+    assert visible_text(html) == "Login works"
+
+
+def test_visible_text_reads_a_bare_fragment():
+    assert visible_text("<p>Nach 3 <b>Fehlversuchen</b></p>") == "Nach 3 Fehlversuchen"

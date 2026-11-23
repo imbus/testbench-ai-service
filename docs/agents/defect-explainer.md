@@ -42,13 +42,14 @@ When authenticating with a **JWT token**, the token must also grant all of the f
 ## How it works
 
 1. The service checks the connected TestBench server version. **TestBench 4.1** is required; against an older server the precheck fails immediately.
-2. The service retrieves all test case sets from the specified test-object-version and **cycle** (a `cycle_key` is required).
-3. For each test case set, it applies the following precheck filters. A test case set is included only if **all** conditions are met:
-   - The **execution tab** is not locked by another user.
+2. The service checks that the test-object-version is **JSON-based** — either set directly on the TOV or inherited from the project's default exchange format. XML-based TOVs fail the precheck immediately.
+3. The service retrieves all test case sets from the specified test-object-version and **cycle** (a `cycle_key` is required).
+4. For each test case set, it applies the following precheck filters. A test case set is included only if **all** conditions are met:
    - Execution data exists.
-   - The execution **verdict** is `ToVerify`.
+   - The execution **verdict** is `ToVerify` or `Fail`.
    - The execution **activity status** is `Performed`.
-4. Items that pass the precheck are processed concurrently in the background:
+   - The **execution tab** is not locked by another user.
+5. Items that pass the precheck are processed concurrently in the background:
    - Failed test cases are extracted from the execution comments.
    - For each failed test case, the test data and error message are rendered into the prompt template.
    - Each prompt is sent to the configured LLM.

@@ -29,7 +29,7 @@ class TestModelSets:
         assert "gpt-4o" in CHAT_MODELS
 
     def test_known_reasoning_model_is_in_reasoning_models(self):
-        assert "o1" in REASONING_MODELS
+        assert "gpt-6-sol" in REASONING_MODELS
 
 
 class TestOpenAIClientQueryLlm:
@@ -58,7 +58,7 @@ class TestOpenAIClientQueryLlm:
         client.client.responses.create = AsyncMock(return_value=mock_response)
 
         messages = [Message(role="user", content="Reason about this")]
-        result = await client.query_llm("o1", messages)
+        result = await client.query_llm("gpt-6-sol", messages)
         assert result == "Reasoning response"
         client.client.responses.create.assert_awaited_once()
 

@@ -22,6 +22,23 @@ This guide walks you through connecting the TestBench AI Service to the OpenAI A
 2. Navigate to **API keys** in the left sidebar.
 3. Click **Create new secret key**, give it a name, and copy the key immediately. It is only shown once.
 
+### Restrict the key's permissions
+
+The service only sends requests to two OpenAI endpoints, so a key with **Restricted** permissions is enough. Set the permissions below and leave all others at **None**:
+
+| Permission | Value | Endpoint | Needed by |
+|---|---|---|---|
+| **Responses API** | Write | `POST /v1/responses` | Test Case Set Reviewer, Test Case Set Describer, Defect Explainer, Test Idea Generator, Link Finder, Coverage Checker, and prompt test runs in the web console |
+| **Model capabilities** | Request | `POST /v1/embeddings` | Test Planner, only with embedding provider `openai` |
+
+The service does not list models, upload files, use vector stores, assistants or batches, and does not store responses at OpenAI (`store=false`). The Test Planner with embedding provider `local` or `azure_openai` makes no calls with this key.
+
+:::tip
+If a request fails with `401` and `Missing scopes: model.request`, set **Model capabilities** to **Request** as well. OpenAI requires this scope for some keys even for the Responses API. Permission changes can take a few minutes to apply.
+:::
+
+Custom agents may call other endpoints; check their code before restricting the key they use.
+
 ## 2. Set the API key
 
 The service reads the OpenAI API key from the environment variable `OPENAI_API_KEY`.
@@ -70,16 +87,9 @@ variants:
 |---|---|
 | `gpt-4o` | Flagship multimodal model |
 | `gpt-4o-mini` | Fast, cost-efficient |
-| `gpt-4o-search-preview` | gpt-4o with integrated web search |
-| `gpt-4o-mini-search-preview` | gpt-4o-mini with integrated web search |
 | `gpt-4.1` | 1 M context window |
 | `gpt-4.1-mini` | 1 M context, cost-efficient |
 | `gpt-4.1-nano` | Fastest and cheapest GPT-4.1 variant |
-| `gpt-4-turbo` | GPT-4 Turbo (legacy) |
-| `gpt-4` | GPT-4 (legacy) |
-| `gpt-3.5-turbo` | GPT-3.5 Turbo (legacy) |
-| `gpt-3.5-turbo-16k` | GPT-3.5 Turbo with 16k context (legacy) |
-| `gpt-3.5-turbo-instruct` | GPT-3.5 Turbo Instruct (legacy) |
 
 ### Supported reasoning models
 
@@ -108,16 +118,19 @@ Reasoning models use `reasoning_effort` (`low`, `medium`, `high`) instead of tem
 | `gpt-5.4-pro` | High-capability GPT-5.4 variant |
 | `gpt-5.5` | GPT-5.5 |
 | `gpt-5.5-pro` | High-capability GPT-5.5 variant |
+| `gpt-5.6-sol` | GPT-5.6 Sol |
+| `gpt-5.6-terra` | GPT-5.6 Terra |
+| `gpt-5.6-luna` | GPT-5.6 Luna |
 
-**o-series**
+**GPT-6 family**
 
 | Model | Notes |
 |---|---|
-| `o1` | First-generation reasoning model |
-| `o1-pro` | High-capability o1 variant |
-| `o3` | Powerful reasoning |
-| `o3-mini` | Lightweight o3 |
-| `o4-mini` | Compact o4 reasoning model |
+| `gpt-6-astra` | GPT-6 Astra |
+| `gpt-6-sol` | GPT-6 Sol |
+| `gpt-6-luna` | GPT-6 Luna |
+| `gpt-6.1-sol` | GPT-6.1 Sol |
+| `gpt-6.1-terra` | GPT-6.1 Terra |
 
 
 :::note

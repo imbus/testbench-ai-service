@@ -1,3 +1,4 @@
+import io
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
@@ -5,9 +6,11 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from pydantic import BaseModel, ValidationError
 
+import testbench_ai_service.utils.config as config_module
+from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
-from testbench_ai_service.models.config import LLMConfig, ProjectConfig
+from testbench_ai_service.models.config import DEFAULT_AGENT_PACKAGES_DIR, LLMConfig, ProjectConfig
 from testbench_ai_service.utils.config import (
     CONFIG_PREFIX,
     get_agent_config,
@@ -19,6 +22,7 @@ from testbench_ai_service.utils.config import (
     merge_model_dicts,
     merge_prompt_configs,
 )
+from tests.helpers.packages import PACKAGE, install_package
 
 
 class _SimpleModel(BaseModel):
@@ -52,6 +56,27 @@ class TestLoadConfigFromFile:
 
         assert isinstance(result, AppConfig)
 
+    def test_activates_agent_packages_before_validating(self, tmp_path):
+        packages_dir = tmp_path / "packages"
+        install_package(packages_dir)
+        path = tmp_path / "config.toml"
+        path.write_text(
+            f"[{CONFIG_PREFIX}.agent_packages]\ndir = '{packages_dir.as_posix()}'\n",
+            encoding="utf-8",
+        )
+
+        load_config_from_file(str(path))
+
+        assert loaded.is_loaded(PACKAGE)
+
+    def test_activates_the_default_agent_packages_dir(self, tmp_path):
+        path = _write_toml(str(tmp_path), CONFIG_PREFIX, {"port": 8010})
+
+        with patch.object(config_module, "activate_packages", return_value=[]) as activate:
+            load_config_from_file(str(path))
+
+        activate.assert_called_once_with(DEFAULT_AGENT_PACKAGES_DIR)
+
     @patch("testbench_ai_service.utils.config.sys.exit")
     def test_missing_file_exits_with_code_1(self, mock_exit):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -75,6 +100,29 @@ class TestLoadConfigFromFile:
             path.write_text("[other_section]\nsome_setting = 'value'")
             load_config_from_file(path)
         mock_exit.assert_called_once_with(1)
+
+    def test_missing_config_path_records_the_pyproject_fallback_as_loaded_from(self):
+        """When config_path doesn't exist, load_config_from_file falls back to
+        reading pyproject.toml. `loaded_from` must name the file that was
+        actually parsed (pyproject.toml), not the originally requested,
+        nonexistent path."""
+        project_toml = Path(config_module.__file__).parent.parent / "pyproject.toml"
+        fake_content = f"[tool.{CONFIG_PREFIX}]\nsome_setting = 'value'\n".encode()
+        real_open = Path.open
+
+        def fake_open(self, *args, **kwargs):
+            if self == project_toml:
+                return io.BytesIO(fake_content)
+            return real_open(self, *args, **kwargs)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            missing = Path(tmpdir) / "nonexistent.toml"
+            with patch("pathlib.Path.open", fake_open):
+                result = load_config_from_file(str(missing))
+
+        assert isinstance(result, AppConfig)
+        assert result.loaded_from == project_toml
+        assert result.loaded_from != missing
 
 
 class TestGetLLMConfig:
@@ -431,3 +479,123 @@ class TestMergePromptConfigs:
         result = merge_prompt_configs(default=default, override=override)
         assert result.name == "override"
         assert result.id == 2
+
+
+class TestProjectLlmConfigInheritance:
+    """The property the console's per-project LLM form is built on.
+
+    A project block is *sparse*: it states only what it overrides, and every
+    other field must come from the global table. LLMConfig has its own
+    defaults (provider=openai, auth_method=api_key), so if the merge ever
+    stopped using exclude_unset those defaults would silently overwrite the
+    operator's global provider -- and the project form would start writing
+    them into config.toml as if the operator had chosen them.
+    """
+
+    def _config(self):
+        return AppConfig(
+            llm_config={
+                "provider": "anthropic",
+                "model": "claude-opus-5",
+                "max_retries": 7,
+            },
+            projects={"Release 2.0": {"llm_config": {"timeout": 12.5}}},
+        )
+
+    def test_unstated_fields_are_inherited_from_the_global_table(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0")
+
+        assert merged.provider == LLMProvider.ANTHROPIC
+        assert merged.model == "claude-opus-5"
+        assert merged.max_retries == 7
+
+    def test_the_stated_field_wins(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0")
+
+        assert merged.timeout == 12.5
+
+    def test_the_project_block_dumps_only_what_it_states(self):
+        """The mechanism itself, pinned separately from its effect.
+
+        If this dump ever grows a second key, the assertions above start
+        passing for the wrong reason.
+        """
+        project = self._config().projects["Release 2.0"].llm_config
+
+        assert project.model_dump(exclude_unset=True) == {"timeout": 12.5}
+
+    def test_a_project_without_an_llm_block_gets_the_global_table(self):
+        config = AppConfig(
+            llm_config={"provider": "anthropic", "model": "claude-opus-5"},
+            projects={"Release 2.0": {"language": "en"}},
+        )
+
+        merged = get_llm_config(config, project_name="Release 2.0")
+
+        assert merged.provider == LLMProvider.ANTHROPIC
+        assert merged.model == "claude-opus-5"
+
+
+class TestAgentModels:
+    """``llm_config.agent_models`` picks the model one agent runs on.
+
+    It is part of the LLM config, so it follows the same global -> project ->
+    request layering, merged key by key: a project that names one agent must
+    not wipe the global choices for the others.
+    """
+
+    def _config(self) -> AppConfig:
+        return AppConfig(
+            llm_config={
+                "provider": "anthropic",
+                "model": "claude-opus-5",
+                "agent_models": {"reviewer": "claude-haiku-5", "describer": "claude-sonnet-5"},
+            },
+            projects={
+                "Release 2.0": {"llm_config": {"agent_models": {"reviewer": "gpt-4.1"}}},
+            },
+        )
+
+    def test_the_global_agent_model_beats_the_global_model(self):
+        merged = get_llm_config(self._config(), agent_key="describer")
+
+        assert merged.model == "claude-sonnet-5"
+
+    def test_an_agent_without_an_entry_keeps_the_model(self):
+        merged = get_llm_config(self._config(), agent_key="planner")
+
+        assert merged.model == "claude-opus-5"
+
+    def test_no_agent_key_leaves_the_model_alone(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0")
+
+        assert merged.model == "claude-opus-5"
+
+    def test_the_project_entry_beats_the_global_one(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0", agent_key="reviewer")
+
+        assert merged.model == "gpt-4.1"
+
+    def test_the_project_merges_per_agent(self):
+        merged = get_llm_config(self._config(), project_name="Release 2.0", agent_key="describer")
+
+        assert merged.model == "claude-sonnet-5"
+        assert merged.agent_models == {"reviewer": "gpt-4.1", "describer": "claude-sonnet-5"}
+
+    def test_a_project_model_does_not_beat_the_agent_model(self):
+        config = self._config()
+        config.projects["Release 2.0"].llm_config = LLMConfig(model="gpt-4o")
+
+        merged = get_llm_config(config, project_name="Release 2.0", agent_key="reviewer")
+
+        assert merged.model == "claude-haiku-5"
+
+    def test_the_request_entry_wins(self):
+        merged = get_llm_config(
+            self._config(),
+            project_name="Release 2.0",
+            request_config=LLMConfig(agent_models={"reviewer": "o3"}),
+            agent_key="reviewer",
+        )
+
+        assert merged.model == "o3"

@@ -18,12 +18,8 @@ from testbench_ai_service.models.prompt import Message
 
 T = TypeVar("T", bound=BaseModel)
 
-#: A reply wrapped in a Markdown code fence, e.g. ```` ```json ... ``` ````.
 CODE_FENCE = re.compile(r"^\s*```[a-zA-Z0-9_-]*\s*\n(?P<body>.*?)\n?\s*```\s*$", re.DOTALL)
 
-#: Sent back to the model after a reply that failed validation. The schema is
-#: spelled out because the prompt may not name it, e.g. a custom or outdated one;
-#: without it the model can only guess, and tends to answer with an empty object.
 REPAIR_INSTRUCTION = (
     "Your previous answer could not be parsed:\n{error}\n\n"
     "Answer again with the same content as one JSON object matching this JSON Schema:\n"

@@ -1,0 +1,182 @@
+import { useEffect, useState } from 'react'
+import { Navigate, Route, Routes } from 'react-router-dom'
+import { Message } from 'primereact/message'
+import { NavRail } from './components/NavRail'
+import { PendingBanner } from './components/PendingBanner'
+import { RestartBanner } from './components/RestartBanner'
+import { TopBar } from './components/TopBar'
+import { AgentDetail } from './screens/AgentDetail'
+import { Agents } from './screens/Agents'
+import { ConfigSection } from './screens/ConfigSection'
+import { Jobs } from './screens/Jobs'
+import { Login } from './screens/Login'
+import { Projects } from './screens/Projects'
+import { PromptEditor } from './screens/PromptEditor'
+import { Prompts } from './screens/Prompts'
+import { Raw } from './screens/Raw'
+import { Status } from './screens/Status'
+import type { ConfigIssue } from './api/types'
+import { useNotedRestart } from './api/packages'
+import { useConfig, useStatus } from './api/queries'
+import { DraftProvider } from './state/draft'
+import { useSession } from './state/session'
+import { useTranslation } from 'react-i18next'
+import { applyTheme, preferredTheme, storedTheme, type Theme } from './theme'
+
+export function App() {
+  const { session, loading, busy, error, signIn, signOut } = useSession()
+  const [theme, setTheme] = useState<Theme>(() => storedTheme() ?? preferredTheme())
+  const [issues, setIssues] = useState<ConfigIssue[]>([])
+  const { t } = useTranslation()
+  // Called unconditionally, ahead of the early returns below: this component
+  // stays mounted across the loading -> signed-in transition, and hooks
+  // called only on some renders of the same instance corrupt React's hook
+  // order (a hard crash, not a lint nit). Gated on `session` rather than
+  // dropped from the login/loading renders entirely -- both routes need a
+  // session, and firing them at the Login screen would just poll a 401 every
+  // 15 seconds for data nothing there uses.
+  const config = useConfig({ enabled: !!session })
+  const status = useStatus({ enabled: !!session })
+  const notedRestart = useNotedRestart(status.data?.service?.uptime_seconds)
+
+  useEffect(() => applyTheme(theme), [theme])
+
+  // App is one component instance across the whole session lifecycle (see
+  // the hook-order note above), so an issue marker set while signed in would
+  // otherwise survive in memory past sign-out -- clearStoredDraft() (in
+  // signOut) only clears the draft, not this state. Keyed on `session`
+  // itself rather than a click handler so an expired session (which also
+  // surfaces as `session` becoming null, not just an explicit sign-out)
+  // clears it too, before the next operator on a shared machine sees it.
+  useEffect(() => {
+    if (!session) setIssues([])
+  }, [session])
+
+  if (loading) return null
+
+  if (!session) {
+    return (
+      <Login
+        theme={theme}
+        busy={busy}
+        error={error}
+        onSignIn={(username, password) => {
+          void signIn(username, password).catch(() => undefined)
+        }}
+        onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+      />
+    )
+  }
+
+  // Derived from the status query rather than remembered from the apply
+  // response: an operator who edits config.toml by hand, or who reloads the
+  // console after applying, must still see the banner.
+  // Plus what package changes noted in this page: switching a package version
+  // changes no config.toml key the status could derive a restart from.
+  const restartFields = [...new Set([...(status.data?.restart_required ?? []), ...notedRestart])]
+  const service = status.data?.service
+
+  return (
+    // The draft is measured against the config *on disk* -- the draft is "what
+    // will be written", and the running snapshot is fully defaulted, so
+    // measuring against it would count every default the file omits as a
+    // pending change. `disk` can be undefined while the query is in flight;
+    // that state must NOT be coerced to `{}` here -- an empty object means
+    // "the file genuinely has no keys" and would prune (and thereby destroy)
+    // any queued removal edits before the config has even loaded.
+    <DraftProvider saved={config.data?.disk}>
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+        <TopBar
+          session={session}
+          theme={theme}
+          serviceLabel={service ? `${service.host}:${service.port}` : undefined}
+          onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          onSignOut={() => void signOut()}
+        />
+        {session.is_admin && <PendingBanner onIssues={setIssues} />}
+        <RestartBanner
+          fields={restartFields}
+          restart={
+            session.is_admin && service?.can_restart
+              ? { startedAt: service.started_at, inFlight: status.data?.in_flight_tasks ?? 0 }
+              : undefined
+          }
+        />
+        {!session.is_admin && (
+          // The same full-width `Message` strip as RestartBanner, and for the
+          // same reason a `status` rather than Message's own `alert`.
+          <Message
+            severity="info"
+            role="status"
+            className="banner"
+            style={{ borderColor: 'var(--color-divider)', padding: '8px var(--space-4)' }}
+            text={t('readOnly')}
+          />
+        )}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
+          <NavRail
+            isAdmin={session.is_admin}
+            overrideCount={status.data?.agents?.project_overrides ?? 0}
+          />
+          <main style={{ flex: 1, minWidth: 0 }}>
+            <Routes>
+              <Route path="/admin" element={<Navigate to="/admin/status" replace />} />
+              <Route path="/" element={<Navigate to="/admin/status" replace />} />
+              <Route path="/admin/status" element={<Status isAdmin={session.is_admin} />} />
+              <Route path="/admin/jobs" element={<Jobs />} />
+              <Route path="/admin/jobs/:jobId" element={<Jobs />} />
+              <Route
+                path="/admin/service"
+                element={
+                  <ConfigSection section="service" isAdmin={session.is_admin} issues={issues} />
+                }
+              />
+              <Route
+                path="/admin/llm"
+                element={<ConfigSection section="llm" isAdmin={session.is_admin} issues={issues} />}
+              />
+              <Route
+                path="/admin/logging"
+                element={
+                  <ConfigSection section="logging" isAdmin={session.is_admin} issues={issues} />
+                }
+              />
+              {/* Both read-only for a non-admin, like Status -- so neither
+                  route is gated; each screen renders through ReadOnlyField
+                  instead. */}
+              <Route path="/admin/agents" element={<Agents isAdmin={session.is_admin} />} />
+              <Route
+                path="/admin/agents/:agentKey"
+                element={<AgentDetail isAdmin={session.is_admin} issues={issues} />}
+              />
+              {/* The packages are a section of the agents screen now; the
+                  old address stays for bookmarks. */}
+              <Route
+                path="/admin/agent-packages"
+                element={<Navigate to="/admin/agents" replace />}
+              />
+              <Route
+                path="/admin/projects"
+                element={<Projects isAdmin={session.is_admin} issues={issues} />}
+              />
+              <Route path="/admin/raw" element={<Raw />} />
+              {/* Under /admin like every other screen: vite's `base` is
+                  `/admin/` and static.py mounts the SPA at `/admin`, so a
+                  route outside it click-throughs fine but 404s on a refresh,
+                  a bookmark or an open-in-new-tab. Both ungated, like Agents
+                  and Projects -- a non-admin sees the tree and the editor
+                  read-only rather than losing the nav entry, which would
+                  conceal information they are allowed to read. */}
+              <Route path="/admin/prompts" element={<Prompts />} />
+              <Route
+                path="/admin/prompts/:lang/:agent"
+                element={<PromptEditor isAdmin={session.is_admin} />}
+              />
+              <Route path="*" element={<Navigate to="/admin/status" replace />} />
+            </Routes>
+          </main>
+        </div>
+      </div>
+    </DraftProvider>
+  )
+}

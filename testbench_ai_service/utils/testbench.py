@@ -232,6 +232,53 @@ async def patch_test_structure_element_spec(
     return response.json()
 
 
+def create_test_case_set(
+    conn: TBConnection,
+    project_key: str,
+    tov_key: str,
+    parent_key: str,
+    name: str,
+    keep_locked: bool = False,
+) -> TestCaseSetDetails:
+    """Create a test case set below a test theme (TestBench 5.0 and later).
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the TOV.
+        tov_key: Key of the TOV the theme belongs to.
+        parent_key: Element key of the test theme to create the set under; the root
+            theme of the TOV is refused by TestBench (409).
+        name: Name of the new set. TestBench trims it, rejects special characters
+            (422) and suffixes a name a sibling already has.
+        keep_locked: Leave the new set's specification locked by the caller.
+
+    Returns:
+        The details of the created test case set.
+    """
+    response = conn.session.post(
+        f"{conn.server_url}2/projects/{project_key}/tovs/{tov_key}/testCaseSets",
+        params={"keepLocked": "true" if keep_locked else "false"},
+        json={"parentKey": parent_key, "name": name},
+    )
+    return TestCaseSetDetails.model_validate(response.json())
+
+
+def delete_test_case_set(conn: TBConnection, project_key: str, test_case_set_key: str) -> None:
+    """Delete a test case set (TestBench 5.0 and later).
+
+    TestBench requires the caller to hold the lock on the set's specification and
+    on the specification of its parent theme (409 otherwise).
+
+    Args:
+        conn: The active TestBench connection.
+        project_key: Key of the project owning the set.
+        test_case_set_key: Element key of the set to delete.
+    """
+    conn.session.delete(
+        f"{conn.server_url}2/projects/{project_key}/testCaseSets/{test_case_set_key}"
+    )
+
+
 def get_own_global_roles(conn: TBConnection) -> list[GlobalHumanRole]:
     global_roles = conn.session.get(
         f"{conn.server_url}2/users/self/globalRoles",
@@ -258,7 +305,7 @@ def get_project_roles(conn: TBConnection, project_key: str) -> list[ProjectRole]
 def get_requirements(
     conn: TBConnection,
     project_key: str,
-    root_uid: str,
+    root_uid: str | None,
     tov_key: str,
     cycle_key: str | None = None,
     filtering: FilteringOptions | None = None,
@@ -321,6 +368,15 @@ def get_test_case_set_nodes(conn: TBConnection, context: ExecutionContext) -> li
         for node in structure.nodes
         if isinstance(node, TestCaseSetNode) and TEST_CASE_SET_UID.search(node.base.uniqueID)
     ]
+
+
+def get_locked_spec_uids(conn: TBConnection, context: ExecutionContext) -> set[str]:
+    """Return the uniqueIDs of the test case sets whose specification is currently locked."""
+    return {
+        node.base.uniqueID
+        for node in get_test_case_set_nodes(conn, context)
+        if node.spec is not None and node.spec.locker is not None
+    }
 
 
 def is_json_based_tov(conn: TBConnection, project_key: str, tov_key: str) -> bool:

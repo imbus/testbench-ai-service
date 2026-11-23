@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 
 from testbench_ai_service.models.config import PromptConfig
-from testbench_ai_service.utils.build_prompt_utils import build_prompt
+from testbench_ai_service.models.prompt import MessageTemplate
+from testbench_ai_service.utils.build_prompt_utils import build_messages, build_prompt
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 
 _DATA_DIR = Path(__file__).parent / "data"
@@ -16,6 +17,24 @@ class TestGetPromptDefinition:
     def test_missing_file_raises_file_not_found(self):
         with pytest.raises(FileNotFoundError):
             get_prompt_definition("nonexistent.yaml")
+
+
+class TestBuildMessagesSandbox:
+    """build_messages renders in a sandbox: the console lets an admin edit templates."""
+
+    def test_python_internals_are_not_reachable(self):
+        template = MessageTemplate(role="user", text="type=[{{ ''.__class__.__name__ }}]")
+
+        messages = build_messages([template], {}, {}, _DATA_DIR)
+
+        assert "type=[str]" not in messages[0].content
+
+    def test_agent_and_vars_still_render(self):
+        template = MessageTemplate(role="user", text="{{ agent.test_case_set }} / {{ vars.tone }}")
+
+        messages = build_messages([template], {"test_case_set": "TCS"}, {"tone": "dry"}, _DATA_DIR)
+
+        assert messages[0].content == "TCS / dry"
 
 
 class TestBuildPrompt:

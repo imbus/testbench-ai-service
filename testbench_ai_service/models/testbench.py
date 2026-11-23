@@ -55,6 +55,10 @@ class PermissionWithCode(int, Enum):
     ReadCompleteUsersList = 49
     ReadActiveUsersList = 50
     ReadOwnUserDetails = 51
+    AdministerServer = 52
+    ExecuteOthersTestCaseSets = 53
+    #: TestBench 5.0 and later.
+    ModifyTestStructureElements = 54
 
 
 class Priority(str, Enum):

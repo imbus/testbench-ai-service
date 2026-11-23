@@ -1,13 +1,17 @@
 import importlib
 import inspect
+import logging
 from pathlib import Path
-from typing import Any, get_type_hints
+from typing import TYPE_CHECKING, Any, get_type_hints
 
+import jsonschema
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
     AgentConfig,
+    AgentPackagesConfig,
+    JobsConfig,
     LLMConfig,
     ProjectConfig,
     PromptConfig,
@@ -15,21 +19,28 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
+from testbench_ai_service.models.webui import AdminUiConfig
 from testbench_ai_service.transport import (
     DEFAULT_CONNECT_TIMEOUT,
     DEFAULT_MAX_RETRIES,
     DEFAULT_READ_TIMEOUT,
 )
 from testbench_ai_service.utils.prompt_utils import (
+    step_agent_variable_errors,
+    step_field_errors,
     template_variables,
     validate_agent_variable,
 )
 from testbench_ai_service.validators import (
     raise_field_validation_error,
     raise_nested_validation_error,
+    resolve_prompt_file_path,
     validate_prompt_file,
     validate_tb_server_url,
 )
+
+if TYPE_CHECKING:
+    from testbench_ai_service.agent_packages.agent_info import AgentInfo
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8010
@@ -62,6 +73,37 @@ DEFAULT_AGENTS: dict[str, AgentConfig] = {
         ),
     ),
 }
+
+
+def _prompt_file_is_absent(file: Path, prompts_dir: Path | None, language: str) -> bool:
+    """Whether *file* cannot be found at all, as opposed to being unreadable.
+
+    ``validate_prompt_file`` raises the same ``ValueError`` for a file that is
+    missing and for one that is present but malformed. Only the first is a
+    reason to treat an agent as simply not installed.
+    """
+    try:
+        resolve_prompt_file_path(file, prompts_dir=prompts_dir, language=language)
+    except ValueError:
+        return True
+    return False
+
+
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Merge *override* into *base*, recursing into nested tables.
+
+    Neither argument is mutated. A non-table value replaces whatever is at that
+    key; two tables are merged key by key, so ``{"prompt": {"variant": "x"}}``
+    sets the variant without discarding the prompt's ``file``.
+    """
+    merged = dict(base)
+    for key, value in override.items():
+        existing = merged.get(key)
+        if isinstance(existing, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge(existing, value)
+        else:
+            merged[key] = value
+    return merged
 
 
 class AppConfig(BaseModel):
@@ -98,6 +140,8 @@ class AppConfig(BaseModel):
     )
     port: int = Field(
         DEFAULT_PORT,
+        ge=1,
+        le=65535,
         description="Port number to run the service on",
     )
     debug: bool = Field(False, description="Enable debug mode for the service")
@@ -125,11 +169,66 @@ class AppConfig(BaseModel):
         default=TEMPLATES_DIR,
         description="Directory containing jinja templates for agents.",
     )
+    usage_file: Path | None = Field(
+        default=None,
+        description="SQLite file holding the token usage per model. Relative paths are "
+        "resolved against the config file's directory; unset means 'usage.sqlite' there.",
+    )
     language: LanguageOption = LanguageOption.GERMAN
     llm_config: LLMConfig = Field(default_factory=LLMConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
+    admin_ui: AdminUiConfig = Field(
+        default_factory=AdminUiConfig,
+        description="Browser console served at /admin",
+    )
+    jobs: JobsConfig = Field(default_factory=JobsConfig)
+    agent_packages: AgentPackagesConfig = Field(default_factory=AgentPackagesConfig)
     agents: dict[str, AgentConfig] = DEFAULT_AGENTS
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
+    loaded_from: Path | None = Field(
+        default=None,
+        exclude=True,
+        description="Path this config was loaded from; set by load_config_from_file",
+    )
+
+    @field_validator("agents", mode="before")
+    @classmethod
+    def merge_agents_onto_defaults(cls, agents: Any) -> Any:
+        """Let a partial ``[agents.<key>]`` block override one setting.
+
+        Without this, ``agents`` is a plain replacement: every ``AgentConfig``
+        field is required, so ``enabled = false`` on its own fails validation,
+        and spelling the block out in full drops every agent the operator did
+        not mention. There was no way to express "turn this agent off".
+
+        A key that names a built-in is merged onto that built-in, recursively,
+        so ``[agents.x.prompt] variant = "..."`` keeps the prompt's ``file``. A
+        key that names no built-in is passed through untouched and must still
+        be declared in full -- there is nothing to inherit from.
+
+        Merging happens *before* validation on plain dicts, rather than through
+        ``model_copy(update=...)`` on the built model: ``model_copy`` neither
+        validates nor recurses, so a nested partial would leave ``prompt`` as a
+        raw dict and every ``agent.prompt.file`` lookup would raise.
+        """
+        if not isinstance(agents, dict):
+            return agents
+
+        merged: dict[Any, Any] = {
+            key: default.model_dump() for key, default in DEFAULT_AGENTS.items()
+        }
+        for key, override in agents.items():
+            default = DEFAULT_AGENTS.get(key)
+            if default is None:
+                merged[key] = override
+                continue
+            # A Python caller passes AgentConfig objects; TOML gives dicts.
+            fields = override.model_dump() if isinstance(override, BaseModel) else override
+            if not isinstance(fields, dict):
+                merged[key] = override
+                continue
+            merged[key] = _deep_merge(merged[key], fields)
+        return merged
 
     @field_validator("tb_server_url", mode="after")
     @classmethod
@@ -179,10 +278,36 @@ class AppConfig(BaseModel):
                 raise ValueError(f"Templates path is not a directory: '{v.resolve()}'")
         return v
 
+    def _is_untouched_builtin(self, agent_key: str, agent: AgentConfig) -> bool:
+        """Whether *agent* is a built-in the operator's config left alone.
+
+        Compares the merged entry against the built-in rather than tracking
+        which keys the operator wrote: a block that spells the default out
+        again means the same thing as no block at all.
+        """
+        return agent == DEFAULT_AGENTS.get(agent_key)
+
     @model_validator(mode="after")
     def validate_prompt_paths(self):
-        """Validate and resolve all prompt file paths."""
-        for agent_key, agent in self.agents.items():
+        """Validate and resolve all prompt file paths.
+
+        Two agents are exempt, because for them a prompt file is not something
+        the operator asked for:
+
+        * a **disabled** agent -- it gets no endpoint, so requiring its prompt
+          file to exist would make ``enabled = false`` an incomplete off
+          switch, and that is the documented way to withdraw an agent;
+        * an **untouched built-in whose prompt file is absent** -- since the
+          ``agents`` table merges onto the built-ins, every config carries all
+          three, including one whose ``prompts_dir`` holds only the operator's
+          own prompts. Failing there would refuse to start a service that
+          started before the merge, naming an agent the operator never wrote
+          down. It is dropped with a warning instead: it cannot run, and that
+          is exactly the state such a config was in before.
+        """
+        for agent_key, agent in list(self.agents.items()):
+            if not agent.enabled:
+                continue
             try:
                 validate_prompt_file(
                     agent.prompt.file,
@@ -190,8 +315,24 @@ class AppConfig(BaseModel):
                     language=self.language.value,
                 )
             except ValueError as e:
+                if self._is_untouched_builtin(agent_key, agent) and _prompt_file_is_absent(
+                    agent.prompt.file, self.prompts_dir, self.language.value
+                ):
+                    logger.warning(
+                        "Built-in agent '%s' is not configured and its prompt file '%s' was not "
+                        "found under '%s'. The agent is unavailable. Configure it explicitly if "
+                        "you meant to run it; otherwise this message can be ignored.",
+                        agent_key,
+                        agent.prompt.file,
+                        self.prompts_dir,
+                    )
+                    del self.agents[agent_key]
+                    continue
                 raise_field_validation_error(self, ("agents", agent_key, "prompt", "file"), e)
         for proj_key, project in self.projects.items():
+            project_language = (
+                project.language.value if project.language is not None else self.language.value
+            )
             for agent_key, agent_override in (project.agents or {}).items():
                 if agent_override.prompt is None or agent_override.prompt.file is None:
                     continue
@@ -199,7 +340,7 @@ class AppConfig(BaseModel):
                     validate_prompt_file(
                         agent_override.prompt.file,
                         prompts_dir=self.prompts_dir,
-                        language=self.language.value,
+                        language=project_language,
                     )
                 except ValueError as e:
                     raise_field_validation_error(
@@ -209,42 +350,110 @@ class AppConfig(BaseModel):
                     )
         return self
 
+    def _package_agent_info(
+        self, agent_key: str, agent: AgentConfig, warn: bool = True
+    ) -> "AgentInfo | None":
+        """The info of a package agent, or ``None`` (logged) if it is unavailable."""
+        # Imported here: agent_packages.manifest -> webui.security -> this module.
+        from testbench_ai_service.agent_packages.agent_info import (  # noqa: PLC0415
+            AgentUnavailable,
+            UnknownAgentClass,
+            agent_info,
+        )
+
+        try:
+            return agent_info(agent, self.agent_packages.dir)
+        except UnknownAgentClass as e:
+            # A typo in class_path of a loaded package: reject like any other typo.
+            raise_field_validation_error(
+                self, ("agents", agent_key, "class_path"), ValueError(str(e))
+            )
+            return None  # unreachable: the call above raises
+        except AgentUnavailable as e:
+            logger.log(
+                logging.WARNING if warn else logging.DEBUG,
+                "Agent '%s' from package '%s' is not validated: %s",
+                agent_key,
+                agent.package,
+                e,
+            )
+            return None
+
+    def _validate_package_agent(self, agent_key: str, agent: AgentConfig) -> None:
+        """Check the prompt of a package agent against its fields, without importing it
+        unless the package was loaded at startup."""
+        info = self._package_agent_info(agent_key, agent)
+        if info is None:
+            return
+        prompt_path = Path(self.prompts_dir, self.language.value, agent.prompt.file)  # type: ignore[arg-type]
+        user_variables = template_variables(prompt_file=prompt_path)
+        if not validate_agent_variable(user_variables, info.data_fields):
+            logger.error(
+                "Template validation failed. User variables: %s do not match agent data requirements.",
+                user_variables,
+            )
+            raise ValueError(
+                "Failed to validate template: variables are incompatible with the agent."
+            )
+        step_errors = step_field_errors(prompt_path, info.step_fields)
+        if step_errors:
+            raise ValueError(
+                f"Failed to validate the steps of '{prompt_path}': {' | '.join(step_errors)}"
+            )
+
     @model_validator(mode="after")
     def validate_config(self):
-        for _, agent in self.agents.items():
+        for agent_key, agent in self.agents.items():
+            if not agent.enabled:
+                continue
+
             if not agent.class_path:
                 raise ValueError("'class_path' must be set.")
 
-            try:
-                module_path, class_name = agent.class_path.rsplit(".", 1)
-            except ValueError as e:
-                raise ValueError(
-                    "'class_path' must be a valid import path, e.g. 'package.module.ClassName'."
-                ) from e
-
-            try:
-                module = importlib.import_module(module_path)
-                getattr(module, class_name)
-            except (ImportError, AttributeError) as e:
-                raise ValueError(f"cannot import '{class_name}' from '{module_path}': {e}") from e
-
-            user_variables = template_variables(
-                prompt_file=Path(self.prompts_dir, self.language.value, agent.prompt.file),
-            )
-            agent_data = {}
-            for _, obj in inspect.getmembers(module):
-                if inspect.isclass(obj) and hasattr(obj, "AGENT_DATA_CLASS"):
-                    agent_data = get_type_hints(obj.AGENT_DATA_CLASS).keys()
-
-            if not validate_agent_variable(user_variables, agent_data):
-                logger.error(
-                    "Template validation failed. User variables: %s do not match agent data requirements.",
-                    user_variables,
-                )
-                raise ValueError(
-                    "Failed to validate template: variables are incompatible with the agent."
-                )
+            if agent.package is not None:
+                self._validate_package_agent(agent_key, agent)
+            else:
+                self._validate_imported_agent(agent)
         return self
+
+    def _validate_imported_agent(self, agent: AgentConfig) -> None:
+        """Import a built-in or ``class_path`` agent and check its prompt against it."""
+        try:
+            module_path, class_name = agent.class_path.rsplit(".", 1)
+        except ValueError as e:
+            raise ValueError(
+                "'class_path' must be a valid import path, e.g. 'package.module.ClassName'."
+            ) from e
+
+        try:
+            module = importlib.import_module(module_path)
+            getattr(module, class_name)
+        except (ImportError, AttributeError) as e:
+            raise ValueError(f"cannot import '{class_name}' from '{module_path}': {e}") from e
+
+        prompt_path = Path(self.prompts_dir, self.language.value, agent.prompt.file)  # type: ignore[arg-type]
+        user_variables = template_variables(prompt_file=prompt_path)
+        agent_data: Any = {}
+        for _, obj in inspect.getmembers(module):
+            if inspect.isclass(obj) and hasattr(obj, "AGENT_DATA_CLASS"):
+                agent_data = get_type_hints(obj.AGENT_DATA_CLASS).keys()
+
+        if not validate_agent_variable(user_variables, agent_data):
+            logger.error(
+                "Template validation failed. User variables: %s do not match agent data requirements.",
+                user_variables,
+            )
+            raise ValueError(
+                "Failed to validate template: variables are incompatible with the agent."
+            )
+        agent_class = getattr(module, class_name)
+        step_errors = step_agent_variable_errors(
+            prompt_path, getattr(agent_class, "STEP_DATA_CLASSES", {})
+        )
+        if step_errors:
+            raise ValueError(
+                f"Failed to validate the steps of '{prompt_path}': {' | '.join(step_errors)}"
+            )
 
     @model_validator(mode="after")
     def validate_agent_args(self):
@@ -254,8 +463,18 @@ class AppConfig(BaseModel):
         validated merged over it, so a project can only override keys.
         """
         for agent_key, agent in self.agents.items():
-            module_path, class_name = agent.class_path.rsplit(".", 1)
-            agent_class = getattr(importlib.import_module(module_path), class_name)
+            if agent.package is not None:
+                # validate_config already warned about an unavailable enabled agent.
+                info = self._package_agent_info(agent_key, agent, warn=not agent.enabled)
+                if info is None:
+                    continue
+                if info.agent_class is None:
+                    self._validate_args_against_schema(agent_key, agent, info.args_schema)
+                    continue
+                agent_class = info.agent_class
+            else:
+                module_path, class_name = agent.class_path.rsplit(".", 1)
+                agent_class = getattr(importlib.import_module(module_path), class_name)
             args_class = getattr(agent_class, "ARGS_CLASS", None)
             if args_class is None:
                 continue
@@ -276,3 +495,33 @@ class AppConfig(BaseModel):
                         self, ("projects", proj_key, "agents", agent_key, "args"), e
                     )
         return self
+
+    def _validate_args_against_schema(
+        self, agent_key: str, agent: AgentConfig, schema: dict[str, Any] | None
+    ) -> None:
+        """Validate the ``args`` of an agent that is not imported against the JSON
+        schema of its ``ARGS_CLASS`` from the inspection report."""
+        if schema is None:
+            return
+        targets: list[tuple[tuple[str, ...], dict[str, Any]]] = [
+            (("agents", agent_key, "args"), agent.args)
+        ]
+        for proj_key, project in self.projects.items():
+            agent_override = (project.agents or {}).get(agent_key)
+            if agent_override is None or agent_override.args is None:
+                continue
+            targets.append(
+                (
+                    ("projects", proj_key, "agents", agent_key, "args"),
+                    merge_agent_args(agent.args, agent_override.args),
+                )
+            )
+        for loc, args in targets:
+            try:
+                jsonschema.validate(args, schema)
+            except jsonschema.ValidationError as e:
+                raise_field_validation_error(self, loc, ValueError(e.message))
+            except jsonschema.SchemaError as e:
+                raise_field_validation_error(
+                    self, loc, ValueError(f"the package's args schema is invalid: {e.message}")
+                )

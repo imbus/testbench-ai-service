@@ -25,7 +25,15 @@ Execution-level agents, such as the Defect Explainer, do not support XML-based t
 | [`test_case_set_reviewer`](test-case-set-reviewer.md)   | AI-powered quality reviews. Results are added to the review comment section of each test structure element specification.                  |
 | [`test_case_set_describer`](test-case-set-describer.md) | Automatic generation of descriptive summaries. Results are assigned to the description field of each test structure element specification. |
 | [`defect_explainer`](defect-explainer.md)               | AI-generated explanations for defects found during test execution. Results are added to the comment section of the execution overview.     |
-| [`requirement`](generate-test-ideas.md) (opt-in)         | AI-generated test ideas for the requirements assigned below a test theme. Results are added to the description of the test theme. Not registered by default. |
+
+Opt-in (not part of the default agents, enable it in the `config.toml`):
+
+| Agent key                             | Description                                                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| [`requirement`](generate-test-ideas.md) | AI-generated test ideas for the requirements assigned below a test theme. Results are added to the description of the test theme; from TestBench 5.0 every idea also becomes a test case set. |
+| [`test_planner`](test-planner.md)     | Plans the most diverse test selection of a cycle via embeddings: sets the selected test cases to Planned and logs the result. |
+| [`coverage_checker`](coverage-checker.md) | Checks whether the tests linked to a requirement prove all its aspects. Results are added to the review comment of every linked test case set. |
+| [`link_finder`](link-finder.md) | Finds test case sets that test a requirement but are not linked to it. Every candidate gets a hint in its review comment; links are never set. |
 
 ---
 
@@ -116,9 +124,12 @@ On success, `202 Accepted`:
 ```json
 {
   "status": "accepted",
+  "job_id": "7f3a9c1e5b2d4e8f9a0b1c2d3e4f5a6b",
   "warnings": ["Optional list of per-item warnings from the precheck"]
 }
 ```
+
+`job_id` identifies this run. Use it with [`GET /jobs/{job_id}`](#jobs) to follow the run and to fetch its report. It is also the `run_id` in the service log.
 
 ### Error responses
 
@@ -133,6 +144,102 @@ On success, `202 Accepted`:
 
 ---
 
+## Jobs
+
+Every accepted trigger starts a **job**. The `202` response carries its `job_id`; the TestBench plugin polls the job to show progress and, once it is done, the agent's report.
+
+```
+GET /jobs/{job_id}
+```
+
+The request needs the same `Authorization` header as the agent endpoints. Example response for a running job:
+
+```json
+{
+  "job_id": "7f3a9c1e5b2d4e8f9a0b1c2d3e4f5a6b",
+  "agent_key": "coverage_checker",
+  "project_key": "PRJ-1",
+  "project_name": "Dream Car",
+  "root_key": "REQ-12",
+  "root_uid": "iTB-RQ-1234",
+  "item_ids": [],
+  "status": "running",
+  "progress": {"done": 3, "total": 7, "text": "Interpreting test case sets"},
+  "error": null,
+  "warnings": [],
+  "report_type": null,
+  "report": null,
+  "created_at": "2026-10-22T09:14:03Z",
+  "updated_at": "2026-10-22T09:14:21Z",
+  "finished_at": null
+}
+```
+
+| Field                              | Description                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `root_key`, `root_uid`            | Key and unique ID of the element the agent was triggered on, as sent in the trigger. Either may be `null`.  |
+| `status`                           | `running`, `succeeded` or `failed`. These are the only values.                                               |
+| `progress`                         | `done` of `total` steps plus an optional `text`; `null` while the agent reports none.                        |
+| `error`                            | Why the job `failed`, in the language of the run. `null` otherwise.                                          |
+| `warnings`                         | Per-item warnings from the precheck.                                                                         |
+| `report_type`, `report`            | Set once the agent has stored a report, otherwise `null`. See [Reports](#reports).                           |
+| `created_at`, `updated_at`, `finished_at` | Timestamps. `finished_at` is `null` while the job runs.                                               |
+
+Poll every 2 to 3 seconds until `status` is `succeeded` or `failed`.
+
+| Status | Meaning                                                                                                |
+| ------ | ------------------------------------------------------------------------------------------------------ |
+| `404`  | No such job, or it belongs to another user. Both look the same, and administrators are no exception.     |
+| `401`  | Missing or invalid authorization token.                                                                |
+| `503`  | The job store could not be read. Try again later.                                                      |
+
+### Job page in the browser
+
+A browser cannot send the `Authorization` header, so a plain link to `GET /jobs/{job_id}` fails with `401`. To show a job in the browser, the plugin first asks for a one-time ticket with the header:
+
+```
+POST /jobs/{job_id}/view-ticket?language=de
+```
+
+```json
+{
+  "view_path": "/jobs/7f3a9c1e5b2d4e8f9a0b1c2d3e4f5a6b/view",
+  "view_token": "q2X…",
+  "expires_in": 120
+}
+```
+
+It then opens `<service URL>{view_path}?view_token={view_token}` in the browser. `language` (`de` or `en`) is optional and defaults to the service's `language`. Only the user who triggered the job gets a ticket; anyone else gets `404`, as for `GET /jobs/{job_id}`.
+
+- The ticket works **once** and only within `expires_in` seconds (2 minutes). A ticket presented for another job is used up as well.
+- Redeeming it opens a view session for this job and user, kept for 8 hours in an HttpOnly cookie that is only sent to the job's view path. The browser is then redirected to the same path without the ticket, so it does not stay in the address bar or the browser history.
+- The page shows the job as the web console's job page does: status, progress, error, warnings and the report, the coverage checker's and link finder's reports in their own views and any other report as JSON. It updates itself every 3 seconds while the job runs.
+- With the web console enabled, *Sign in* in the top bar signs in to the console and opens the same job there. A user already signed in to the console goes straight to it.
+- The JWT never reaches the browser. Tickets and view sessions live in memory, so a service restart ends them; a new click in the plugin opens a new link.
+
+An expired or reused link shows a page asking to open the job again from TestBench (`401`).
+
+### Reports
+
+`report_type` names the schema of `report`; the service stores the report as JSON and returns it unchanged. The plugin renders it; the [job page](#job-page-in-the-browser) shows it as the web console does.
+
+| `report_type`      | `report`                                                                                                  |
+| ------------------ | --------------------------------------------------------------------------------------------------------- |
+| `coverage_checker` | The [Coverage Checker](coverage-checker.md#report)'s `CoverageResult`.                                    |
+| `link_finder`      | The [Link Finder](link-finder.md#report)'s `LinkFinderResult`; not yet agreed on with the plugin.          |
+
+:::caution
+The report schemas are a contract with the plugin. A change to one, for example to `CoverageResult`, is a breaking change.
+:::
+
+Agents without a report type still have a job with status and progress, but `report_type` and `report` stay `null`.
+
+### Retention
+
+Jobs are kept in the same SQLite file as the [token usage](../configuration.md#service-settings) (`usage_file`). At startup, jobs older than `[testbench-ai-service.jobs] retention_days` (default 90) are deleted, and jobs still `running` become `failed` with the error "Aborted by a service restart", since a restart ends their runs. The error is written in the service's default `language`, so a German service writes "Durch Neustart des Service abgebrochen". See [Configuration](../configuration.md#jobs).
+
+---
+
 ## Authorization
 
 All agent endpoints require an **`Authorization` header** containing either a JWT token or a session token. The token is validated by calling the TestBench REST API.
@@ -143,6 +250,11 @@ Allowed project roles and required API token permissions differ per agent. See e
 - [Test Case Set Describer](test-case-set-describer.md#authorization)
 - [Defect Explainer](defect-explainer.md#authorization)
 - [Test Idea Generator](generate-test-ideas.md#authorization)
+- [Test Planner](test-planner.md#authorization)
+- [Link Finder](link-finder.md#authorization)
+- [Coverage Checker](coverage-checker.md#authorization)
+
+The permissions an OpenAI API key needs per agent are listed in [OpenAI Setup](../llm-providers/openai-setup.md#restrict-the-keys-permissions).
 
 For custom agents, implement your own permission and role checks inside `precheck()`. See [Custom Agent: 1. Implement the agent class](custom-agent.md#1-implement-the-agent-class) for details.
 

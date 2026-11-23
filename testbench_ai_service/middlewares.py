@@ -1,3 +1,4 @@
+import json
 import time
 from collections.abc import Awaitable, Callable
 from functools import wraps
@@ -9,7 +10,30 @@ from fastapi import Request, Response
 from starlette.concurrency import iterate_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from testbench_ai_service.log import logger
+from testbench_ai_service.log import log_in_request, logger
+from testbench_ai_service.utils.redaction import looks_like_credential_key
+
+
+class RequestScopeMiddleware:
+    """Mark every record logged while serving an HTTP or websocket request (design D4).
+
+    Records that carry no user are then ``request``-scoped and never reach the
+    activity view, whoever is looking. Websocket connections are requests too;
+    leaving them unmarked would let their records through as ``service``.
+
+    Deliberately set without a reset: uvicorn logs an unhandled exception after
+    the app returns, in the same per-request task, and that traceback belongs
+    to the request, not to the service. Each request runs in its own task with
+    its own context copy, so the value cannot leak into another request.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] in ("http", "websocket"):
+            log_in_request.set(True)
+        await self.app(scope, receive, send)
 
 
 class OutboundRequestLoggingMiddleware:
@@ -71,6 +95,33 @@ class OutboundRequestLoggingMiddleware:
         return response
 
 
+_REDACTED = "<redacted>"
+#: Bodies of these paths carry credentials as a whole and are never logged.
+_NEVER_LOG_BODY = frozenset({"/admin/api/session"})
+
+
+def _mask(value):
+    if isinstance(value, dict):
+        return {
+            key: _REDACTED if looks_like_credential_key(str(key)) else _mask(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_mask(item) for item in value]
+    return value
+
+
+def redact_body(path: str, text: str) -> str:
+    """Make a request or response body safe to log."""
+    if path in _NEVER_LOG_BODY:
+        return _REDACTED
+    try:
+        data = json.loads(text)
+    except ValueError:
+        return text
+    return json.dumps(_mask(data), ensure_ascii=False)
+
+
 class LoggingMiddleware(BaseHTTPMiddleware):
     async def dispatch(
         self, request: Request, call_next: Callable[..., Awaitable[Response]]
@@ -84,8 +135,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         if request.method in ("POST", "PUT", "PATCH"):
             body_bytes = await request.body()
             body_text = body_bytes.decode("utf-8", errors="replace") if body_bytes else ""
-            # TODO: sanitize body_text to remove sensitive info
-            logger.debug(f"Request Body: {body_text}")
+            logger.debug(f"Request Body: {redact_body(request.url.path, body_text)}")
 
         # Process request and get response
         response = await call_next(request)
@@ -105,8 +155,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 # For non-streaming responses fallback - may not apply often
                 response_body = getattr(response, "body", b"").decode("utf-8", errors="replace")
 
-            # TODO: sanitize response_body to remove sensitive info
-            logger.debug(f"Response Body: {response_body}")
+            logger.debug(f"Response Body: {redact_body(request.url.path, response_body)}")
 
         process_time = time.time() - start_time
         logger.debug(f"Processed in {process_time:.3f} seconds")

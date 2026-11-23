@@ -73,11 +73,13 @@ class TriggerAgentRequest(BaseModel):
 class TriggerAgentResponse(BaseModel):
     status: str
     warnings: list[str] | None = None
+    job_id: str
 
 
 class ExecutionContext(BaseModel):
     """Holds all resolved data and configuration for a single agent execution."""
 
+    agent_key: str
     user_key: str
     project_name: str
     project_key: str

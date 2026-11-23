@@ -1,0 +1,14 @@
+name: "Rater"
+summary: "Rate test case sets"
+description: "Rates test case sets."
+default_model: "gpt-5.5"
+default_variant: "Default"
+variants:
+  - name: "Default"
+    description: "Default rating."
+    model: "gpt-5.5"
+    messages:
+      - role: "system"
+        file: "system.jinja"
+      - role: "user"
+        file: "user.jinja"

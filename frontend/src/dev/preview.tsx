@@ -1,0 +1,442 @@
+/* Throwaway harness: mounts the real console against fixture responses so a
+   rendered screen can be compared against the artboard. Not shipped. */
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { App } from '../App'
+import { SessionProvider } from '../state/session'
+import 'primereact/resources/themes/lara-light-amber/theme.css'
+import '../styles/fonts.css'
+import '../styles/industry.css'
+import '../styles/brand.css'
+import '../styles/brand-orange.css'
+import '../styles/prime-bridge.css'
+
+const signedIn = !new URLSearchParams(location.search).has('login')
+
+const FIXTURES: Record<string, unknown> = {
+  '/admin/api/session': {
+    username: 'a.mueller',
+    roles: ['Administrator'],
+    is_admin: true,
+    tb_server_url: 'https://tb.example.com:9443/api/',
+    has_user_key: true,
+  },
+  '/admin/api/status': {
+    service: {
+      version: '1.0.1',
+      host: '127.0.0.1',
+      port: 8010,
+      debug: false,
+      uptime_seconds: 8040,
+      language: 'de',
+      started_at: '2026-11-18T08:00:00Z',
+      can_restart: true,
+    },
+    testbench: { url: 'https://tb.example.com:9443/api/', reachable: true, detail: null },
+    api_keys: [
+      { name: 'OPENAI_API_KEY', present: true },
+      { name: 'AZURE_OPENAI_API_KEY', present: true },
+      { name: 'ANTHROPIC_API_KEY', present: false },
+    ],
+    agents: { total: 4, enabled: 3, project_overrides: 2, projects: 2 },
+    in_flight_tasks: 0,
+    restart_required: [],
+    token_usage: {
+      available: true,
+      models: [
+        {
+          provider: 'openai',
+          model: 'gpt-5',
+          calls: 128,
+          input_tokens: 1843210,
+          output_tokens: 412877,
+          reasoning_tokens: 198340,
+          last_used: '2026-10-20T09:41:00+00:00',
+        },
+        {
+          provider: 'anthropic',
+          model: 'claude-sonnet-5',
+          calls: 37,
+          input_tokens: 402118,
+          output_tokens: 88412,
+          reasoning_tokens: 0,
+          last_used: '2026-10-19T16:02:00+00:00',
+        },
+      ],
+    },
+  },
+  '/admin/api/config': {
+    running: {
+      host: '127.0.0.1',
+      port: 8010,
+      language: 'de',
+      agents: {
+        test_case_set_reviewer: {
+          enabled: true,
+          prompt: {
+            variant: 'Gründlich',
+            vars: { tone: 'sachlich und sehr ausführlich formuliert' },
+          },
+        },
+      },
+    },
+    disk: {
+      host: '127.0.0.1',
+      port: 8010,
+      llm_config: {
+        extra_models: {
+          'gpt-5.5': { provider: 'openai', routing: 'reasoning' },
+          'claude-local-proxy': { provider: 'custom', routing: 'fallback' },
+        },
+      },
+      agents: {
+        test_case_set_reviewer: {
+          prompt: {
+            variant: 'Gründlich',
+            vars: { tone: 'sachlich und sehr ausführlich formuliert' },
+          },
+        },
+      },
+    },
+    config_path: 'C:/ProgramData/TestBench/config.toml',
+  },
+  '/admin/api/projects': {
+    projects: [
+      { name: 'Alpha', key: 'ALPHA' },
+      { name: 'Beta', key: 'BETA' },
+    ],
+    fetched_at: null,
+    source: 'testbench',
+    error: null,
+  },
+  '/admin/api/prompts/test': {
+    text: [
+      'Die Testfallmenge deckt die Anmeldung vollständig ab.',
+      '',
+      '- TC-12 und TC-14 prüfen denselben Pfad; einer davon genügt.',
+      '- Für gesperrte Konten fehlt ein Negativtest.',
+    ].join('\n'),
+    latency_ms: 1840,
+    usage: { input_tokens: 1234, output_tokens: 356, reasoning_tokens: 128 },
+    resolved: { provider: 'openai', model: 'gpt-5', credential_scope: 'global' },
+  },
+  '/admin/api/models': {
+    providers: [
+      {
+        provider: 'openai',
+        key_present: true,
+        models: [
+          { id: 'gpt-5', routing: 'adaptive', source: 'builtin' },
+          { id: 'gpt-5-mini', routing: 'adaptive', source: 'builtin' },
+        ],
+      },
+      {
+        provider: 'anthropic',
+        key_present: false,
+        models: [
+          { id: 'claude-opus-5-5', routing: 'adaptive', source: 'builtin' },
+          { id: 'claude-local-proxy', routing: 'fallback', source: 'config' },
+        ],
+      },
+    ],
+  },
+  '/admin/api/prompts': {
+    languages: [
+      {
+        lang: 'de',
+        prompts: [
+          {
+            agent: 'test_case_set_reviewer',
+            file: 'de/test_case_set_reviewer/prompt.yaml',
+            name: 'Testfallmengen-Prüfer',
+            variants: ['Gründlich', 'Kompakt'],
+            ok: true,
+            error: null,
+            used_by: [],
+          },
+        ],
+      },
+      {
+        lang: 'en',
+        prompts: [
+          {
+            agent: 'test_case_set_reviewer',
+            file: 'en/test_case_set_reviewer/prompt.yaml',
+            name: 'Test Case Set Reviewer',
+            variants: ['Thorough'],
+            ok: true,
+            error: null,
+            used_by: [],
+          },
+        ],
+      },
+    ],
+  },
+  '/admin/api/prompts/de/test_case_set_reviewer/meta': {
+    name: 'Testfallsatz-Review',
+    summary: null,
+    description: null,
+    default_model: 'gpt-4o',
+    default_variant: 'Gründlich',
+    variants: [
+      {
+        name: 'Gründlich',
+        description: null,
+        model: null,
+        vars: {
+          tone: {
+            name: 'Tonfall',
+            description: 'Wie die Rückmeldung formuliert wird',
+            value_type: 'string',
+            choices: null,
+            default_value: 'sachlich',
+            required: false,
+          },
+          notes: {
+            name: 'Hinweise',
+            description: null,
+            value_type: 'text',
+            choices: null,
+            default_value: null,
+            required: false,
+          },
+        },
+      },
+    ],
+  },
+  '/admin/api/prompts/de/test_case_set_reviewer': {
+    lang: 'de',
+    agent: 'test_case_set_reviewer',
+    file: 'de/test_case_set_reviewer/prompt.yaml',
+    name: 'Testfallmengen-Prüfer',
+    summary: 'Prüft eine Testfallmenge auf Vollständigkeit und Konsistenz.',
+    description:
+      'Bewertet die übergebene Testfallmenge gegenüber den Anforderungen und liefert eine strukturierte Rückmeldung.',
+    default_model: 'gpt-5.5',
+    default_variant: 'Gründlich',
+    variants: [
+      {
+        name: 'Gründlich',
+        description: 'Ausführliche Prüfung mit Begründung',
+        model: null,
+        vars: {
+          tone: {
+            name: 'tone',
+            description: 'Ton der Rückmeldung',
+            value_type: 'string',
+            choices: null,
+            default_value: 'sachlich',
+            required: false,
+          },
+        },
+        messages: [
+          {
+            role: 'system',
+            source: 'file',
+            file: 'gruendlich_system.jinja',
+            content: 'Du bist ein gründlicher Prüfer für Testfallmengen.',
+            readable: true,
+          },
+          {
+            role: 'user',
+            source: 'inline',
+            file: null,
+            content: 'Prüfe {{ agent.test_case_set }} im Ton {{ vars.tone }}',
+            readable: true,
+          },
+        ],
+      },
+      {
+        name: 'Kompakt',
+        description: null,
+        model: null,
+        vars: {},
+        messages: [
+          {
+            role: 'user',
+            source: 'inline',
+            file: null,
+            content: 'Kurzprüfung von {{ agent.test_case_set }}',
+            readable: true,
+          },
+        ],
+      },
+    ],
+    agent_context_skeleton: { test_case_set: '', test_cases: [], project_name: '' },
+    agent_context_sample: {
+      test_case_set: '<str>',
+      parameter_combinations: '<str | None>',
+      test_case_set_description: '<str | None>',
+      test_case_set_obj: {
+        details: {
+          uniqueID: '<str>',
+          name: '<str>',
+          spec: { description: '<str>', status: '<SpecStatus>', tags: ['<Tag>'] },
+          testCases: [{ uniqueID: '<str>', index: '<int>' }],
+        },
+        test_cases: { '<key>': { uniqueID: '<str>' } },
+      },
+    },
+  },
+}
+
+const ACTIVITY = [
+  {
+    timestamp: '2026-09-10T10:02:12.000+00:00',
+    level: 'ERROR',
+    source: 'testbench_ai_service',
+    message: 'Agent failed: Azure deployment gpt-4o-mini returned 429',
+    scope: 'user',
+    agent: 'test_case_set_reviewer',
+    project_key: 'p-1',
+    run_id: 'r1',
+    exc: 'Traceback (most recent call last):\n  File "llm.py", line 42, in call\nRuntimeError: 429 Too Many Requests',
+  },
+  {
+    timestamp: '2026-09-10T10:02:01.000+00:00',
+    level: 'INFO',
+    source: 'testbench_ai_service',
+    message: 'Agent started',
+    scope: 'user',
+    agent: 'test_case_set_reviewer',
+    project_key: 'p-1',
+    run_id: 'r1',
+    exc: null,
+  },
+  {
+    timestamp: '2026-09-10T09:14:02.000+00:00',
+    level: 'INFO',
+    source: 'uvicorn.error',
+    message: 'Application startup complete.',
+    scope: 'service',
+    agent: null,
+    project_key: null,
+    run_id: null,
+    exc: null,
+  },
+]
+
+const JOB_BASE = {
+  project_key: 'KP',
+  project_name: 'Kundenportal',
+  root_key: null,
+  root_uid: null,
+  error: null,
+  warnings: [],
+  progress: null,
+  report_type: null,
+  report: null,
+}
+const JOBS = [
+  {
+    ...JOB_BASE,
+    job_id: 'j1',
+    agent_key: 'coverage_checker',
+    item_ids: ['REQ-42'],
+    status: 'succeeded',
+    warnings: ['Testfallset „Login › Passwort vergessen“ ist nicht freigegeben.'],
+    report_type: 'coverage_checker',
+    created_at: '2026-09-10T10:41:57+00:00',
+    updated_at: '2026-09-10T10:42:38+00:00',
+    finished_at: '2026-09-10T10:42:38+00:00',
+    report: {
+      requirement_key: 'REQ-42',
+      aspects: [
+        ['a1', 'covered', 'Ein falsches Passwort erhöht den Fehlerzähler.', 'TS-7', 'TC-12'],
+        ['a2', 'covered', 'Nach dem dritten Fehlversuch wird das Konto gesperrt.', 'TS-8', 'TC-14'],
+        [
+          'a3',
+          'weak',
+          'Ein gesperrter Nutzer sieht einen Hinweis mit der Wartezeit.',
+          'TS-8',
+          'TC-15',
+        ],
+        ['a4', 'missing', 'Die Sperre hebt sich nach 15 Minuten von selbst auf.', null, null],
+      ].map(([id, status, statement, set, tc]) => ({
+        aspect: { id, statement, kind: 'happy_path', source_quote: statement },
+        status,
+        weak_reason: status === 'weak' ? 'only_partial' : null,
+        evidence: set
+          ? [{ set_key: set, test_case_key: tc, strength: 'full', evidence: 'Prüft genau das.' }]
+          : [],
+        gap_reason: status === 'missing' ? 'Kein Testfall prüft die Entsperrung.' : null,
+        suggested_test:
+          status === 'missing'
+            ? { title: 'Entsperrung nach 15 Minuten', description: 'Sperren, warten, anmelden.' }
+            : null,
+      })),
+      sets_without_evidence: [{ set_key: 'TS-9', reason: 'no_matching_aspect' }],
+      skipped_comments: ['TS-9'],
+      reduced_mode: false,
+      incomplete: false,
+      set_paths: {
+        'TS-7': 'Login / Anmeldung',
+        'TS-8': 'Login / Sperre',
+        'TS-9': 'Login / Passwort',
+      },
+    },
+  },
+  {
+    ...JOB_BASE,
+    job_id: 'j2',
+    agent_key: 'coverage_checker',
+    item_ids: ['REQ-17'],
+    status: 'running',
+    progress: { done: 3, total: 7, text: 'Testfallset 2 von 3' },
+    created_at: '2026-09-10T10:40:12+00:00',
+    updated_at: '2026-09-10T10:40:50+00:00',
+    finished_at: null,
+  },
+  {
+    ...JOB_BASE,
+    job_id: 'j3',
+    agent_key: 'test_case_set_reviewer',
+    item_ids: ['TS-118'],
+    status: 'failed',
+    error: 'TestBench antwortete mit 403.',
+    created_at: '2026-09-09T09:12:30+00:00',
+    updated_at: '2026-09-09T09:12:41+00:00',
+    finished_at: '2026-09-09T09:12:41+00:00',
+  },
+]
+FIXTURES['/admin/api/jobs'] = JOBS.map(({ report: _report, ...summary }) => summary)
+for (const job of JOBS) FIXTURES[`/admin/api/jobs/${job.job_id}`] = job
+
+window.fetch = (async (input: RequestInfo | URL) => {
+  const url = String(typeof input === 'string' ? input : ((input as Request).url ?? input))
+  const path = url.split('?')[0]
+  const body = path.startsWith('/admin/api/activity') ? ACTIVITY : FIXTURES[path]
+  if (body === undefined || (path === '/admin/api/session' && !signedIn)) {
+    return new Response('{"detail":"no"}', { status: 401 })
+  }
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}) as typeof fetch
+
+const queryClient = new QueryClient({
+  defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } },
+})
+
+// A data router, matching main.tsx -- PromptEditor's `useBlocker` needs one.
+const router = createBrowserRouter([
+  {
+    path: '*',
+    element: (
+      <SessionProvider>
+        <App />
+      </SessionProvider>
+    ),
+  },
+])
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  </StrictMode>,
+)

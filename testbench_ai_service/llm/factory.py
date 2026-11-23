@@ -1,4 +1,3 @@
-import os
 import re
 from typing import Any
 
@@ -8,10 +7,11 @@ from testbench_ai_service.llm.azure_auth import (
     create_token_provider,
     resolve_entra_credentials,
 )
-from testbench_ai_service.llm.base import AzureAuthMethod, LLMClient, LLMProvider
+from testbench_ai_service.llm.base import AzureAuthMethod, LLMClient, LLMProvider, RoutingFamily
+from testbench_ai_service.llm.credentials import get_api_key, get_project_api_key, uses_entra_id
 from testbench_ai_service.llm.openai import AzureOpenAIClient, OpenAIClient
 from testbench_ai_service.log import logger
-from testbench_ai_service.models.config import LLMConfig
+from testbench_ai_service.models.config import LLMConfig, resolved_extra_models
 from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.naming import normalize_project_name
 
@@ -75,6 +75,33 @@ class LLMFactory:
 
         return self._clients[global_key]
 
+    def has_project_credential(
+        self, project_name: str, provider: LLMProvider, config: LLMConfig
+    ) -> bool:
+        """Whether a project-specific credential exists for this provider.
+
+        A thin wrapper over the exact call ``get_client`` makes, so the console
+        can report which credential a run used without restating the
+        environment-variable naming rules (design D4). A credential resolver
+        that raises is reported as "no project credential" rather than
+        propagating: this is a reporting aid, and the real failure surfaces on
+        the call itself.
+        """
+        try:
+            return self._get_project_credential(project_name, provider, config) is not None
+        except Exception:
+            return False
+
+    def resolve_provider(self, config: LLMConfig, prompt_model: str | None) -> LLMProvider:
+        """Which provider this model routes to -- the same answer get_client uses.
+
+        Public because the console reports the resolved route back to the
+        operator (design D4) and must not reach into a private method to do
+        it. Delegates rather than reimplements: a second copy of the prefix
+        rules would be a second thing to keep in step.
+        """
+        return self._resolve_provider(config, prompt_model)
+
     async def close_clients(self):
         """
         Close all cached clients.
@@ -99,7 +126,7 @@ class LLMFactory:
         """
         if prompt_model is not None:
             if self._is_openai_model(prompt_model):
-                if config.provider in (LLMProvider.AZURE_OPENAI):
+                if config.provider == LLMProvider.AZURE_OPENAI:
                     return config.provider
                 return LLMProvider.OPENAI
             if prompt_model.startswith("claude-"):
@@ -110,15 +137,7 @@ class LLMFactory:
         """
         Load the API key from environment variables using the pattern '{PROVIDER}_API_KEY'.
         """
-        if provider == LLMProvider.CUSTOM:
-            return None  # Do not force 'CUSTOM_API_KEY' as environment variable
-        env_key = f"{provider.value.upper()}_API_KEY"
-        api_key = os.getenv(env_key)
-        if not api_key:
-            raise ValueError(
-                f"API key for provider '{provider.value}' not found in environment variables."
-            )
-        return api_key
+        return get_api_key(provider)
 
     def _normalize_project_name(self, project_name: str) -> str:
         """
@@ -130,18 +149,13 @@ class LLMFactory:
         """
         Load the project API key from environment variables using the pattern '{NORMALIZED_PROJECT_NAME}_{PROVIDER}_API_KEY'.
         """
-        normalized = self._normalize_project_name(project_name)
-        env_key = f"{normalized}_{provider.value.upper()}_API_KEY"
-        return os.getenv(env_key)
+        return get_project_api_key(project_name, provider)
 
     def _uses_entra_id(self, provider: LLMProvider, config: LLMConfig) -> bool:
         """
         Return True when this provider/config combination authenticates via Entra ID.
         """
-        return (
-            provider == LLMProvider.AZURE_OPENAI
-            and config.auth_method == AzureAuthMethod.ENTRA_ID
-        )
+        return uses_entra_id(provider, config)
 
     def _get_credential(
         self, provider: LLMProvider, config: LLMConfig
@@ -172,7 +186,7 @@ class LLMFactory:
         """
         Create an LLM client instance using the given LLMConfig and credential.
         """
-        common_kwargs = self._get_common_client_kwargs(config)
+        common_kwargs = self._get_common_client_kwargs(config, provider)
 
         if provider == LLMProvider.OPENAI:
             return OpenAIClient(api_key=self._as_api_key(credential), **common_kwargs)
@@ -197,9 +211,7 @@ class LLMFactory:
         Narrow a credential to an API key, rejecting Entra ID credentials.
         """
         if isinstance(credential, EntraIdCredentials):
-            raise ValueError(
-                "Entra ID credentials are only supported for provider 'azure_openai'."
-            )
+            raise ValueError("Entra ID credentials are only supported for provider 'azure_openai'.")
         return credential
 
     def _create_azure_client(
@@ -248,10 +260,50 @@ class LLMFactory:
             **common_kwargs,
         )
 
-    def _get_common_client_kwargs(self, config: LLMConfig) -> dict[str, Any]:
+    def _get_common_client_kwargs(self, config: LLMConfig, provider: LLMProvider) -> dict[str, Any]:
+        """Kwargs passed to every provider SDK client.
+
+        'timeout' and 'max_retries' are declared fields (the console renders
+        them), so they are read off the model. Only an explicitly-set value is
+        forwarded: passing None would override the SDK's own default with
+        nothing. '_strict_response_validation' stays undeclared -- it is a
+        private SDK flag, not a configuration surface -- so it still comes from
+        model_extra.
+
+        'model_routing' is filtered to *provider* so an OpenAI entry never
+        reaches the Anthropic client, and is omitted entirely when empty: a
+        third-party CUSTOM client should see exactly the kwargs it saw before
+        this field existed.
+
+        It is never forwarded to CUSTOM at all, empty or not. `_create_client`
+        splats these kwargs into a class the operator named, and a third-party
+        `__init__` that spells out `timeout` and `max_retries` without a
+        `**kwargs` catch-all raises TypeError on an unexpected one -- at
+        `init_clients` during startup and at every `reload.apply`, taking down
+        all four production agents rather than just the console. Nothing is
+        lost: a CUSTOM client implements its own dispatch, so the routing
+        family is decorative there, which is why `fallback` is the only value
+        ALLOWED_ROUTING permits for it (design 5.3).
+        """
+        kwargs: dict[str, Any] = {}
+        if config.timeout is not None:
+            kwargs["timeout"] = config.timeout
+        if config.max_retries is not None:
+            kwargs["max_retries"] = config.max_retries
+
+        if provider != LLMProvider.CUSTOM:
+            model_routing: dict[str, RoutingFamily] = {
+                name: entry.routing
+                for name, entry in resolved_extra_models(config).items()
+                if entry.provider == provider
+            }
+            if model_routing:
+                kwargs["model_routing"] = model_routing
+
         extra = config.model_extra or {}
-        allowed_keys = {"timeout", "max_retries", "_strict_response_validation"}
-        return {key: value for key, value in extra.items() if key in allowed_keys}
+        if "_strict_response_validation" in extra:
+            kwargs["_strict_response_validation"] = extra["_strict_response_validation"]
+        return kwargs
 
     def _get_deployment_mapping(self, config: LLMConfig) -> dict[str, str] | None:
         extra = config.model_extra or {}

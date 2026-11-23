@@ -23,6 +23,7 @@ from testbench_ai_service.exceptions import (
     handle_requests_http_error,
     handle_requests_transport_error,
 )
+from testbench_ai_service.jobs.store import JobStore, get_job_store
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.models.agent import (
     AgentDetailsResponse,
@@ -31,9 +32,11 @@ from testbench_ai_service.models.agent import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.prompt import PromptDetailsResponse, PromptVariantResponse
+from testbench_ai_service.usage import UsageStore, get_usage_store
 from testbench_ai_service.utils.config import get_agent_config, get_prompt_config
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 from testbench_ai_service.utils.testbench import get_project_name
+from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 
 router = APIRouter()
 
@@ -54,7 +57,10 @@ def _resolve_project_name(conn: TBConnection, project_key: str | None) -> str | 
 
 
 @router.get("/", include_in_schema=False)
-async def redirect_to_docs(request: Request):
+async def redirect_to_start_page(request: Request):
+    """Send the browser to the web console, or to Swagger when it is disabled."""
+    if request.app.state.config.admin_ui.enabled:
+        return RedirectResponse(url="/admin/")
     return RedirectResponse(url=request.app.docs_url)
 
 
@@ -197,6 +203,9 @@ async def trigger_agent(
     llm_factory: LLMFactory = Depends(get_llm_factory),
     app_config: AppConfig = Depends(get_app_config),
     auth_info: AuthInfo = Depends(validate_auth_token),
+    registry: TaskRegistry = Depends(get_task_registry),
+    usage_store: UsageStore = Depends(get_usage_store),
+    job_store: JobStore = Depends(get_job_store),
 ) -> TriggerAgentResponse:
     return await trigger_agent_execution(
         agent_key=agent_key,
@@ -206,4 +215,7 @@ async def trigger_agent(
         llm_factory=llm_factory,
         app_config=app_config,
         auth_info=auth_info,
+        registry=registry,
+        usage_store=usage_store,
+        job_store=job_store,
     )

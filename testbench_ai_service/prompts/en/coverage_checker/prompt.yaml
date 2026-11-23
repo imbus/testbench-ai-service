@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../../prompt.schema.json
+
+name: "Coverage Checker"
+summary: "Check whether the tests linked to a requirement prove all its aspects"
+description: >
+  This agent splits the requirement it was triggered on into testable aspects, reads the
+  test cases linked to it and builds a coverage matrix. The result is added to the review
+  comment of every linked test case set and written to the service log. Links and test
+  elements are never changed.
+default_model: "gpt-5.5"
+default_variant: "Coverage check"
+variants:
+  - name: "Coverage check"
+    description: "Checks the linked tests against every aspect of the requirement and explains the gaps."
+    vars:
+      write_review_comments:
+        name: "Write review comments"
+        description: "Off: the result only goes to the service log."
+        value_type: "boolean"
+        default_value: true
+        required: false
+      coverage_view:
+        name: "Coverage view"
+        description: "release: only test case sets in review or released count. work: unfinished sets count too."
+        value_type: "enum"
+        choices: ["release", "work"]
+        default_value: "release"
+        required: false
+    messages: []
+    steps:
+      aspects:
+        - role: "system"
+          file: "aspects_system.jinja"
+        - role: "user"
+          file: "aspects_user.jinja"
+      interpretation:
+        - role: "system"
+          file: "interpretation_system.jinja"
+        - role: "user"
+          file: "interpretation_user.jinja"
+      gaps:
+        - role: "system"
+          file: "gaps_system.jinja"
+        - role: "user"
+          file: "gaps_user.jinja"

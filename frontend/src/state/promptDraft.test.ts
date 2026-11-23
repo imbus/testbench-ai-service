@@ -1,0 +1,635 @@
+import { describe, expect, it } from 'vitest'
+
+import type { PromptDocument, PromptMessageDoc } from '../api/types'
+import {
+  changedFiles,
+  isDirty,
+  isMessageDirty,
+  isMetaDirty,
+  isStepMessageDirty,
+  isVariantDirty,
+  promptDraftReducer as reduce,
+  withMessageUids,
+  withoutMessageUids,
+} from './promptDraft'
+import { defaultTemplateName } from '../api/prompts'
+
+const base: PromptDocument = {
+  lang: 'de',
+  agent: 'explainer',
+  file: 'de/explainer/prompt.yaml',
+  name: 'E',
+  summary: null,
+  description: null,
+  default_model: 'm',
+  default_variant: 'A',
+  variants: [
+    {
+      name: 'A',
+      description: null,
+      model: null,
+      vars: {},
+      messages: [
+        { role: 'system', source: 'file', file: 'sys.jinja', content: 'S', readable: true },
+        { role: 'user', source: 'inline', file: null, content: 'U', readable: true },
+      ],
+    },
+  ],
+  agent_context_skeleton: {},
+}
+
+function documentWith(messages: PromptMessageDoc[]): PromptDocument {
+  return {
+    lang: 'de',
+    agent: 'test',
+    file: 'de/test/prompt.yaml',
+    name: 'Test',
+    summary: null,
+    description: null,
+    default_model: 'test-model',
+    default_variant: 'A',
+    variants: [
+      {
+        name: 'A',
+        description: null,
+        model: null,
+        vars: {},
+        messages,
+      },
+    ],
+    agent_context_skeleton: {},
+  }
+}
+
+describe('header', () => {
+  it('sets a header field', () => {
+    expect(reduce(base, { type: 'setHeader', field: 'name', value: 'Neu' }).name).toBe('Neu')
+  })
+  it('does not mutate the input', () => {
+    reduce(base, { type: 'setHeader', field: 'name', value: 'Neu' })
+    expect(base.name).toBe('E')
+  })
+})
+
+describe('variants', () => {
+  it('adds a variant', () => {
+    const next = reduce(base, { type: 'addVariant', name: 'B', uid: 'n1' })
+    expect(next.variants.map((v) => v.name)).toEqual(['A', 'B'])
+  })
+  it('renames a variant', () => {
+    expect(reduce(base, { type: 'renameVariant', from: 'A', to: 'Z' }).variants[0].name).toBe('Z')
+  })
+  it("refuses a rename onto another variant's name", () => {
+    // Variants are found by name: two of one name would be renamed together.
+    const two = reduce(base, { type: 'addVariant', name: 'B', uid: 'n1' })
+    expect(reduce(two, { type: 'renameVariant', from: 'B', to: 'A' })).toBe(two)
+  })
+  it('refuses an empty name', () => {
+    expect(reduce(base, { type: 'renameVariant', from: 'A', to: ' ' })).toBe(base)
+  })
+  it('repoints default_variant when the default is renamed', () => {
+    expect(reduce(base, { type: 'renameVariant', from: 'A', to: 'Z' }).default_variant).toBe('Z')
+  })
+  it('removes a variant', () => {
+    const two = reduce(base, { type: 'addVariant', name: 'B', uid: 'n1' })
+    expect(reduce(two, { type: 'removeVariant', name: 'A' }).variants.map((v) => v.name)).toEqual([
+      'B',
+    ])
+  })
+  it('refuses to remove the last variant', () => {
+    // PromptDefinition requires at least one; the UI must not build an invalid doc.
+    expect(reduce(base, { type: 'removeVariant', name: 'A' }).variants).toHaveLength(1)
+  })
+  it('repoints default_variant to the first remaining variant when the default is removed', () => {
+    const two = reduce(base, { type: 'addVariant', name: 'B', uid: 'n1' })
+    expect(two.default_variant).toBe('A')
+    const next = reduce(two, { type: 'removeVariant', name: 'A' })
+    expect(next.variants.map((v) => v.name)).toEqual(['B'])
+    expect(next.default_variant).toBe('B')
+  })
+})
+
+describe('variables', () => {
+  it('adds a declaration with a usable default type', () => {
+    const next = reduce(base, { type: 'addVar', variant: 'A', key: 'tone' })
+    expect(next.variants[0].vars.tone.value_type).toBe('string')
+  })
+  it('removes a declaration', () => {
+    const added = reduce(base, { type: 'addVar', variant: 'A', key: 'tone' })
+    expect(
+      reduce(added, { type: 'removeVar', variant: 'A', key: 'tone' }).variants[0].vars,
+    ).toEqual({})
+  })
+  it('clears choices when the type stops being enum', () => {
+    let next = reduce(base, { type: 'addVar', variant: 'A', key: 'tone' })
+    next = reduce(next, {
+      type: 'editVar',
+      variant: 'A',
+      key: 'tone',
+      decl: { ...next.variants[0].vars.tone, value_type: 'enum', choices: ['a'] },
+    })
+    next = reduce(next, {
+      type: 'editVar',
+      variant: 'A',
+      key: 'tone',
+      decl: { ...next.variants[0].vars.tone, value_type: 'string' },
+    })
+    // PromptVariableDefinition rejects choices on a non-enum type.
+    expect(next.variants[0].vars.tone.choices).toBeNull()
+  })
+  it('normalises a null choices to an empty array when the type becomes enum', () => {
+    let next = reduce(base, { type: 'addVar', variant: 'A', key: 'tone' })
+    // addVar's default decl has value_type 'string' and choices null.
+    next = reduce(next, {
+      type: 'editVar',
+      variant: 'A',
+      key: 'tone',
+      decl: { ...next.variants[0].vars.tone, value_type: 'enum' },
+    })
+    // PromptVariableDefinition.validate_choices requires non-empty choices on
+    // 'enum'; null would 422 the save, so the reducer must not pass it through.
+    expect(next.variants[0].vars.tone.choices).toEqual([])
+  })
+})
+
+describe('messages', () => {
+  it('adds an inline message', () => {
+    const next = reduce(base, { type: 'addMessage', variant: 'A', uid: 'n1' })
+    expect(next.variants[0].messages).toHaveLength(3)
+    expect(next.variants[0].messages[2].source).toBe('inline')
+  })
+  it('sets content', () => {
+    const next = reduce(base, { type: 'setMessageContent', variant: 'A', index: 1, content: 'X' })
+    expect(next.variants[0].messages[1].content).toBe('X')
+  })
+  it('sets a role', () => {
+    const next = reduce(base, { type: 'setMessageRole', variant: 'A', index: 1, role: 'assistant' })
+    expect(next.variants[0].messages[1].role).toBe('assistant')
+  })
+  it('moves a message', () => {
+    const next = reduce(base, { type: 'moveMessage', variant: 'A', index: 0, to: 1 })
+    expect(next.variants[0].messages.map((m) => m.role)).toEqual(['user', 'system'])
+  })
+  it('ignores a move off either end', () => {
+    expect(reduce(base, { type: 'moveMessage', variant: 'A', index: 0, to: -1 })).toEqual(base)
+    expect(reduce(base, { type: 'moveMessage', variant: 'A', index: 1, to: 2 })).toEqual(base)
+  })
+  it('ignores a move whose source index is out of range, without corrupting the array', () => {
+    const next = reduce(base, { type: 'moveMessage', variant: 'A', index: 5, to: 0 })
+    expect(next).toEqual(base)
+    expect(next.variants[0].messages).toHaveLength(2)
+    expect(next.variants[0].messages.every((m) => m !== undefined)).toBe(true)
+  })
+  it('ignores a move whose source index is negative', () => {
+    // A negative index would otherwise hit JS's negative-splice semantics and
+    // silently move the last message instead of being a no-op.
+    expect(reduce(base, { type: 'moveMessage', variant: 'A', index: -1, to: 0 })).toEqual(base)
+  })
+  it('removes a message', () => {
+    expect(
+      reduce(base, { type: 'removeMessage', variant: 'A', index: 0 }).variants[0].messages,
+    ).toHaveLength(1)
+  })
+  it('refuses to remove the last message', () => {
+    const one = reduce(base, { type: 'removeMessage', variant: 'A', index: 0 })
+    expect(
+      reduce(one, { type: 'removeMessage', variant: 'A', index: 0 }).variants[0].messages,
+    ).toHaveLength(1)
+  })
+})
+
+describe('shared template files', () => {
+  // build_write_set guarantees two messages naming the same `file` start out
+  // identical, and 409s otherwise -- so editing one must edit both, or the
+  // draft drifts into a state the backend will refuse to save.
+  const shared: PromptDocument = {
+    ...base,
+    variants: [
+      base.variants[0],
+      {
+        name: 'B',
+        description: null,
+        model: null,
+        vars: {},
+        messages: [
+          { role: 'system', source: 'file', file: 'sys.jinja', content: 'S', readable: true },
+        ],
+      },
+    ],
+  }
+
+  it('editing a file-backed message updates a message in another variant sharing the same file', () => {
+    const next = reduce(shared, {
+      type: 'setMessageContent',
+      variant: 'A',
+      index: 0,
+      content: 'S2',
+    })
+    expect(next.variants[0].messages[0].content).toBe('S2')
+    expect(next.variants[1].messages[0].content).toBe('S2')
+  })
+
+  it('editing an inline message does not touch any other message', () => {
+    const next = reduce(shared, {
+      type: 'setMessageContent',
+      variant: 'A',
+      index: 1,
+      content: 'U2',
+    })
+    expect(next.variants[0].messages[1].content).toBe('U2')
+    expect(next.variants[0].messages[0].content).toBe('S')
+    expect(next.variants[1].messages[0].content).toBe('S')
+  })
+
+  it('names the shared template exactly once after such an edit', () => {
+    const next = reduce(shared, {
+      type: 'setMessageContent',
+      variant: 'B',
+      index: 0,
+      content: 'S3',
+    })
+    expect(changedFiles(shared, next)).toEqual(['sys.jinja'])
+  })
+
+  it('leaves no divergence between the two messages sharing a file after an edit', () => {
+    const next = reduce(shared, {
+      type: 'setMessageContent',
+      variant: 'A',
+      index: 0,
+      content: 'S4',
+    })
+    const contents = next.variants.flatMap((v) =>
+      v.messages.filter((m) => m.source === 'file' && m.file === 'sys.jinja').map((m) => m.content),
+    )
+    expect(contents).toEqual(['S4', 'S4'])
+  })
+})
+
+describe('isDirty and changedFiles', () => {
+  it('is clean against itself', () => expect(isDirty(base, base)).toBe(false))
+  it('is dirty after an edit', () => {
+    expect(isDirty(base, reduce(base, { type: 'setHeader', field: 'name', value: 'N' }))).toBe(true)
+  })
+  it('names the yaml when the header changed', () => {
+    const next = reduce(base, { type: 'setHeader', field: 'name', value: 'N' })
+    expect(changedFiles(base, next)).toEqual(['de/explainer/prompt.yaml'])
+  })
+  it('names a template when only its body changed', () => {
+    const next = reduce(base, { type: 'setMessageContent', variant: 'A', index: 0, content: 'S2' })
+    expect(changedFiles(base, next)).toEqual(['sys.jinja'])
+  })
+  it('names both when the yaml and a template changed', () => {
+    let next = reduce(base, { type: 'setMessageContent', variant: 'A', index: 0, content: 'S2' })
+    next = reduce(next, { type: 'setHeader', field: 'name', value: 'N' })
+    expect(changedFiles(base, next).sort()).toEqual(['de/explainer/prompt.yaml', 'sys.jinja'])
+  })
+  it('names nothing when nothing changed', () => expect(changedFiles(base, base)).toEqual([]))
+})
+
+describe('message source', () => {
+  it('proposes the house naming convention when a message moves into a file', () => {
+    expect(defaultTemplateName('Detailed Explanation', 'system')).toBe(
+      'detailed_explanation_system.jinja',
+    )
+    expect(defaultTemplateName('Kompakte Prüfung', 'user')).toBe('kompakte_prufung_user.jinja')
+  })
+
+  it('carries the body across inline -> file', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'inline', file: null, content: 'hallo', readable: true },
+    ])
+    const next = reduce(doc, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 0,
+      source: 'file',
+    })
+    const message = next.variants[0].messages[0]
+    expect(message.source).toBe('file')
+    expect(message.file).toBe('a_user.jinja')
+    expect(message.content).toBe('hallo')
+    expect(message.readable).toBe(true)
+  })
+
+  it('carries the body across file -> inline and drops the reference', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'file', file: 'a_user.jinja', content: 'body', readable: true },
+    ])
+    const next = reduce(doc, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 0,
+      source: 'inline',
+    })
+    const message = next.variants[0].messages[0]
+    expect(message.source).toBe('inline')
+    expect(message.file).toBeNull()
+    expect(message.content).toBe('body')
+  })
+
+  it('renames the reference without touching the body', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'file', file: 'old.jinja', content: 'body', readable: true },
+    ])
+    const next = reduce(doc, {
+      type: 'setMessageFile',
+      variant: 'A',
+      index: 0,
+      file: 'new.jinja',
+    })
+    expect(next.variants[0].messages[0].file).toBe('new.jinja')
+    expect(next.variants[0].messages[0].content).toBe('body')
+  })
+
+  it('leaves an out-of-range index alone', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'inline', file: null, content: 'x', readable: true },
+    ])
+    expect(
+      reduce(doc, { type: 'setMessageSource', variant: 'A', index: 7, source: 'file' }),
+    ).toEqual(doc)
+  })
+
+  it('deduplicates when two user messages move to file', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'inline', file: null, content: 'first', readable: true },
+      { role: 'user', source: 'inline', file: null, content: 'second', readable: true },
+    ])
+    const next = reduce(doc, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 0,
+      source: 'file',
+    })
+    const msg0 = next.variants[0].messages[0]
+    const msg1 = next.variants[0].messages[1]
+    expect(msg0.source).toBe('file')
+    expect(msg1.source).toBe('inline')
+    expect(msg0.file).toBe('a_user.jinja')
+    expect(msg1.file).toBeNull()
+    expect(msg0.content).toBe('first')
+    expect(msg1.content).toBe('second')
+  })
+
+  it('deduplicates when both messages move to file and would share a base name', () => {
+    const doc = documentWith([
+      { role: 'user', source: 'inline', file: null, content: 'first', readable: true },
+      { role: 'user', source: 'inline', file: null, content: 'second', readable: true },
+    ])
+    let next = reduce(doc, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 0,
+      source: 'file',
+    })
+    next = reduce(next, {
+      type: 'setMessageSource',
+      variant: 'A',
+      index: 1,
+      source: 'file',
+    })
+    const msg0 = next.variants[0].messages[0]
+    const msg1 = next.variants[0].messages[1]
+    expect(msg0.file).toBe('a_user.jinja')
+    expect(msg1.file).toBe('a_user_2.jinja')
+    expect(msg0.content).toBe('first')
+    expect(msg1.content).toBe('second')
+  })
+
+  it('handles the variant fallback when multiple non-Latin variants slug to "variant"', () => {
+    const docWithNonLatin: PromptDocument = {
+      ...documentWith([
+        { role: 'user', source: 'inline', file: null, content: 'first', readable: true },
+        { role: 'user', source: 'inline', file: null, content: 'second', readable: true },
+      ]),
+      variants: [
+        {
+          name: '中文',
+          description: null,
+          model: null,
+          vars: {},
+          messages: [
+            { role: 'user', source: 'inline', file: null, content: 'first', readable: true },
+            { role: 'user', source: 'inline', file: null, content: 'second', readable: true },
+          ],
+        },
+      ],
+    }
+    let next = reduce(docWithNonLatin, {
+      type: 'setMessageSource',
+      variant: '中文',
+      index: 0,
+      source: 'file',
+    })
+    next = reduce(next, {
+      type: 'setMessageSource',
+      variant: '中文',
+      index: 1,
+      source: 'file',
+    })
+    const msg0 = next.variants[0].messages[0]
+    const msg1 = next.variants[0].messages[1]
+    expect(msg0.file).toBe('variant_user.jinja')
+    expect(msg1.file).toBe('variant_user_2.jinja')
+  })
+})
+
+describe('message uids', () => {
+  it('gives every message a distinct uid', () => {
+    const doc = withMessageUids(base)
+    const uids = doc.variants[0].messages.map((m) => m.uid)
+    expect(uids.every((uid) => typeof uid === 'string' && uid.length > 0)).toBe(true)
+    expect(new Set(uids).size).toBe(2)
+  })
+
+  it('adopts the previous draft uids by variant name and position', () => {
+    const before = withMessageUids(base)
+    // The save reload: same positions, new objects.
+    const after = withMessageUids(structuredClone(base), before)
+    expect(after.variants[0].messages.map((m) => m.uid)).toEqual(
+      before.variants[0].messages.map((m) => m.uid),
+    )
+  })
+
+  it('keeps uids through a move, so a reload after saving a move keeps them too', () => {
+    const loaded = withMessageUids(base)
+    const moved = reduce(loaded, { type: 'moveMessage', variant: 'A', index: 0, to: 1 })
+    const reloaded = withMessageUids(
+      {
+        ...base,
+        variants: [
+          {
+            ...base.variants[0],
+            messages: [base.variants[0].messages[1], base.variants[0].messages[0]],
+          },
+        ],
+      },
+      moved,
+    )
+    expect(reloaded.variants[0].messages.map((m) => m.uid)).toEqual(
+      moved.variants[0].messages.map((m) => m.uid),
+    )
+  })
+
+  it('gives fresh uids where the previous draft has no counterpart', () => {
+    const before = withMessageUids(base)
+    const grown = {
+      ...base,
+      variants: [
+        {
+          ...base.variants[0],
+          messages: [
+            ...base.variants[0].messages,
+            {
+              role: 'user' as const,
+              source: 'inline' as const,
+              file: null,
+              content: 'X',
+              readable: true,
+            },
+          ],
+        },
+      ],
+    }
+    const after = withMessageUids(grown, before)
+    expect(after.variants[0].messages[2].uid).toBeTruthy()
+    expect(before.variants[0].messages.map((m) => m.uid)).not.toContain(
+      after.variants[0].messages[2].uid,
+    )
+  })
+
+  it('uses the uid the action carries for a new message and a new variant', () => {
+    expect(
+      reduce(base, { type: 'addMessage', variant: 'A', uid: 'n7' }).variants[0].messages[2].uid,
+    ).toBe('n7')
+    expect(
+      reduce(base, { type: 'addVariant', name: 'B', uid: 'n8' }).variants[1].messages[0].uid,
+    ).toBe('n8')
+  })
+
+  it('strips uids for the save request', () => {
+    const stripped = withoutMessageUids(withMessageUids(base).variants)
+    expect(stripped[0].messages.every((m) => !('uid' in m))).toBe(true)
+    expect(stripped[0].messages[0]).toEqual(base.variants[0].messages[0])
+  })
+
+  it('does not count uids as a change', () => {
+    expect(isDirty(base, withMessageUids(base))).toBe(false)
+  })
+})
+
+describe('per-tab dirty', () => {
+  const original = withMessageUids(base)
+
+  it('marks only the edited message dirty', () => {
+    const next = reduce(original, {
+      type: 'setMessageContent',
+      variant: 'A',
+      index: 1,
+      content: 'U2',
+    })
+    expect(isMessageDirty(original, next.variants[0].messages[1])).toBe(true)
+    expect(isMessageDirty(original, next.variants[0].messages[0])).toBe(false)
+  })
+
+  it('does not mark a moved but unchanged message dirty', () => {
+    const next = reduce(original, { type: 'moveMessage', variant: 'A', index: 0, to: 1 })
+    expect(isMessageDirty(original, next.variants[0].messages[1])).toBe(false)
+  })
+
+  it('marks a message with no original dirty', () => {
+    const next = reduce(original, { type: 'addMessage', variant: 'A', uid: 'n9' })
+    expect(isMessageDirty(original, next.variants[0].messages[2])).toBe(true)
+  })
+
+  it('tracks the header fields', () => {
+    expect(isMetaDirty(original, original)).toBe(false)
+    expect(
+      isMetaDirty(original, reduce(original, { type: 'setHeader', field: 'name', value: 'N' })),
+    ).toBe(true)
+  })
+
+  it('tracks a variant by name, model, description and vars', () => {
+    expect(isVariantDirty(original, original.variants[0])).toBe(false)
+    const modelled = reduce(original, { type: 'setVariantModel', variant: 'A', model: 'x' })
+    expect(isVariantDirty(original, modelled.variants[0])).toBe(true)
+    const renamed = reduce(original, { type: 'renameVariant', from: 'A', to: 'Z' })
+    expect(isVariantDirty(original, renamed.variants[0])).toBe(true)
+  })
+})
+
+describe('step messages', () => {
+  const steps: PromptDocument = {
+    ...base,
+    variants: [
+      {
+        ...base.variants[0],
+        messages: [],
+        steps: {
+          aspects: [
+            { role: 'system', source: 'file', file: 'aspects.jinja', content: 'A', readable: true },
+            { role: 'user', source: 'inline', file: null, content: 'B', readable: true },
+          ],
+          gaps: [
+            { role: 'system', source: 'file', file: 'aspects.jinja', content: 'A', readable: true },
+          ],
+        },
+      },
+    ],
+  }
+
+  it('edits a file-backed step body, in every message sharing the file', () => {
+    const next = reduce(steps, {
+      type: 'setMessageContent',
+      variant: 'A',
+      step: 'aspects',
+      index: 0,
+      content: 'A2',
+    })
+    expect(next.variants[0].steps?.aspects[0].content).toBe('A2')
+    expect(next.variants[0].steps?.gaps[0].content).toBe('A2')
+    expect(changedFiles(steps, next)).toEqual(['aspects.jinja'])
+    expect(isStepMessageDirty(steps, 'A', 'aspects', 0, next.variants[0].steps!.aspects[0])).toBe(
+      true,
+    )
+    expect(isStepMessageDirty(steps, 'A', 'aspects', 1, next.variants[0].steps!.aspects[1])).toBe(
+      false,
+    )
+  })
+
+  it('edits an inline step body and a role into the YAML', () => {
+    const inline = reduce(steps, {
+      type: 'setMessageContent',
+      variant: 'A',
+      step: 'aspects',
+      index: 1,
+      content: 'B2',
+    })
+    expect(changedFiles(steps, inline)).toEqual(['de/explainer/prompt.yaml'])
+    const role = reduce(steps, {
+      type: 'setMessageRole',
+      variant: 'A',
+      step: 'aspects',
+      index: 1,
+      role: 'assistant',
+    })
+    expect(role.variants[0].steps?.aspects[1].role).toBe('assistant')
+    expect(isDirty(steps, role)).toBe(true)
+  })
+
+  it('ignores an unknown step', () => {
+    expect(
+      reduce(steps, {
+        type: 'setMessageContent',
+        variant: 'A',
+        step: 'nope',
+        index: 0,
+        content: 'x',
+      }),
+    ).toBe(steps)
+  })
+
+  it('sends the steps with the save request', () => {
+    expect(withoutMessageUids(steps.variants)[0].steps).toEqual(steps.variants[0].steps)
+  })
+})

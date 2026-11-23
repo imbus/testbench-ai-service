@@ -1,0 +1,287 @@
+import { useState } from 'react'
+import { Badge } from 'primereact/badge'
+import { Message } from 'primereact/message'
+import { TabPanel, TabView } from 'primereact/tabview'
+import { useSearchParams } from 'react-router-dom'
+import { configuredProjects, llmOverridingProjects, scopedLlmPath, type Scope } from '../api/agents'
+import type { ConfigIssue, ExtraModelEntry } from '../api/types'
+import { useConfig, useModels, useProjects } from '../api/queries'
+import { Field } from '../components/Field'
+import { ModelTable } from '../components/ModelTable'
+import { ReadOnlyField } from '../components/ReadOnlyField'
+import { ScopeTabs, scopeAddLabels } from '../components/ScopeTabs'
+import { useTranslation } from 'react-i18next'
+import { LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt, type FieldSpec } from './fields'
+
+type Section = 'service' | 'llm' | 'logging'
+
+const TITLE_KEY: Record<Section, 'service' | 'llm' | 'logging'> = {
+  service: 'service',
+  llm: 'llm',
+  logging: 'logging',
+}
+
+const TOML_SECTION: Record<Section, string> = {
+  service: '[testbench-ai-service]',
+  llm: '[testbench-ai-service.llm_config]',
+  logging: '[testbench-ai-service.logging.console] · [.file]',
+}
+
+/**
+ * Check if an issue path matches a field key or a child path within it.
+ * Matches exact equality or paths starting with key + '.' to handle array
+ * elements reported by pydantic (e.g., trusted_proxies.0 matches trusted_proxies).
+ * Must not be bare startsWith — that would make port match port_extra.
+ */
+function issueMatchesField(issuePath: string, fieldKey: string): boolean {
+  return issuePath === fieldKey || issuePath.startsWith(fieldKey + '.')
+}
+
+export function ConfigSection({
+  section,
+  isAdmin,
+  issues = [],
+}: {
+  section: Section
+  isAdmin: boolean
+  /** Field-addressed validation failures from the last preview or apply. */
+  issues?: ConfigIssue[]
+}) {
+  const { t } = useTranslation()
+  const config = useConfig()
+  const projects = useProjects()
+  const [params, setParams] = useSearchParams()
+  const [tab, setTab] = useState(SERVICE_TABS[0].key)
+
+  // Every hook is called here, above the early returns below -- the same
+  // hook-order rule AgentDetail documents. This component stays mounted across
+  // the loading -> loaded transition, so a hook called on only some renders of
+  // the same instance corrupts React's hook order.
+  //
+  // Only the LLM screen has scopes; on Service and Logging the parameter is
+  // ignored rather than being allowed to put those screens in a state they
+  // cannot render.
+  const project = section === 'llm' ? params.get('project') : null
+  const scope: Scope = project === null ? { kind: 'global' } : { kind: 'project', project }
+  const catalogue = useModels(project ?? undefined)
+
+  if (config.isLoading) return <div style={{ padding: 28 }}>…</div>
+  if (config.isError || !config.data) {
+    // Same structure as Status.tsx's error branch: the primary line is
+    // always the translated fallback — never the raw, often-English,
+    // backend-shaped error text — so this alert can never show untranslated
+    // copy regardless of what threw. The raw message, if any, is shown
+    // underneath only as diagnostic detail, guarded so an empty detail
+    // renders nothing.
+    const detail = (config.error as Error)?.message
+    return (
+      <div style={{ padding: 28 }}>
+        {/* `Message` carries role="alert". */}
+        <Message
+          severity="error"
+          content={
+            <div>
+              <div>{t('configError')}</div>
+              {detail && (
+                <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+                  {detail}
+                </div>
+              )}
+            </div>
+          }
+        />
+      </div>
+    )
+  }
+
+  const running = config.data.running
+  let fields: FieldSpec[]
+  if (section === 'service') {
+    fields = (SERVICE_TABS.find((entry) => entry.key === tab) ?? SERVICE_TABS[0]).fields
+  } else {
+    fields = section === 'llm' ? llmFields(scope) : LOGGING_FIELDS
+  }
+
+  // For Service tabs, determine which have issues
+  const tabIssueCount = (tabKey: string): number => {
+    const tabFields = SERVICE_TABS.find((entry) => entry.key === tabKey)?.fields ?? []
+    return issues.filter((issue) =>
+      tabFields.some((field) => issueMatchesField(issue.path, field.key)),
+    ).length
+  }
+
+  // From `disk`, not `running`: `running` reports an llm_config table for a
+  // project only when it has one, but reading the file is what "this project
+  // overrides the LLM config" means, and it is the same source the fields are
+  // measured against.
+  const llmTabs = llmOverridingProjects(config.data.disk)
+  // A project addressed by the URL gets a tab even before it has a block, so
+  // the Projects screen can link straight into an override that does not exist
+  // yet.
+  const tabs = [...new Set(project !== null ? [...llmTabs, project] : llmTabs)]
+  const known = [
+    ...(projects.data?.projects ?? []).map((entry) => entry.name),
+    ...configuredProjects(running),
+  ]
+  const addable = [...new Set(known)].filter((name) => !tabs.includes(name))
+  // Presence only. No endpoint returns a credential value and no code here may
+  // print one. Defaulted rather than assumed: `/models` can be absent, failed
+  // or still loading, and none of those is worth a crashed screen.
+  const credentials = catalogue.data?.providers ?? []
+
+  return (
+    <div
+      style={{
+        padding: '28px 32px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+      }}
+    >
+      {/* The artboard sets the screen title and the TOML section it edits on
+          one line, so the section reads as the subject of the heading rather
+          than as a caption under it. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+          {t(TITLE_KEY[section])}
+        </h2>
+        <span className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}>
+          {TOML_SECTION[section]} · {config.data.config_path}
+        </span>
+      </div>
+
+      {section === 'llm' && (
+        <>
+          <ScopeTabs
+            projects={tabs}
+            selected={project}
+            addable={addable}
+            onSelect={(next) => {
+              // Navigation, not an edit. Replacing the whole parameter set is
+              // deliberate: this screen owns no other search parameter, and a
+              // stale one left behind would outlive the scope it described.
+              setParams(next === null ? {} : { project: next })
+            }}
+            globalLabel={t('globalScope')}
+            addLabels={scopeAddLabels(t)}
+          />
+          {project !== null && (
+            <div className="text-muted" style={{ fontSize: 12 }}>
+              {t('llmScopeHint')}
+            </div>
+          )}
+        </>
+      )}
+
+      {section === 'service' && (
+        // Header-only, like ScopeTabs: the tab's fields render below from
+        // `fields`, so every panel is empty and the selection is controlled.
+        <TabView
+          activeIndex={Math.max(
+            0,
+            SERVICE_TABS.findIndex((entry) => entry.key === tab),
+          )}
+          onTabChange={(event) => setTab(SERVICE_TABS[event.index].key)}
+        >
+          {SERVICE_TABS.map((entry) => {
+            const count = tabIssueCount(entry.key)
+            return (
+              <TabPanel
+                key={entry.key}
+                header={
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {t(entry.labelKey)}
+                    {count > 0 && <Badge severity="danger" value={count} />}
+                  </span>
+                }
+                // The badge is a bare number; the tab's name spells it out.
+                pt={{
+                  headerAction: {
+                    'aria-label': `${t(entry.labelKey)}${count > 0 ? ` (${t('issueCount', { count })})` : ''}`,
+                  },
+                }}
+              />
+            )
+          })}
+        </TabView>
+      )}
+
+      <div>
+        {fields.map((spec) => {
+          const issue = issues.find((entry) => issueMatchesField(entry.path, spec.key))?.message
+          // In project scope the saved value comes from `disk` ONLY. `running`
+          // is a pydantic dump, so a project stating just `timeout` still
+          // carries provider="openai" and auth_method="api_key" -- the model's
+          // defaults, not the operator's choices. Falling back to it would
+          // show every field as overridden, and would offer the operator a
+          // default to accidentally write into their file. Measured
+          // 2026-09-18; see the plan's Task 6.
+          //
+          // Globally the fallback is right and stays: the draft is "what will
+          // be written", so it is measured against the file, but a default the
+          // file omits is genuinely the value in force.
+          const saved =
+            scope.kind === 'project'
+              ? valueAt(config.data.disk, spec.key)
+              : (valueAt(config.data.disk, spec.key) ?? valueAt(running, spec.key))
+          // What applies when this project says nothing. Read from `running`'s
+          // *global* llm_config, where a dump filled with defaults is exactly
+          // what is in force.
+          const inherited =
+            scope.kind === 'project'
+              ? valueAt(running, scopedLlmPath({ kind: 'global' }, spec.setting))
+              : undefined
+          // Non-admins keep the phase-1 read-only rendering unchanged rather
+          // than getting a form full of disabled inputs.
+          return isAdmin ? (
+            <Field
+              key={spec.key}
+              spec={spec}
+              saved={saved}
+              inheritedFrom={
+                scope.kind === 'project' ? { value: inherited, label: t('globalScope') } : undefined
+              }
+              issue={issue}
+            />
+          ) : (
+            <ReadOnlyField
+              key={spec.key}
+              spec={spec}
+              // The same two sources in the same order as the editable path.
+              // A read-only viewer has no control to notice a wrong value on,
+              // so showing them the filled default would be the harder error.
+              value={scope.kind === 'project' ? (saved ?? inherited) : valueAt(running, spec.key)}
+            />
+          )
+        })}
+      </div>
+
+      {section === 'llm' && scope.kind === 'global' && (
+        <ModelTable
+          entries={
+            // Same source ordering every other field on this screen uses:
+            // the file first (what the draft is measured against), the
+            // fully-defaulted running config only if the file is silent.
+            (valueAt(config.data.disk, 'llm_config.extra_models') ??
+              valueAt(running, 'llm_config.extra_models') ??
+              {}) as Record<string, ExtraModelEntry>
+          }
+          issues={issues}
+          readOnly={!isAdmin}
+        />
+      )}
+
+      {section === 'llm' && scope.kind === 'project' && credentials.length > 0 && (
+        <div>
+          <h3 style={{ fontSize: 16, marginBottom: 8 }}>{t('credentialsHeading')}</h3>
+          {credentials.map((entry) => (
+            <div key={entry.provider} className="text-muted" style={{ fontSize: 12 }}>
+              <strong>{entry.provider}</strong> —{' '}
+              {entry.key_present ? t('projectKeyPresent') : t('projectKeyAbsent')}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}

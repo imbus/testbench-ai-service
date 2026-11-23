@@ -1,10 +1,16 @@
 import time
+from pathlib import Path
 from typing import get_type_hints
+from uuid import uuid4
 
 import requests
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from pydantic import ValidationError
 from testbench_cli_reporter.testbench import Connection as TBConnection
 
+from testbench_ai_service.agent_packages import loaded
+from testbench_ai_service.agent_packages.agent_info import AgentUnavailable, agent_info
+from testbench_ai_service.agent_packages.manifest import load_manifest, site_dir, wheel_path
 from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
@@ -19,15 +25,18 @@ from testbench_ai_service.exceptions import (
     handle_requests_http_error,
     handle_requests_transport_error,
 )
+from testbench_ai_service.jobs.store import JobStore, get_job_store
 from testbench_ai_service.llm.factory import LLMFactory
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import (
+    AgentArgs,
     TriggerAgentRequest,
     TriggerAgentResponse,
 )
 from testbench_ai_service.models.config import AgentConfig
 from testbench_ai_service.models.prompt import PromptDefinition
 from testbench_ai_service.tasks import run_agent
+from testbench_ai_service.usage import UsageStore, get_usage_store
 from testbench_ai_service.utils.agent import build_execution_context, has_required_permissions
 from testbench_ai_service.utils.config import agent_enabled, get_agent_config, get_prompt_config
 from testbench_ai_service.utils.i18n import get_translation
@@ -35,11 +44,13 @@ from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.prompt_utils import (
     get_prompt_definition,
     get_prompt_variant,
+    step_agent_variable_errors,
     template_variables,
     validate_agent_variable,
     validate_template_placeholders,
 )
 from testbench_ai_service.utils.testbench import get_project_roles
+from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 
 TRIGGER_AGENT_ROUTE_KWARGS: dict = {
     "response_model": TriggerAgentResponse,
@@ -66,21 +77,93 @@ TRIGGER_AGENT_ROUTE_KWARGS: dict = {
 }
 
 
-def load_agent(config: AgentConfig) -> Agent:
+def _unavailable(detail: str) -> HTTPException:
+    logger.error(detail)
+    return HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=detail)
+
+
+def _waits_for_restart(name: str, packages_dir: Path | None) -> bool:
+    """Whether package *name* is intact and only needs a restart to be loaded.
+
+    False if it failed to load at startup, or its active version or files are gone.
+    Without *packages_dir* nothing can be checked; a restart is assumed.
+    """
+    if name in loaded.failures():
+        return False
+    if packages_dir is None:
+        return True
+    try:
+        active = load_manifest(packages_dir).active(name)
+        return (
+            active is not None
+            and wheel_path(packages_dir, active.filename).is_file()
+            and site_dir(packages_dir, name, active.version).is_dir()
+        )
+    except Exception:  # unreadable manifest, or a name resolve_within refuses
+        return False
+
+
+def _load_package_agent(
+    config: AgentConfig, agent_key: str | None, packages_dir: Path | None
+) -> Agent:
+    """Instantiate an agent from an uploaded package; 503 if that is not possible."""
+    name = config.package or ""
+    if not loaded.is_loaded(name):
+        # Never import package code the service did not load at startup.
+        if _waits_for_restart(name, packages_dir):
+            raise _unavailable(
+                f"Agent package '{name}' is not loaded yet. Restart the service to load it."
+            )
+        raise _unavailable(
+            f"Agent package '{name}' is missing or failed to load. Upload it again or fix it "
+            "in the web console."
+        )
+    failure = loaded.agent_failures().get(agent_key or "")
+    if failure is not None:
+        raise _unavailable(f"Agent '{agent_key}' is unavailable: {failure}")
+    try:
+        agent_class = load_class_from_path(config.class_path)
+        agent: Agent = agent_class()
+    except (Exception, SystemExit) as e:  # package code may even call sys.exit()
+        raise _unavailable(f"Cannot load agent class '{config.class_path}': {e!r}") from e
+    args_class = getattr(agent_class, "ARGS_CLASS", AgentArgs)
+    if config.args or args_class is not AgentArgs:
+        try:
+            agent.args = args_class.model_validate(config.args)
+        except ValidationError as e:
+            raise _unavailable(f"Invalid args for agent class '{config.class_path}': {e}") from e
+    return agent
+
+
+def load_agent(
+    config: AgentConfig, agent_key: str | None = None, packages_dir: Path | None = None
+) -> Agent:
     """Instantiate an agent from the provided configuration.
 
     Args:
         config: The configuration for the agent.
+        agent_key: The agent's key, to refuse an agent whose import failed at startup.
+        packages_dir: Where agent packages are stored, to tell a package that only
+            waits for a restart from one that is missing or failed to load.
 
     Returns:
         An instance of the agent.
 
     Raises:
-        HTTPException: If the agent class cannot be imported.
+        HTTPException: 500 if the agent class cannot be imported; 503 for a
+            package agent that is not loaded, failed at startup or has invalid args.
     """
+    if config.package is not None:
+        return _load_package_agent(config, agent_key, packages_dir)
     try:
         agent_class = load_class_from_path(config.class_path)
-        agent: Agent = agent_class(agent_class.ARGS_CLASS.model_validate(config.args))
+        agent: Agent = agent_class()
+        # Set after construction instead of passed in, so custom agents with an
+        # own no-argument __init__ keep loading. Agents that declare no args and
+        # get none keep whatever ``args`` attribute they set themselves.
+        args_class = getattr(agent_class, "ARGS_CLASS", AgentArgs)
+        if config.args or args_class is not AgentArgs:
+            agent.args = args_class.model_validate(config.args)
         logger.debug(
             "Successfully loaded agent '%s' from class path '%s'",
             agent_class.__name__,
@@ -100,6 +183,9 @@ async def trigger_agent_execution(
     llm_factory: LLMFactory,
     app_config: AppConfig,
     auth_info: AuthInfo,
+    registry: TaskRegistry,
+    usage_store: UsageStore,
+    job_store: JobStore,
 ) -> TriggerAgentResponse:
     """Execute the trigger flow shared by all agent endpoints.
 
@@ -115,9 +201,13 @@ async def trigger_agent_execution(
         llm_factory:      Factory for obtaining the LLM client.
         app_config:       The application configuration.
         auth_info:        Validated authentication context for this request.
+        registry:         The console's in-flight task registry.
+        usage_store:      Where the run's token usage is counted.
+        job_store:        Where the run is recorded as a job.
 
     Returns:
-        ``TriggerAgentResponse`` with ``status="accepted"`` and any precheck warnings.
+        ``TriggerAgentResponse`` with ``status="accepted"``, any precheck warnings and
+        the ID of the job that tracks the run.
 
     Raises:
         HTTPException 404: If the agent is disabled for the resolved project.
@@ -140,7 +230,7 @@ async def trigger_agent_execution(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
 
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
-    agent = load_agent(agent_config)
+    agent = load_agent(agent_config, agent_key, app_config.agent_packages.dir)
 
     if auth_info.auth_type == AuthType.JWT_TOKEN and not has_required_permissions(
         auth_info.token, agent.REQUIRED_PERMISSIONS
@@ -193,18 +283,46 @@ async def trigger_agent_execution(
             detail=detail,
         )
 
+    job_id = uuid4().hex
+    await job_store.run(
+        job_store.create,
+        job_id,
+        agent_key=agent_key,
+        user_key=context.user_key,
+        project_key=context.project_key,
+        project_name=context.project_name,
+        root_key=context.root_key,
+        root_uid=context.root_uid,
+        item_ids=precheck_result.items,
+        warnings=precheck_result.warnings,
+    )
+
     background_tasks.add_task(
-        run_agent,
+        _tracked_run_agent,
+        registry,
         agent_key=agent_key,
         agent=agent,
         context=context,
         conn=conn,
         llm_factory=llm_factory,
         item_ids=precheck_result.items,
+        usage_store=usage_store,
+        job_id=job_id,
+        job_store=job_store,
     )
     logger.debug("Scheduled background task for agent '%s'", agent_key)
 
-    return TriggerAgentResponse(status="accepted", warnings=precheck_result.warnings)
+    return TriggerAgentResponse(status="accepted", warnings=precheck_result.warnings, job_id=job_id)
+
+
+async def _tracked_run_agent(registry: TaskRegistry, agent_key: str, **kwargs) -> None:
+    """Run an agent while the console's in-flight registry counts it.
+
+    A wrapper rather than a change to run_agent(): the console is an
+    observer here, and tasks.py should not have to know it exists.
+    """
+    async with registry.track(agent_key):
+        await run_agent(agent_key=agent_key, **kwargs)
 
 
 def validate_template_and_agent_vars(context, agent):
@@ -244,6 +362,15 @@ def validate_template_and_agent_vars(context, agent):
         logger.error(error_msg)
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=error_msg)
 
+    step_errors = step_agent_variable_errors(prompt_file, getattr(agent, "STEP_DATA_CLASSES", {}))
+    if step_errors:
+        error_msg = (
+            f"Step variable validation failed for '{prompt_file}'. "
+            f"Details: {' | '.join(step_errors)}"
+        )
+        logger.error(error_msg)
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=error_msg)
+
 
 def create_agent_router(
     agent_key: str,
@@ -268,6 +395,9 @@ def create_agent_router(
         llm_factory: LLMFactory = Depends(get_llm_factory),
         app_config: AppConfig = Depends(get_app_config),
         auth_info: AuthInfo = Depends(validate_auth_token),
+        registry: TaskRegistry = Depends(get_task_registry),
+        usage_store: UsageStore = Depends(get_usage_store),
+        job_store: JobStore = Depends(get_job_store),
     ) -> TriggerAgentResponse:
         return await trigger_agent_execution(
             agent_key=agent_key,
@@ -277,9 +407,36 @@ def create_agent_router(
             llm_factory=llm_factory,
             app_config=app_config,
             auth_info=auth_info,
+            registry=registry,
+            usage_store=usage_store,
+            job_store=job_store,
         )
 
     return router
+
+
+def _package_agent_routable(agent_key: str, agent: AgentConfig, app_config: AppConfig) -> bool:
+    """Whether the package of *agent* was loaded at startup and its class imports.
+
+    An import failure is recorded for this agent only; the package's other
+    agents keep their routes.
+    """
+    package = agent.package or ""
+    if not loaded.is_loaded(package):
+        logger.warning(
+            "Agent '%s' gets no route: its package '%s' is not loaded. "
+            "Restart the service to load it.",
+            agent_key,
+            package,
+        )
+        return False
+    try:
+        agent_info(agent, app_config.agent_packages.dir)
+    except AgentUnavailable as e:  # agent_info also turns SystemExit into this
+        logger.error("Agent '%s' gets no route: %s", agent_key, e)
+        loaded.mark_agent_failed(agent_key, str(e))
+        return False
+    return True
 
 
 def get_agent_routers(app_config: AppConfig) -> list[APIRouter]:
@@ -288,6 +445,10 @@ def get_agent_routers(app_config: AppConfig) -> list[APIRouter]:
     for agent_key, agent_config in app_config.agents.items():
         if not agent_config.enabled:
             logger.debug("Agent '%s' is disabled in config, skipping router creation", agent_key)
+            continue
+        if agent_config.package is not None and not _package_agent_routable(
+            agent_key, agent_config, app_config
+        ):
             continue
         logger.debug("Creating router for enabled agent '%s'", agent_key)
         try:

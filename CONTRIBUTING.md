@@ -47,6 +47,11 @@ pip install -e .[dev]
 pre-commit install
 ```
 
+The pre-commit hooks also format the web console with Prettier, using the
+version installed in `frontend/`. Run `npm install` there once (see
+[Web Console Frontend](#web-console-frontend)), or commits that touch
+`frontend/src` fail with a "module not found" error.
+
 ## Running Tests
 
 If you want to contribute code, it's important to ensure that everything works correctly. You can run the tests to make sure the code passes all the required checks.
@@ -56,21 +61,71 @@ If you want to contribute code, it's important to ensure that everything works c
 pytest tests/unit
 ```
 
+## Web Console Frontend
+
+The browser console served at `/admin` is a React + TypeScript app under
+`frontend/`. It builds into `testbench_ai_service/static/admin/`, which is
+git-ignored, so a fresh checkout has no console until you build it. Node 20+ is
+required.
+
+**Install the dependencies:**
+```bash
+cd frontend
+npm install
+```
+
+**Run the dev server:**
+```bash
+npm run dev
+```
+
+It serves the console with hot reload and proxies `/admin/api` to a service
+running on `http://127.0.0.1:8010`, so start the service separately with
+`testbench-ai-service start`.
+
+**Run the frontend tests (Vitest):**
+```bash
+npm test
+```
+
+**Format the sources (Prettier):**
+```bash
+npm run format        # rewrite src/ in place
+npm run format:check  # only report files that differ
+```
+
+The style lives in `frontend/.prettierrc`. The pre-commit hook formats staged
+files automatically; if it rewrites any, stage them and commit again.
+
+**Build the console into the package:**
+```bash
+npm run build
+```
+
+Run the build before starting the service if you want to exercise the console
+at `/admin` rather than through the dev server. `python build_binary.py` runs
+`npm ci && npm run build` for you; pass `--skip-frontend` to package whatever is
+already built.
+
 ## Code Style & Linting
 
 This project uses [Ruff](https://docs.astral.sh/ruff/) for linting and formatting, and [mypy](https://mypy-lang.org/) for static type checking.
 
-**Check linting:**
+**Check linting and formatting:**
 ```bash
-ruff check src/
+ruff check .
+ruff format --check .
 ```
 
 **Check types:**
 ```bash
-mypy src/
+mypy testbench_ai_service
 ```
 
 Please ensure `ruff` and `mypy` pass with no errors before opening a pull request.
+
+The web console frontend is formatted with [Prettier](https://prettier.io/);
+`npm run format:check` in `frontend/` must pass as well.
 
 ## Branching & Pull Requests
 

@@ -25,9 +25,16 @@ T = TypeVar("T", bound=BaseModel)
 
 class Agent(ABC):
     AGENT_DATA_CLASS: ClassVar[type[AgentData]]
+    #: Step name to the ``AgentData`` TypedDict the step is rendered with, for agents
+    #: whose prompt variant uses ``steps``. Checked against the templates like
+    #: ``AGENT_DATA_CLASS`` is against ``messages``.
+    STEP_DATA_CLASSES: ClassVar[dict[str, type[AgentData]]] = {}
     REQUIRED_PERMISSIONS: ClassVar[frozenset[PermissionWithCode]] = frozenset()
     ALLOWED_ROLES: ClassVar[frozenset[GlobalHumanRole | ProjectRole] | None] = None
     ARGS_CLASS: ClassVar[type[AgentArgs]] = AgentArgs
+    #: False for agents that never query an LLM; they get a ``NoLLMClient``, so
+    #: running them needs no LLM credentials.
+    USES_LLM: ClassVar[bool] = True
 
     def __init__(self, args: AgentArgs | None = None):
         """
@@ -107,16 +114,18 @@ class Agent(ABC):
         prompt_config: PromptConfig,
         schema: type[T],
         agent_data: AgentData | None = None,
+        step: str | None = None,
     ) -> T:
         """Sends the prompt to the LLM and returns its reply validated against ``schema``.
 
         The prompt must ask for JSON matching ``schema``. An invalid reply is sent
-        back once for repair, see :func:`query_structured`.
+        back once for repair, see :func:`query_structured`. With *step*, the
+        messages of that step of the prompt variant are sent.
 
         Raises:
             StructuredOutputError: The reply failed validation after the repair retry.
         """
-        model, messages = self._prepare_prompt(llm_config, prompt_config, agent_data)
+        model, messages = self._prepare_prompt(llm_config, prompt_config, agent_data, step)
         return await query_structured(
             llm_client, model, messages, schema, **(llm_config.model_extra or {})
         )
@@ -126,9 +135,10 @@ class Agent(ABC):
         llm_config: LLMConfig,
         prompt_config: PromptConfig,
         agent_data: AgentData | None,
+        step: str | None = None,
     ) -> tuple[str, list[Message]]:
         """Build the prompt and resolve the model to send it to."""
-        prompt = build_prompt(prompt_config, agent_data=agent_data)
+        prompt = build_prompt(prompt_config, agent_data=agent_data, step=step)
 
         model = llm_config.model if llm_config.model is not None else prompt.model_name
         messages = prompt.messages

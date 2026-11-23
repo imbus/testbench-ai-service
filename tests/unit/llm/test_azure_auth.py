@@ -128,9 +128,7 @@ class TestEntraIdCredentialsRepr:
         assert "client-1" in text
 
     def test_str_omits_the_client_secret(self):
-        credentials = EntraIdCredentials(
-            tenant_id="t", client_id="c", client_secret="SUPER-SECRET"
-        )
+        credentials = EntraIdCredentials(tenant_id="t", client_id="c", client_secret="SUPER-SECRET")
 
         assert "SUPER-SECRET" not in str(credentials)
 
@@ -181,9 +179,7 @@ class TestCreateTokenProvider:
         module = self._fake_identity_module()
         monkeypatch.setitem(sys.modules, "azure.identity.aio", module)
 
-        create_token_provider(
-            EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s")
-        )
+        create_token_provider(EntraIdCredentials(tenant_id="t", client_id="c", client_secret="s"))
 
         module.get_bearer_token_provider.assert_called_once_with(
             module.ClientSecretCredential.return_value,
@@ -206,9 +202,7 @@ class TestCreateTokenProvider:
 
         with pytest.raises(ValueError, match="azure-identity") as exc_info:
             create_token_provider(
-                EntraIdCredentials(
-                    tenant_id="t", client_id="c", client_secret="super-secret-value"
-                )
+                EntraIdCredentials(tenant_id="t", client_id="c", client_secret="super-secret-value")
             )
 
         assert "super-secret-value" not in str(exc_info.value)
@@ -219,9 +213,7 @@ class TestCreateTokenProvider:
         so that call must be covered by the ImportError handling too.
         """
         module = self._fake_identity_module()
-        module.ClientSecretCredential.side_effect = ImportError(
-            "aiohttp package is not installed"
-        )
+        module.ClientSecretCredential.side_effect = ImportError("aiohttp package is not installed")
         monkeypatch.setitem(sys.modules, "azure.identity.aio", module)
 
         with pytest.raises(ValueError, match="azure-identity") as exc_info:

@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import FileSystemLoader
+from jinja2.sandbox import SandboxedEnvironment
 
 from testbench_ai_service.models.language import LanguageOption
 
@@ -55,7 +56,13 @@ def resolve_template_path(
 
 
 def render_template(path: Path, values: dict[str, Any]) -> str:
-    """Render a Jinja template from the given path with the provided values."""
-    env = Environment(loader=FileSystemLoader(path.parent))
+    """Render a Jinja template from the given path with the provided values.
+
+    Sandboxed like every other prompt render: a write-back template is a file an
+    operator can change -- through the web console, too, if ``templates_dir``
+    overlaps ``prompts_dir`` -- and an unsandboxed one could reach Python
+    internals and run code in the service.
+    """
+    env = SandboxedEnvironment(loader=FileSystemLoader(path.parent))
     template = env.get_template(path.name)
     return template.render(values)

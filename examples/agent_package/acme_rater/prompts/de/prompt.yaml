@@ -1,0 +1,14 @@
+name: "Rater"
+summary: "Testfallsets bewerten"
+description: "Bewertet Testfallsets."
+default_model: "gpt-5.5"
+default_variant: "Default"
+variants:
+  - name: "Default"
+    description: "Standardbewertung."
+    model: "gpt-5.5"
+    messages:
+      - role: "system"
+        file: "system.jinja"
+      - role: "user"
+        file: "user.jinja"

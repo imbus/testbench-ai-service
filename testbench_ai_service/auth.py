@@ -88,8 +88,6 @@ def _validate_token(
     """
     conn: TBConnection | None = None
     try:
-        # Bounds the bootstrap requests that ``Connection.session`` makes on the
-        # library's own adapter, before harden_connection() can replace it.
         conn = TBConnection(
             server_url,
             verify=verify,
@@ -164,7 +162,4 @@ def validate_auth_token(
     try:
         yield AuthInfo(auth_type=auth_type, token=token, user_key=user_key, conn=conn)
     finally:
-        # NOTE: Starlette runs BackgroundTasks inside Response.__call__ before returning
-        # control to the routing stack, so the connection is still open for the full
-        # duration of any background task scheduled during this request.
         conn.close()

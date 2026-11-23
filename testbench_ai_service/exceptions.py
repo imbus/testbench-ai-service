@@ -1,4 +1,4 @@
-from typing import NoReturn
+from typing import Any, NoReturn
 
 import requests
 from fastapi import HTTPException, Request, status
@@ -17,7 +17,10 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> Respon
     headers = getattr(exc, "headers", None)
     if not is_body_allowed_for_status_code(exc.status_code):
         return Response(status_code=exc.status_code, headers=headers)
-    error_response = HTTPError(detail=str(exc.detail))
+    detail: Any = exc.detail
+    if isinstance(detail, dict):
+        return JSONResponse({"detail": detail}, status_code=exc.status_code, headers=headers)
+    error_response = HTTPError(detail=str(detail))
     return JSONResponse(error_response.model_dump(), status_code=exc.status_code, headers=headers)
 
 
@@ -46,10 +49,6 @@ def handle_requests_http_error(e: requests.exceptions.HTTPError):
     ) from e
 
 
-#: Transport-level failures of an outbound TestBench call: the server could not be
-#: reached, or it accepted the connection and then never answered.  ``ReadTimeout``
-#: derives from ``Timeout`` only - not from ``ConnectionError`` - so catching
-#: ``ConnectionError`` alone lets a stalled read escape as an unhandled 500.
 TRANSPORT_ERRORS = (requests.exceptions.ConnectionError, requests.exceptions.Timeout)
 
 

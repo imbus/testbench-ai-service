@@ -1,5 +1,5 @@
-import re
 import json
+import re
 import tempfile
 import zipfile
 from dataclasses import dataclass
@@ -19,14 +19,14 @@ from testbench_ai_service.agents.defect_explainer.model import (
 )
 from testbench_ai_service.agents.defect_explainer.utils import (
     add_explanations_to_comment,
-    extract_error_message,
-    message_cell_pattern,
     build_protocol_json,
     build_update_test_case_set,
     clean_up_comment,
     create_import_zip,
     custom_serializer,
+    extract_error_message,
     import_data,
+    message_cell_pattern,
 )
 from testbench_ai_service.agents.defect_explainer.utils import (
     test_case_execution_as_str as _tce_as_str,
@@ -653,6 +653,4 @@ class TestTb2rfAnchors:
         )
 
         assert "The card number is wrong." in result
-        assert re.search(
-            r"data-tb-role='message'.*?The card number is wrong\.", result, re.DOTALL
-        )
+        assert re.search(r"data-tb-role='message'.*?The card number is wrong\.", result, re.DOTALL)

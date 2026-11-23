@@ -4,14 +4,19 @@ import pytest
 import requests
 
 from testbench_ai_service.agents.test_case_set_reviewer.agent import TestCaseSetReviewer
+from testbench_ai_service.jobs.handle import JobHandle, job_scope
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.agent import AgentResult, ExecutionContext
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.utils.i18n import load_translations
+from tests.unit.jobs.test_store import _create
 
 
 def _make_context(**overrides):
     defaults = {
+        "agent_key": "test_agent",
         "user_key": "U1",
         "project_key": "P1",
         "project_name": "Project",
@@ -43,6 +48,8 @@ def _make_tcs(uid="TCS1", key="K1", spec_key="SK1"):
     tcs.details.spec.description = None
     return tcs
 
+
+load_translations()
 
 _AGENT_MODULE = "testbench_ai_service.agents.test_case_set_reviewer.agent"
 
@@ -154,6 +161,52 @@ class TestTestCaseSetReviewerRun:
             await self.service.run(context, conn, llm_client, ["TCS1"])
 
         mock_handler.assert_called_once()
+
+    async def test_one_failing_item_keeps_job_running_with_warning(self, tmp_path):
+        store = JobStore(tmp_path / "jobs.sqlite")
+        _create(store)
+        mock = AsyncMock(side_effect=[RuntimeError("kaputt"), None])
+
+        with (
+            job_scope(JobHandle("j1", store)),
+            patch(
+                f"{_AGENT_MODULE}.get_test_case_set_catalog",
+                return_value={
+                    "TCS1": _make_tcs(uid="TCS1", key="K1"),
+                    "TCS2": _make_tcs(uid="TCS2", key="K2"),
+                },
+            ),
+            patch.object(self.service, "_review_test_case_set", mock),
+        ):
+            await self.service.run(_make_context(), MagicMock(), MagicMock(), ["TCS1", "TCS2"])
+
+        job = store.get("j1", "u1")
+        assert job.status == "running"  # run_agent marks it succeeded afterwards
+        assert any(w.startswith("K1:") and "kaputt" in w for w in job.warnings)
+        assert mock.await_count == 2
+
+    async def test_all_items_failing_fails_the_job(self, tmp_path):
+        store = JobStore(tmp_path / "jobs.sqlite")
+        _create(store)
+
+        with (
+            job_scope(JobHandle("j1", store)),
+            patch(
+                f"{_AGENT_MODULE}.get_test_case_set_catalog",
+                return_value={
+                    "TCS1": _make_tcs(uid="TCS1", key="K1"),
+                    "TCS2": _make_tcs(uid="TCS2", key="K2"),
+                },
+            ),
+            patch.object(
+                self.service, "_review_test_case_set", AsyncMock(side_effect=RuntimeError("kaputt"))
+            ),
+        ):
+            await self.service.run(_make_context(), MagicMock(), MagicMock(), ["TCS1", "TCS2"])
+
+        job = store.get("j1", "u1")
+        assert job.status == "failed"
+        assert job.error == "None of the 2 items could be processed."
 
 
 class TestBuildAgentData:

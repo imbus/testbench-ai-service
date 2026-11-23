@@ -1,30 +1,44 @@
 """Tests for the requirement agent's orchestration and write-back sequence."""
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
+import requests
 
-from testbench_ai_service.agents.generate_test_idears import agent as agent_module
-from testbench_ai_service.agents.generate_test_idears import utils as utils_module
-from testbench_ai_service.agents.generate_test_idears.agent import RequirementAgent
-from testbench_ai_service.agents.generate_test_idears.model import (
+import testbench_ai_service
+from testbench_ai_service.agents.generate_test_ideas import agent as agent_module
+from testbench_ai_service.agents.generate_test_ideas import utils as utils_module
+from testbench_ai_service.agents.generate_test_ideas.agent import RequirementAgent
+from testbench_ai_service.agents.generate_test_ideas.model import (
     ExtendedRequirement,
     IdeaGroup,
     RequirementAgentArgs,
     TestIdea,
     TestIdeaResult,
 )
+from testbench_ai_service.jobs.handle import JobHandle, job_scope
+from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.testbench import (
+    PermissionWithCode,
     Priority,
     RequirementAssignment,
     TestCaseSetNode,
     TestThemeNode,
 )
-from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.utils.agent import MIN_TESTBENCH_VERSION
+from testbench_ai_service.utils.i18n import get_translation, load_translations
 from testbench_ai_service.utils.structured_output import StructuredOutputError
+
+
+@pytest.fixture(autouse=True)
+def _translations():
+    # Warnings and the written ideas are translated; no test may rely on another
+    # having loaded them first.
+    load_translations()
 
 
 def _context(user_key: str = "u1") -> SimpleNamespace:
@@ -39,7 +53,7 @@ def _context(user_key: str = "u1") -> SimpleNamespace:
         language=LanguageOption.ENGLISH,
         llm_config=SimpleNamespace(model="gpt-4.1-mini", model_extra={}),
         prompt_config=SimpleNamespace(file="requirement/prompt.yaml", variant="Default"),
-        templates_dir=Path("templates"),
+        templates_dir=Path(testbench_ai_service.__file__).parent / "templates",
     )
 
 
@@ -115,6 +129,43 @@ class _Recorder:
         return _patch
 
 
+def _wire_test_case_sets(monkeypatch, state: SimpleNamespace) -> None:
+    """Fake creating, describing, locking and deleting test case sets (TestBench 5.0)."""
+    recorder = state.recorder
+
+    def _create(_conn, _project_key, tov_key, parent_key, name, keep_locked=False):
+        if state.create_error is not None and state.create_error[0] == state.created:
+            raise state.create_error[1]
+        state.created += 1
+        key = f"new-{state.created}"
+        recorder.calls.append(f"create:{name}")
+        recorder.kwargs[f"create:{name}"] = {
+            "tov_key": tov_key,
+            "parent_key": parent_key,
+            "keep_locked": keep_locked,
+        }
+        return SimpleNamespace(key=key, spec=SimpleNamespace(key=f"spec-{key}"))
+
+    async def _patch_set(_conn, _project_key, spec_key, spec_update):
+        body = spec_update.model_dump(exclude_unset=True)
+        state.set_writes.append((spec_key, body))
+        if "description" in body:
+            recorder.calls.append(f"describe:{spec_key}")
+            if "describe" in recorder.failing:
+                raise RuntimeError("describe failed")
+        else:
+            recorder.calls.append(f"lock:{spec_key}")
+
+    def _delete(_conn, _project_key, key):
+        recorder.calls.append(f"delete:{key}")
+        if "delete" in recorder.failing:
+            raise RuntimeError("delete failed")
+
+    monkeypatch.setattr(utils_module, "create_test_case_set", _create)
+    monkeypatch.setattr(utils_module, "patch_test_structure_element_spec", _patch_set)
+    monkeypatch.setattr(utils_module, "delete_test_case_set", _delete)
+
+
 @pytest.fixture
 def wired(monkeypatch):
     """Wire the agent's collaborators to fakes and return the control surface."""
@@ -143,6 +194,9 @@ def wired(monkeypatch):
         test_case_set_details={},
         theme_error=None,
         theme_reads=[],
+        created=0,
+        create_error=None,
+        set_writes=[],
     )
 
     def _structure(**_kwargs):
@@ -178,20 +232,100 @@ def wired(monkeypatch):
     monkeypatch.setattr(agent_module, "patch_generation_started", recorder.hook("started"))
     monkeypatch.setattr(agent_module, "patch_generated_test_ideas", recorder.hook("generated"))
     monkeypatch.setattr(agent_module, "patch_generation_failed", recorder.hook("failed"))
+    monkeypatch.setattr(agent_module, "patch_previous_description", recorder.hook("restored"))
     monkeypatch.setattr(RequirementAgent, "get_structured_ai_response", _ai)
+
+    _wire_test_case_sets(monkeypatch, state)
     return state
 
 
-async def _run(context=None):
-    await RequirementAgent().run(context or _context(), MagicMock(), MagicMock(), [])
+NOT_A_THEME = "Trigger the test idea generator on a test theme of a test object version."
+
+
+def _conn(server_version=MIN_TESTBENCH_VERSION) -> MagicMock:
+    conn = MagicMock()
+    conn.server_version = server_version
+    return conn
+
+
+async def _run(context=None, agent=None, server_version=MIN_TESTBENCH_VERSION):
+    """Precheck, then run only if it passed -- the order the trigger route keeps."""
+    agent = agent or RequirementAgent()
+    context = context or _context()
+    conn = _conn(server_version)
+    result = await agent.precheck(context, conn)
+    if result.passed:
+        await agent.run(context, conn, MagicMock(), result.items)
+    return result
 
 
 class TestPrecheck:
-    async def test_passes_without_gating_anything(self):
-        result = await RequirementAgent().precheck(_context(), MagicMock())
+    async def test_passes_for_a_theme_with_requirements(self, wired):
+        result = await RequirementAgent().precheck(_context(), _conn())
 
         assert result.passed is True
-        assert result.items == []
+        assert result.items == ["TT-1"]
+        assert result.warnings == []
+
+    async def test_refuses_an_unsupported_testbench_version(self, wired):
+        result = await RequirementAgent().precheck(_context(), _conn(server_version=[4, 0]))
+
+        assert result.passed is False
+
+    async def test_refuses_a_trigger_without_a_test_theme(self, wired):
+        context = _context()
+        context.root_uid = None
+
+        result = await RequirementAgent().precheck(context, _conn())
+
+        assert result.passed is False
+        assert result.warnings == [NOT_A_THEME]
+
+    async def test_reads_the_structure_off_the_event_loop(self, wired, monkeypatch):
+        # A blocking TestBench call on the loop thread stalls every other request.
+        on_loop = []
+
+        def _structure(**_kwargs):
+            try:
+                asyncio.get_running_loop()
+                on_loop.append(True)
+            except RuntimeError:
+                on_loop.append(False)
+            return SimpleNamespace(root=wired.theme, nodes=wired.nodes)
+
+        monkeypatch.setattr(agent_module, "post_project_tov_structure", _structure)
+
+        await RequirementAgent().precheck(_context(), _conn())
+
+        assert on_loop == [False]
+
+    async def test_run_refuses_without_a_passed_precheck(self):
+        with pytest.raises(RuntimeError, match="passed precheck"):
+            await RequirementAgent().run(_context(), _conn(), MagicMock(), [])
+
+
+class TestPermissions:
+    def test_covers_every_endpoint_the_agent_calls(self):
+        # Structure, requirements, theme details, test case sets, and the spec
+        # PATCH including its locker and reviewer.
+        needed = {
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTovRequirements,
+            PermissionWithCode.ReadTestThemeDetails,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ModifySpecifications,
+            PermissionWithCode.ModifySpecManagementInfo,
+        }
+
+        assert needed <= RequirementAgent.REQUIRED_PERMISSIONS
+
+    def test_does_not_require_the_permission_to_create_test_case_sets(self):
+        # TestBench before 5.0 has no such permission, so a token there can never
+        # carry it; without it the agent falls back to writing text only.
+        assert (
+            PermissionWithCode.ModifyTestStructureElements
+            not in RequirementAgent.REQUIRED_PERMISSIONS
+        )
 
 
 class TestHappyPath:
@@ -253,10 +387,6 @@ class TestHappyPath:
 
 
 class TestWrittenIdeas:
-    @pytest.fixture(autouse=True)
-    def setup(self):
-        load_translations()
-
     async def test_writes_the_rendered_ideas(self, wired):
         await _run()
 
@@ -291,7 +421,7 @@ class TestWrittenIdeas:
         )
         agent = RequirementAgent(RequirementAgentArgs(max_ideas_per_theme=2))
 
-        await agent.run(_context(), MagicMock(), MagicMock(), [])
+        await _run(agent=agent)
 
         written = wired.recorder.kwargs["generated"]["test_ideas"]
         assert "Idea 1" in written
@@ -328,15 +458,18 @@ class TestNothingToDo:
     async def test_writes_nothing_when_the_root_is_not_a_test_theme(self, wired):
         wired.theme = SimpleNamespace(base=SimpleNamespace(key="k"))
 
-        await _run()
+        result = await _run()
 
+        assert result.warnings == [NOT_A_THEME]
         assert wired.recorder.calls == []
         assert wired.ai_calls == []
 
     async def test_writes_nothing_when_the_requirements_cannot_be_loaded(self, wired):
+        # Raised from precheck, so the route answers with TestBench's own status.
         wired.load_error = RuntimeError("404")
 
-        await _run()
+        with pytest.raises(RuntimeError, match="404"):
+            await _run()
 
         assert wired.recorder.calls == []
 
@@ -351,7 +484,9 @@ class TestNothingToDo:
     async def test_writes_nothing_when_no_requirements_are_assigned(self, wired):
         wired.requirements = []
 
-        await _run()
+        result = await _run()
+
+        assert result.warnings == ["No requirements are assigned below test theme 'Discounts'."]
 
         assert wired.recorder.calls == []
         assert wired.ai_calls == []
@@ -359,7 +494,9 @@ class TestNothingToDo:
     async def test_skips_a_theme_locked_by_another_user(self, wired):
         wired.theme = _theme_node(locker_key="someone-else")
 
-        await _run()
+        result = await _run()
+
+        assert result.warnings == ["Test theme 'Discounts' is locked by another user."]
 
         assert wired.recorder.calls == []
 
@@ -371,13 +508,100 @@ class TestNothingToDo:
         assert wired.recorder.calls == ["started", "generated"]
 
 
+class TestThemeLock:
+    """The theme ends the run locked the way it was before: by the user, or not at all."""
+
+    async def test_unlocks_a_theme_that_was_not_locked(self, wired):
+        await _run()
+
+        assert wired.recorder.kwargs["generated"]["keep_locked"] is False
+
+    async def test_keeps_a_theme_locked_by_the_triggering_user(self, wired):
+        wired.theme = _theme_node(locker_key="u1")
+
+        await _run()
+
+        assert wired.recorder.kwargs["generated"]["keep_locked"] is True
+
+    async def test_keeps_the_lock_when_the_generation_fails(self, wired):
+        wired.theme = _theme_node(locker_key="u1")
+        wired.ai_error = RuntimeError("upstream refused")
+
+        await _run()
+
+        assert wired.recorder.kwargs["failed"]["keep_locked"] is True
+
+    async def test_unlocks_after_a_failure_when_it_was_not_locked(self, wired):
+        wired.ai_error = RuntimeError("upstream refused")
+
+        await _run()
+
+        assert wired.recorder.kwargs["failed"]["keep_locked"] is False
+
+
+class TestThemeLockPatch:
+    """The PATCH body carries the locker it is given."""
+
+    @pytest.fixture
+    def bodies(self, monkeypatch):
+        bodies: list[dict] = []
+
+        async def _patch(_conn, _project_key, _spec_key, spec_update):
+            bodies.append(spec_update.model_dump(exclude_unset=True))
+
+        monkeypatch.setattr(utils_module, "patch_test_structure_element_spec", _patch)
+        return bodies
+
+    @pytest.mark.parametrize(("keep_locked", "locker"), [(True, "u1"), (False, None)])
+    @pytest.mark.parametrize(
+        "patch_name", ["patch_generated_test_ideas", "patch_generation_failed"]
+    )
+    async def test_sets_the_given_locker(self, bodies, patch_name, keep_locked, locker):
+        kwargs = {"test_ideas": "Idea"} if patch_name == "patch_generated_test_ideas" else {}
+
+        await getattr(utils_module, patch_name)(
+            conn=MagicMock(),
+            project_key="10004",
+            spec_key="s1",
+            previous_description="",
+            language=LanguageOption.ENGLISH,
+            user_key="u1",
+            templates_dir=_context().templates_dir,
+            keep_locked=keep_locked,
+            **kwargs,
+        )
+
+        (body,) = bodies
+        assert body["locker"] == {"optional": locker}
+        assert body["reviewer"] == {"optional": "u1"}
+
+    @pytest.mark.parametrize(("keep_locked", "locker"), [(True, "u1"), (False, None)])
+    async def test_restores_exactly_the_previous_description(self, bodies, keep_locked, locker):
+        await utils_module.patch_previous_description(
+            conn=MagicMock(),
+            project_key="10004",
+            spec_key="s1",
+            previous_description="<p>Old</p>",
+            user_key="u1",
+            keep_locked=keep_locked,
+        )
+
+        (body,) = bodies
+        assert body["description"]["html"] == "<html><body><p>Old</p></body></html>"
+        assert body["locker"] == {"optional": locker}
+        assert body["reviewer"] == {"optional": "u1"}
+
+
 class TestMaxRequirements:
     async def test_skips_a_theme_with_more_requirements_than_allowed(self, wired):
         wired.requirements = [_requirement("ER_1"), _requirement("ER_2"), _requirement("ER_3")]
         agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
 
-        await agent.run(_context(), MagicMock(), MagicMock(), [])
+        result = await _run(agent=agent)
 
+        assert result.warnings == [
+            "Test theme 'Discounts' has 3 requirements, more than the 2 allowed."
+        ]
         assert wired.recorder.calls == []
         assert wired.ai_calls == []
 
@@ -392,7 +616,7 @@ class TestMaxRequirements:
         wired.requirements = [_requirement("ER_1"), _requirement("ER_2"), _requirement("ER_3")]
         agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
 
-        await agent.run(_context(), MagicMock(), MagicMock(), [])
+        await _run(agent=agent)
 
         assert fetched == []
 
@@ -400,7 +624,7 @@ class TestMaxRequirements:
         wired.requirements = [_requirement("ER_1"), _requirement("ER_2")]
         agent = RequirementAgent(RequirementAgentArgs(max_requirements=2))
 
-        await agent.run(_context(), MagicMock(), MagicMock(), [])
+        await _run(agent=agent)
 
         assert wired.recorder.calls == ["started", "generated"]
 
@@ -454,3 +678,268 @@ class TestFailureHandling:
         await _run()
 
         assert wired.recorder.calls == ["started", "failed"]
+
+
+class TestJobReporting:
+    """A run that writes no ideas fails its job, so the job matches what TestBench shows."""
+
+    @pytest.fixture
+    def job(self, tmp_path):
+        store = JobStore(tmp_path / "usage.sqlite")
+        store.create(
+            "j1",
+            agent_key="requirement",
+            user_key="u1",
+            project_key="10004",
+            project_name="VSR-Dreamcar",
+            root_key="TT-1",
+            item_ids=["TT-1"],
+            warnings=[],
+        )
+        return SimpleNamespace(store=store, handle=JobHandle("j1", store))
+
+    async def _run(self, job):
+        with job_scope(job.handle):
+            await _run()
+        return job.store.get("j1", "u1")
+
+    async def test_a_written_result_leaves_the_job_alone(self, wired, job):
+        await self._run(job)
+
+        assert job.handle.failed is False
+
+    async def test_an_unreadable_theme_fails_the_job(self, wired, job):
+        wired.theme_error = RuntimeError("403")
+
+        detail = await self._run(job)
+
+        assert detail.status == "failed"
+        assert detail.error == get_translation(
+            "requirement.job.theme_unreadable", LanguageOption.ENGLISH, theme="Discounts"
+        )
+
+    async def test_a_failed_generation_fails_the_job(self, wired, job):
+        wired.ai_error = RuntimeError("upstream refused")
+
+        detail = await self._run(job)
+
+        assert wired.recorder.calls == ["started", "failed"]
+        assert detail.status == "failed"
+        assert detail.error == get_translation(
+            "requirement.job.generation_failed", LanguageOption.ENGLISH, theme="Discounts"
+        )
+
+
+TB_5 = [5, 0]
+
+
+def _two_ideas() -> TestIdeaResult:
+    return TestIdeaResult(
+        groups=[
+            IdeaGroup(
+                theme_name="Thresholds",
+                ideas=[
+                    TestIdea(
+                        title="Discount of 0.5%",
+                        description="Checks the lower bound.",
+                        covered_requirements=["ER_WHY299"],
+                    ),
+                    TestIdea(title="Discount at the maximum"),
+                ],
+            )
+        ]
+    )
+
+
+def _deletes(calls: list[str]) -> list[str]:
+    return [call for call in calls if call.startswith("delete:")]
+
+
+class TestCreatesTestCaseSets:
+    """From TestBench 5.0 every idea also becomes a test case set below the theme."""
+
+    async def test_creates_one_set_per_idea_before_writing_the_theme(self, wired):
+        wired.ai_result = _two_ideas()
+
+        await _run(server_version=TB_5)
+
+        assert wired.recorder.calls == [
+            "started",
+            "create:Discount of 0 5%",
+            "describe:spec-new-1",
+            "create:Discount at the maximum",
+            "describe:spec-new-2",
+            "restored",
+        ]
+
+    async def test_creates_the_sets_flat_below_the_triggered_theme(self, wired):
+        await _run(server_version=TB_5)
+
+        assert wired.recorder.kwargs["create:Discount of 0%"] == {
+            "tov_key": "42",
+            "parent_key": "k-s1",
+            "keep_locked": True,
+        }
+
+    async def test_writes_the_idea_into_the_set_and_unlocks_it(self, wired):
+        await _run(server_version=TB_5)
+
+        ((spec_key, body),) = wired.set_writes
+        assert spec_key == "spec-new-1"
+        assert body["locker"] == {"optional": None}
+        html = body["description"]["html"]
+        assert html.startswith("<html>")
+        assert "Checks the lower bound." in html
+        assert "Covers: ER_WHY299" in html
+
+    async def test_escapes_the_idea_in_the_set_description(self, wired):
+        wired.ai_result = TestIdeaResult(
+            groups=[IdeaGroup(ideas=[TestIdea(title="X", description="<script>1</script>")])]
+        )
+
+        await _run(server_version=TB_5)
+
+        ((_spec_key, body),) = wired.set_writes
+        assert "<script>" not in body["description"]["html"]
+        assert "&lt;script&gt;" in body["description"]["html"]
+
+    async def test_writes_only_the_previous_description_back_into_the_theme(self, wired):
+        await _run(server_version=TB_5)
+
+        assert "generated" not in wired.recorder.calls
+        restored = wired.recorder.kwargs["restored"]
+        assert restored["previous_description"] == "Old"
+        assert restored["keep_locked"] is False
+
+    async def test_keeps_the_users_lock_on_the_theme(self, wired):
+        wired.theme = _theme_node(locker_key="u1")
+
+        await _run(server_version=TB_5)
+
+        assert wired.recorder.kwargs["restored"]["keep_locked"] is True
+
+    async def test_creates_nothing_before_testbench_5(self, wired):
+        await _run(server_version=[4, 1])
+
+        assert wired.recorder.calls == ["started", "generated"]
+
+    async def test_creates_nothing_when_switched_off(self, wired):
+        agent = RequirementAgent(RequirementAgentArgs(create_test_case_sets=False))
+
+        await _run(agent=agent, server_version=TB_5)
+
+        assert wired.recorder.calls == ["started", "generated"]
+
+    async def test_creates_nothing_without_ideas(self, wired):
+        wired.ai_result = TestIdeaResult(groups=[])
+
+        await _run(server_version=TB_5)
+
+        assert wired.recorder.calls == ["started", "generated"]
+
+
+class TestTestCaseSetRollback:
+    """Creating the sets is all or nothing: a failure deletes the ones already created."""
+
+    async def test_deletes_the_created_sets_when_a_later_one_fails(self, wired):
+        wired.ai_result = _two_ideas()
+        wired.create_error = (1, RuntimeError("409"))
+
+        await _run(server_version=TB_5)
+
+        assert wired.recorder.calls == [
+            "started",
+            "create:Discount of 0 5%",
+            "describe:spec-new-1",
+            "lock:spec-new-1",
+            "delete:new-1",
+            "failed",
+        ]
+
+    async def test_deletes_the_created_sets_when_writing_the_theme_fails(self, wired):
+        wired.ai_result = _two_ideas()
+        wired.recorder.failing = {"restored"}
+
+        await _run(server_version=TB_5)
+
+        assert wired.recorder.calls[-5:] == [
+            "lock:spec-new-2",
+            "delete:new-2",
+            "lock:spec-new-1",
+            "delete:new-1",
+            "failed",
+        ]
+
+    async def test_deletes_a_set_whose_description_could_not_be_written(self, wired):
+        wired.recorder.failing = {"describe"}
+
+        await _run(server_version=TB_5)
+
+        assert _deletes(wired.recorder.calls) == ["delete:new-1"]
+        assert wired.recorder.calls[-1] == "failed"
+
+    async def test_locks_a_set_before_deleting_it(self, wired):
+        wired.recorder.failing = {"restored"}
+
+        await _run(server_version=TB_5)
+
+        lock_bodies = [body for _spec, body in wired.set_writes if "description" not in body]
+        assert lock_bodies == [{"locker": {"optional": "u1"}}]
+
+    async def test_a_failing_delete_still_restores_the_theme(self, wired):
+        wired.ai_result = _two_ideas()
+        wired.recorder.failing = {"restored", "delete"}
+
+        await _run(server_version=TB_5)
+
+        assert _deletes(wired.recorder.calls) == ["delete:new-2", "delete:new-1"]
+        assert wired.recorder.calls[-1] == "failed"
+
+
+def _http_error(status: int) -> requests.HTTPError:
+    response = requests.Response()
+    response.status_code = status
+    return requests.HTTPError(f"{status}", response=response)
+
+
+class TestTestCaseSetCreationForbiddenError:
+    """A token without ModifyTestStructureElements gets the ideas as text only."""
+
+    async def test_writes_the_text_when_the_first_set_is_forbidden(self, wired):
+        wired.create_error = (0, _http_error(403))
+
+        await _run(server_version=TB_5)
+
+        assert wired.recorder.calls == ["started", "generated"]
+        assert "Discount of 0%" in wired.recorder.kwargs["generated"]["test_ideas"]
+
+    async def test_warns_on_the_job(self, wired, tmp_path):
+        wired.create_error = (0, _http_error(403))
+        store = JobStore(tmp_path / "usage.sqlite")
+        store.create(
+            "j1",
+            agent_key="requirement",
+            user_key="u1",
+            project_key="10004",
+            project_name="VSR-Dreamcar",
+            root_key="TT-1",
+            item_ids=["TT-1"],
+            warnings=[],
+        )
+
+        with job_scope(JobHandle("j1", store)):
+            await _run(server_version=TB_5)
+
+        detail = store.get("j1", "u1")
+        assert detail.warnings == [
+            get_translation("requirement.job.test_case_sets_not_permitted", LanguageOption.ENGLISH)
+        ]
+
+    async def test_a_later_forbidden_set_rolls_back(self, wired):
+        wired.ai_result = _two_ideas()
+        wired.create_error = (1, _http_error(403))
+
+        await _run(server_version=TB_5)
+
+        assert _deletes(wired.recorder.calls) == ["delete:new-1"]
+        assert wired.recorder.calls[-1] == "failed"

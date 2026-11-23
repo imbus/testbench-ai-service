@@ -43,7 +43,9 @@ When authenticating with a **JWT token**, the token must also grant all of the f
 
 1. The service checks the connected TestBench server version. **TestBench 4.1** is required; against an older server the precheck fails immediately.
 2. The service retrieves all test case sets from the specified test-object-version (and optional cycle / subtree).
-3. For each test case set, it checks that the **specification tab** is not locked by another user.
+3. For each test case set, it applies the following precheck filters. A test case set is included only if **all** conditions are met:
+   - The **specification tab** is not locked by another user.
+   - No other user is entered as **responsible** for the specification. Test case sets without a responsible person, or with the triggering user as responsible, are processed.
 4. Items that pass the precheck are processed concurrently in the background:
    - The current review comment is saved as a backup.
    - A "review started" marker is written to the review comment.
@@ -51,6 +53,7 @@ When authenticating with a **JWT token**, the token must also grant all of the f
    - The prompt is sent to the configured LLM.
    - The AI response is written to the review comment section.
    - If an error occurs, the previous review comment is restored.
+   - The specification is unlocked afterwards — unless it was already locked before the run, in which case the lock is kept.
 
 ## Configuration
 

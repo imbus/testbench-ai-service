@@ -10,25 +10,38 @@
 #
 # Output: dist/testbench-ai-service/  (onedir)
 
-from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import (
+    collect_all,
+    collect_data_files,
+    collect_submodules,
+    copy_metadata,
+)
 
 # Collect everything from packages that use dynamic internal imports or
 # have data files / lazy-loaded sub-packages.
 uvicorn_datas, uvicorn_binaries, uvicorn_hiddenimports = collect_all("uvicorn")
 fastapi_datas, fastapi_binaries, fastapi_hiddenimports = collect_all("fastapi")
+sqlalchemy_datas, sqlalchemy_binaries, sqlalchemy_hiddenimports = collect_all("sqlalchemy")
 
 # Package data files (prompts YAML/schema, locale JSON files)
 pkg_datas = collect_data_files("testbench_ai_service")
 
+# Distribution metadata of the service and all its dependencies: the agent package
+# inspection checks a package's Requires-Dist with importlib.metadata.version().
+metadata_datas = copy_metadata("testbench-ai-service", recursive=True)
+
 datas = (
     pkg_datas
+    + metadata_datas
     + uvicorn_datas
     + fastapi_datas
+    + sqlalchemy_datas
 )
-binaries = uvicorn_binaries + fastapi_binaries
+binaries = uvicorn_binaries + fastapi_binaries + sqlalchemy_binaries
 hiddenimports = (
     uvicorn_hiddenimports
     + fastapi_hiddenimports
+    + sqlalchemy_hiddenimports
     + collect_submodules("testbench_ai_service")
     + collect_submodules("testbench_cli_reporter")
     + collect_submodules("testbench2robotframework")
@@ -45,7 +58,11 @@ hiddenimports = (
     + collect_submodules("aiohttp")
     + collect_submodules("msal")
     + collect_submodules("msal_extensions")
+    # The agent package inspection runs in a subprocess of the binary
+    # (`inspect-agent-package`); it imports the inspector lazily and needs packaging.
+    + collect_submodules("packaging")
     + [
+        "testbench_ai_service.agent_packages.inspector",
         # uvicorn server implementation modules loaded by string at runtime
         "uvicorn.lifespan.on",
         "uvicorn.lifespan.off",
@@ -67,9 +84,10 @@ hiddenimports = (
         "jsonschema._format",
         # yaml (PyYAML)
         "yaml",
-        # tomli / tomli-w for config parsing
+        # tomli / tomli-w / tomlkit for config parsing
         "tomli",
         "tomli_w",
+        "tomlkit",
         # jinja2 template engine
         "jinja2",
         # python-dotenv

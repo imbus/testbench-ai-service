@@ -14,10 +14,12 @@ else:
 
 from pydantic import BaseModel, ValidationError
 
+from testbench_ai_service.agent_packages.loaded import activate_packages
 from testbench_ai_service.config import PROMPTS_DIR, TEMPLATES_DIR, AppConfig
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
+    DEFAULT_AGENT_PACKAGES_DIR,
     AgentConfig,
     LLMConfig,
     ProjectPromptConfig,
@@ -259,6 +261,9 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
                 config_dict = tomllib.load(config_file)
 
             config_dict = {config_prefix: config_dict["tool"][config_prefix]}
+            # The file actually read is pyproject.toml, not the originally
+            # requested (nonexistent) config_path; record that below.
+            config_file_path = project_toml
 
         except (FileNotFoundError, tomllib.TOMLDecodeError, KeyError):
             print(
@@ -287,11 +292,22 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
             sys.exit(1)
             return None  # type: ignore[unreachable]
 
+    section = config_dict[config_prefix]
+    # Before validation, so agents of loaded packages are imported, not checked
+    # against their report. The only place package code is put on sys.path.
+    packages = section.get("agent_packages", {}) if isinstance(section, dict) else {}
+    packages_dir = packages.get("dir") if isinstance(packages, dict) else None
+    activate_packages(Path(packages_dir or DEFAULT_AGENT_PACKAGES_DIR))
+
     try:
-        return AppConfig(**config_dict[config_prefix])
+        config = AppConfig(**section)
     except ValidationError as e:
         print_config_errors(e, config_file_path, config_prefix)
         sys.exit(1)
+        return None  # type: ignore[unreachable]
+
+    config.loaded_from = config_file_path
+    return config
 
 
 def merge_prompt_configs(
@@ -359,8 +375,19 @@ def get_prompt_config(
     return prompt_config
 
 
+def _overlay_llm_config(base: LLMConfig, override: LLMConfig) -> LLMConfig:
+    """Apply the fields *override* states onto *base*, ``agent_models`` key by key."""
+    update = override.model_dump(exclude_unset=True)
+    if "agent_models" in update:
+        update["agent_models"] = {**base.agent_models, **update["agent_models"]}
+    return base.model_copy(update=update)
+
+
 def get_llm_config(
-    config: AppConfig, project_name: str | None = None, request_config: LLMConfig | None = None
+    config: AppConfig,
+    project_name: str | None = None,
+    request_config: LLMConfig | None = None,
+    agent_key: str | None = None,
 ) -> LLMConfig:
     """
     Get the LLM configuration based on the given app configuration, optional project name
@@ -371,10 +398,14 @@ def get_llm_config(
     2. Project-specific config
     3. Global config (lowest priority)
 
+    With *agent_key*, the merged ``agent_models`` entry for that agent, if any,
+    replaces ``model``.
+
     Args:
         config: AppConfig containing global and project configurations
         project_name: Optional project name
         request_config: Optional LLM config from request
+        agent_key: Optional key of the agent the config is resolved for
 
     Returns:
         LLMConfig: LLM configuration with overrides applied
@@ -390,13 +421,14 @@ def get_llm_config(
     if project_name is not None:
         project_config = config.projects.get(project_name)
         if project_config is not None and project_config.llm_config is not None:
-            llm_config = llm_config.model_copy(
-                update=project_config.llm_config.model_dump(exclude_unset=True)
-            )
+            llm_config = _overlay_llm_config(llm_config, project_config.llm_config)
 
     # Override with request config if provided
     if request_config:
-        llm_config = llm_config.model_copy(update=request_config.model_dump(exclude_unset=True))
+        llm_config = _overlay_llm_config(llm_config, request_config)
+
+    if agent_key is not None and (agent_model := llm_config.agent_models.get(agent_key)):
+        llm_config = llm_config.model_copy(update={"model": agent_model})
 
     # 'model_copy(update=...)' skips validation, so 'LLMConfig.validate_config'
     # cannot guarantee this invariant across a merge. Re-check it narrowly here

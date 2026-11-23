@@ -22,11 +22,11 @@ def _override_project_lookup_error(app, status_code: int, message: str) -> None:
 
 
 class TestRootRoute:
-    def test_root_redirects_to_docs(self, client):
+    def test_root_redirects_to_console(self, client):
         response = client.get("/", follow_redirects=False)
 
         assert response.status_code in (307, 308)
-        assert "/docs" in response.headers["location"]
+        assert response.headers["location"] == "/admin/"
 
 
 class TestGetAgents:

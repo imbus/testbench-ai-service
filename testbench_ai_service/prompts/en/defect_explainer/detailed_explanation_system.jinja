@@ -68,7 +68,7 @@ Exactly **one sentence**, plain text:
 - Business-friendly language accessible to non-technical readers
 - No technical terms, no speculation
 
-{% if vars.validate_output %}
+{% if vars.validate_output in [true, "true"] %}
 # Self-Check Before Output
 Before returning the result, verify:
 1. Is the output exactly one sentence?

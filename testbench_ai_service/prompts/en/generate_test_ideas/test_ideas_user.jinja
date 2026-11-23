@@ -1,0 +1,15 @@
+{% for requirement in agent.requirements %}
+# Target Requirement {{ loop.index }} of {{ loop.length }}
+<requirement>
+{{ requirement }}
+</requirement>
+
+{% endfor %}
+# Target Test Theme
+The test theme these ideas will be written to, and what is already below it. Do not repeat what the existing test case sets cover.
+<existing_tests>
+{{ agent.existing_tests }}
+</existing_tests>
+
+# Instruction
+Derive the test ideas for the target requirements as one unit now, and answer with the JSON object only.

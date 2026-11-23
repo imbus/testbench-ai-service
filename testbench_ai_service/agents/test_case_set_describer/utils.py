@@ -53,6 +53,7 @@ async def patch_generated_description_for_test_structure_element(
     language: LanguageOption,
     user_key: str,
     templates_dir: Path,
+    keep_locked: bool = False,
 ):
     template_path = resolve_template_path(
         "template.jinja", templates_dir=templates_dir, language=language, agent_key=AGENT_KEY
@@ -67,7 +68,7 @@ async def patch_generated_description_for_test_structure_element(
         },
     )
     spec_update = SpecificationDetailsForUpdate(
-        locker=OptionalUser(optional=None),
+        locker=OptionalUser(optional=user_key if keep_locked else None),
         reviewer=OptionalUser(optional=user_key),
         description=RichTextInfo(html=description_html, images=[]),
     )
@@ -82,6 +83,7 @@ async def patch_previous_description_for_test_structure_element(
     language: LanguageOption,
     user_key: str,
     templates_dir: Path,
+    keep_locked: bool = False,
 ):
     template_path = resolve_template_path(
         "failed.jinja", templates_dir=templates_dir, language=language, agent_key=AGENT_KEY
@@ -93,7 +95,7 @@ async def patch_previous_description_for_test_structure_element(
     )
     spec_update = SpecificationDetailsForUpdate(
         reviewer=OptionalUser(optional=user_key),
-        locker=OptionalUser(optional=None),
+        locker=OptionalUser(optional=user_key if keep_locked else None),
         description=RichTextInfo(html=description_html, images=[]),
     )
     return await patch_test_structure_element_spec(conn, project_key, spec_key, spec_update)

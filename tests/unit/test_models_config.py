@@ -1,0 +1,152 @@
+from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
+
+from testbench_ai_service.config import AppConfig
+from testbench_ai_service.llm.base import LLMProvider, RoutingFamily
+from testbench_ai_service.models.config import (
+    AgentConfig,
+    AgentPackagesConfig,
+    ExtraModel,
+    LLMConfig,
+    PromptConfig,
+)
+
+
+def test_timeout_zero_rejected():
+    with pytest.raises(ValidationError):
+        LLMConfig(provider=LLMProvider.OPENAI, timeout=0)
+
+
+def test_timeout_negative_rejected():
+    with pytest.raises(ValidationError):
+        LLMConfig(provider=LLMProvider.OPENAI, timeout=-1)
+
+
+def test_timeout_positive_accepted():
+    config = LLMConfig(provider=LLMProvider.OPENAI, timeout=0.5)
+    assert config.timeout == 0.5
+
+
+def test_max_retries_negative_rejected():
+    with pytest.raises(ValidationError):
+        LLMConfig(provider=LLMProvider.OPENAI, max_retries=-1)
+
+
+def test_max_retries_zero_accepted():
+    config = LLMConfig(provider=LLMProvider.OPENAI, max_retries=0)
+    assert config.max_retries == 0
+
+
+def test_timeout_and_max_retries_default_to_none():
+    config = LLMConfig(provider=LLMProvider.OPENAI)
+    assert config.timeout is None
+    assert config.max_retries is None
+
+
+class TestExtraModels:
+    def test_defaults_to_empty(self):
+        assert LLMConfig().extra_models == {}
+
+    def test_accepts_a_valid_anthropic_entry(self):
+        config = LLMConfig(
+            extra_models={"claude-opus-6": {"provider": "anthropic", "routing": "adaptive"}}
+        )
+        entry = config.extra_models["claude-opus-6"]
+        assert entry.provider is LLMProvider.ANTHROPIC
+        assert entry.routing is RoutingFamily.ADAPTIVE
+
+    def test_accepts_a_valid_openai_entry(self):
+        config = LLMConfig(extra_models={"gpt-6": {"provider": "openai", "routing": "reasoning"}})
+        assert config.extra_models["gpt-6"].routing is RoutingFamily.REASONING
+
+    @pytest.mark.parametrize(
+        ("provider", "routing"),
+        [
+            ("anthropic", "chat"),
+            ("anthropic", "reasoning"),
+            ("openai", "adaptive"),
+            ("openai", "budget"),
+            ("azure_openai", "budget"),
+            ("custom", "chat"),
+            ("custom", "adaptive"),
+        ],
+    )
+    def test_refuses_a_routing_family_the_provider_cannot_use(self, provider, routing):
+        with pytest.raises(ValidationError) as excinfo:
+            LLMConfig(extra_models={"m": {"provider": provider, "routing": routing}})
+        assert "extra_models" in str(excinfo.value)
+
+    @pytest.mark.parametrize(
+        ("provider", "routing"),
+        [
+            ("anthropic", "fallback"),
+            ("openai", "fallback"),
+            ("azure_openai", "chat"),
+            ("azure_openai", "reasoning"),
+            ("custom", "fallback"),
+        ],
+    )
+    def test_allows_every_family_its_provider_can_use(self, provider, routing):
+        config = LLMConfig(extra_models={"m": {"provider": provider, "routing": routing}})
+        assert config.extra_models["m"].routing is RoutingFamily(routing)
+
+    def test_refuses_an_entry_that_shadows_a_builtin(self):
+        # gpt-4o is in CHAT_MODELS; letting config redefine it would let a typo
+        # silently change how a shipped model is called (design 6, 9).
+        with pytest.raises(ValidationError) as excinfo:
+            LLMConfig(extra_models={"gpt-4o": {"provider": "openai", "routing": "reasoning"}})
+        assert "gpt-4o" in str(excinfo.value)
+
+    def test_the_error_path_reaches_the_offending_row(self):
+        # ConfigSection matches issues by path prefix, so a table-level loc
+        # would mark every row instead of the broken one (design 5.3). Task 12
+        # renders against exactly this path.
+        with pytest.raises(ValidationError) as excinfo:
+            LLMConfig(extra_models={"m": {"provider": "anthropic", "routing": "chat"}})
+        assert excinfo.value.errors()[0]["loc"] == ("extra_models", "m", "routing")
+
+    def test_a_shadow_error_names_the_offending_entry(self):
+        with pytest.raises(ValidationError) as excinfo:
+            LLMConfig(extra_models={"gpt-4o": {"provider": "openai", "routing": "chat"}})
+        assert excinfo.value.errors()[0]["loc"] == ("extra_models", "gpt-4o")
+
+    def test_the_field_is_declared_so_it_cannot_leak_into_a_provider_request(self):
+        # agents/base.py:92 spreads **(llm_config.model_extra or {}) into
+        # query_llm. A declared field stays out of model_extra; an undeclared
+        # one would be sent to the provider as a request parameter.
+        config = LLMConfig(
+            extra_models={"claude-opus-6": {"provider": "anthropic", "routing": "adaptive"}}
+        )
+        assert "extra_models" not in (config.model_extra or {})
+
+
+class TestExtraModelStandalone:
+    def test_requires_both_fields(self):
+        with pytest.raises(ValidationError):
+            ExtraModel(provider="openai")
+
+
+def test_agent_packages_defaults():
+    # AppConfig() itself fails in some environments (prompt variable check), so read the default
+    packages = AppConfig.model_fields["agent_packages"].get_default(call_default_factory=True)
+    assert packages.allow_upload is False
+    assert packages.dir == Path("data/agent_packages")
+    assert packages.max_upload_mb == 20
+
+
+@pytest.mark.parametrize("value", [0, 501])
+def test_agent_packages_max_upload_mb_is_bounded(value):
+    with pytest.raises(ValidationError):
+        AgentPackagesConfig(max_upload_mb=value)
+
+
+def test_agent_config_package_defaults_to_none():
+    agent = AgentConfig(
+        enabled=True,
+        endpoint_path="/x",
+        class_path="a.B",
+        prompt=PromptConfig(file=Path("x/prompt.yaml")),
+    )
+    assert agent.package is None

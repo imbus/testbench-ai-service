@@ -63,6 +63,11 @@ file_name = "testbench-ai-service.log"
 log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 
+# Browser console at /admin
+[testbench-ai-service.admin_ui]
+enabled = true
+# require_loopback = false      # refuse console clients that are not on this host
+
 # agent: Test Case Set Reviewer
 [testbench-ai-service.agents.test_case_set_reviewer]
 enabled = true
@@ -117,6 +122,7 @@ enabled = false
 | `debug`            | Boolean | Enable debug mode (verbose logging, auto-reload).                                                             | `false`                         |
 | `language`         | String  | Default language for prompt resolution and localization (`"en"` or `"de"`).                               | `"de"`                          |
 | `prompts_dir`      | String  | Directory containing prompt YAML files. Relative paths in prompt configs are resolved against this directory. | Built-in prompts directory        |
+| `usage_file`       | String  | SQLite file holding the token usage per model, shown on the web console's Status screen. A relative path is resolved against the directory of `config.toml`. Delete the file to reset the counts. Changing it takes effect after a restart. | `usage.sqlite` next to `config.toml` |
 
 **Example:**
 
@@ -211,6 +217,26 @@ trusted_proxies = ["10.0.0.1"]
 
 ---
 
+## Jobs
+
+**`[testbench-ai-service.jobs]`**
+
+| Option           | Type    | Description                                                                                                                                    | Default |
+| ---------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `retention_days` | Integer | Jobs older than this many days are deleted when the service starts. Must be greater than 0. Jobs live in the `usage_file` SQLite file. | `90`    |
+
+At startup, jobs still `running` are also marked `failed`, because a restart ended their runs. Their error message is in the default `language` of the [service settings](#service-settings). See [Jobs](agents/index.md#jobs).
+
+**Example:**
+
+```toml
+# config.toml
+[testbench-ai-service.jobs]
+retention_days = 30
+```
+
+---
+
 ## LLM provider
 
 :::tip[Provider setup guides]
@@ -227,11 +253,14 @@ For step-by-step instructions on configuring each provider see the [LLM Provider
 | ------------------ | ------- | ----------------------------------------------------------------------------------------- | ---------------- |
 | `provider`       | String  | LLM provider: `"openai"`, `"azure_openai"`, `"anthropic"`, or `"custom"`.          | `"openai"`     |
 | `model`          | String  | Override the default model (if not set, the model from the prompt variant is used).       | —               |
+| `agent_models`   | Table   | The model one agent runs on, keyed by agent key. Takes precedence over `model`. See [Model per agent](#model-per-agent). | —               |
 | `azure_endpoint` | String  | Azure OpenAI endpoint URL (required when `provider = "azure_openai"`).                  | —               |
 | `api_version`    | String  | Azure OpenAI API version (required when `provider = "azure_openai"`).                   | —               |
 | `class_path`     | String  | Full Python class path for a custom LLM client (required when `provider = "custom"`).   | —               |
-| `timeout`        | Float   | HTTP request timeout in seconds, passed through to the underlying client.                 | Provider default |
-| `max_retries`    | Integer | Number of automatic retries on transient errors, passed through to the underlying client. | Provider default |
+| `timeout`        | Float   | Seconds to wait for an LLM response before giving up. Must be greater than 0. Unset uses the provider SDK's default. | _unset_ |
+| `max_retries`    | Integer | How often the provider SDK retries a failed request. 0 disables retries. Unset uses the SDK's default.           | _unset_ |
+
+**Note on validation:** The `timeout` and `max_retries` options are now validated at startup. Previously, invalid values (0 or negative for `timeout`, negative values for `max_retries`) were silently accepted. If you encounter a validation error when starting the service, remove the invalid line from your config file.
 
 **OpenAI example:**
 
@@ -260,9 +289,31 @@ api_version = "2025-04-01-preview"
 model = "gpt-4o"  # use your Azure deployment name here
 ```
 
+### Model per agent
+
+`agent_models` picks the model for single agents. Entries are keyed by agent key and take precedence over `model`, so `model` stays the model for every agent without an entry:
+
+```toml
+# config.toml
+[testbench-ai-service.llm_config.agent_models]
+test_case_set_reviewer = "claude-sonnet-4-6"
+
+[testbench-ai-service.projects."Release 2.0".llm_config.agent_models]
+test_case_set_reviewer = "gpt-4.1"
+```
+
+A project's `agent_models` overrides the global table agent by agent; agents the project does not name keep their global entry. The model of an agent is resolved in this order:
+
+1. its `agent_models` entry (request, then project, then global)
+2. `model` (request, then project, then global)
+3. the `model` of the prompt variant
+4. the `default_model` of the prompt
+
+In the web console, the **Agents** screen sets the global entry in the model column and a project's entry in the agent's expanded row, and the agent's detail screen sets the entry of the selected scope. **Inherited** removes the entry.
+
 ### Automatic model routing
 
-The service automatically routes each request to the correct client based on the model name specified in the prompt variant, regardless of the globally configured `provider`. This lets you mix models from different providers across prompt variants without changing the global config:
+The service automatically routes each request to the correct client based on the model the agent runs on (see [Model per agent](#model-per-agent)), regardless of the globally configured `provider`. This lets you mix models from different providers across prompt variants without changing the global config:
 
 | Model name prefix | Routed to |
 | ----------------- | --------- |
@@ -272,6 +323,36 @@ The service automatically routes each request to the correct client based on the
 | anything else | uses `config.provider` |
 
 For example, if `provider = "openai"` is configured globally but a prompt variant specifies `model: "claude-sonnet-4-6"`, the service automatically uses the Anthropic client for that variant. The corresponding API key (`ANTHROPIC_API_KEY`) must be set in the environment.
+
+### Adding a model the service does not know yet
+
+The clients know a fixed set of models and how to request each one. A newer model is still sent, but as a plain fallback request: without reasoning effort or thinking, and with a warning in the log. To use such a model properly, add it to `extra_models` with its provider and the request shape (`routing`) its client should use. No code change is needed, and the web console offers the model in its model lists.
+
+**`[testbench-ai-service.llm_config.extra_models."<model name>"]`**
+
+| Option     | Type   | Description                                       |
+| ---------- | ------ | ------------------------------------------------- |
+| `provider` | String | `openai`, `azure_openai`, `anthropic` or `custom` |
+| `routing`  | String | The request shape, see below                      |
+
+| `routing`   | Providers                     | Request                                                       |
+| ----------- | ----------------------------- | ------------------------------------------------------------- |
+| `chat`      | `openai`, `azure_openai`      | Chat model, temperature 0                                     |
+| `reasoning` | `openai`, `azure_openai`      | Reasoning model with a reasoning effort                       |
+| `adaptive`  | `anthropic`                   | Adaptive thinking with an effort                              |
+| `budget`    | `anthropic`                   | Extended thinking with a token budget derived from the effort |
+| `fallback`  | all (the only one for `custom`) | Plain request, as for an unknown model                      |
+
+Any other combination is refused when the configuration is loaded, and so is an entry for a model the clients already know: such a model is offered automatically.
+
+**Example:**
+
+```toml
+# config.toml
+[testbench-ai-service.llm_config.extra_models."gpt-6"]
+provider = "openai"
+routing = "reasoning"
+```
 
 ### Setting the API key
 
@@ -364,11 +445,24 @@ For a complete implementation guide, examples, and troubleshooting reference, se
 
 Each agent is configured under its own key. The three built-in Agents are `test_case_set_reviewer`, `test_case_set_describer`, and `defect_explainer`.
 
+A block for a **built-in** agent overrides only the settings it names; everything else keeps its built-in value, and agents you do not mention are unaffected. So turning one agent off is a single line:
+
+```toml
+[testbench-ai-service.agents.test_case_set_reviewer]
+enabled = false
+```
+
+Nested blocks merge the same way — setting `prompt.variant` keeps the built-in `prompt.file`. A **new** agent key has nothing to inherit from, so it must declare `enabled`, `endpoint_path`, `class_path` and `prompt.file` in full.
+
+Because the table merges, the built-in agents are always present: an empty `[testbench-ai-service.agents]` block, or none at all, leaves all three enabled. An agent cannot be removed by omission — set `enabled = false`.
+
+A disabled agent registers no HTTP endpoint at all, and is exempt from the startup checks on its prompt file and `class_path`. If you point `prompts_dir` at a directory that holds only your own prompts, a built-in you never configured is skipped with a warning rather than stopping the service: it has no prompt file to run.
+
 | Option            | Type    | Description                                                 | Required |
 | ----------------- | ------- | ----------------------------------------------------------- | -------- |
-| `enabled`       | Boolean | Whether this agent is active.                               | Yes      |
-| `endpoint_path` | String  | The HTTP endpoint path (e.g.,`"/test-case-set-reviews"`). | Yes      |
-| `class_path`    | String  | Full Python class path to the agent service implementation. | Yes      |
+| `enabled`       | Boolean | Whether this agent is active. A disabled agent registers no endpoint. | For a new agent |
+| `endpoint_path` | String  | The HTTP endpoint path (e.g.,`"/test-case-set-reviews"`). | For a new agent |
+| `class_path`    | String  | Full Python class path to the agent service implementation. | For a new agent |
 
 :::note
 The `name`, `summary`, and `description` shown in the OpenAPI UI and in TestBench as the agent name, summary, and description are read from the prompt YAML file (`name`, `summary`, `description` fields at the root of the YAML).
@@ -378,9 +472,11 @@ The `name`, `summary`, and `description` shown in the OpenAPI UI and in TestBenc
 
 | Option      | Type   | Description                                                                                          | Required |
 | ----------- | ------ | ---------------------------------------------------------------------------------------------------- | -------- |
-| `file`    | String | Path to the prompt YAML file (relative to `prompts_dir/<language>/`).                              | Yes      |
+| `file`    | String | Path to the prompt YAML file (relative to `prompts_dir/<language>/`).                              | For a new agent |
 | `variant` | String | Prompt variant to use (falls back to `default_variant` in the YAML file).                          | No       |
-| `vars`    | Table  | Key-value pairs for user-provided variables, accessible as `{{ vars.<key> }}` in prompt templates. | No       |
+| `vars`    | Table  | Key-value pairs for user-provided variables, accessible as `{{ vars.<key> }}` in prompt templates. Values may be strings, numbers or booleans, matching the `value_type` the variant declares. | No       |
+
+A boolean renders as Python spells it — `{{ vars.strict }}` with `strict = true` produces `True`. Use it in a condition (`{% if vars.strict %}`) rather than interpolating it directly.
 
 For details on how prompts work, see the [Prompts](prompts.md) page.
 
@@ -417,7 +513,9 @@ Any global setting can be overridden per TestBench project. The project name mus
 | `agents.<key>.enabled`        | Boolean | Enable or disable a specific agent.             |
 | `agents.<key>.prompt.file`    | String  | Override the prompt file.                       |
 | `agents.<key>.prompt.variant` | String  | Override the prompt variant.                    |
-| `agents.<key>.prompt.vars`    | Table   | Override prompt variables.                      |
+| `agents.<key>.prompt.vars`    | Table   | Override prompt variables — see the note below. |
+
+Unlike the other rows, `vars` is replaced rather than merged: a project that sets one variable overrides the whole table, and every variable it does not name falls back to the prompt's own `default_value` rather than to the global setting.
 
 **Example:**
 
@@ -440,6 +538,32 @@ enabled = false
 file = "CarConfigurator_reviews_prompt/prompt.yaml"
 variant = "Full Review"
 ```
+
+### Per-project LLM configuration
+
+A project may override any `llm_config` setting. The override is *sparse*:
+state only what differs, and every other setting is inherited from the global
+`[testbench-ai-service.llm_config]` table.
+
+```toml
+[testbench-ai-service.projects."Release 2.0".llm_config]
+model = "gpt-5"
+timeout = 30
+```
+
+Edit this from the console on the **LLM** screen, which has a tab per project.
+An empty field inherits; clearing a field removes the override.
+
+Two things behave differently from the rest of the table:
+
+- **`extra_models` is not merged.** A project that declares any `extra_models`
+  entry replaces the global catalogue for that project rather than adding to
+  it. The console therefore edits `extra_models` globally only.
+- **A project API key is separate from the project's config.** The key is read
+  from `<PROJECT_NAME>_<PROVIDER>_API_KEY` in the environment (see
+  [Project-specific API keys](#project-specific-api-keys)); when it is not set,
+  runs for that project fall back to the global credential even though the
+  project's own LLM settings still apply.
 
 ---
 
@@ -482,3 +606,51 @@ file_name = "testbench-ai-service.log"
 log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 ```
+
+### Activity log
+
+**`[testbench-ai-service.logging.activity]`**
+
+A separate JSON Lines file that feeds the activity view of the [web console](web-console.md): what each user's agent runs did, and, for administrators, what the service itself did. Credentials found in the environment are masked in this file only.
+
+| Option         | Type    | Description                                                                   | Default                                  |
+| -------------- | ------- | ----------------------------------------------------------------------------- | ---------------------------------------- |
+| `enabled`      | Boolean | Write the activity log. When `false`, the activity view stays empty.          | `true`                                   |
+| `file_name`    | String  | Path to the file. Relative paths are resolved from the working directory.     | `"testbench-ai-service.activity.jsonl"` |
+| `log_level`    | String  | Minimum log level. One of `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`.    | `"INFO"`                                 |
+| `max_bytes`    | Integer | Size at which the file is rotated.                                            | `5242880` (5 MB)                         |
+| `backup_count` | Integer | Rotated files to keep. The activity view reads them too.                      | `3`                                      |
+
+**Example:**
+
+```toml
+# config.toml
+[testbench-ai-service.logging.activity]
+enabled = true
+file_name = "testbench-ai-service.activity.jsonl"
+max_bytes = 5242880
+backup_count = 3
+```
+
+---
+
+## Web console
+
+**`[testbench-ai-service.admin_ui]`**
+
+| Option             | Type    | Description                                                                                  | Default |
+| ------------------ | ------- | -------------------------------------------------------------------------------------------- | ------- |
+| `enabled`          | Boolean | Serve the browser console at `/admin`. When `false`, `/admin` and the console API return `404`. | `true`  |
+| `require_loopback` | Boolean | Refuse console requests from any client that is not on this machine.                          | `false` |
+
+**Example:**
+
+```toml
+# config.toml
+[testbench-ai-service.admin_ui]
+enabled = true
+require_loopback = false
+```
+
+See [Web Console](web-console.md) for signing in, the roles it checks, and the
+security implications of a non-loopback `host`.

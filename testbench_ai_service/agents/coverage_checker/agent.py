@@ -1,0 +1,409 @@
+"""Checks whether the tests linked to a requirement prove all of its aspects.
+
+Triggered on a single requirement. The run finds the sets linked to it; without
+any linked test case it only reports that. Otherwise the model splits the requirement into aspects,
+reads each linked set against them and explains the gaps; the code builds the
+matrix and assigns each aspect its status. The result goes into a marked block in
+the review comment of every linked set and, in full, into the log. Links and test
+elements are never changed.
+"""
+
+import asyncio
+from typing import ClassVar
+
+from pydantic import ValidationError
+from testbench_cli_reporter.testbench import Connection as TBConnection
+
+from testbench_ai_service.agents.base import Agent
+from testbench_ai_service.agents.coverage_checker.formatting import (
+    headings,
+    render_report,
+    render_set_block,
+)
+from testbench_ai_service.agents.coverage_checker.gaps import GapsData, explain_gaps
+from testbench_ai_service.agents.coverage_checker.matrix import SetResult, build_matrix
+from testbench_ai_service.agents.coverage_checker.model import (
+    CoverageCheckerArgs,
+    CoverageCheckerData,
+    CoverageResult,
+    SetWithoutEvidence,
+    resolve_run_options,
+)
+from testbench_ai_service.jobs.handle import current_job
+from testbench_ai_service.llm.base import LLMClient
+from testbench_ai_service.log import logger
+from testbench_ai_service.models.agent import (
+    AgentData,
+    ElementType,
+    ExecutionContext,
+    PrecheckResult,
+)
+from testbench_ai_service.models.testbench import (
+    PermissionWithCode,
+    ProjectRole,
+    RequirementAssignment,
+)
+from testbench_ai_service.utils.agent import check_min_testbench_version
+from testbench_ai_service.utils.i18n import get_translation
+from testbench_ai_service.utils.testbench import (
+    get_requirements,
+    is_json_based_tov,
+)
+from testbench_ai_service.utils.time_utils import current_time
+from testbench_ai_service.utils.traceability.aspects import (
+    AspectsData,
+    decompose,
+    render_requirement,
+)
+from testbench_ai_service.utils.traceability.context import (
+    find_requirement,
+    load_requirement_context,
+)
+from testbench_ai_service.utils.traceability.interpretation import (
+    InterpretationData,
+    interpret_set,
+)
+from testbench_ai_service.utils.traceability.models import (
+    AskStep,
+    Aspect,
+    LinkedSet,
+    RequirementContext,
+    T,
+)
+from testbench_ai_service.utils.traceability.review_writer import (
+    WriteOutcome,
+    block_pattern,
+    write_review_block,
+)
+
+
+def _refused(language, key: str, **values) -> PrecheckResult:
+    message = get_translation(f"coverage_checker.precheck.{key}", language, **values)
+    return PrecheckResult(passed=False, warnings=[message])
+
+
+def _without_linked_tests(loaded: RequirementContext) -> CoverageResult:
+    """The result for a requirement no test case is linked to.
+
+    Sets linked as a whole but empty are listed, so the report shows why they do
+    not count.
+    """
+    return CoverageResult(
+        requirement_key=loaded.requirement_ref,
+        aspects=[],
+        sets_without_evidence=[
+            SetWithoutEvidence(set_key=linked_set.key, reason="no_test_cases")
+            for linked_set in loaded.linked_sets
+        ],
+        reduced_mode=loaded.reduced_mode,
+        incomplete=False,
+        no_linked_tests=True,
+        set_paths={linked_set.key: linked_set.path for linked_set in loaded.linked_sets},
+    )
+
+
+class CoverageChecker(Agent):
+    AGENT_DATA_CLASS = CoverageCheckerData
+    STEP_DATA_CLASSES: ClassVar[dict[str, type[AgentData]]] = {
+        "aspects": AspectsData,
+        "interpretation": InterpretationData,
+        "gaps": GapsData,
+    }
+    ARGS_CLASS = CoverageCheckerArgs
+    args: CoverageCheckerArgs
+    REQUIRED_PERMISSIONS = frozenset(
+        {
+            PermissionWithCode.ReadOwnUserDetails,
+            PermissionWithCode.ReadProjectDetails,
+            PermissionWithCode.ReadTovRequirements,
+            PermissionWithCode.ReadTovReport,
+            PermissionWithCode.ReadReportingJobDetails,
+            PermissionWithCode.DownloadReportFile,
+            PermissionWithCode.ReadTestThemeTree,
+            PermissionWithCode.ReadTestCaseSetDetails,
+            PermissionWithCode.ModifySpecifications,
+        }
+    )
+    ALLOWED_ROLES = frozenset({ProjectRole.TestManager, ProjectRole.TestDesigner})
+
+    async def precheck(self, context: ExecutionContext, conn: TBConnection) -> PrecheckResult:
+        """Refuse anything but a requirement of a JSON-based TOV.
+
+        The linked tests are searched by the run: that needs the TOV's JSON report,
+        which is too slow for the request.
+
+        Returns:
+            On success the requirement's key as the only item, and a warning when
+            no RM service is configured (the aspects then rest on the title alone).
+        """
+        if unsupported_version := check_min_testbench_version(context, conn):
+            return unsupported_version
+        language = context.language
+        if refusal := self._refuse_trigger(context):
+            return refusal
+        assignments = await self._load_requirements(context, conn)
+        if isinstance(assignments, PrecheckResult):
+            return assignments
+
+        assignment = find_requirement(assignments, context.root_key, context.root_uid)
+        if assignment is None:
+            return _refused(
+                language, "requirement_not_found", requirement=context.root_key or context.root_uid
+            )
+
+        warnings = []
+        if self.args.rm_service_url is None:
+            warnings.append(get_translation("coverage_checker.precheck.reduced_mode", language))
+        return PrecheckResult(passed=True, warnings=warnings, items=[assignment.key])
+
+    def _refuse_trigger(self, context: ExecutionContext) -> PrecheckResult | None:
+        """Refuse a trigger that is not a requirement of a TOV or has invalid prompt vars."""
+        language = context.language
+        if (
+            context.element_type != ElementType.REQUIREMENT
+            or not context.tov_key
+            or not (context.root_key or context.root_uid)
+        ):
+            logger.warning(
+                "Coverage check needs a requirement of a TOV; got element_type=%r, "
+                "tree_type=%r, tov_key=%r, root_key=%r, root_uid=%r",
+                context.element_type,
+                context.tree_type,
+                context.tov_key,
+                context.root_key,
+                context.root_uid,
+            )
+            return _refused(language, "not_a_requirement")
+        try:
+            resolve_run_options(context.prompt_config.vars, self.args)
+        except ValidationError as error:
+            details = "; ".join(str(err["msg"]) for err in error.errors())
+            return _refused(language, "invalid_vars", details=details)
+        return None
+
+    async def _load_requirements(
+        self, context: ExecutionContext, conn: TBConnection
+    ) -> PrecheckResult | list[RequirementAssignment]:
+        """Load the TOV's requirements, or the refusal if that is impossible."""
+        try:
+            if not await asyncio.to_thread(
+                is_json_based_tov, conn, context.project_key, context.tov_key
+            ):
+                return _refused(context.language, "unsupported_tov_format")
+            assignments = await asyncio.to_thread(
+                get_requirements, conn, context.project_key, None, context.tov_key
+            )
+        except Exception as error:
+            logger.error("Could not load the requirements of TOV '%s': %r", context.tov_key, error)
+            return _refused(context.language, "load_failed")
+        return list(assignments)
+
+    async def run(
+        self,
+        context: ExecutionContext,
+        conn: TBConnection,
+        llm_client: LLMClient,
+        item_ids: list[str],
+    ) -> None:
+        """Check the coverage and log the report and the full result.
+
+        ``item_ids`` holds only the requirement; the linked sets are found here.
+        """
+        result = await self.check_coverage(context, conn, llm_client)
+        if result is None:
+            return
+        logger.info("%s\n%s", render_report(result), result.model_dump_json(indent=2))
+        await current_job().set_report("coverage_checker", result)
+
+    async def check_coverage(
+        self,
+        context: ExecutionContext,
+        conn: TBConnection,
+        llm_client: LLMClient,
+    ) -> CoverageResult | None:
+        """Build the coverage result and write it into the linked sets' review comments.
+
+        Returns:
+            The result, or ``None`` if the check had to stop; the reason is logged. A
+            requirement without linked test cases gives a result with
+            ``no_linked_tests`` set and writes nothing.
+        """
+        if not context.tov_key:
+            logger.error("Coverage check without a TOV; nothing to do")
+            await self._fail_job(context, "load_failed", requirement=context.root_key)
+            return None
+        options = resolve_run_options(context.prompt_config.vars, self.args)
+
+        try:
+            loaded = await load_requirement_context(
+                conn,
+                self.args,
+                context.project_key,
+                context.tov_key,
+                context.root_key,
+                context.root_uid,
+            )
+        except Exception as error:
+            logger.error(
+                "Could not load requirement %r of TOV '%s': %r",
+                context.root_key or context.root_uid,
+                context.tov_key,
+                error,
+            )
+            await self._fail_job(
+                context, "load_failed", requirement=context.root_key or context.root_uid
+            )
+            return None
+
+        if not any(linked_set.test_cases for linked_set in loaded.linked_sets):
+            logger.info(
+                "No test case is linked to requirement '%s'; nothing to check or write",
+                loaded.requirement_ref,
+            )
+            return _without_linked_tests(loaded)
+
+        if loaded.reduced_mode and self.args.rm_service_url is not None:
+            # Without an RM service the precheck already warned; here the configured
+            # one delivered no description, which only the run can tell.
+            await current_job().warn(
+                self._job_text(context, "reduced_mode", requirement=loaded.requirement_ref)
+            )
+        ask = self._ask(context, llm_client)
+        n_sets = len(loaded.linked_sets)
+        await current_job().progress(0, n_sets, self._job_text(context, "progress.aspects"))
+        try:
+            aspects = await decompose(ask, loaded.requirement, self.args.max_aspects)
+        except Exception as error:
+            logger.error(
+                "Splitting requirement '%s' into aspects failed; nothing is written: %r",
+                loaded.requirement_ref,
+                error,
+            )
+            await self._fail_job(context, "decompose_failed", requirement=loaded.requirement_ref)
+            return None
+
+        set_results = await self._interpret_sets(ask, loaded, aspects, context)
+        coverages, without = build_matrix(aspects, set_results, options.counting_spec_status)
+        await current_job().progress(n_sets, n_sets, self._job_text(context, "progress.gaps"))
+        try:
+            coverages = await explain_gaps(
+                ask,
+                render_requirement(loaded.requirement),
+                coverages,
+                [f"{linked_set.title} ({linked_set.path})" for linked_set in loaded.linked_sets],
+            )
+        except Exception as error:
+            logger.error(
+                "Explaining the coverage gaps of requirement '%s' failed; "
+                "writing the matrix without them: %r",
+                loaded.requirement_ref,
+                error,
+            )
+
+        result = CoverageResult(
+            requirement_key=loaded.requirement_ref,
+            aspects=coverages,
+            sets_without_evidence=without,
+            reduced_mode=loaded.reduced_mode,
+            incomplete=any(set_result.evidence is None for set_result in set_results),
+            set_paths={linked_set.key: linked_set.path for linked_set in loaded.linked_sets},
+        )
+        if options.write_review_comments:
+            skipped = await self._write_comments(context, conn, loaded.linked_sets, result)
+            result = result.model_copy(update={"skipped_comments": skipped})
+        return result
+
+    @staticmethod
+    def _job_text(context: ExecutionContext, key: str, **values: str | None) -> str:
+        text: str = get_translation(f"coverage_checker.job.{key}", context.language, **values)
+        return text
+
+    async def _fail_job(self, context: ExecutionContext, key: str, **values: str | None) -> None:
+        await current_job().fail(self._job_text(context, key, **values))
+
+    def _ask(self, context: ExecutionContext, llm_client: LLMClient) -> AskStep:
+        async def ask(step: str, schema: type[T], agent_data: AgentData) -> T:
+            return await self.get_structured_ai_response(
+                llm_client,
+                context.llm_config,
+                context.prompt_config,
+                schema,
+                agent_data,
+                step=step,
+            )
+
+        return ask
+
+    async def _interpret_sets(
+        self,
+        ask: AskStep,
+        loaded: RequirementContext,
+        aspects: list[Aspect],
+        context: ExecutionContext,
+    ) -> list[SetResult]:
+        """Interpret the linked sets in parallel; a failing set does not stop the others."""
+        semaphore = asyncio.Semaphore(self.args.max_parallel_sets)
+        requirement = render_requirement(loaded.requirement)
+        total = len(loaded.linked_sets)
+        text = self._job_text(context, "progress.sets")
+        interpreted = 0
+
+        async def interpret(linked_set: LinkedSet) -> SetResult:
+            async with semaphore:
+                try:
+                    evidence = await interpret_set(
+                        ask, requirement, aspects, linked_set, self.args.max_test_cases_per_call
+                    )
+                except Exception as error:
+                    logger.error(
+                        "Interpreting test case set '%s' failed: %r", linked_set.path, error
+                    )
+                    evidence = None
+            nonlocal interpreted
+            interpreted += 1
+            await current_job().progress(interpreted, total, text)
+            return SetResult(
+                set_key=linked_set.key,
+                spec_status=linked_set.spec_status,
+                has_test_cases=bool(linked_set.test_cases),
+                evidence=evidence,
+            )
+
+        return list(await asyncio.gather(*(interpret(s) for s in loaded.linked_sets)))
+
+    async def _write_comments(
+        self,
+        context: ExecutionContext,
+        conn: TBConnection,
+        linked_sets: list[LinkedSet],
+        result: CoverageResult,
+    ) -> list[str]:
+        """Write each set's block; return the keys of the sets that were not written."""
+        semaphore = asyncio.Semaphore(self.args.max_parallel_sets)
+        pattern = block_pattern(headings(), result.requirement_key)
+        timestamp = current_time()
+
+        async def write(linked_set: LinkedSet) -> tuple[str, WriteOutcome]:
+            try:
+                block = render_set_block(result, linked_set.key, context.language, timestamp)
+            except Exception as error:
+                logger.error(
+                    "Rendering the review block of test case set '%s' failed: %r",
+                    linked_set.path,
+                    error,
+                )
+                return linked_set.key, WriteOutcome.FAILED
+            async with semaphore:
+                outcome = await write_review_block(
+                    conn,
+                    context.project_key,
+                    context.tov_key,
+                    context.user_key,
+                    linked_set,
+                    pattern,
+                    block,
+                )
+            return linked_set.key, outcome
+
+        outcomes = await asyncio.gather(*(write(s) for s in linked_sets))
+        return [key for key, outcome in outcomes if outcome != WriteOutcome.WRITTEN]

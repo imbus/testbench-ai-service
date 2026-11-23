@@ -1,0 +1,114 @@
+import { useEffect, useRef, useState } from 'react'
+import { Button } from 'primereact/button'
+import { Message } from 'primereact/message'
+import { usePreview } from '../api/mutations'
+import { useTranslation } from 'react-i18next'
+import { useDraft } from '../state/draft'
+
+/**
+ * The `config.toml` the current draft would write.
+ *
+ * It comes from `POST /config/preview` rather than being rendered in the
+ * browser: the artboard hand-rolled a `toToml`, and two serializers for one
+ * file is two chances to disagree about what is actually on disk.
+ */
+export function Raw() {
+  const { t } = useTranslation()
+  const draft = useDraft()
+  const preview = usePreview()
+  const [copied, setCopied] = useState(false)
+  const timerRef = useRef<NodeJS.Timeout | number>()
+
+  const edits = JSON.stringify(draft.edits)
+  useEffect(() => {
+    preview.mutate(draft.edits)
+    // Keyed on the serialized edits: the object identity changes on every
+    // render, and re-previewing per render would hammer the endpoint.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [edits])
+
+  useEffect(() => {
+    // Clear any pending timer on unmount to avoid setState on an unmounted component.
+    return () => {
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current)
+      }
+    }
+  }, [])
+
+  const onCopy = () => {
+    void navigator.clipboard.writeText(preview.data?.toml ?? '').then(() => {
+      // Clear any existing timer before starting a new one, so rapid clicks
+      // do not leave the label stuck or double-flip.
+      if (timerRef.current) {
+        window.clearTimeout(timerRef.current)
+      }
+      setCopied(true)
+      timerRef.current = window.setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
+  return (
+    <div
+      style={{
+        padding: '28px 32px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 16,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+          config.toml
+        </h2>
+        <span className="text-muted" style={{ fontSize: 12 }}>
+          {t('rawSub')}
+        </span>
+        <div style={{ flex: 1 }} />
+        {preview.data && !preview.isError && (
+          <Button
+            type="button"
+            outlined
+            label={copied ? t('copied') : t('copy')}
+            onClick={onCopy}
+          />
+        )}
+      </div>
+
+      {preview.isError && (
+        <Message
+          severity="error"
+          style={{ justifyContent: 'flex-start' }}
+          text={(preview.error as Error).message}
+        />
+      )}
+
+      {preview.data && !preview.isError && (
+        <pre
+          className="blueprint"
+          style={{
+            margin: 0,
+            padding: '16px 20px',
+            fontSize: 12.5,
+            lineHeight: 1.55,
+            background: 'var(--color-surface)',
+            overflow: 'auto',
+            fontFamily: 'var(--font-code)',
+          }}
+        >
+          <i className="corner tl" />
+          <i className="corner tr" />
+          <i className="corner bl" />
+          <i className="corner br" />
+          {preview.data.toml}
+        </pre>
+      )}
+      {/* React Query retains the last successful data even after a failed
+        re-preview. We deliberately do not render it here: showing an older
+        TOML beside a current error breaks the contract "this is exactly what
+        an apply would write", and the operator cannot tell which text is
+        current. An honest gap is better than a document that looks
+        authoritative and is stale. */}
+    </div>
+  )
+}

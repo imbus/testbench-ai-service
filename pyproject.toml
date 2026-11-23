@@ -9,7 +9,7 @@ authors = [{ name = "imbus AG", email = "support@imbus.de" }]
 readme = "README.md"
 license = { file = "LICENSE" }
 dynamic = ["version"]
-requires-python = ">=3.10,<3.15"
+requires-python = ">=3.11,<3.15"
 keywords = [
   "testbench",
   "ai-proxy",
@@ -46,6 +46,7 @@ dependencies = [
   "fastapi>=0.135.2,<1.0.0",
   "pydantic>=2.12.5,<3.0.0",
   "uvicorn>=0.42.0,<1.0.0",
+  "SQLAlchemy>=2.0,<3.0.0",
   "python-dotenv>=1.2.2,<2.0.0",
   "openai>=2.30.0,<3.0.0",
   "anthropic>=0.97.0,<1.0.0",
@@ -57,13 +58,20 @@ dependencies = [
   "PyYAML>=6.0.3,<7.0.0",
   "jinja2>=3.1.6,<4.0.0",
   "testbench-cli-reporter>=3.0.0,<4.0.0",
-  "testbench2robotframework>=2.0.0,<3.0.0",
+  "testbench2robotframework>=2.1.0,<3.0.0",
   "requests>=2.33.1,<3.0.0",
   "tzdata>=2025.3",
   "tomli>=2.4.1,<3.0.0",
   "tomli-w>=1.2.0,<2.0.0",
+  # config.toml is hand-edited and commented; tomlkit round-trips comments and
+  # key order, which tomli_w cannot. The console must not delete an operator's
+  # notes on first save.
+  "tomlkit>=0.13.2,<1.0.0",
   "jsonschema>=4.26.0,<5.0.0",
   "PyJWT>=2.12.1,<3.0.0",
+  "numpy>=2.0,<3",
+  "packaging>=24.0,<26.0",
+  "python-multipart>=0.0.20,<1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -81,6 +89,7 @@ dev = [
   "pytest-asyncio>=1.3.0",
   "pytest-mock>=3.15.1",
 ]
+local-embeddings = ["fastembed>=0.7,<1"]
 
 [project.urls]
 Homepage = "https://github.com/imbus/testbench-ai-service"
@@ -160,6 +169,22 @@ files = ["testbench_ai_service", "tests"]
 module = ["testbench2robotframework.*", "testbench_cli_reporter.*"]
 ignore_missing_imports = true
 
+# numpy (pulled in by fastembed/onnxruntime) ships stubs using the 3.12
+# `type` statement, which mypy rejects under python_version = "3.10".
+# Nothing here imports numpy directly, so skip analysing it.
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+
+[[tool.mypy.overrides]]
+# numpy >= 2.3 ships stubs with Python 3.12 syntax that mypy cannot parse for
+# python_version 3.10; skip them (numpy values are typed as Any).
+module = ["numpy", "numpy.*", "fastembed", "fastembed.*"]
+follow_imports = "skip"
+follow_imports_for_stubs = true
+ignore_missing_imports = true
+
 [[tool.mypy.overrides]]
 module = "tests.*"
 disallow_untyped_defs = false
@@ -170,4 +195,5 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
   "prompt_engineering: Tests requiring real LLM API keys (expensive, excluded from CI)",
+  "slow: Performance smoke tests (deselect with -m 'not slow')",
 ]

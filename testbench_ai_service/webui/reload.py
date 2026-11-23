@@ -1,0 +1,175 @@
+"""Hot reload, and what a hot reload cannot cover.
+
+Most of the configuration can be swapped in a running process: every request
+reads ``app.state.config`` through ``get_app_config``, the LLM clients can be
+closed and rebuilt, translations and logging can be re-applied.
+
+Two things cannot:
+
+- ``host``, ``port``, the three TLS paths and ``trusted_proxies`` are handed to
+  uvicorn and the middleware stack at boot and are never consulted again;
+- ``admin_ui.enabled`` controls whether the console is mounted at all, decided
+  once in ``create_app()`` when ``init_webui()`` is called;
+- an agent's ``endpoint_path`` and ``class_path`` are consumed by
+  ``init_routers()`` exactly once, at startup, so adding, removing, moving or
+  re-classing an agent cannot change the live routing table.
+
+Those changes are still written to disk. They just raise the console's
+"restart needed" banner rather than pretending to take effect. The banner's
+restart button rebuilds app and server inside the running process
+(``testbench_ai_service.restart``); re-execing would only work under a
+supervisor and would kill a bare terminal process outright.
+
+Note: ``admin_ui.require_loopback`` is deliberately NOT in the restart-required
+set because it is read per request through ``get_app_config`` and is genuinely
+hot-swappable.
+"""
+
+import asyncio
+
+from fastapi import FastAPI
+
+from testbench_ai_service.config import AppConfig
+from testbench_ai_service.llm.factory import LLMFactory
+from testbench_ai_service.log import logger, setup_logging
+from testbench_ai_service.utils.i18n import load_translations
+from testbench_ai_service.webui.paths import join_path
+
+RESTART_FIELDS: tuple[str, ...] = (
+    "host",
+    "port",
+    "ssl_cert",
+    "ssl_key",
+    "ssl_ca_cert",
+    "trusted_proxies",
+    "admin_ui.enabled",
+    "usage_file",
+    "agent_packages.dir",
+)
+
+RESTART_AGENT_FIELDS: tuple[str, ...] = ("endpoint_path", "class_path")
+
+
+def _resolve_dotted_path(obj: object, path: str) -> object:
+    """Resolve a dotted path like 'admin_ui.enabled' by walking attributes.
+
+    Args:
+        obj: The object to traverse (e.g., an AppConfig instance).
+        path: A dotted attribute path (e.g., 'admin_ui.enabled').
+
+    Returns:
+        The value at the path, or raises AttributeError if any component missing.
+    """
+    current = obj
+    for part in path.split("."):
+        current = getattr(current, part)
+    return current
+
+
+def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
+    """Dotted paths of changes between *old* and *new* that a live swap cannot cover.
+
+    An empty list means the whole change set can be applied in process.
+    """
+    changed: list[str] = []
+
+    for field in RESTART_FIELDS:
+        if _resolve_dotted_path(old, field) != _resolve_dotted_path(new, field):
+            changed.append(field)
+
+    old_keys = set(old.agents)
+    new_keys = set(new.agents)
+    changed.extend(join_path(["agents", key]) for key in old_keys - new_keys)
+    changed.extend(join_path(["agents", key, "class_path"]) for key in new_keys - old_keys)
+
+    for key in sorted(old_keys & new_keys):
+        for field in RESTART_AGENT_FIELDS:
+            if getattr(old.agents[key], field) != getattr(new.agents[key], field):
+                changed.append(join_path(["agents", key, field]))
+
+    return sorted(changed)
+
+
+async def hot_reload(app: FastAPI, config: AppConfig) -> bool:
+    """Make *config* the running configuration, in process.
+
+    Ordered deliberately:
+
+    1. logging first, so everything after it is logged the way the operator
+       just asked for;
+    2. translations, which are a module-level dict and cheap to re-read;
+    3. the config swap, which every subsequent request sees through
+       ``get_app_config``;
+    4. the LLM clients last, because rebuilding them is the only step that
+       touches the network and the only one that can be slow.
+
+    Re-applying ``setup_logging`` is safe to repeat: the dict config names every
+    logger the service cares about (``testbench_ai_service``, the four
+    ``uvicorn`` loggers, ``py.warnings``), so ``disable_existing_loggers`` has
+    nothing new to disable, and ``dictConfig`` flushes and closes the handlers
+    it replaces.
+
+    Failures closing the *old* clients, and failures pre-warming the *new*
+    ones, are logged and swallowed rather than raised. By the time this runs
+    the new config is already on disk, so aborting would leave the file and
+    the process disagreeing with no way to reconcile them. A client that
+    cannot be closed is a leaked connection, not a corrupt state; a client
+    that cannot be pre-warmed -- typically a missing provider credential --
+    is an operator problem that belongs on the next request that needs that
+    client, not on the apply. Either way the new ``LLMFactory`` is installed
+    on ``app.state`` regardless of whether the pre-warm succeeded, because
+    ``LLMFactory.get_client`` creates clients lazily on demand: the process
+    must never end up holding the new config together with the old (already
+    partially closed) factory.
+
+    Returns True when the reload completed with no degradation (both the old
+    clients closed cleanly and the new ones pre-warmed), False when it
+    completed but something above was swallowed -- the config and the
+    factory are swapped either way.
+
+    ``setup_logging`` and ``load_translations`` are guarded the same way as
+    the client steps below: by the time this runs, ``apply`` has already
+    written the new config to disk (Task 12's validation cannot catch every
+    way a log path can fail to open -- a race, a permission change after the
+    check -- so this is defence in depth, not the primary guard). A request
+    whose write already succeeded must never come back as a 500 because the
+    *in-process* logging setup failed; the failure is logged (best-effort, to
+    whichever logging configuration is still active) and swallowed, exactly
+    like a client failure below.
+
+    Changes this cannot cover do not belong here at all; see
+    :func:`restart_required`.
+    """
+    succeeded = True
+
+    try:
+        setup_logging(config.logging)
+        load_translations()
+    except Exception as e:
+        succeeded = False
+        logger.warning("Reloaded configuration, but could not re-apply logging: %r", e)
+
+    previous_factory = app.state.llm_factory
+    app.state.config = config
+
+    try:
+        await previous_factory.close_clients()
+    except (Exception, asyncio.CancelledError) as e:
+        succeeded = False
+        logger.warning("Could not close the previous LLM clients during reload: %r", e)
+
+    factory = LLMFactory()
+    try:
+        factory.init_clients([config.llm_config])
+    except Exception as e:
+        succeeded = False
+        logger.warning(
+            "Reloaded configuration, but could not pre-initialise the LLM clients: %r. "
+            "The clients will be created on demand; a missing provider credential will "
+            "surface on the next agent request.",
+            e,
+        )
+    app.state.llm_factory = factory
+
+    logger.info("Configuration reloaded in process")
+    return succeeded

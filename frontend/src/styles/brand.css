@@ -1,0 +1,450 @@
+/* TestBench brand tokens, extracted verbatim from the Claude Design artboard
+   "TestBench AI Service Console.dc.html" <helmet> style block.
+   Layer this AFTER industry.css. Do not edit values. */
+
+[data-brand='testbench'] {
+  --color-accent: #128a5e;
+  --color-accent-2: #2a9a72;
+  --color-accent-100: #e8f5ef;
+  --color-accent-200: #c9e9d9;
+  --color-accent-300: #9fd6bb;
+  --color-accent-400: #6fbd99;
+  --color-accent-500: #3fa27a;
+  --color-accent-600: #0f7a53;
+  --color-accent-700: #0d6446;
+  --color-accent-800: #0a4d36;
+  --color-accent-900: #073627;
+  --color-accent-2-100: #e8f5ef;
+  --color-accent-2-200: #c9e9d9;
+  --color-accent-2-300: #9fd6bb;
+  --color-accent-2-400: #6fbd99;
+  --color-accent-2-500: #3fa27a;
+  --color-accent-2-600: #0f7a53;
+  --color-accent-2-700: #0d6446;
+  --color-accent-2-800: #0a4d36;
+  --color-accent-2-900: #073627;
+  --tb-orange: #f28c00;
+}
+[data-brand='testbench'][data-theme='dark'] {
+  --color-accent: #2fb37f;
+  --color-accent-600: #3fc48e;
+  --color-accent-700: #6fd3a8;
+}
+:root:not([data-brand='testbench']) {
+  --tb-orange: var(--color-accent-700);
+}
+[data-corners='soft'] .card,
+[data-corners='soft'] .btn,
+[data-corners='soft'] .input,
+[data-corners='soft'] .seg,
+[data-corners='soft'] .tb-chip,
+[data-corners='soft'] select.input,
+[data-corners='soft'] .CodeMirror-hints {
+  border-radius: 8px;
+}
+[data-corners='soft'] .blueprint,
+[data-corners='soft'] .dialog,
+[data-corners='soft'] pre.blueprint {
+  border-radius: 12px;
+}
+[data-corners='soft'] .blueprint > .corner {
+  display: none;
+}
+[data-corners='soft'] .tag {
+  border-radius: 999px;
+}
+[data-corners='soft'] .tb-nav {
+  border-radius: 8px;
+  border-left-width: 0 !important;
+  padding-left: 16px !important;
+}
+[data-corners='soft'] .blueprint {
+  overflow: hidden;
+}
+[data-corners='soft'] .btn-icon {
+  border-radius: 999px;
+}
+[data-corners='soft'] .tb-row:first-child {
+  border-radius: 12px 12px 0 0;
+}
+[data-corners='soft'] header {
+  border-bottom-color: transparent;
+  box-shadow: var(--shadow-sm);
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 14px;
+}
+a {
+  color: var(--color-accent-700);
+}
+a:hover {
+  color: var(--color-accent-800);
+}
+[data-theme='dark'] {
+  --color-bg: #15181c;
+  --color-surface: #1d2127;
+  --color-text: #e7e9ec;
+  --color-divider: color-mix(in srgb, #e7e9ec 18%, transparent);
+  --color-neutral-100: #2b2f35;
+  --color-neutral-200: #353a41;
+  --color-neutral-300: #454b53;
+  --color-neutral-800: #d4d7db;
+  --color-neutral-900: #f2f3f5;
+  --color-accent-100: #12302a;
+  --color-accent-200: #174535;
+  --color-accent-300: #1f5c46;
+  --color-accent-800: #9fe0c2;
+  --color-accent-900: #c9f0dd;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 3px 10px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+}
+[data-theme='dark'] .btn-primary {
+  color: #0f1215;
+}
+.CodeMirror {
+  height: 100%;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+.CodeMirror-gutters {
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-divider);
+}
+.CodeMirror-linenumber {
+  color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.CodeMirror-cursor {
+  border-left: 1.5px solid var(--color-accent);
+}
+.cm-s-default .cm-tag,
+.cm-s-default .cm-keyword {
+  color: var(--color-accent-700);
+}
+.cm-s-default .cm-variable,
+.cm-s-default .cm-variable-2,
+.cm-s-default .cm-property {
+  color: var(--color-accent-600);
+}
+.cm-s-default .cm-string {
+  color: #7a5a2a;
+}
+[data-theme='dark'] .cm-s-default .cm-string {
+  color: #d9b07a;
+}
+[data-theme='dark'] .cm-s-default .cm-tag,
+[data-theme='dark'] .cm-s-default .cm-keyword {
+  color: #6fd3a8;
+}
+[data-theme='dark'] .cm-s-default .cm-variable,
+[data-theme='dark'] .cm-s-default .cm-variable-2,
+[data-theme='dark'] .cm-s-default .cm-property {
+  color: #9fe0c2;
+}
+.cm-lint-line {
+  background: color-mix(in srgb, #c0392b 14%, transparent);
+}
+.CodeMirror-hints {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-divider);
+  border-radius: 0;
+  box-shadow: var(--shadow-md);
+}
+.CodeMirror-hint-active {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+.tb-nav:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+.btn,
+.tb-chip {
+  white-space: nowrap;
+  flex: none;
+}
+.tb-row:hover {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+/* Not from the artboard: a table row that opens as one link. The row's real
+   <a class="tb-row-link"> stretches an ::after over the whole row, so a click
+   anywhere on it -- middle and Ctrl-click included -- is a click on the link. */
+.tb-link-row {
+  position: relative;
+  cursor: pointer;
+}
+.tb-link-row:hover {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+.tb-link-row:focus-within {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+/* Toggle chips (jobs status filter). --chip-color tints a status chip; All uses the accent. */
+.tb-chip {
+  --chip-color: var(--color-accent-fg, var(--color-accent));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  cursor: pointer;
+}
+.tb-chip[data-status] {
+  color: var(--chip-color);
+}
+.tb-chip:hover {
+  background: color-mix(in srgb, var(--chip-color) 8%, transparent);
+}
+.tb-chip[aria-pressed='true'] {
+  color: var(--chip-color);
+  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
+  border-color: var(--chip-color);
+}
+.tb-chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+/* Not from the artboard: one line inside an expanded table row, such as a
+   project under an agent. It takes the hover itself, so only the line under
+   the pointer lights up; the negative margin keeps the text where it was. */
+.tb-subrow {
+  padding: 4px 6px;
+  margin: 0 -6px;
+}
+.tb-subrow:hover {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+/* Not from the artboard: the chevron that expands a table row. Small and
+   quiet at rest; it turns down when open and shows a ring only for keyboard
+   focus. */
+.tb-expander {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  cursor: pointer;
+}
+.tb-expander svg {
+  transition: transform 0.15s ease;
+}
+.tb-expander[aria-expanded='true'] svg {
+  transform: rotate(90deg);
+}
+.tb-expander:hover,
+.tb-expander[aria-expanded='true'] {
+  color: var(--color-accent-fg);
+}
+.tb-expander:hover {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.tb-expander:focus-visible {
+  outline: 2px solid var(--color-accent-fg);
+  outline-offset: 1px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .tb-expander svg {
+    transition: none;
+  }
+}
+/* Not from the artboard: the "+" tab of ScopeTabs. */
+.scope-add:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent) !important;
+}
+.scope-add:focus-visible {
+  outline: 2px solid var(--color-accent-fg);
+  outline-offset: -2px;
+}
+
+/* Not from the artboard: SearchPopover, the searchable pick list of the "+"
+   tab and of the agent model. */
+.tb-popover {
+  position: fixed;
+  z-index: 1100;
+  max-width: min(360px, 90vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+  text-align: left;
+}
+.tb-popover > input {
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--color-divider);
+  background: transparent;
+  color: var(--color-text);
+  outline-offset: -2px;
+}
+.tb-popover > ul {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.tb-popover-foot {
+  font-size: 11px;
+  padding: 7px 10px;
+  border-top: 1px solid var(--color-divider);
+}
+.tb-popover-empty {
+  padding: 6px 12px;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.tb-popover-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.tb-popover-group .warn {
+  margin-left: auto;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--color-danger);
+}
+.tb-popover-item {
+  font: inherit;
+  font-size: 13px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tb-popover-item:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+.tb-popover-item:focus-visible {
+  outline: 2px solid var(--color-accent-fg);
+  outline-offset: -2px;
+}
+.tb-popover-item[aria-current='true'] {
+  color: var(--color-accent-fg);
+  font-weight: 600;
+}
+.tb-popover-item .check {
+  width: 12px;
+  flex: none;
+  color: var(--color-accent-fg);
+}
+
+/* Not from the artboard: the agent model as an inline value (AgentModelPicker).
+   Inherited reads dashed with its source; an own entry bold on the accent. */
+.model-inline {
+  font: inherit;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+button.model-inline {
+  cursor: pointer;
+}
+.model-inline .name {
+  font-family: var(--font-code);
+  font-size: 12.5px;
+  border-bottom: 1px dashed color-mix(in srgb, var(--color-text) 45%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.model-inline[data-state='override'] .name {
+  font-weight: 600;
+  border-bottom: 1px solid var(--color-accent);
+}
+.model-inline .src {
+  font-size: 11px;
+  white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.model-inline[data-state='override'] .src {
+  color: var(--color-accent-fg);
+}
+.model-inline .chev {
+  font-size: 10px;
+  opacity: 0;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  transition: opacity 0.12s;
+}
+.model-inline:hover .chev,
+.model-inline:focus-visible .chev,
+.model-inline[aria-expanded='true'] .chev {
+  opacity: 1;
+}
+.model-inline:focus-visible {
+  outline: 2px solid var(--color-accent-fg);
+  outline-offset: 2px;
+}
+.model-inline .name.missing {
+  border-bottom-style: dotted;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.tb-row-link {
+  color: inherit;
+  text-decoration: none;
+  font-weight: 500;
+}
+.tb-row-link::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+}
+.tb-row-link:focus-visible {
+  outline: none;
+}
+/* Not from the artboard: our rows sit in per-row wrappers, so the
+   :first-child rounding above hits every row and shows a rounded top corner
+   on hover. The clipping .blueprint already rounds the list's top. */
+[data-corners='soft'] .tb-row:first-child {
+  border-radius: 0;
+}
+select.input {
+  appearance: auto;
+}
+input[type='checkbox'] {
+  accent-color: var(--color-accent);
+}

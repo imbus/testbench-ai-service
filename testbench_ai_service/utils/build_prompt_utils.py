@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Any
 
-from jinja2 import Environment, TemplateSyntaxError, UndefinedError
+from jinja2 import TemplateSyntaxError, UndefinedError
+from jinja2.sandbox import SandboxedEnvironment
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData
@@ -31,7 +32,7 @@ def build_messages(
     Returns:
         List of ``Message`` objects ready to be sent to an LLM.
     """
-    env = Environment(trim_blocks=True, lstrip_blocks=True)
+    env = SandboxedEnvironment(trim_blocks=True, lstrip_blocks=True)
     messages: list[Message] = []
 
     for msg_template in templates:
@@ -56,7 +57,11 @@ def build_messages(
     return messages
 
 
-def build_prompt(prompt_config: PromptConfig, agent_data: AgentData | None = None) -> Prompt:
+def build_prompt(
+    prompt_config: PromptConfig,
+    agent_data: AgentData | None = None,
+    step: str | None = None,
+) -> Prompt:
     """
     Builds and returns a Prompt object by loading, rendering, and preparing prompt data.
 
@@ -70,20 +75,21 @@ def build_prompt(prompt_config: PromptConfig, agent_data: AgentData | None = Non
     Args:
         prompt_config: Configuration containing file path, name, variant, and user vars.
         agent_data: Agent-generated variable values (``agent.*`` namespace).
+        step: Name of the variant step to render; ``None`` renders the variant's ``messages``.
 
     Returns:
         Prompt: A fully initialized Prompt object ready for use with an LLM.
 
     Raises:
         FileNotFoundError: If the prompt file or a referenced template file doesn't exist.
-        ValueError: If prompt name or variant is not found.
+        ValueError: If prompt name or variant is not found, or the variant has no such step.
     """
     prompt_definition = get_prompt_definition(prompt_config.file)
     prompt_variant = get_prompt_variant(prompt_definition, prompt_config.variant)
     base_path = Path(prompt_config.file).parent
 
     messages = build_messages(
-        templates=prompt_variant.messages,
+        templates=prompt_variant.templates_for(step),
         agent_data=agent_data or {},
         prompt_vars=prompt_config.vars or {},
         base_path=base_path,

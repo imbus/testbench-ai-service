@@ -1,0 +1,436 @@
+import { useState } from 'react'
+import { Button } from 'primereact/button'
+import { Card } from 'primereact/card'
+import { InputText } from 'primereact/inputtext'
+import { Message } from 'primereact/message'
+import { SelectButton, type SelectButtonChangeEvent } from 'primereact/selectbutton'
+import { Tag } from 'primereact/tag'
+import {
+  agentKeys,
+  agentPath,
+  configuredProjects,
+  effectiveAgent,
+  projectAgentPath,
+  projectPath,
+} from '../api/agents'
+import { useRefreshProjects } from '../api/mutations'
+import { useConfig, useProjects } from '../api/queries'
+import type { ConfigIssue } from '../api/types'
+import { AgentSwitch } from '../components/AgentSwitch'
+import { useTranslation } from 'react-i18next'
+import { useDraft } from '../state/draft'
+import { LANGUAGES } from './agentFields'
+import { valueAt } from './fields'
+
+function issueFor(issues: ConfigIssue[], key: string): string | undefined {
+  return issues.find((entry) => entry.path === key || entry.path.startsWith(key + '.'))?.message
+}
+
+/**
+ * Which TestBench projects override which agents.
+ *
+ * Cards are the **union** of the cached TestBench list and the projects
+ * `config.toml` declares. A config-only project keeps its card, flagged: it
+ * usually means the project was renamed or deleted in TestBench, which is
+ * exactly the case an operator has to be able to see and clean up.
+ */
+export function Projects({ isAdmin, issues = [] }: { isAdmin: boolean; issues?: ConfigIssue[] }) {
+  const { t } = useTranslation()
+  const config = useConfig()
+  const projects = useProjects()
+  const refresh = useRefreshProjects()
+  const [typed, setTyped] = useState<string[]>([])
+  const [pending, setPending] = useState('')
+
+  if (config.isLoading) return <div style={{ padding: 28 }}>…</div>
+  if (config.isError || !config.data) {
+    const detail = (config.error as Error)?.message
+    return (
+      <div role="alert" style={{ padding: 28 }}>
+        <div>{t('configError')}</div>
+        {detail && (
+          <div className="text-muted" style={{ fontSize: 12, marginTop: 4 }}>
+            {detail}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // `?? {}` because `running`/`disk` are whatever the server sent: a payload
+  // missing either one must render an empty screen, not crash.
+  const disk = config.data.disk ?? {}
+  const running = config.data.running ?? {}
+  const fromTestBench = (projects.data?.projects ?? []).map((entry) => entry.name)
+  const names = [...new Set([...fromTestBench, ...configuredProjects(running), ...typed])]
+  const keys = agentKeys(running)
+  const unavailable = projects.data?.source === 'unavailable'
+
+  return (
+    <div
+      style={{
+        padding: '28px 32px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 20,
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <h2 className="page-title" style={{ margin: 0, fontSize: 30 }}>
+            {t('projects')}
+          </h2>
+          <div className="text-muted" style={{ fontSize: 12, fontFamily: 'var(--font-code)' }}>
+            [testbench-ai-service.projects] · {config.data.config_path}
+          </div>
+        </div>
+        {projects.data?.fetched_at && (
+          <span data-testid="projects-fetched-at" className="text-muted" style={{ fontSize: 11 }}>
+            {t('fetchedAt')} {new Date(projects.data.fetched_at).toLocaleString()}
+          </span>
+        )}
+        {/* Admin only: the refresh spends the stored TestBench credential on an
+            outbound call, and the route is admin-gated to match. */}
+        {isAdmin && (
+          <Button
+            type="button"
+            text
+            size="small"
+            label={refresh.isPending ? t('refreshing') : t('refresh')}
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate()}
+          />
+        )}
+      </div>
+
+      {unavailable && (
+        <Message
+          data-testid="projects-unavailable"
+          severity="warn"
+          text={`${t('projectsUnavailable')} ${projects.data?.error ?? ''}`.trim()}
+          style={{ alignSelf: 'flex-start', fontSize: 12 }}
+        />
+      )}
+
+      {/* A refresh that never came back is not the same as a project list that
+          is merely stale, and the row above cannot say so: the route answers
+          200 with the previous list even when the fetch failed, and a 403 or a
+          dropped connection never reaches it at all. */}
+      {refresh.isError && (
+        // `Message` carries role="alert".
+        <Message
+          data-testid="refresh-failed"
+          severity="error"
+          text={`${t('refreshFailed')} ${(refresh.error as Error)?.message ?? ''}`.trim()}
+          style={{ alignSelf: 'flex-start', fontSize: 12 }}
+        />
+      )}
+
+      {/* Only when the console genuinely cannot know the real names. Typing a
+          name that has to match TestBench character for character is a
+          footgun, and not one worth offering while the real list is in hand. */}
+      {unavailable && (
+        <div
+          data-testid="add-by-name"
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            fontSize: 12,
+          }}
+        >
+          <label htmlFor="add-project">{t('projectName')}</label>
+          <InputText
+            id="add-project"
+            type="text"
+            style={{ width: 220 }}
+            value={pending}
+            onChange={(event) => setPending(event.target.value)}
+          />
+          <Button
+            type="button"
+            text
+            size="small"
+            label={t('add')}
+            onClick={() => {
+              const name = pending.trim()
+              if (!name) return
+              setTyped((current) => (current.includes(name) ? current : [...current, name]))
+              setPending('')
+            }}
+          />
+          <span className="text-muted">{t('projectNameExact')}</span>
+        </div>
+      )}
+
+      {names.length === 0 ? (
+        <div className="text-muted" style={{ fontSize: 13 }}>
+          {t('noProjects')}
+        </div>
+      ) : (
+        <div
+          style={{
+            display: 'grid',
+            // Wide enough for an agent row (switch, name, variant, override
+            // tag, state) on one line; min() keeps a narrow window from
+            // scrolling sideways.
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(460px, 100%), 1fr))',
+            gap: 24,
+          }}
+        >
+          {names.map((name) => (
+            <ProjectCard
+              key={name}
+              name={name}
+              // Unknown, not absent, while the list could not be fetched.
+              inTestBench={unavailable ? null : fromTestBench.includes(name)}
+              agentKeys={keys}
+              disk={disk}
+              running={running}
+              issues={issues}
+              isAdmin={isAdmin}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The language choice's "no override" option. Not a language code. */
+const INHERIT = '__inherit__'
+
+function ProjectCard({
+  name,
+  inTestBench,
+  agentKeys: keys,
+  disk,
+  running,
+  issues,
+  isAdmin,
+}: {
+  name: string
+  /** `null` when the console could not ask TestBench. */
+  inTestBench: boolean | null
+  agentKeys: string[]
+  disk: Record<string, unknown>
+  running: Record<string, unknown>
+  issues: ConfigIssue[]
+  isAdmin: boolean
+}) {
+  const { t } = useTranslation()
+  const draft = useDraft()
+
+  const block = valueAt(running, projectPath(name))
+  const declared = block !== undefined
+  const globalLanguage = valueAt(running, 'language')
+
+  // What the header chip counts: every key this project's block carries. The
+  // draft is not consulted -- the chip describes the file, and the pending
+  // banner already describes the draft.
+  const overrideCount = (() => {
+    const table =
+      block !== null && typeof block === 'object' ? (block as Record<string, unknown>) : {}
+    const agents = table.agents
+    const perAgent =
+      agents !== null && typeof agents === 'object' ? Object.keys(agents as object).length : 0
+    return perAgent + (table.language ? 1 : 0) + (table.llm_config ? 1 : 0)
+  })()
+
+  const languagePath = projectPath(name, 'language')
+  const savedLanguage = valueAt(disk, languagePath)
+  const language = draft.valueOf(languagePath, savedLanguage)
+  const languageIssue = issueFor(issues, languagePath)
+
+  return (
+    <section
+      className="blueprint"
+      data-testid={`project-${name}`}
+      data-in-testbench={String(inTestBench)}
+      // minWidth 0: a grid item otherwise refuses to shrink below its content
+      // and pushes past its column.
+      style={{ display: 'flex', minWidth: 0 }}
+    >
+      {/* The frame's corner marks. Hidden under [data-corners=soft], but they
+          are what the square-cornered brand draws, so they are always emitted
+          -- and always first, as the design system's selectors expect. They
+          are why the frame is a wrapper around the Card rather than the Card
+          itself: `.blueprint > .corner` needs them as direct children, and
+          Prime nests a Card's children two levels down. */}
+      <i className="corner tl" />
+      <i className="corner tr" />
+      <i className="corner bl" />
+      <i className="corner br" />
+      <Card
+        style={{ flex: 1, minWidth: 0, borderRadius: 'inherit' }}
+        pt={{
+          body: { style: { padding: 16 } },
+          content: { style: { display: 'flex', flexDirection: 'column', gap: 12 } },
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <h3 className="card-title" style={{ margin: 0, fontSize: 19 }}>
+            {name}
+          </h3>
+          <div style={{ flex: 1 }} />
+          {inTestBench === false && (
+            <span style={{ fontSize: 11, color: 'var(--color-danger)' }}>
+              ⚠ {t('notInTestBench')}
+            </span>
+          )}
+          {overrideCount > 0 ? (
+            <Tag value={t('overrideCount', { count: overrideCount })} />
+          ) : (
+            <Tag severity="secondary" value={t('inheritsGlobal')} />
+          )}
+        </div>
+
+        {/* Three states, one control: the language override is exactly the
+            inherit/de/en choice, so it reads as a segmented switch rather than a
+            select whose empty option means "inherit". */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            fontSize: 13,
+            flexWrap: 'wrap',
+          }}
+        >
+          <span
+            id={`${encodeURIComponent(languagePath)}-label`}
+            style={{ fontFamily: 'var(--font-code)', fontSize: 12 }}
+          >
+            language
+          </span>
+          {isAdmin ? (
+            // `INHERIT` stands in for "no override": Prime matches the value
+            // against each option's, and an empty value would select nothing.
+            <SelectButton
+              aria-labelledby={`${encodeURIComponent(languagePath)}-label`}
+              value={language === undefined || language === null ? INHERIT : language}
+              allowEmpty={false}
+              options={[
+                { label: `${t('inherit')} (${String(globalLanguage ?? '')})`, value: INHERIT },
+                ...LANGUAGES.map((option) => ({ label: option, value: option })),
+              ]}
+              onChange={(event: SelectButtonChangeEvent) =>
+                event.value === INHERIT
+                  ? draft.unsetValue(languagePath)
+                  : draft.setValue(languagePath, event.value)
+              }
+              pt={{ button: { style: { padding: '3px 10px', fontSize: 12 } } }}
+            />
+          ) : (
+            <span className="text-muted" style={{ fontSize: 12 }}>
+              {String(valueAt(running, languagePath) ?? globalLanguage ?? '')}
+            </span>
+          )}
+          {draft.isChanged(languagePath) && (
+            <Button
+              type="button"
+              text
+              size="small"
+              label={t('revert')}
+              onClick={() => draft.revert(languagePath)}
+            />
+          )}
+        </div>
+        {languageIssue && (
+          // `Message` carries role="alert".
+          <Message severity="error" text={languageIssue} style={{ alignSelf: 'flex-start' }} />
+        )}
+
+        {/* No gap between rows: the hover band must meet the next divider. */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <div className="text-muted" style={{ fontSize: 11, marginBottom: 6 }}>
+            {t('agents')}
+          </div>
+          {keys.map((agentKey) => {
+            const path = projectAgentPath(name, agentKey, 'enabled')
+            const scoped = effectiveAgent(running, agentKey, name)
+            const variant = scoped.prompt?.variant
+            const hasOverride = valueAt(disk, path) !== undefined
+            return (
+              <div
+                key={agentKey}
+                className="tb-row"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  fontSize: 13,
+                  // Bled into the card padding so the hover band has an inset
+                  // while the switches stay aligned with the label above.
+                  padding: '7px 8px',
+                  margin: '0 -8px',
+                  borderTop: '1px solid var(--color-divider)',
+                }}
+              >
+                <AgentSwitch
+                  path={path}
+                  saved={valueAt(disk, path)}
+                  inherited={
+                    // Draft-aware: an agent switched off globally in this same
+                    // unapplied draft must not read as running here.
+                    draft.valueOf(
+                      agentPath(agentKey, 'enabled'),
+                      effectiveAgent(running, agentKey, null).enabled,
+                    ) === true
+                  }
+                  label={`${agentKey} · ${name}`}
+                  readOnly={!isAdmin}
+                >
+                  <span
+                    style={{
+                      fontFamily: 'var(--font-code)',
+                      flex: 1,
+                      minWidth: 0,
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {agentKey}
+                  </span>
+                  {/* Which prompt this agent runs here, since the switch only says
+                      whether it runs at all. */}
+                  {typeof variant === 'string' && variant && (
+                    <span
+                      className="text-muted"
+                      style={{
+                        fontSize: 11,
+                        fontFamily: 'var(--font-code)',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
+                      {variant}
+                    </span>
+                  )}
+                  {hasOverride && (
+                    <Tag value={t('override')} style={{ padding: '1px 6px', fontSize: 10 }} />
+                  )}
+                </AgentSwitch>
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="card-meta" style={{ fontFamily: 'var(--font-code)' }}>
+            [testbench-ai-service.{projectPath(name)}]
+          </span>
+          <div style={{ flex: 1 }} />
+          {isAdmin && declared && (
+            <Button
+              type="button"
+              text
+              size="small"
+              label={t('removeAllOverrides')}
+              onClick={() => draft.unsetSubtree(projectPath(name))}
+            />
+          )}
+        </div>
+      </Card>
+    </section>
+  )
+}

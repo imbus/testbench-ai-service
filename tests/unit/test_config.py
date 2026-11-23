@@ -1,10 +1,24 @@
+import logging
+import shutil
+import sys
 from pathlib import Path
+from typing import get_type_hints
 from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
 
-from testbench_ai_service.config import DEFAULT_HOST, DEFAULT_PORT, PROMPTS_DIR, AppConfig
+from testbench_ai_service.agent_packages import loaded
+from testbench_ai_service.agents.test_case_set_reviewer.agent import (
+    TestCaseSetReviewerAgentData as ReviewerData,
+)
+from testbench_ai_service.config import (
+    DEFAULT_AGENTS,
+    DEFAULT_HOST,
+    DEFAULT_PORT,
+    PROMPTS_DIR,
+    AppConfig,
+)
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.models.config import (
     AgentConfig,
@@ -15,6 +29,15 @@ from testbench_ai_service.models.config import (
     PromptConfig,
 )
 from testbench_ai_service.models.language import LanguageOption
+from testbench_ai_service.models.logging import LoggingConfig
+from tests.helpers.packages import (
+    BROKEN_CLASS_PATH,
+    CLASS_PATH,
+    PACKAGE,
+    install_package,
+    install_two_agent_package,
+    rater_report,
+)
 
 
 def _make_app_config(**kwargs):
@@ -207,6 +230,17 @@ class TestAppConfigDefaults:
         assert self._config.projects == {}
 
 
+class TestAppConfigPortRange:
+    @pytest.mark.parametrize("port", [0, -1, 65536, 99999])
+    def test_port_outside_tcp_range_is_rejected(self, port):
+        with pytest.raises(ValidationError, match="port"):
+            _make_app_config(port=port)
+
+    @pytest.mark.parametrize("port", [1, 8010, 65535])
+    def test_port_inside_tcp_range_is_accepted(self, port):
+        assert _make_app_config(port=port).port == port
+
+
 class TestAppConfigTrustedProxiesValidator:
     def test_string_split_by_comma(self):
         config = _make_app_config(trusted_proxies="10.0.0.1,10.0.0.2")
@@ -263,3 +297,423 @@ class TestAppConfigTbServerUrlValidator:
         ):
             AppConfig(tb_server_url="https://mytb.example.com/api/")
         mock_validate.assert_called_once_with("https://mytb.example.com/api/")
+
+
+class TestPromptVarsAreTyped:
+    """Spec 11.1: prompt variables carry typed values, not only strings.
+
+    PromptVariableDefinition already declares 'number' and 'boolean' value
+    types, so a config that supplies one was a hard boot failure before this.
+    """
+
+    @pytest.mark.parametrize(
+        ("value", "expected_type"),
+        [(10, int), (1.5, float), (True, bool), ("ten", str)],
+    )
+    def test_a_prompt_var_keeps_the_type_it_was_written_with(self, value, expected_type):
+        cfg = PromptConfig(file="prompts/test.yaml", vars={"max_findings": value})
+
+        assert cfg.vars is not None
+        assert type(cfg.vars["max_findings"]) is expected_type
+        assert cfg.vars["max_findings"] == value
+
+    @pytest.mark.parametrize(
+        ("value", "expected_type"),
+        [(10, int), (1.5, float), (True, bool), ("ten", str)],
+    )
+    def test_a_project_prompt_var_keeps_the_type_it_was_written_with(self, value, expected_type):
+        cfg = ProjectPromptConfig(vars={"max_findings": value})
+
+        assert cfg.vars is not None
+        assert type(cfg.vars["max_findings"]) is expected_type
+        assert cfg.vars["max_findings"] == value
+
+    def test_a_quoted_number_stays_a_string(self):
+        """'10' and 10 are different values; the union must not collapse them."""
+        cfg = PromptConfig(file="prompts/test.yaml", vars={"max_findings": "10"})
+
+        assert cfg.vars == {"max_findings": "10"}
+        assert type(cfg.vars["max_findings"]) is str
+
+
+class TestAgentsMergeOntoDefaults:
+    """A partial [agents.<key>] block overrides one setting, not the whole dict.
+
+    Before this, ``agents`` was a plain default: declaring one agent replaced
+    every built-in, and declaring one *partially* was rejected outright because
+    every AgentConfig field is required. There was therefore no way to write
+    "turn this agent off" into config.toml -- the naive spelling failed
+    validation and the complete spelling silently deleted the other agents.
+    """
+
+    def test_a_partial_block_leaves_the_other_agents_in_place(self):
+        cfg = _make_app_config(agents={"test_case_set_reviewer": {"enabled": False}})
+
+        assert set(cfg.agents) == {
+            "test_case_set_reviewer",
+            "test_case_set_describer",
+            "defect_explainer",
+        }
+        assert cfg.agents["test_case_set_reviewer"].enabled is False
+        assert cfg.agents["test_case_set_describer"].enabled is True
+
+    def test_a_partial_block_keeps_the_fields_it_did_not_mention(self):
+        cfg = _make_app_config(agents={"test_case_set_reviewer": {"enabled": False}})
+
+        agent = cfg.agents["test_case_set_reviewer"]
+        assert agent.endpoint_path == "/test-case-set-reviews"
+        assert agent.class_path.endswith("TestCaseSetReviewer")
+
+    def test_a_nested_partial_merges_rather_than_replacing_the_prompt(self):
+        """The console writes 'agents.<key>.prompt.variant' on its own."""
+        cfg = _make_app_config(
+            agents={"test_case_set_reviewer": {"prompt": {"variant": "Quick Review"}}}
+        )
+
+        prompt = cfg.agents["test_case_set_reviewer"].prompt
+        assert isinstance(prompt, PromptConfig)
+        assert prompt.variant == "Quick Review"
+        # The file was not mentioned, so the built-in value must survive.
+        assert prompt.file == Path("test_case_set_reviewer/prompt.yaml")
+
+    def test_a_complete_block_for_a_builtin_also_keeps_the_others(self):
+        """The one behaviour change: declaring one agent no longer deletes the rest."""
+        cfg = _make_app_config(
+            agents={
+                "test_case_set_reviewer": {
+                    "enabled": False,
+                    "endpoint_path": "/custom",
+                    "class_path": (
+                        "testbench_ai_service.agents.test_case_set_reviewer.agent"
+                        ".TestCaseSetReviewer"
+                    ),
+                    "prompt": {"file": "test_case_set_reviewer/prompt.yaml"},
+                }
+            }
+        )
+
+        assert len(cfg.agents) == 3
+        assert cfg.agents["test_case_set_reviewer"].endpoint_path == "/custom"
+
+    def test_an_unknown_agent_key_still_requires_every_field(self):
+        with pytest.raises(ValidationError) as exc:
+            _make_app_config(agents={"my_agent": {"enabled": True}})
+
+        missing = {tuple(error["loc"]) for error in exc.value.errors()}
+        assert ("agents", "my_agent", "endpoint_path") in missing
+        assert ("agents", "my_agent", "class_path") in missing
+        assert ("agents", "my_agent", "prompt") in missing
+
+    def test_a_complete_unknown_agent_is_added_beside_the_builtins(self):
+        cfg = _make_app_config(
+            agents={
+                "second_reviewer": {
+                    "enabled": True,
+                    "endpoint_path": "/second-reviews",
+                    "class_path": (
+                        "testbench_ai_service.agents.test_case_set_reviewer.agent"
+                        ".TestCaseSetReviewer"
+                    ),
+                    "prompt": {"file": "test_case_set_reviewer/prompt.yaml"},
+                }
+            }
+        )
+
+        assert len(cfg.agents) == 4
+        assert cfg.agents["second_reviewer"].endpoint_path == "/second-reviews"
+
+    def test_a_bad_value_in_a_partial_block_is_field_addressed(self):
+        with pytest.raises(ValidationError) as exc:
+            _make_app_config(agents={"test_case_set_reviewer": {"enabled": "yes please"}})
+
+        locations = {tuple(error["loc"]) for error in exc.value.errors()}
+        assert ("agents", "test_case_set_reviewer", "enabled") in locations
+
+    def test_merging_does_not_mutate_the_shared_defaults(self):
+        """DEFAULT_AGENTS is a module-level dict; poisoning it would leak everywhere."""
+        _make_app_config(agents={"test_case_set_reviewer": {"enabled": False}})
+
+        assert DEFAULT_AGENTS["test_case_set_reviewer"].enabled is True
+        assert _make_app_config().agents["test_case_set_reviewer"].enabled is True
+
+    def test_omitting_agents_entirely_still_yields_the_builtins(self):
+        cfg = _make_app_config()
+
+        assert set(cfg.agents) == set(DEFAULT_AGENTS)
+
+    def test_an_agent_declared_as_a_model_instance_still_works(self):
+        """Python callers pass AgentConfig objects, not dicts."""
+        cfg = _make_app_config(
+            agents={
+                "test_case_set_reviewer": AgentConfig(
+                    enabled=False,
+                    endpoint_path="/x",
+                    class_path=(
+                        "testbench_ai_service.agents.test_case_set_reviewer.agent"
+                        ".TestCaseSetReviewer"
+                    ),
+                    prompt=PromptConfig(file="test_case_set_reviewer/prompt.yaml"),
+                )
+            }
+        )
+
+        assert cfg.agents["test_case_set_reviewer"].endpoint_path == "/x"
+
+
+class TestBuiltinsWithNoPromptFile:
+    """A built-in the operator never configured must not stop the service.
+
+    Merging the ``agents`` table onto the built-ins means every built-in is now
+    present in every config -- including one whose ``prompts_dir`` holds only
+    the operator's own prompt files. Validating a built-in's prompt file into a
+    hard error there would turn a config that booted before the merge into one
+    that refuses to start, naming an agent the operator never wrote down.
+    """
+
+    REVIEWER = "testbench_ai_service.agents.test_case_set_reviewer.agent.TestCaseSetReviewer"
+
+    @pytest.fixture
+    def prompts_dir(self, tmp_path):
+        """A prompts_dir holding one prompt file, and none of the built-ins'."""
+        for language in ("de", "en"):
+            (tmp_path / language).mkdir()
+            shutil.copy(
+                PROMPTS_DIR / language / "test_case_set_reviewer" / "prompt.yaml",
+                tmp_path / language / "mine.yaml",
+            )
+        return tmp_path
+
+    def _config(self, prompts_dir, **kwargs):
+        with patch("testbench_ai_service.config.validate_tb_server_url"):
+            return AppConfig(
+                tb_server_url="https://localhost:9443/api/", prompts_dir=prompts_dir, **kwargs
+            )
+
+    def test_a_custom_agent_set_with_its_own_prompts_dir_still_boots(self, prompts_dir):
+        cfg = self._config(
+            prompts_dir,
+            agents={
+                "my_agent": {
+                    "enabled": True,
+                    "endpoint_path": "/mine",
+                    "class_path": self.REVIEWER,
+                    "prompt": {"file": "mine.yaml"},
+                }
+            },
+        )
+
+        assert set(cfg.agents) == {"my_agent"}
+
+    def test_disabling_a_builtin_does_not_require_its_prompt_file(self, prompts_dir):
+        """The documented way to switch an agent off has to work everywhere."""
+        cfg = self._config(
+            prompts_dir,
+            agents={
+                "test_case_set_reviewer": {"enabled": False},
+                "test_case_set_describer": {"enabled": False},
+                "defect_explainer": {"enabled": False},
+                "my_agent": {
+                    "enabled": True,
+                    "endpoint_path": "/mine",
+                    "class_path": self.REVIEWER,
+                    "prompt": {"file": "mine.yaml"},
+                },
+            },
+        )
+
+        assert cfg.agents["test_case_set_reviewer"].enabled is False
+        assert cfg.agents["my_agent"].enabled is True
+
+    def test_a_configured_prompt_file_that_is_missing_is_still_an_error(self, prompts_dir):
+        """Leniency covers what the operator did not write, not what they did."""
+        with pytest.raises(ValidationError) as excinfo:
+            self._config(
+                prompts_dir,
+                agents={"test_case_set_reviewer": {"prompt": {"file": "nope.yaml"}}},
+            )
+
+        assert excinfo.value.errors()[0]["loc"] == (
+            "agents",
+            "test_case_set_reviewer",
+            "prompt",
+            "file",
+        )
+
+    def test_the_builtins_survive_when_their_prompt_files_are_there(self):
+        with patch("testbench_ai_service.config.validate_tb_server_url"):
+            cfg = AppConfig(tb_server_url="https://localhost:9443/api/")
+
+        assert set(cfg.agents) == set(DEFAULT_AGENTS)
+
+    def test_a_dropped_builtin_is_logged(self, prompts_dir, caplog):
+        with caplog.at_level(logging.WARNING):
+            self._config(
+                prompts_dir,
+                agents={
+                    "my_agent": {
+                        "enabled": True,
+                        "endpoint_path": "/mine",
+                        "class_path": self.REVIEWER,
+                        "prompt": {"file": "mine.yaml"},
+                    }
+                },
+            )
+
+        assert "test_case_set_reviewer" in caplog.text
+
+
+def test_logging_activity_defaults_when_section_is_missing():
+    cfg = LoggingConfig.model_validate({"file": {"file_name": "x.log"}})
+    assert cfg.activity.enabled is True
+    assert cfg.activity.file_name == "testbench-ai-service.activity.jsonl"
+    assert cfg.activity.log_level.value == "INFO"
+    assert cfg.activity.max_bytes == 5 * 1024 * 1024
+    assert cfg.activity.backup_count == 3
+
+
+class TestJobsConfig:
+    def test_retention_defaults_to_90_days(self):
+        assert _make_app_config().jobs.retention_days == 90
+
+    def test_retention_must_be_positive(self):
+        with pytest.raises(ValidationError):
+            _make_app_config(jobs={"retention_days": 0})
+
+
+REVIEWER_FIELDS = list(get_type_hints(ReviewerData))
+
+
+class TestPackageAgents:
+    """Agents from uploaded packages are validated against their inspection report.
+
+    The package code must not be imported unless the package was put on
+    ``sys.path`` at startup.
+    """
+
+    def _agent(self, **kwargs) -> AgentConfig:
+        values = {
+            "enabled": True,
+            "endpoint_path": "/acme",
+            "class_path": CLASS_PATH,
+            "prompt": PromptConfig(file=Path("test_case_set_reviewer/prompt.yaml")),
+            "package": PACKAGE,
+        }
+        values.update(kwargs)
+        return AgentConfig(**values)
+
+    def _config(self, packages_dir, agent=None, **kwargs):
+        with patch("testbench_ai_service.config.validate_tb_server_url"):
+            return AppConfig(
+                tb_server_url="https://localhost:9443/api/",
+                agents={**DEFAULT_AGENTS, "acme": agent or self._agent()},
+                agent_packages={"dir": packages_dir},
+                **kwargs,
+            )
+
+    def test_appconfig_accepts_unloaded_package_agent(self, tmp_path):
+        install_package(tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS))
+
+        cfg = self._config(tmp_path)
+
+        assert "acme" in cfg.agents
+        assert "acme" not in sys.modules
+
+    def test_appconfig_rejects_prompt_variables_the_report_lacks(self, tmp_path):
+        install_package(tmp_path, report=rater_report(data_fields=["title"]))
+
+        with pytest.raises(ValidationError, match="variables are incompatible"):
+            self._config(tmp_path)
+        assert "acme" not in sys.modules
+
+    def test_appconfig_rejects_steps_the_report_lacks(self, tmp_path):
+        install_package(
+            tmp_path,
+            report=rater_report(data_fields=REVIEWER_FIELDS, step_fields={"plan": ["title"]}),
+        )
+
+        with pytest.raises(ValidationError, match="Step 'plan' is missing"):
+            self._config(tmp_path)
+
+    def test_appconfig_rejects_args_against_report_schema(self, tmp_path):
+        schema = {
+            "type": "object",
+            "properties": {"max_items": {"type": "integer"}},
+            "additionalProperties": False,
+        }
+        install_package(
+            tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS, args_schema=schema)
+        )
+
+        with pytest.raises(ValidationError) as exc_info:
+            self._config(tmp_path, agent=self._agent(args={"max_items": "many"}))
+
+        assert exc_info.value.errors()[0]["loc"] == ("agents", "acme", "args")
+        assert "acme" not in sys.modules
+
+    def test_appconfig_rejects_project_args_against_report_schema(self, tmp_path):
+        schema = {"type": "object", "properties": {"max_items": {"type": "integer"}}}
+        install_package(
+            tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS, args_schema=schema)
+        )
+        projects = {
+            "P": ProjectConfig(agents={"acme": ProjectAgentConfig(args={"max_items": "many"})})
+        }
+
+        with pytest.raises(ValidationError) as exc_info:
+            self._config(tmp_path, projects=projects)
+
+        assert exc_info.value.errors()[0]["loc"] == ("projects", "P", "agents", "acme", "args")
+
+    def test_appconfig_accepts_args_matching_report_schema(self, tmp_path):
+        schema = {"type": "object", "properties": {"max_items": {"type": "integer"}}}
+        install_package(
+            tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS, args_schema=schema)
+        )
+
+        cfg = self._config(tmp_path, agent=self._agent(args={"max_items": 3}))
+
+        assert cfg.agents["acme"].args == {"max_items": 3}
+
+    def test_appconfig_skips_package_agent_without_manifest(self, tmp_path, caplog):
+        with caplog.at_level(logging.WARNING, logger="testbench_ai_service"):
+            cfg = self._config(tmp_path / "missing")
+
+        assert "acme" in cfg.agents
+        assert PACKAGE in caplog.text
+
+    def test_appconfig_validates_a_loaded_package_agent_by_importing_it(self, tmp_path):
+        install_package(tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS))
+        loaded.activate_packages(tmp_path)
+
+        # A loaded package is imported, its report ignored: the class declares only
+        # ``title``, which does not cover the reviewer prompt's variables.
+        with pytest.raises(ValidationError, match="variables are incompatible"):
+            self._config(tmp_path)
+
+    @pytest.mark.parametrize("enabled", [True, False])
+    def test_appconfig_rejects_a_class_the_loaded_package_lacks(self, tmp_path, enabled):
+        install_package(tmp_path)
+        loaded.activate_packages(tmp_path)
+        agent = self._agent(class_path="acme.rater.agent.Typo", enabled=enabled)
+
+        with pytest.raises(ValidationError) as exc_info:
+            self._config(tmp_path, agent=agent)
+
+        assert exc_info.value.errors()[0]["loc"] == ("agents", "acme", "class_path")
+        assert loaded.is_loaded(PACKAGE)
+        assert loaded.failures() == {}
+        assert loaded.agent_failures() == {}
+
+    def test_appconfig_skips_a_loaded_agent_whose_import_exits(self, tmp_path, caplog):
+        install_two_agent_package(tmp_path)
+        loaded.activate_packages(tmp_path)
+        agent = self._agent(class_path=BROKEN_CLASS_PATH)
+
+        with caplog.at_level(logging.WARNING, logger="testbench_ai_service"):
+            cfg = self._config(tmp_path, agent=agent)
+
+        assert "acme" in cfg.agents
+        assert "SystemExit" in caplog.text
+        assert loaded.is_loaded(PACKAGE)
+        assert loaded.failures() == {}
+        assert loaded.agent_failures() == {}

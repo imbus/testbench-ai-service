@@ -11,6 +11,7 @@ from testbench_ai_service.models.language import LanguageOption
 
 def _make_execution_context(**overrides):
     defaults = {
+        "agent_key": "test_agent",
         "user_key": "u1",
         "project_name": "Project",
         "project_key": "pk",
@@ -46,12 +47,13 @@ class TestTriggerAgentResponse:
     """Tests for ``TriggerAgentResponse``."""
 
     def test_accepted_response(self):
-        resp = TriggerAgentResponse(status="accepted", warnings=[])
+        resp = TriggerAgentResponse(status="accepted", warnings=[], job_id="abc")
         assert resp.status == "accepted"
         assert resp.warnings == []
+        assert resp.job_id == "abc"
 
     def test_warnings_defaults_to_none(self):
-        resp = TriggerAgentResponse(status="accepted")
+        resp = TriggerAgentResponse(status="accepted", job_id="abc")
         assert resp.warnings is None
 
 

@@ -64,6 +64,94 @@ class_path = "testbench_ai_service.agents.defect_explainer.agent.DefectExplainer
 [testbench-ai-service.agents.defect_explainer.prompt]
 file = "defect_explainer/prompt.yaml"
 
+# Test planner (preview, opt-in): suggests a diverse test selection for a cycle and logs it.
+# [testbench-ai-service.agents.test_planner]
+# enabled = true
+# endpoint_path = "/test-planner"
+# class_path = "testbench_ai_service.agents.test_planner.agent.TestPlannerAgent"
+
+# [testbench-ai-service.agents.test_planner.prompt]
+# file = "test_planner/prompt.yaml"
+
+# [testbench-ai-service.agents.test_planner.args]
+# mandatory_tag = "mandatory"      # test cases with this tag are always selected
+# cluster_threshold = 0.05         # distance below which test cases count as redundant
+
+# [testbench-ai-service.agents.test_planner.args.embedding]
+# provider = "openai"              # openai | azure_openai | local
+# model = "text-embedding-3-small" # azure_openai: deployment name; local e.g. "BAAI/bge-small-en-v1.5"
+# cache_dir = "data/embedding_cache"
+# batch_size = 256
+
+# Test idea generator (opt-in): generates test ideas for the requirements assigned below a test
+# theme and writes them into the theme's description. From TestBench 5.0 it also creates a test
+# case set per idea below the theme (needs the token permission ModifyTestStructureElements).
+# [testbench-ai-service.agents.requirement]
+# enabled = true
+# endpoint_path = "/requirement-test-ideas"
+# class_path = "testbench_ai_service.agents.generate_test_ideas.agent.RequirementAgent"
+
+# [testbench-ai-service.agents.requirement.prompt]
+# file = "generate_test_ideas/prompt.yaml"
+
+# [testbench-ai-service.agents.requirement.args]
+# max_requirements = 20
+# max_ideas_per_theme = 30
+# create_test_case_sets = false                 # TestBench 5.0+: only write the text, no sets
+# rm_service_url = "https://rm.example.com/api/"   # unset: requirements without description
+# rm_username = "rm-user"
+# rm_password = "rm-password"
+# rm_projects = ["Dream Car"]                   # searched with a JWT; unset: every RM project
+
+# Coverage checker (opt-in): checks whether the tests linked to a requirement prove all its
+# aspects and adds the result to the review comment of every linked test case set.
+# TestBench must offer the plugin on requirements (register it as a requirement plugin).
+# [testbench-ai-service.agents.coverage_checker]
+# enabled = true
+# endpoint_path = "/coverage"
+# class_path = "testbench_ai_service.agents.coverage_checker.agent.CoverageChecker"
+
+# [testbench-ai-service.agents.coverage_checker.prompt]
+# file = "coverage_checker/prompt.yaml"
+
+# [testbench-ai-service.agents.coverage_checker.args]
+# rm_service_url = "https://rm.example.com/api/"   # unset: aspects from the requirement title only
+# rm_username = "rm-user"
+# rm_password = "rm-password"
+# rm_projects = ["Dream Car"]                   # searched with a JWT; unset: every RM project
+# max_aspects = 12
+# counting_spec_status = ["InReview", "Released"]
+# work_spec_status = ["Planned", "InProgress", "InReview", "Released"]
+# write_review_comments = true
+# max_parallel_sets = 4
+# max_test_cases_per_call = 20
+
+# Link finder (opt-in): searches every unlinked test case set of the TOV for sets that test a
+# requirement and adds a hint to the review comment of each likely candidate. Never sets links.
+# TestBench must offer the plugin on requirements (register it as a requirement plugin).
+# [testbench-ai-service.agents.link_finder]
+# enabled = true
+# endpoint_path = "/link-candidates"
+# class_path = "testbench_ai_service.agents.link_finder.agent.LinkFinder"
+
+# [testbench-ai-service.agents.link_finder.prompt]
+# file = "link_finder/prompt.yaml"
+
+# [testbench-ai-service.agents.link_finder.args]
+# rm_service_url = "https://rm.example.com/api/"   # unset: aspects from the requirement title only
+# rm_username = "rm-user"
+# rm_password = "rm-password"
+# rm_projects = ["Dream Car"]                   # searched with a JWT; unset: every RM project
+# max_aspects = 12
+# max_sets_searched = 1000          # refuse a requirement with more unlinked sets (prefilter cost)
+# prefilter_batch_size = 40          # sets per prefilter call
+# max_candidates = 15                # sets whose test steps are read
+# high_confidence_ratio = 0.5        # share of aspects a candidate must touch for "high"
+# min_confidence_for_comment = "low"
+# write_review_comments = true
+# max_parallel_sets = 4
+# max_test_cases_per_call = 20
+
 
 # Project-specific configurations (override global configurations)
 
@@ -78,3 +166,21 @@ enabled = false
 [testbench-ai-service.projects."Car Configurator".agents.test_case_set_reviewer.prompt]
 file = "CarConfigurator_reviews_prompt.yaml"
 name = "TestCaseSetReviewer"
+
+# Agent jobs are kept in the usage_file SQLite file. At startup, jobs older than
+# this many days are deleted (must be greater than 0).
+# [testbench-ai-service.jobs]
+# retention_days = 90
+
+# Agent packages: Python wheels with custom agents that admins upload in the console.
+# These settings can only be changed here, never from the console.
+# [testbench-ai-service.agent_packages]
+# allow_upload = false
+# dir = "data/agent_packages"
+# max_upload_mb = 20
+
+# Browser console served at /admin
+[testbench-ai-service.admin_ui]
+enabled = true
+# Refuse the console to any client that is not on this host.
+# require_loopback = false
