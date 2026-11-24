@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import argparse
 from collections.abc import Callable
+from pathlib import Path
 from types import SimpleNamespace
 from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+import testbench_ai_service
 from testbench_ai_service import __version__, log
 from testbench_ai_service.cli import (
     init_action,
@@ -194,6 +196,21 @@ class TestStartAction:
             start_action(self._make_args(dev=True))
 
         assert mock_config.debug
+
+    def test_dev_mode_reloads_on_service_code_only(self):
+        """An agent package unpacked below the working directory must not restart the service."""
+        mock_config = self._mock_config()
+        with (
+            patch("testbench_ai_service.cli.load_config_from_file", return_value=mock_config),
+            patch("testbench_ai_service.cli.uvicorn.run") as mock_run,
+            patch("testbench_ai_service.cli.setup_logging"),
+            patch("testbench_ai_service.cli.get_log_config_dict", return_value={}),
+            patch("testbench_ai_service.cli.print_cli_banner"),
+        ):
+            start_action(self._make_args(dev=True))
+
+        package_dir = Path(testbench_ai_service.__file__).resolve().parent
+        assert mock_run.call_args.kwargs["reload_dirs"] == [str(package_dir)]
 
     def test_serves_in_the_restart_loop(self):
         mock_config = self._mock_config()

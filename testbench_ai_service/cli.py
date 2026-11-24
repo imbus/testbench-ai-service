@@ -2,6 +2,7 @@ import argparse
 import ssl
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import uvicorn
@@ -263,10 +264,14 @@ def start_action(args):
     try:
         if use_reload:
             # The reloader restarts on code changes; the console offers no
-            # restart here (no RestartController is attached).
+            # restart here (no RestartController is attached). It watches the
+            # service code only: by default it watches the working directory,
+            # where an uploaded agent package is unpacked, and the restart
+            # that follows would sign every console user out.
             uvicorn.run(
                 "testbench_ai_service.main:create_app",
                 reload=True,
+                reload_dirs=[str(Path(__file__).resolve().parent)],
                 factory=True,
                 **server_options(config),
             )

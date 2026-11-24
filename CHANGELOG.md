@@ -281,6 +281,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   could reach Python internals and run code in the service process.
 - A `port` of 0, a negative one or one above 65535 is now rejected when the configuration is
   validated -- also in the console's preview -- instead of failing when the server binds.
+- With `--dev`, uploading an agent package no longer restarts the service and signs the console
+  user out. The reloader watched the whole working directory, including the unpacked package
+  files; it now watches the service code only.
 
 - A run whose `llm_config.model` names a model of another provider than the prompt's model now
   reaches that provider's client. The client was chosen by the prompt's model.
