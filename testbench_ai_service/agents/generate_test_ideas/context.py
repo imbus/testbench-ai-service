@@ -10,7 +10,7 @@ from collections.abc import Callable
 
 from testbench_ai_service.agents.generate_test_ideas.model import Requirement, ThemeContext
 from testbench_ai_service.models.agent import AgentData
-from testbench_ai_service.utils.html_utils import visible_text
+from testbench_ai_service.utils.html_utils import html_to_structured_text, visible_text
 
 
 class RequirementAgentData(AgentData):
@@ -76,8 +76,10 @@ def render_requirement(requirement: Requirement, covered_by: list[str] | None = 
     """Render a requirement as its identifier and title, its attributes, its description
     and the test case sets already linked to it.
 
-    Attributes that are unset and a description without visible text are omitted
-    rather than rendered empty.
+    The description comes from the requirement service as HTML and is rendered as
+    plain text that keeps its line breaks, lists and tables. Attributes that are
+    unset and a description without visible text are omitted rather than rendered
+    empty.
 
     Args:
         requirement: The requirement to render.
@@ -95,10 +97,10 @@ def render_requirement(requirement: Requirement, covered_by: list[str] | None = 
     ]
     if attributes:
         lines.append("  " + " | ".join(attributes))
-    description = strip_html_header(requirement.description or "")
-    if html_text(description):
+    description = html_to_structured_text(strip_html_header(requirement.description or ""))
+    if description:
         lines.append("  description:")
-        lines.extend(f"    {line}" for line in description.strip().splitlines())
+        lines.extend(f"    {line}" if line else "" for line in description.splitlines())
     if covered_by is not None:
         lines.append(f"  existing test case sets: {', '.join(covered_by) or 'none'}")
     return "\n".join(lines)

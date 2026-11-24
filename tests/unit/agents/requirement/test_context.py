@@ -93,7 +93,23 @@ class TestRenderRequirement:
 
         assert render_requirement(requirement).splitlines()[2:] == [
             "  description:",
-            "    <p>Orders get 5 % off.</p>",
+            "    Orders get 5 % off.",
+        ]
+
+    def test_renders_an_html_description_as_structured_text(self):
+        requirement = _requirement(
+            description=(
+                '<p style="color: red">Orders get a <b>discount</b>.</p>'
+                "<ul><li>5 % above 100 EUR</li><li>10 % above 500 EUR</li></ul>"
+            )
+        )
+
+        assert render_requirement(requirement).splitlines()[2:] == [
+            "  description:",
+            "    Orders get a discount.",
+            "",
+            "    - 5 % above 100 EUR",
+            "    - 10 % above 500 EUR",
         ]
 
     def test_omits_a_description_that_is_only_a_header(self):

@@ -78,6 +78,14 @@ class TestValidateAspects:
 
         assert len(validate_aspects(answer, SOURCE, max_aspects=12)) == 1
 
+    def test_a_quote_across_list_items_is_found_as_the_model_read_it(self):
+        requirement = _requirement("<ul><li>Lock after 3 attempts</li><li>Unlock by mail</li></ul>")
+        rendered = render_requirement(requirement)
+        answer = AspectList(aspects=[_aspect("Lock", "- Lock after 3 attempts\n- Unlock by mail")])
+
+        assert "Description:\n- Lock after 3 attempts\n- Unlock by mail" in rendered
+        assert len(validate_aspects(answer, requirement_text(requirement), max_aspects=12)) == 1
+
     def test_duplicate_statements_are_dropped(self):
         answer = AspectList(
             aspects=[

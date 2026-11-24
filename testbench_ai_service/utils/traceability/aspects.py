@@ -7,7 +7,7 @@ An aspect must quote the requirement text, so aspects the model adds from experi
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.agent import AgentData
-from testbench_ai_service.utils.html_utils import visible_text
+from testbench_ai_service.utils.html_utils import html_to_structured_text
 from testbench_ai_service.utils.rm_service import Requirement
 from testbench_ai_service.utils.traceability.models import AskStep, Aspect, AspectList
 
@@ -35,14 +35,21 @@ def render_requirement(requirement: Requirement) -> str:
     ]
     if attributes:
         lines.append(" | ".join(attributes))
-    description = visible_text(requirement.description or "")
-    lines.append(f"Description: {description or '(none, only the title is known)'}")
+    description = html_to_structured_text(requirement.description or "")
+    if "\n" in description:
+        lines.append(f"Description:\n{description}")
+    else:
+        lines.append(f"Description: {description or '(none, only the title is known)'}")
     return "\n".join(lines)
 
 
 def requirement_text(requirement: Requirement) -> str:
-    """The text an aspect's quote must come from: the title and the visible description."""
-    return f"{requirement.title}\n{visible_text(requirement.description or '')}"
+    """The text an aspect's quote must come from: the title and the description as rendered.
+
+    The same rendering the model reads, so a quote that runs across list items or
+    table cells is found again.
+    """
+    return f"{requirement.title}\n{html_to_structured_text(requirement.description or '')}"
 
 
 def _normalized(text: str) -> str:
