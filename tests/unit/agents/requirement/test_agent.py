@@ -98,12 +98,13 @@ def _test_case_set_node(key: str, name: str) -> TestCaseSetNode:
     )
 
 
-def _theme_details(description: str = "Old") -> SimpleNamespace:
+def _theme_details(description: str = "Old", responsible=None) -> SimpleNamespace:
     return SimpleNamespace(
         spec=SimpleNamespace(
             key="s1",
             description=description,
             reviewComment="",
+            responsible=responsible,
             priority=Priority.Undefined,
             tags=[],
             udfs=[],
@@ -193,7 +194,11 @@ def wired(monkeypatch):
         nodes=[],
         test_case_set_details={},
         theme_error=None,
+        # How many reads of the theme succeed before ``theme_error`` is raised:
+        # 0 fails the read in precheck, 1 only the one in run.
+        theme_error_after=0,
         theme_reads=[],
+        responsible=None,
         created=0,
         create_error=None,
         set_writes=[],
@@ -206,9 +211,9 @@ def wired(monkeypatch):
         # The patches applied so far, to tell whether the theme was read before
         # or after it was marked as in progress.
         state.theme_reads.append(list(recorder.calls))
-        if state.theme_error is not None:
+        if state.theme_error is not None and len(state.theme_reads) > state.theme_error_after:
             raise state.theme_error
-        return _theme_details()
+        return _theme_details(responsible=state.responsible)
 
     async def _load(*_args, **_kwargs):
         if state.load_error is not None:
@@ -429,10 +434,11 @@ class TestWrittenIdeas:
 
 
 class TestOrdering:
-    async def test_reads_the_theme_once_before_marking_it_in_progress(self, wired):
+    async def test_reads_the_theme_only_before_marking_it_in_progress(self, wired):
+        # Once in precheck (responsible person), once in run (description to keep).
         await _run()
 
-        assert wired.theme_reads == [[]]
+        assert wired.theme_reads == [[], []]
 
     async def test_marks_the_theme_in_progress_before_the_rm_lookup(self, wired, monkeypatch):
         seen_by_lookup = []
@@ -474,7 +480,18 @@ class TestNothingToDo:
         assert wired.recorder.calls == []
 
     async def test_writes_nothing_when_the_theme_cannot_be_read(self, wired):
+        # Raised from precheck, so the route answers with TestBench's own status.
         wired.theme_error = RuntimeError("403")
+
+        with pytest.raises(RuntimeError, match="403"):
+            await _run()
+
+        assert wired.recorder.calls == []
+        assert wired.ai_calls == []
+
+    async def test_writes_nothing_when_the_theme_cannot_be_read_in_the_run(self, wired):
+        wired.theme_error = RuntimeError("403")
+        wired.theme_error_after = 1
 
         await _run()
 
@@ -506,6 +523,48 @@ class TestNothingToDo:
         await _run()
 
         assert wired.recorder.calls == ["started", "generated"]
+
+    async def test_skips_a_theme_another_user_is_responsible_for(self, wired):
+        wired.responsible = SimpleNamespace(key="someone-else", name="Erika Mustermann")
+
+        result = await _run()
+
+        assert result.passed is False
+        assert result.warnings == [
+            (
+                "The AI agent cannot process test theme 'Discounts' because "
+                "'Erika Mustermann' is entered as the responsible person."
+            )
+        ]
+        assert wired.recorder.calls == []
+        assert wired.ai_calls == []
+
+    async def test_skips_a_theme_with_an_unnamed_other_responsible(self, wired):
+        wired.responsible = SimpleNamespace(key="someone-else", name=" ")
+
+        result = await _run()
+
+        assert result.warnings == [
+            (
+                "The AI agent cannot process test theme 'Discounts' because someone else "
+                "is entered as the responsible person."
+            )
+        ]
+        assert wired.recorder.calls == []
+
+    async def test_still_writes_a_theme_the_triggering_user_is_responsible_for(self, wired):
+        wired.responsible = SimpleNamespace(key="u1", name="Me")
+
+        await _run()
+
+        assert wired.recorder.calls == ["started", "generated"]
+
+    async def test_a_locked_theme_is_refused_without_reading_its_details(self, wired):
+        wired.theme = _theme_node(locker_key="someone-else")
+
+        await _run()
+
+        assert wired.theme_reads == []
 
 
 class TestThemeLock:
@@ -710,6 +769,7 @@ class TestJobReporting:
 
     async def test_an_unreadable_theme_fails_the_job(self, wired, job):
         wired.theme_error = RuntimeError("403")
+        wired.theme_error_after = 1
 
         detail = await self._run(job)
 

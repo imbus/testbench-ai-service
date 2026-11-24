@@ -152,7 +152,7 @@ No separate username/password configuration is needed. The AI Service uses the J
 | `502 Bad Gateway`    | AI Service cannot reach TestBench REST API. | Verify`tb_server_url` in `config.toml` is correct and reachable.                                                    |
 | `404 Not Found`      | Agent disabled for the project.             | Check`enabled = true` in the agent config; check project-specific overrides.                                          |
 | `409 Conflict`       | Precheck failed (e.g., all items locked).   | Unlock the test structure elements in TestBench and retry.                                                              |
-| `409 Conflict` with a responsible-person message | Another user is entered as responsible for the test case set specification. | Clear the responsible person or enter yourself, or let the responsible user trigger the agent.                          |
+| `409 Conflict` with a responsible-person message | Another user is entered as responsible for the specification of the test case set (Reviewer, Describer) or test theme (Test Idea Generator). | Clear the responsible person or enter yourself, or let the responsible user trigger the agent.                          |
 | `409 Conflict` with an unsupported-version message | TestBench server is older than the version the triggered agent requires (4.1 for all built-in agents). | Update the TestBench server to the required version or newer.                                                           |
 | LLM errors in logs     | Missing or invalid API key.                 | Verify your provider key is set in`.env` or environment (for example `OPENAI_API_KEY` or `AZURE_OPENAI_API_KEY`). |
 

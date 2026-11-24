@@ -30,7 +30,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   - **Test Idea Generator** (`requirement`): writes test ideas for the requirements below a test
     theme into the theme's description. From TestBench 5.0 it also creates one test case set per
     idea, all or nothing; `create_test_case_sets = false` switches that off, and a token without
-    `ModifyTestStructureElements` falls back to the description with a job warning.
+    `ModifyTestStructureElements` falls back to the description with a job warning. Like the
+    Test Case Set Reviewer, it refuses a theme another user is responsible for, with a localized
+    precheck warning naming that user.
   - **Test Planner** (`test_planner`): plans the most diverse test selection of a cycle via
     embeddings and sets the selected test cases to Planned.
   - **Coverage Checker** (`coverage_checker`): checks whether the test case sets linked to a

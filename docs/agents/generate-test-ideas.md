@@ -47,6 +47,7 @@ To create the test case sets (TestBench 5.0 and later), the token also needs `Mo
 2. Before accepting the request, the service loads the test structure below the theme and checks it:
    - The theme has a specification to write into.
    - The theme is not locked by another user.
+   - No other user is entered as **responsible** for the theme's specification. A theme without a responsible person, or with the triggering user as responsible, is processed.
    - At least one requirement is assigned below the theme, and no more than `max_requirements` (if set).
 3. The theme is marked as in progress: its description is replaced by a *"generation started"* marker (the previous description is kept below it), and the triggering user is set as locker and reviewer.
 4. The service collects the context for the prompt:

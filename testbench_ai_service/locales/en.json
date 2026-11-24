@@ -21,6 +21,8 @@
     "requirement.precheck.not_a_test_theme": "Trigger the test idea generator on a test theme of a test object version.",
     "requirement.precheck.no_specification": "Test theme '{theme}' has no specification to write the test ideas into.",
     "requirement.precheck.locked": "Test theme '{theme}' is locked by another user.",
+    "requirement.precheck.responsible_other_user": "The AI agent cannot process test theme '{theme}' because '{user}' is entered as the responsible person.",
+    "requirement.precheck.responsible_unknown_user": "The AI agent cannot process test theme '{theme}' because someone else is entered as the responsible person.",
     "requirement.precheck.no_requirements": "No requirements are assigned below test theme '{theme}'.",
     "requirement.precheck.too_many_requirements": "Test theme '{theme}' has {count} requirements, more than the {max} allowed.",
     "requirement.job.theme_unreadable": "Could not read test theme '{theme}'.",

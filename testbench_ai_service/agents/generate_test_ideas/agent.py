@@ -5,8 +5,9 @@ tree. The requirements assigned below that theme are loaded from the TOV (or cyc
 and the ideas generated for them are written into the theme's description.
 
 ``precheck`` refuses a trigger that cannot produce ideas (not a test theme, locked by
-someone else, no or too many requirements) with a translated warning, so the user
-sees why (409) instead of an accepted run that silently writes nothing. What it loaded
+or the responsibility of someone else, no or too many requirements) with a translated
+warning, so the user sees why (409) instead of an accepted run that silently writes
+nothing. What it loaded
 is handed to ``run`` on the instance: ``load_agent`` builds one per request.
 """
 
@@ -129,6 +130,11 @@ class RequirementAgent(Agent):
         )
         theme = tree.root
         if refusal := _check_theme(theme, context):
+            return refusal
+        # The structure node carries the locker only; the responsible person is
+        # part of the theme's details.
+        spec = await get_theme_spec(conn, context.project_key, theme)
+        if refusal := _check_responsible(theme.base.name, spec, context):
             return refusal
 
         assignments = await load_requirements(
@@ -467,6 +473,25 @@ def _check_theme(theme: object, context: ExecutionContext) -> PrecheckResult | N
     if locker is not None and locker.key != context.user_key:
         return _refused(language, "requirement.precheck.locked", theme=name)
     return None
+
+
+def _check_responsible(
+    theme_name: str, spec: TestThemeSpecification, context: ExecutionContext
+) -> PrecheckResult | None:
+    """A failed result if someone other than the triggering user is the theme's responsible."""
+    responsible = spec.responsible
+    if responsible is None or responsible.key == context.user_key:
+        return None
+    if responsible.name.strip():
+        return _refused(
+            context.language,
+            "requirement.precheck.responsible_other_user",
+            theme=theme_name,
+            user=responsible.name,
+        )
+    return _refused(
+        context.language, "requirement.precheck.responsible_unknown_user", theme=theme_name
+    )
 
 
 def _refused(language: LanguageOption, key: str, **kwargs: object) -> PrecheckResult:
