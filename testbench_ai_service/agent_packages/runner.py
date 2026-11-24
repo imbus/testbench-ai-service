@@ -15,6 +15,43 @@ from testbench_ai_service.agent_packages.models import InspectionReport
 INSPECT_TIMEOUT_SECONDS = 30
 _STDERR_TAIL = 2000
 
+#: What the child needs to start, find its libraries and write temporary files. Compared in
+#: upper case: Windows names are case-insensitive.
+_ENV_KEEP = frozenset(
+    {
+        "PATH",
+        "PATHEXT",
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "WINDIR",
+        "COMSPEC",
+        "TEMP",
+        "TMP",
+        "TMPDIR",
+        "HOME",
+        "USERPROFILE",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMDATA",
+        "USERNAME",
+        "USER",
+        "LOGNAME",
+        "LANG",
+        "LANGUAGE",
+        "TZ",
+        "NUMBER_OF_PROCESSORS",
+        "PROCESSOR_ARCHITECTURE",
+        "VIRTUAL_ENV",
+        "LD_LIBRARY_PATH",
+        "DYLD_LIBRARY_PATH",
+        "DYLD_FALLBACK_LIBRARY_PATH",
+    }
+)
+#: Locale settings, interpreter switches and what the binary's bootloader hands to its children.
+_ENV_KEEP_PREFIXES = ("LC_", "PYTHON", "_PYI_", "_MEI")
+
 
 def _frozen() -> bool:
     return bool(getattr(sys, "frozen", False))
@@ -39,6 +76,26 @@ def inspection_command(site_dir: Path) -> list[str]:
     ]
 
 
+def inspection_env() -> dict[str, str]:
+    """The environment of the inspection process: the service's, reduced to what a Python
+    process needs.
+
+    The child imports code of a package nobody has registered yet, so it must not see the
+    service's credentials. Those have no fixed names (``<PROJECT>_<PROVIDER>_API_KEY``,
+    whatever ``.env`` holds), so the variables to keep are listed, not the ones to drop.
+    ``PYTHONPATH`` goes too: it would put foreign code in front of the service's.
+    """
+    env = {
+        name: value
+        for name, value in os.environ.items()
+        if name.upper() in _ENV_KEEP or name.upper().startswith(_ENV_KEEP_PREFIXES)
+    }
+    for name in [name for name in env if name.upper() == "PYTHONPATH"]:
+        del env[name]
+    env["PYTHONIOENCODING"] = "utf-8"
+    return env
+
+
 def _failed(message: str) -> InspectionReport:
     return InspectionReport(ok=False, errors=[message])
 
@@ -48,9 +105,6 @@ def run_inspection(site_dir: Path, timeout: float = INSPECT_TIMEOUT_SECONDS) -> 
 
     Never raises: a timeout, a crash or unreadable output becomes a failed report.
     """
-    env = os.environ.copy()
-    env.pop("PYTHONPATH", None)
-    env["PYTHONIOENCODING"] = "utf-8"
     # From source, the running service's package must be first on the child's sys.path.
     cwd = None if _frozen() else Path(testbench_ai_service.__file__).resolve().parent.parent
     try:
@@ -59,7 +113,7 @@ def run_inspection(site_dir: Path, timeout: float = INSPECT_TIMEOUT_SECONDS) -> 
             capture_output=True,
             timeout=timeout,
             cwd=cwd,
-            env=env,
+            env=inspection_env(),
             check=False,
         )
     except subprocess.TimeoutExpired:

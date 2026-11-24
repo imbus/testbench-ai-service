@@ -12,7 +12,7 @@ Use a package when the agent author and the service operator are different peopl
 A wheel can also carry a custom LLM client, alone or next to agents, through the entry-point group `testbench_ai_service.llm_clients`. See [Custom LLM Client](../llm-providers/custom-client.md#upload-as-a-package).
 
 :::warning
-Registered package code runs inside the service with the service's rights: it can read the configuration, the environment (including API keys) and everything the service user can access. Turn on uploads only for administrators you trust, and only install packages from sources you trust.
+Package code runs on the server with the rights of the service user, and it runs for the first time at upload, before anything is registered: the check imports the package in a separate process. That process does not get the service's environment variables (API keys), but it can read and write every file the service user can, including `config.toml` and `.env`, and it can reach the network. Once the package is registered and the service restarted, the code runs inside the service and sees the environment too. Turn on uploads only for administrators you trust, and upload only wheels from sources you trust.
 :::
 
 ---
@@ -128,12 +128,13 @@ The wheel appears in `dist/`.
 - **Self-contained wheels only.** The service does not install dependencies. `Requires-Dist` entries are checked: every requirement must already be satisfied by the service's environment, otherwise the upload is refused. In the binary distribution the metadata of a bundled library may be missing; a requirement whose metadata cannot be found only produces a warning there, while a version mismatch still fails.
 - **Wheel tags must fit the service's interpreter.** A pure-Python wheel (`py3-none-any`) always fits. A wheel with compiled code must match the Python version, platform and architecture of the running service, which in the binary distribution is the bundled interpreter.
 - **No clashing module names.** No top-level module of the wheel may have the name of a module the service already contains (for example `testbench_ai_service`, `fastapi` or `jinja2`).
+- **No environment variables at import.** The check at upload imports the module without the service's environment variables. Read them in `__init__` or `run()`, not at module level, or the upload fails.
 
 ---
 
 ## Installing a package
 
-1. **Upload.** On the console's **Agents** screen, click **Import agent wheel** and choose the `.whl`. The uploaded packages are listed in the **Agent packages** section below the agent table. The wheel is examined in a separate process with a 30 second timeout. No package code runs inside the service during this check. The result lists the agents found and any errors or warnings.
+1. **Upload.** On the console's **Agents** screen, click **Import agent wheel** and choose the `.whl`. The uploaded packages are listed in the **Agent packages** section below the agent table. The check imports the package's code in a separate process, with a 30 second timeout and without the service's environment variables. The code does not run inside the service at this point, but it does run on the server (see the warning above). The result lists the agents found and any errors or warnings.
 2. **Register.** Choose the key and the endpoint path of each agent. The console copies the prompt and template files to `prompts_dir/<lang>/<key>/` and `templates_dir/<lang>/<key>/`. If a target file already exists and differs, you decide per file whether to keep the existing file or replace it.
 3. **Restart the service.** The package code is not imported before the restart. Until then the agent has no route. An administrator can restart from the console's "restart needed" strip (**Restart now**); see [the web console](../web-console.md).
 

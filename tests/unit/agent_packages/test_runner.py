@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -61,6 +62,38 @@ def test_run_inspection_drops_pythonpath(monkeypatch, tmp_path):
     script = "import os; print('{\"ok\": %s}' % str('PYTHONPATH' not in os.environ).lower())"
     monkeypatch.setattr(runner, "inspection_command", lambda site: [sys.executable, "-c", script])
     assert run_inspection(Path("x")).ok
+
+
+def test_inspection_env_keeps_only_what_python_needs(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
+    monkeypatch.setenv("MYPROJECT_AZURE_CLIENT_SECRET", "secret")
+    monkeypatch.setenv("SOME_UNRELATED_SETTING", "value")
+    monkeypatch.setenv("PYTHONPATH", "somewhere")
+    monkeypatch.setenv("PYTHONUTF8", "1")
+    monkeypatch.setenv("LC_ALL", "C.UTF-8")
+    env = runner.inspection_env()
+    assert "OPENAI_API_KEY" not in env
+    assert "MYPROJECT_AZURE_CLIENT_SECRET" not in env
+    assert "SOME_UNRELATED_SETTING" not in env
+    assert "PYTHONPATH" not in env
+    assert env["PYTHONUTF8"] == "1"
+    assert env["LC_ALL"] == "C.UTF-8"
+    assert env["PYTHONIOENCODING"] == "utf-8"
+    assert env["PATH"] == os.environ["PATH"]
+
+
+def test_inspected_package_does_not_see_credentials(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-secret")
+    seen = tmp_path / "seen"
+    source = (
+        "import os\nfrom pathlib import Path\n"
+        f"Path({str(seen)!r}).write_text(os.environ.get('OPENAI_API_KEY', 'absent'))\n"
+        + str(VALID_AGENT_FILES["acme/rater/agent.py"])
+    )
+    files = {**VALID_AGENT_FILES, "acme/rater/agent.py": source}
+    report = run_inspection(extracted(tmp_path, files))
+    assert report.ok, report.errors
+    assert seen.read_text() == "absent"
 
 
 def test_inspection_does_not_import_into_service(tmp_path):

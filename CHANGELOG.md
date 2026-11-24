@@ -187,12 +187,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
   be used to fix the provider configuration that is wrong.
 - Agent packages. An administrator can upload a Python wheel with custom agents in the web
   console, register its agents (key, endpoint path) and restart the service, without touching
-  the server's Python environment. The wheel is checked in a separate process, so no package
-  code runs in the service before the restart; a broken or missing package never stops the
+  the server's Python environment. The wheel is checked in a separate process that does not get
+  the service's environment variables (API keys), so no package code runs in the service before
+  the restart; a broken or missing package never stops the
   service from starting, its agents just answer `503`. Versions can be updated, activated and
   deleted. Off by default: set `agent_packages.allow_upload = true` (`dir`, `max_upload_mb`,
-  not editable in the console) and use custom `prompts_dir`/`templates_dir`. Registered package
-  code runs with the service's rights, so enable it only for trusted administrators. Documented
+  not editable in the console) and use custom `prompts_dir`/`templates_dir`. Package code
+  runs with the service user's rights from the upload on (the check imports it), so enable it
+  only for trusted administrators. Documented
   in `docs/agents/agent-packages.md`, with a runnable example in `examples/agent_package/`.
   - `ExecutionContext.agent_key` carries the key an agent is configured under. Custom agents
     should resolve their write-back templates with `agent_key=context.agent_key`, so they keep
