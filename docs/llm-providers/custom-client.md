@@ -144,7 +144,7 @@ The service finds the clients of a package through the entry-point group `testbe
 acme_llm = "acme_llm.client:AcmeLLMClient"
 ```
 
-A complete example is in [`examples/llm_client_package`](https://github.com/imbus/testbench-ai-service/tree/main/examples/llm_client_package). Build it with `python -m build --wheel`.
+A complete example is in [`examples/llm_client_package`](https://github.com/imbus/testbench-ai-service/tree/main/examples/llm_client_package). Build it with `python -m build --wheel`. A client for a real target, [Ollama](https://ollama.com), is in [`examples/ollama_llm_package`](https://github.com/imbus/testbench-ai-service/tree/main/examples/ollama_llm_package); its README lists the environment variables it reads.
 
 At upload the wheel is examined in a separate process. For each client the check requires that
 

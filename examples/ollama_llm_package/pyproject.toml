@@ -1,0 +1,20 @@
+[build-system]
+requires = ["flit_core>=3.9,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "ollama-llm"
+version = "1.0.0"
+description = "Ollama LLM client package for the TestBench AI Service"
+readme = "README.md"
+requires-python = ">=3.11"
+# The service does not install dependencies for you: a package is a self-contained wheel.
+# httpx, which the client uses, ships with the service.
+dependencies = []
+
+# The service finds the LLM clients of a package through this entry-point group.
+[project.entry-points."testbench_ai_service.llm_clients"]
+ollama = "ollama_llm.client:OllamaLLMClient"
+
+[tool.flit.module]
+name = "ollama_llm"
