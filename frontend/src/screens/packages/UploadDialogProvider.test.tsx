@@ -106,6 +106,17 @@ describe('UploadDialog with an LLM client', () => {
     expect(screen.queryByRole('button', { name: 'Next: register agents' })).not.toBeInTheDocument()
   })
 
+  it('does not claim agents for a wheel whose report lists nothing', async () => {
+    const base = version({ active: false })
+    fetchMock.mockResolvedValue(ok(version({ active: false, report: { ...base.report, agents: {} } })))
+    await upload()
+
+    expect(
+      await screen.findByText('The check found no agents and no LLM client in this package.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/listed on the Agents screen/)).not.toBeInTheDocument()
+  })
+
   it('asks to activate first while another version is active', async () => {
     fetchMock.mockResolvedValue(ok(llmVersion({ version: '2.0.0' })))
     await upload(packages({ packages: [llmPkg({ versions: [llmVersion({ active: true })] })] }))

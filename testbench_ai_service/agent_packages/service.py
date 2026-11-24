@@ -86,6 +86,26 @@ def _remove_dir(path: Path) -> None:
         path.parent.rmdir()  # only succeeds when the package has no other version
 
 
+def _refresh_report(
+    packages_dir: Path, manifest: Manifest, entry: PackageVersion
+) -> PackageVersion:
+    """Inspect a stored version again and keep the new report.
+
+    A report is as old as its upload: one written by a service version that did not
+    check LLM clients yet lists none, and uploading the wheel again would only hand
+    that report back. A passing report is not replaced by a failing one, so an
+    inspection that times out leaves a version in use alone.
+    """
+    target_site = site_dir(packages_dir, entry.name, entry.version)
+    if not target_site.is_dir():
+        return entry
+    report = run_inspection(target_site)
+    if report != entry.report and (report.ok or not entry.report.ok):
+        entry.report = report
+        save_manifest(packages_dir, manifest)
+    return entry
+
+
 def store_upload(
     packages_dir: Path,
     filename: str,
@@ -95,7 +115,8 @@ def store_upload(
 ) -> PackageVersion:
     """Store an uploaded wheel, unpack it and inspect it. The version starts inactive.
 
-    Uploading the same version with the same content again returns the existing entry.
+    Uploading the same version with the same content again returns the existing entry,
+    inspected anew.
     Raises ``PackageInvalid`` for an unusable upload and ``PackageConflict`` when the version
     exists with different content. Callers serialise uploads.
     """
@@ -112,7 +133,7 @@ def store_upload(
         existing = manifest.packages.get(info.name, {}).get(info.version)
         if existing is not None:
             if existing.sha256 == info.sha256:
-                return existing
+                return _refresh_report(packages_dir, manifest, existing)
             raise PackageConflict(
                 f"{info.name} {info.version} already exists with different content"
             )

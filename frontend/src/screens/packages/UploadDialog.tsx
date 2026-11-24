@@ -98,7 +98,8 @@ export function UploadDialog({
     !uploaded || otherActive
       ? null
       : forProvider
-        ? Object.keys(uploaded.report.llm_clients ?? {}).length === 0
+        ? Object.keys(uploaded.report.llm_clients ?? {}).length === 0 &&
+          Object.keys(uploaded.report.agents).length > 0
           ? t('packagesOnlyAgents')
           : null
         : Object.keys(uploaded.report.agents).length === 0 &&
@@ -536,7 +537,7 @@ function ReportTable({ report }: { report: PackageReport }) {
       ))}
       {rows.length === 0 ? (
         <div className="text-muted" style={{ fontSize: 13 }}>
-          {t('packagesNoAgents')}
+          {t('packagesNothingDeclared')}
         </div>
       ) : (
         <DataTable value={rows} size="small" stripedRows dataKey="entry">

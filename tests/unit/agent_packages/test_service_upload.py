@@ -67,6 +67,40 @@ def test_same_upload_twice_is_idempotent(tmp_path):
     assert _leftovers(packages) == []
 
 
+def _stale_report(packages: Path, entry) -> None:
+    """Empty the stored report, as a service version that checked less would have left it."""
+    manifest = load_manifest(packages)
+    stored = manifest.packages[entry.name][entry.version]
+    stored.report = stored.report.model_copy(update={"agents": {}})
+    service.save_manifest(packages, manifest)
+
+
+def test_same_upload_again_replaces_a_stale_report(tmp_path):
+    packages = tmp_path / "packages"
+    wheel = _wheel(tmp_path)
+    first = _upload(packages, wheel)
+    _stale_report(packages, first)
+
+    second = _upload(packages, wheel)
+
+    assert second.report == first.report
+    assert second.uploaded_at == first.uploaded_at
+    assert load_manifest(packages).packages[first.name][first.version] == second
+
+
+def test_same_upload_again_keeps_a_passing_report_when_the_inspection_fails(tmp_path, monkeypatch):
+    packages = tmp_path / "packages"
+    wheel = _wheel(tmp_path)
+    first = _upload(packages, wheel)
+    monkeypatch.setattr(
+        service,
+        "run_inspection",
+        lambda site: first.report.model_copy(update={"ok": False, "errors": ["timed out"]}),
+    )
+
+    assert _upload(packages, wheel).report == first.report
+
+
 def test_same_version_other_content_conflicts(tmp_path):
     packages = tmp_path / "packages"
     first = _upload(packages, _wheel(tmp_path))

@@ -394,6 +394,8 @@ export const de = {
   packagesWarning: 'Warnung',
   packagesError: 'Fehler',
   packagesNoAgents: 'Das Paket deklariert keine Agenten.',
+  packagesNothingDeclared:
+    'Die Prüfung hat in diesem Paket weder Agenten noch einen LLM-Client gefunden.',
   packagesUploadTitle: 'Agenten-Paket hochladen',
   packagesStepWheel: 'Wheel wählen',
   packagesStepReport: 'Prüfbericht',

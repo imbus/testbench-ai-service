@@ -393,6 +393,7 @@ export const en = {
   packagesWarning: 'Warning',
   packagesError: 'Error',
   packagesNoAgents: 'The package declares no agents.',
+  packagesNothingDeclared: 'The check found no agents and no LLM client in this package.',
   packagesUploadTitle: 'Upload agent package',
   packagesStepWheel: 'Choose wheel',
   packagesStepReport: 'Check report',
