@@ -400,6 +400,54 @@ const JOBS = [
     updated_at: '2026-09-09T09:12:41+00:00',
     finished_at: '2026-09-09T09:12:41+00:00',
   },
+  {
+    // A custom agent's report: no view of its own, so it is laid out from its shape.
+    ...JOB_BASE,
+    job_id: 'j4',
+    agent_key: 'acme_rater',
+    item_ids: ['TS-118'],
+    status: 'succeeded',
+    report_type: 'rater',
+    created_at: '2026-09-08T14:02:10+00:00',
+    updated_at: '2026-09-08T14:02:55+00:00',
+    finished_at: '2026-09-08T14:02:55+00:00',
+    report: {
+      test_case_set: 'TS-118',
+      overall_score: 3.4,
+      release_recommended: false,
+      reviewed_by_model: 'gpt-5',
+      tags: ['login', 'regression'],
+      summary:
+        'Das Testfallset deckt den **Standardablauf** gut ab.\n\n- Negative Fälle fehlen fast ganz.\n- Zwei Testfälle haben keine erwarteten Ergebnisse.',
+      ratings: [
+        {
+          test_case: 'TC-12',
+          title: 'Anmeldung mit gültigen Daten',
+          score: 5,
+          complete: true,
+          findings: [],
+        },
+        {
+          test_case: 'TC-14',
+          title: 'Konto wird gesperrt',
+          score: 3,
+          complete: true,
+          findings: [{ step: 2, severity: 'minor', text: 'Erwartetes Ergebnis ist unscharf.' }],
+        },
+        {
+          test_case: 'TC-15',
+          title: 'Hinweis mit Wartezeit',
+          score: 2,
+          complete: false,
+          findings: [
+            { step: 1, severity: 'major', text: 'Vorbedingung fehlt.' },
+            { step: 3, severity: 'major', text: 'Kein erwartetes Ergebnis.' },
+          ],
+        },
+      ],
+      totals: { test_cases: 3, with_findings: 2, tokens: { input: 4120, output: 890 } },
+    },
+  },
 ]
 FIXTURES['/admin/api/jobs'] = JOBS.map(({ report: _report, ...summary }) => summary)
 for (const job of JOBS) FIXTURES[`/admin/api/jobs/${job.job_id}`] = job

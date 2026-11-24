@@ -50,6 +50,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - The console's Jobs screen filters by status with chips, shows each job's duration and a status
   pill, names the item by its unique ID, and opens every job on its own page
   (`/admin/jobs/<job id>`) with a real link. Documented in `docs/web-console.md`.
+- A job report without a view of its own, for example a custom agent's, is no longer shown as raw
+  JSON: the console's job page and the job page in the browser lay it out from its shape (short
+  values as labelled lines, lists of objects as tables, long text as Markdown, nested objects as
+  sections), with a switch to the stored JSON. No report schema is needed. Documented in
+  `docs/agents/index.md`.
 - The service root `/` redirects to the web console, or to the Swagger UI when the console is
   disabled.
 - A failed console sign-in names the likely cause (wrong credentials, TestBench unreachable,

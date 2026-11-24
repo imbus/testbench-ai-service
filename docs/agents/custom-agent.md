@@ -175,7 +175,7 @@ All methods are coroutines. Write messages and texts in `context.language`; the 
 - **No job, no effect.** Outside a job, for example in a unit test, `current_job()` returns a handle whose methods do nothing. Your agent never has to check whether a job exists.
 - **Errors are not raised.** If the job store cannot be written, the service logs the error and the call returns normally. A broken job never fails the run.
 - **Reports must be plain JSON.** A report holding `NaN` or `Infinity`, or a value that is not JSON at all, is logged and dropped. Round or replace such floats before calling `set_report`.
-- **Report types are a contract.** The plugin renders only the report types it knows. Call `set_report` only with a type agreed on with the plugin, otherwise do not call it; the job still shows status, progress and warnings.
+- **Report types are a contract.** The plugin renders only the report types it knows. Call `set_report` only with a type agreed on with the plugin, otherwise do not call it; the job still shows status, progress and warnings. The web console and the job page in the browser show a report of any type, see [Reports without a view](index.md#reports-without-a-view).
 
 **If one item fails, warn; if all fail, fail.** An agent that processes several items should keep the job `succeeded` when single items fail, and report each failure as a warning. Only when every item failed should the job end as `failed`. The built-in agents follow this rule through `gather_items`, which you can use as well:
 

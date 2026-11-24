@@ -11,6 +11,7 @@ import type {
 import { type Lang, type Translations, useLang } from '../../i18n'
 import { formatActivityTime } from '../Status'
 import { CoverageReport } from './CoverageReport'
+import { GenericReport } from './GenericReport'
 import { LinkFinderReport } from './LinkFinderReport'
 
 export const STATUS_COLORS: Record<JobStatus, string> = {
@@ -118,14 +119,8 @@ function Report({ job }: { job: JobDetail }) {
   if (job.report_type === 'link_finder' && job.report) {
     return <LinkFinderReport report={job.report as LinkFinderResult} />
   }
-  // A report type this UI does not know is still shown, as the stored JSON.
-  if (job.report) {
-    return (
-      <pre style={{ margin: 0, overflowX: 'auto', fontFamily: 'var(--font-code)', fontSize: 12 }}>
-        {JSON.stringify(job.report, null, 2)}
-      </pre>
-    )
-  }
+  // A report type this UI has no view for is laid out from its shape.
+  if (job.report) return <GenericReport report={job.report} />
   return null
 }
 

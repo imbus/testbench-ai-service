@@ -21,6 +21,12 @@ export const de = {
   jobDuration: 'Dauer',
   jobError: 'Fehler',
   jobWarnings: 'Warnungen',
+  reportViewMode: 'Darstellung des Berichts',
+  reportViewFormatted: 'Aufbereitet',
+  reportViewJson: 'JSON',
+  reportYes: 'Ja',
+  reportNo: 'Nein',
+  reportShowDetails: 'Details anzeigen',
   jobViewExpired:
     'Dieser Link ist abgelaufen oder wurde bereits verwendet. Öffne den Job erneut aus TestBench.',
   jobViewLoadFailed: 'Der Job konnte nicht geladen werden. Öffne ihn erneut aus TestBench.',

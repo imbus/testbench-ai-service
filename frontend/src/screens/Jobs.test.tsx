@@ -219,14 +219,17 @@ test('filtering by status asks the backend', async () => {
   )
 })
 
-test('an unknown report type is shown as JSON', async () => {
+test('an unknown report type is laid out from its shape, with the JSON a click away', async () => {
   const job = { ...FAILED, status: 'succeeded' as const, error: null, report_type: 'mystery' }
   list = [job]
   details = { j2: detail(job, { report: { answer: 42 } }) }
   renderJobs('/admin/jobs/j2')
   const pane = await screen.findByTestId('job-detail')
-  await waitFor(() => expect(within(pane).getByText(/"answer": 42/)).toBeInTheDocument())
-  expect(pane.querySelector('pre')).not.toBeNull()
+  await waitFor(() => expect(within(pane).getByText('Answer')).toBeInTheDocument())
+  expect(within(pane).getByText('42')).toBeInTheDocument()
+  expect(pane.querySelector('pre')).toBeNull()
+  await userEvent.click(within(pane).getByRole('button', { name: 'JSON' }))
+  expect(within(pane).getByText(/"answer": 42/)).toBeInTheDocument()
 })
 
 test('a link finder report gets its own view', async () => {
