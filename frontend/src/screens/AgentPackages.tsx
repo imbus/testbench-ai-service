@@ -14,6 +14,7 @@ import {
   LIST_ROW,
   LlmClientsView,
   PackageError,
+  type PackageKind,
   ReportView,
 } from './packages/parts'
 import { ProviderDialog, StopProviderDialog } from './packages/ProviderDialog'
@@ -47,7 +48,11 @@ export interface PackageDialogs {
  * agents header and the package cards below the agent table: an upload ends
  * in the register dialog, so both have to open the same set.
  */
-export function usePackageDialogs(data: PackagesResponse | undefined): PackageDialogs {
+export function usePackageDialogs(
+  data: PackagesResponse | undefined,
+  /** The screen the dialogs belong to: what an upload leads on to. */
+  kind: PackageKind = 'agents',
+): PackageDialogs {
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const close = () => setDialog(null)
 
@@ -68,6 +73,7 @@ export function usePackageDialogs(data: PackagesResponse | undefined): PackageDi
         <UploadDialog
           onClose={close}
           packages={data}
+          kind={kind}
           onActivate={(version) =>
             setDialog({ kind: 'activate', pkg: version.name, version: version.version })
           }
@@ -167,7 +173,9 @@ export function AgentPackagesSection({
     const data = packages.data
     // `?? []`: a payload without the list renders an empty section rather
     // than taking the agents screen above it down.
-    const list = data.packages ?? []
+    // Only what carries agents: a wheel with nothing but an LLM client
+    // belongs to the LLM provider screen.
+    const list = (data.packages ?? []).filter(hasAgents)
     body = (
       <>
         {isAdmin && !data.allow_upload && (
@@ -184,6 +192,7 @@ export function AgentPackagesSection({
           <PackageCard
             key={entry.name}
             pkg={entry}
+            kind="agents"
             isAdmin={isAdmin}
             onUse={(version) => dialogs.openVersion(entry.name, version)}
             onActivate={(version) => dialogs.open({ kind: 'activate', pkg: entry.name, version })}
@@ -228,13 +237,27 @@ const SECTION_LABEL = {
   color: 'var(--color-muted)',
 } as const
 
+/** Whether a package carries agents: in any uploaded version, or registered. */
+export function hasAgents(pkg: AgentPackage): boolean {
+  return (
+    Object.keys(pkg.registered).length > 0 ||
+    pkg.versions.some((entry) => Object.keys(entry.report.agents).length > 0)
+  )
+}
+
 /** Whether any uploaded version of a package provides an LLM client. */
 export function hasLlmClient(pkg: AgentPackage): boolean {
   return pkg.versions.some((entry) => Object.keys(entry.report.llm_clients ?? {}).length > 0)
 }
 
+/**
+ * One package with its versions. `kind` picks the side shown: its agents with
+ * registering them, or its LLM clients with using one as the provider. The
+ * versions and what switches or deletes them belong to both.
+ */
 export function PackageCard({
   pkg,
+  kind,
   isAdmin,
   onUse,
   onActivate,
@@ -244,6 +267,7 @@ export function PackageCard({
   onStopProvider,
 }: {
   pkg: AgentPackage
+  kind: PackageKind
   isAdmin: boolean
   onUse: (version: PackageVersion) => void
   onActivate: (version: string) => void
@@ -257,7 +281,11 @@ export function PackageCard({
   // The report shown is the active version's, or the newest upload's.
   const shown = active ?? pkg.versions[0]
   const provides = !!pkg.llm_client
-  const inUse = Object.keys(pkg.registered).length > 0 || provides
+  const registered = Object.keys(pkg.registered).length > 0
+  const inUse = registered || provides
+  const forProvider = kind === 'provider'
+  // "loaded" is said of the side this card shows.
+  const usedHere = forProvider ? provides : registered
   const shownClients = shown ? Object.keys(shown.report.llm_clients ?? {}).length : 0
   const date = shown ? formatDate(shown.uploaded_at, i18n.language) : ''
 
@@ -316,14 +344,14 @@ export function PackageCard({
                 style={{ padding: '1px 8px', fontSize: 11 }}
               />
             )}
-            {provides && (
+            {forProvider && provides && (
               <Tag
                 severity="info"
                 value={t('packagesProviderInUse')}
                 style={{ padding: '1px 8px', fontSize: 11 }}
               />
             )}
-            {inUse && (
+            {usedHere && (
               <Tag
                 severity={pkg.loaded ? 'success' : 'warning'}
                 value={pkg.loaded ? t('packagesLoaded') : t('packagesNotLoaded')}
@@ -343,7 +371,7 @@ export function PackageCard({
             </span>
           )}
         </div>
-        {isAdmin && provides && (
+        {isAdmin && forProvider && provides && (
           <Button
             type="button"
             text
@@ -371,14 +399,14 @@ export function PackageCard({
           <Message severity="warn" style={{ justifyContent: 'flex-start' }} text={pkg.load_error} />
         )}
 
-        {shown && (Object.keys(shown.report.agents).length > 0 || shownClients === 0) && (
+        {shown && !forProvider && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={SECTION_LABEL}>{t('packagesAgentsOf', { version: shown.version })}</div>
             <ReportView report={shown.report} registered={pkg.registered} />
           </div>
         )}
 
-        {shown && shownClients > 0 && (
+        {shown && forProvider && shownClients > 0 && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div style={SECTION_LABEL}>{t('packagesLlmClientsOf', { version: shown.version })}</div>
             <LlmClientsView report={shown.report} inUse={pkg.llm_client} />
@@ -427,8 +455,8 @@ export function PackageCard({
                   <VersionActions
                     version={entry}
                     otherActive={!!active && !entry.active}
-                    registrable={hasUnregistered(entry, pkg.registered)}
-                    providable={!provides && hasUsableClient(entry)}
+                    registrable={!forProvider && hasUnregistered(entry, pkg.registered)}
+                    providable={forProvider && !provides && hasUsableClient(entry)}
                     onUseProvider={() => onUseProvider(entry)}
                     onUse={() => onUse(entry)}
                     onActivate={() => onActivate(entry.version)}

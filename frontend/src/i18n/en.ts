@@ -208,6 +208,7 @@ export const en = {
   modelNoKey: 'no API key',
   modelNoKeyHint: 'Without an API key for this provider, runs with this model fail.',
   modelApplyHint: 'Saved when you apply.',
+  llmSettings: 'Provider settings',
   llmScopeHint: 'Empty fields inherit from the global configuration.',
   projectKeyPresent: 'This project has its own key; its runs use it.',
   projectKeyAbsent: 'No project key; runs fall back to the global credential.',
@@ -470,11 +471,17 @@ export const en = {
   packagesStopProviderTitle: 'Stop using {{name}} as LLM provider',
   packagesStopProviderHint:
     'The service returns to the default provider (OpenAI). The models of this package are removed from the configuration, including where they are set as default or agent model. It takes effect after a restart.',
-  providerPackages: 'Provider packages',
-  providerPackagesSub: 'Uploaded Python wheels with their own LLM client',
+  providerPackages: 'Upload custom LLM provider',
+  providerPackagesSub: 'Install a Python wheel with your own LLM client and use it as the provider',
   providerPackagesEmpty: 'No package with an LLM client has been uploaded yet.',
   providerPackagesUpload: 'Import provider wheel',
+  providerPackagesUploadTitle: 'Upload LLM provider package',
+  packagesStepProvider: 'Use as provider',
+  packagesOnlyLlmClient:
+    'This wheel has an LLM client and no agents. It is stored and listed on the LLM provider screen, under "Upload custom LLM provider".',
+  packagesOnlyAgents:
+    'This wheel has agents and no LLM client. It is stored and listed on the Agents screen.',
   llmClassPathFromPackage:
-    'Comes from the uploaded package {{name}}. Change the provider under "Provider packages" below.',
+    'Comes from the uploaded package {{name}}. Change the provider under "Upload custom LLM provider" below.',
   statusLlmClientError: 'The LLM client of the uploaded package is not in use',
 } as const

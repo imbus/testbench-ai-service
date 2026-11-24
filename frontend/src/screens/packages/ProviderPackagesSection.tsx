@@ -3,17 +3,19 @@ import { Message } from 'primereact/message'
 import { useTranslation } from 'react-i18next'
 import { usePackages } from '../../api/packages'
 import { useStatus } from '../../api/queries'
+import { SectionPanel } from '../../components/SectionPanel'
 import { hasLlmClient, PackageCard, PackageUploadButton, usePackageDialogs } from '../AgentPackages'
 
 /**
- * The uploaded packages that provide an LLM client: a section of the LLM
- * screen. The same cards and dialogs as on the agents screen, limited to the
- * packages that matter here; a package may carry agents as well.
+ * The uploaded packages that provide an LLM client: a section of its own on
+ * the LLM screen, drawn like the settings and the models above it. The
+ * cards of the agents screen, showing the LLM client side only: a package's
+ * agents, if it has any, are the agents screen's business.
  */
 export function ProviderPackagesSection({ isAdmin }: { isAdmin: boolean }) {
   const { t } = useTranslation()
   const packages = usePackages()
-  const dialogs = usePackageDialogs(packages.data)
+  const dialogs = usePackageDialogs(packages.data, 'provider')
   const clientError = useStatus().data?.llm_client_error
 
   let body: ReactNode
@@ -46,6 +48,7 @@ export function ProviderPackagesSection({ isAdmin }: { isAdmin: boolean }) {
           <PackageCard
             key={entry.name}
             pkg={entry}
+            kind="provider"
             isAdmin={isAdmin}
             onUse={(version) => dialogs.openVersion(entry.name, version)}
             onActivate={(version) => dialogs.open({ kind: 'activate', pkg: entry.name, version })}
@@ -62,27 +65,19 @@ export function ProviderPackagesSection({ isAdmin }: { isAdmin: boolean }) {
   }
 
   return (
-    <section
-      aria-label={t('providerPackages')}
-      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ margin: 0, fontFamily: 'var(--font-heading)', fontSize: 20 }}>
-            {t('providerPackages')}
-          </h3>
-          <div className="text-muted" style={{ fontSize: 12 }}>
-            {t('providerPackagesSub')}
-          </div>
-        </div>
-        {isAdmin && (
+    <SectionPanel
+      title={t('providerPackages')}
+      hint={t('providerPackagesSub')}
+      action={
+        isAdmin && (
           <PackageUploadButton
             data={packages.data}
             dialogs={dialogs}
             label={t('providerPackagesUpload')}
           />
-        )}
-      </div>
+        )
+      }
+    >
       {clientError && (
         <Message
           severity="warn"
@@ -98,6 +93,6 @@ export function ProviderPackagesSection({ isAdmin }: { isAdmin: boolean }) {
       )}
       {body}
       {dialogs.element}
-    </section>
+    </SectionPanel>
   )
 }

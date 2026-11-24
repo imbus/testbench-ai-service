@@ -44,7 +44,7 @@ describe('ProviderPackagesSection', () => {
   it('lists only the packages that provide an LLM client', async () => {
     renderSection()
 
-    const section = await screen.findByRole('region', { name: 'Provider packages' })
+    const section = await screen.findByRole('region', { name: 'Upload custom LLM provider' })
     expect(await within(section).findByTestId('package-acme-llm')).toBeInTheDocument()
     expect(within(section).queryByTestId('package-acme-tb-agents')).not.toBeInTheDocument()
   })

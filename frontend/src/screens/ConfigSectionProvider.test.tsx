@@ -51,7 +51,9 @@ function renderLlm(url = '/admin/llm', section: 'llm' | 'logging' = 'llm') {
 
 test('the global LLM screen lists the provider packages', async () => {
   renderLlm()
-  expect(await screen.findByRole('region', { name: 'Provider packages' }, WAIT)).toBeInTheDocument()
+  expect(
+    await screen.findByRole('region', { name: 'Upload custom LLM provider' }, WAIT),
+  ).toBeInTheDocument()
   expect(await screen.findByTestId('package-acme-llm', {}, WAIT)).toBeInTheDocument()
 })
 
@@ -59,13 +61,17 @@ test('a project scope has no provider packages', async () => {
   disk = { projects: { Alpha: { llm_config: { timeout: 5 } } } }
   renderLlm('/admin/llm?project=Alpha')
   expect(await screen.findByRole('tab', { name: 'Alpha' })).toBeInTheDocument()
-  expect(screen.queryByRole('region', { name: 'Provider packages' })).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Upload custom LLM provider' }),
+  ).not.toBeInTheDocument()
 })
 
 test('other config screens have no provider packages', async () => {
   renderLlm('/admin/logging', 'logging')
   await screen.findByRole('heading', { name: 'Logging' })
-  expect(screen.queryByRole('region', { name: 'Provider packages' })).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('region', { name: 'Upload custom LLM provider' }),
+  ).not.toBeInTheDocument()
 })
 
 test('says where the class path comes from while a package provides the client', async () => {
@@ -85,6 +91,6 @@ test('says where the class path comes from while a package provides the client',
 test('says nothing about a package for a hand-written custom provider', async () => {
   disk = { llm_config: { provider: 'custom', class_path: 'my.Client' } }
   renderLlm()
-  await screen.findByRole('region', { name: 'Provider packages' }, WAIT)
+  await screen.findByRole('region', { name: 'Upload custom LLM provider' }, WAIT)
   expect(screen.queryByText(/Comes from the uploaded package/)).not.toBeInTheDocument()
 })

@@ -7,6 +7,7 @@ import { InputText } from 'primereact/inputtext'
 
 import { joinPath, splitPath } from '../api/paths'
 import type { ConfigIssue, ExtraModelEntry, RoutingFamily } from '../api/types'
+import { SectionPanel } from './SectionPanel'
 import { useDraft, type Edits } from '../state/draft'
 import { useTranslation } from 'react-i18next'
 
@@ -183,12 +184,7 @@ export function ModelTable({
   )
 
   return (
-    <div style={{ marginTop: 24 }}>
-      <h3 style={{ margin: '0 0 4px' }}>{t('models')}</h3>
-      <p className="text-muted" style={{ fontSize: 12, margin: '0 0 12px' }}>
-        {t('modelsHint')}
-      </p>
-
+    <SectionPanel title={t('models')} hint={t('modelsHint')}>
       <DataTable
         value={rows}
         dataKey="model"
@@ -200,7 +196,6 @@ export function ModelTable({
             {row.issue}
           </span>
         )}
-        style={{ marginBottom: 16 }}
       >
         <Column
           field="model"
@@ -272,6 +267,6 @@ export function ModelTable({
         </div>
         <Button type="button" outlined label={t('modelAdd')} disabled={readOnly} onClick={onAdd} />
       </div>
-    </div>
+    </SectionPanel>
   )
 }

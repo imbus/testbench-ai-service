@@ -1,4 +1,7 @@
-/** The package cards' LLM client part: use a client as the provider, stop using it. */
+/**
+ * The two sides of the package cards: the LLM provider screen shows the LLM
+ * clients (use one as the provider, stop using it), the agents screen the agents.
+ */
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -8,7 +11,8 @@ import type { PackagesResponse } from '../api/types'
 import { usePackages } from '../api/packages'
 import { i18n } from '../i18n'
 import { AgentPackagesSection, usePackageDialogs } from './AgentPackages'
-import { llmPkg, llmVersion, ok, packages, pkg } from './packages/fixtures'
+import { llmPkg, llmVersion, ok, packages, pkg, version } from './packages/fixtures'
+import { ProviderPackagesSection } from './packages/ProviderPackagesSection'
 
 beforeEach(() => i18n.changeLanguage('en'))
 
@@ -42,15 +46,33 @@ function Section({ isAdmin }: { isAdmin: boolean }) {
   )
 }
 
-function renderSection({ isAdmin = true } = {}) {
+function renderSection({ isAdmin = true, screen: on = 'provider' as 'provider' | 'agents' } = {}) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter>
-        <Section isAdmin={isAdmin} />
+        {on === 'provider' ? (
+          <ProviderPackagesSection isAdmin={isAdmin} />
+        ) : (
+          <Section isAdmin={isAdmin} />
+        )}
       </MemoryRouter>
     </QueryClientProvider>,
   )
+}
+
+/** One wheel with both: the agents of `pkg()` and the client of `llmPkg()`. */
+const MIXED = () => {
+  const base = version()
+  return packages({
+    packages: [
+      pkg({
+        versions: [
+          version({ report: { ...base.report, llm_clients: llmVersion().report.llm_clients } }),
+        ],
+      }),
+    ],
+  })
 }
 
 const IN_USE = () =>
@@ -123,11 +145,41 @@ describe('the LLM client of a package card', () => {
     expect(within(active).getByRole('button', { name: 'Use as LLM provider' })).toBeInTheDocument()
   })
 
-  it('keeps an agent package without clients as it was', async () => {
-    body = packages({ packages: [pkg()] })
+  it('shows the client side only of a wheel that has agents as well', async () => {
+    body = MIXED()
     renderSection()
+
+    const card = await screen.findByTestId('package-acme-tb-agents')
+    expect(within(card).getByText('LLM clients in 1.2.0')).toBeInTheDocument()
+    expect(within(card).queryByText('Agents in 1.2.0')).not.toBeInTheDocument()
+    expect(within(card).queryByRole('button', { name: 'Register agents' })).not.toBeInTheDocument()
+  })
+})
+
+describe('the agents screen keeps to the agents', () => {
+  it('does not list a wheel that only provides an LLM client', async () => {
+    body = packages({ packages: [pkg(), llmPkg()] })
+    renderSection({ screen: 'agents' })
+
     await screen.findByTestId('package-acme-tb-agents')
+    expect(screen.queryByTestId('package-acme-llm')).not.toBeInTheDocument()
+  })
+
+  it('says there is no agent package when only provider wheels are uploaded', async () => {
+    renderSection({ screen: 'agents' })
+    expect(await screen.findByText('No agent package uploaded yet.')).toBeInTheDocument()
+  })
+
+  it('shows the agent side only of a wheel that has an LLM client as well', async () => {
+    body = MIXED()
+    body.packages[0].llm_client = 'acme_llm'
+    renderSection({ screen: 'agents' })
+
+    const card = await screen.findByTestId('package-acme-tb-agents')
+    expect(within(card).getByText('Agents in 1.2.0')).toBeInTheDocument()
+    expect(within(card).queryByText('LLM clients in 1.2.0')).not.toBeInTheDocument()
+    expect(within(card).queryByText('active LLM provider')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Use as LLM provider' })).not.toBeInTheDocument()
-    expect(screen.queryByText('LLM clients in 1.2.0')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Stop using as provider' })).not.toBeInTheDocument()
   })
 })

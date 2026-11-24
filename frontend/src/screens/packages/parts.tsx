@@ -158,6 +158,13 @@ export function ReportView({
 }
 
 /**
+ * What a wheel is installed for. Agents and the LLM provider are two things,
+ * each with a screen: a screen shows a package's side that belongs to it and
+ * leaves the other side to the other screen.
+ */
+export type PackageKind = 'agents' | 'provider'
+
+/**
  * The LLM clients of a version's check report, one row each. `inUse` is the
  * entry point the service's configuration takes its custom provider from.
  */

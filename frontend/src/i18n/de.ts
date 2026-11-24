@@ -208,6 +208,7 @@ export const de = {
   modelNoKey: 'kein API-Schlüssel',
   modelNoKeyHint: 'Ohne API-Schlüssel für diesen Anbieter scheitern Läufe mit diesem Modell.',
   modelApplyHint: 'Wird mit „Übernehmen“ gespeichert.',
+  llmSettings: 'Provider-Einstellungen',
   llmScopeHint: 'Leere Felder werden aus der globalen Konfiguration übernommen.',
   projectKeyPresent: 'Dieses Projekt hat einen eigenen Schlüssel; seine Läufe verwenden ihn.',
   projectKeyAbsent: 'Kein Projektschlüssel; Läufe verwenden die globale Zugangsdaten.',
@@ -473,12 +474,19 @@ export const de = {
   packagesStopProviderTitle: '{{name}} nicht mehr als LLM-Provider verwenden',
   packagesStopProviderHint:
     'Der Dienst verwendet wieder den Standard-Provider (OpenAI). Die Modelle dieses Pakets werden aus der Konfiguration entfernt, auch dort, wo sie als Standard- oder Agentenmodell eingetragen sind. Wirksam nach einem Neustart.',
-  providerPackages: 'Provider-Pakete',
-  providerPackagesSub: 'Hochgeladene Python-Wheels mit eigenem LLM-Client',
+  providerPackages: 'Eigenen LLM-Provider hochladen',
+  providerPackagesSub:
+    'Python-Wheel mit eigenem LLM-Client installieren und als Provider verwenden',
   providerPackagesEmpty: 'Noch kein Paket mit LLM-Client hochgeladen.',
   providerPackagesUpload: 'Provider-Wheel importieren',
+  providerPackagesUploadTitle: 'LLM-Provider-Paket hochladen',
+  packagesStepProvider: 'Als Provider verwenden',
+  packagesOnlyLlmClient:
+    'Dieses Wheel enthält einen LLM-Client und keine Agenten. Es ist gespeichert und steht auf der Seite „LLM-Anbieter“ unter „Eigenen LLM-Provider hochladen“.',
+  packagesOnlyAgents:
+    'Dieses Wheel enthält Agenten und keinen LLM-Client. Es ist gespeichert und steht auf der Seite „Agenten“.',
   llmClassPathFromPackage:
-    'Kommt aus dem hochgeladenen Paket {{name}}. Ändern Sie den Provider unten unter „Provider-Pakete“.',
+    'Kommt aus dem hochgeladenen Paket {{name}}. Ändern Sie den Provider unten unter „Eigenen LLM-Provider hochladen“.',
   statusLlmClientError: 'Der LLM-Client des hochgeladenen Pakets ist nicht in Betrieb',
 } as const
 

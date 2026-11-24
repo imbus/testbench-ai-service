@@ -154,7 +154,7 @@ At upload the wheel is examined in a separate process. For each client the check
 
 ### Use it as the provider
 
-1. **Upload.** On the console's **LLM** screen, in the **Provider packages** section, click **Import provider wheel** and choose the `.whl`. The same packages also appear on the **Agents** screen.
+1. **Upload.** On the console's **LLM** screen, in the **Upload custom LLM provider** section, click **Import provider wheel** and choose the `.whl`. The **Agents** screen lists only packages with agents. A wheel that carries both shows its LLM client here and its agents there.
 2. **Use as LLM provider.** Enter the model names the client serves, one per line. These are the names you later pick for agents; the service passes the chosen name to `query_llm` as `model`. By default the first name also becomes the default model.
 3. **Restart the service.** The package code is not imported before the restart. An administrator can restart from the console's "restart needed" strip (**Restart now**).
 

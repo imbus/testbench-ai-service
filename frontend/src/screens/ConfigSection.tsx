@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Badge } from 'primereact/badge'
 import { Message } from 'primereact/message'
 import { TabPanel, TabView } from 'primereact/tabview'
@@ -10,6 +10,7 @@ import { Field } from '../components/Field'
 import { ModelTable } from '../components/ModelTable'
 import { ReadOnlyField } from '../components/ReadOnlyField'
 import { ScopeTabs, scopeAddLabels } from '../components/ScopeTabs'
+import { SectionPanel } from '../components/SectionPanel'
 import { useTranslation } from 'react-i18next'
 import { LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt, type FieldSpec } from './fields'
 import { ProviderPackagesSection } from './packages/ProviderPackagesSection'
@@ -36,6 +37,16 @@ const TOML_SECTION: Record<Section, string> = {
  */
 function issueMatchesField(issuePath: string, fieldKey: string): boolean {
   return issuePath === fieldKey || issuePath.startsWith(fieldKey + '.')
+}
+
+/** The fields of a screen: in a titled panel, or bare when the screen has one section. */
+function FieldGroup({ title, children }: { title?: string; children: ReactNode }) {
+  if (title === undefined) return <div>{children}</div>
+  return (
+    <SectionPanel title={title}>
+      <div>{children}</div>
+    </SectionPanel>
+  )
 }
 
 export function ConfigSection({
@@ -220,7 +231,9 @@ export function ConfigSection({
         />
       )}
 
-      <div>
+      {/* The LLM screen has several sections, each in a panel with a header
+          bar; Service and Logging are one list of fields and need none. */}
+      <FieldGroup title={section === 'llm' ? t('llmSettings') : undefined}>
         {fields.map((spec) => {
           const issue = issues.find((entry) => issueMatchesField(entry.path, spec.key))?.message
           // In project scope the saved value comes from `disk` ONLY. `running`
@@ -268,7 +281,7 @@ export function ConfigSection({
             />
           )
         })}
-      </div>
+      </FieldGroup>
 
       {section === 'llm' && scope.kind === 'global' && (
         <ModelTable
@@ -290,15 +303,16 @@ export function ConfigSection({
       )}
 
       {section === 'llm' && scope.kind === 'project' && credentials.length > 0 && (
-        <div>
-          <h3 style={{ fontSize: 16, marginBottom: 8 }}>{t('credentialsHeading')}</h3>
-          {credentials.map((entry) => (
-            <div key={entry.provider} className="text-muted" style={{ fontSize: 12 }}>
-              <strong>{entry.provider}</strong> —{' '}
-              {entry.key_present ? t('projectKeyPresent') : t('projectKeyAbsent')}
-            </div>
-          ))}
-        </div>
+        <SectionPanel title={t('credentialsHeading')}>
+          <div>
+            {credentials.map((entry) => (
+              <div key={entry.provider} className="text-muted" style={{ fontSize: 12 }}>
+                <strong>{entry.provider}</strong> —{' '}
+                {entry.key_present ? t('projectKeyPresent') : t('projectKeyAbsent')}
+              </div>
+            ))}
+          </div>
+        </SectionPanel>
       )}
     </div>
   )

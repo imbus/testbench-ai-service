@@ -20,7 +20,7 @@ afterEach(() => vi.unstubAllGlobals())
 
 const WHEEL = new File(['wheel'], 'acme_llm-1.0.0-py3-none-any.whl')
 
-async function upload(list = packages({ packages: [] })) {
+async function upload(list = packages({ packages: [] }), kind: 'provider' | 'agents' = 'provider') {
   const onUseProvider = vi.fn()
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   const user = userEvent.setup()
@@ -28,6 +28,7 @@ async function upload(list = packages({ packages: [] })) {
     <QueryClientProvider client={client}>
       <UploadDialog
         packages={list}
+        kind={kind}
         onClose={vi.fn()}
         onActivate={vi.fn()}
         onUseProvider={onUseProvider}
@@ -35,7 +36,11 @@ async function upload(list = packages({ packages: [] })) {
     </QueryClientProvider>,
   )
   await user.upload(screen.getByLabelText('Wheel file (.whl)'), WHEEL)
-  await user.click(screen.getByRole('button', { name: 'Import agent wheel' }))
+  await user.click(
+    screen.getByRole('button', {
+      name: kind === 'provider' ? 'Import provider wheel' : 'Import agent wheel',
+    }),
+  )
   return { user, onUseProvider }
 }
 
@@ -56,17 +61,49 @@ describe('UploadDialog with an LLM client', () => {
     expect(onUseProvider).toHaveBeenCalledWith(uploaded)
   })
 
-  it('offers both steps for a wheel with an agent and a client', async () => {
+  const MIXED = () => {
     const base = version({ active: false })
-    const uploaded = version({
+    return version({
       active: false,
       report: { ...base.report, llm_clients: llmVersion().report.llm_clients },
     })
-    fetchMock.mockResolvedValue(ok(uploaded))
+  }
+
+  it('offers only the provider step for a wheel with an agent and a client', async () => {
+    fetchMock.mockResolvedValue(ok(MIXED()))
     await upload()
 
+    expect(await screen.findByRole('button', { name: 'Next: use as LLM provider' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Next: register agents' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Upload LLM provider package' })).toBeInTheDocument()
+  })
+
+  it('offers only registering for the same wheel on the agents screen', async () => {
+    fetchMock.mockResolvedValue(ok(MIXED()))
+    await upload(undefined, 'agents')
+
     expect(await screen.findByRole('button', { name: 'Next: register agents' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: 'Next: use as LLM provider' })).toBeEnabled()
+    expect(
+      screen.queryByRole('button', { name: 'Next: use as LLM provider' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('says where a provider wheel went when it is uploaded on the agents screen', async () => {
+    fetchMock.mockResolvedValue(ok(llmVersion()))
+    await upload(undefined, 'agents')
+
+    expect(await screen.findByText(/listed on the LLM provider screen/)).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Next: use as LLM provider' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('says where an agent wheel went when it is uploaded for the provider', async () => {
+    fetchMock.mockResolvedValue(ok(version({ active: false })))
+    await upload()
+
+    expect(await screen.findByText(/listed on the Agents screen/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next: register agents' })).not.toBeInTheDocument()
   })
 
   it('asks to activate first while another version is active', async () => {

@@ -14,7 +14,7 @@ import type {
   PackageVersion,
 } from '../../api/types'
 import { Modal } from '../../components/Modal'
-import { Icon, ICONS, PackageError } from './parts'
+import { Icon, ICONS, PackageError, type PackageKind } from './parts'
 import { RegisterForm } from './RegisterDialog'
 
 const MONO = { fontFamily: 'var(--font-code)' } as const
@@ -39,7 +39,9 @@ function formatSize(bytes: number): string {
 
 /**
  * The upload wizard: pick a wheel, upload it and read its check report, then
- * register its agents -- all in this one dialog.
+ * register its agents -- all in this one dialog. Opened for the LLM provider
+ * (`kind`), the last step is using the wheel's LLM client instead, in the
+ * provider dialog (`onUseProvider`).
  *
  * Registering is refused while another version of the package is active; for
  * such a version the report step hands over to the activate dialog instead
@@ -47,12 +49,15 @@ function formatSize(bytes: number): string {
  */
 export function UploadDialog({
   packages,
+  kind = 'agents',
   onClose,
   onActivate,
   onUseProvider,
 }: {
   /** The package list, for what is registered already and the folder setting. */
   packages: PackagesResponse
+  /** What the wheel is uploaded for; a wheel's other side is not offered. */
+  kind?: PackageKind
   onClose: () => void
   onActivate: (version: PackageVersion) => void
   /** Continue in the dialog that puts the version's LLM client to use. */
@@ -63,8 +68,11 @@ export function UploadDialog({
   const [file, setFile] = useState<File | null>(null)
   const [registering, setRegistering] = useState(false)
   const uploaded = upload.data
-  const registrable = uploaded && Object.values(uploaded.report.agents).some((agent) => agent.ok)
+  const forProvider = kind === 'provider'
+  const registrable =
+    !forProvider && uploaded && Object.values(uploaded.report.agents).some((agent) => agent.ok)
   const providable =
+    forProvider &&
     !!onUseProvider &&
     !!uploaded &&
     Object.values(uploaded.report.llm_clients ?? {}).some((client) => client.ok)
@@ -79,17 +87,38 @@ export function UploadDialog({
   }
 
   const step = !uploaded ? 0 : registering ? 2 : 1
-  const steps = [t('packagesStepWheel'), t('packagesStepReport'), t('packagesStepRegister')]
+  const steps = [
+    t('packagesStepWheel'),
+    t('packagesStepReport'),
+    forProvider ? t('packagesStepProvider') : t('packagesStepRegister'),
+  ]
+  const title = forProvider ? t('providerPackagesUploadTitle') : t('packagesUploadTitle')
+  // A wheel with nothing for this screen is stored all the same; say where it went.
+  const elsewhere =
+    !uploaded || otherActive
+      ? null
+      : forProvider
+        ? Object.keys(uploaded.report.llm_clients ?? {}).length === 0
+          ? t('packagesOnlyAgents')
+          : null
+        : Object.keys(uploaded.report.agents).length === 0 &&
+            Object.keys(uploaded.report.llm_clients ?? {}).length > 0
+          ? t('packagesOnlyLlmClient')
+          : null
   const position = t('packagesStepOf', { step: step + 1, total: steps.length })
 
   return (
-    <Modal label={t('packagesUploadTitle')} width={780} maxHeight="85vh">
+    <Modal label={title} width={780} maxHeight="85vh">
       <div style={HEADER}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: 0 }}>{t('packagesUploadTitle')}</h3>
+            <h3 style={{ margin: 0 }}>{title}</h3>
             <div className="text-muted" style={{ fontSize: 12 }}>
-              {uploaded ? `${uploaded.name} ${uploaded.version}` : t('packagesSub')}
+              {uploaded
+                ? `${uploaded.name} ${uploaded.version}`
+                : forProvider
+                  ? t('providerPackagesSub')
+                  : t('packagesSub')}
             </div>
           </div>
           <Button
@@ -160,6 +189,13 @@ export function UploadDialog({
                   text={t('packagesUploaded', { name: uploaded.name, version: uploaded.version })}
                 />
                 <ReportTable report={uploaded.report} />
+                {elsewhere && (
+                  <Message
+                    severity="info"
+                    style={{ justifyContent: 'flex-start' }}
+                    text={elsewhere}
+                  />
+                )}
                 {otherActive && (
                   <Message
                     severity="info"
@@ -185,7 +221,6 @@ export function UploadDialog({
                   {providable && (
                     <Button
                       type="button"
-                      outlined={!!registrable}
                       label={t('packagesNextProvider')}
                       onClick={() => onUseProvider?.(uploaded)}
                     />
@@ -202,7 +237,7 @@ export function UploadDialog({
             ) : (
               <Button
                 type="button"
-                label={t('packagesUpload')}
+                label={forProvider ? t('providerPackagesUpload') : t('packagesUpload')}
                 disabled={!file || upload.isPending}
                 loading={upload.isPending}
                 onClick={() => file && upload.mutate(file)}
