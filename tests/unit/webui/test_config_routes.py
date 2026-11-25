@@ -860,3 +860,201 @@ def test_a_class_path_typo_on_a_loaded_package_is_refused(
     assert loaded.is_loaded(PACKAGE)
     assert loaded.failures() == {}
     assert loaded.agent_failures() == {}
+
+
+def test_apply_keeps_the_crlf_line_endings_of_the_file(file_client, admin, config_file):
+    config_file.write_bytes(COMMENTED.replace("\n", "\r\n").encode("utf-8"))
+    admin()
+    edits = {"edits": {"port": 9999, "language": "de"}}
+
+    preview = file_client.post(
+        "/admin/api/config/preview", json=edits, headers=csrf(file_client)
+    ).json()
+    file_client.post("/admin/api/config/apply", json=edits, headers=csrf(file_client))
+
+    written = config_file.read_bytes()
+    assert b"port = 9999\r\n" in written
+    assert b'language = "de"\r\n' in written
+    assert written.count(b"\r\n") == written.count(b"\n")
+    # The browser is shown LF only: a CR in the diff would render as a stray character.
+    assert "\r" not in preview["toml"]
+    assert all("\r" not in diff["diff"] for diff in preview["diffs"])
+    assert preview["diffs"][0]["added"] == 2
+
+
+def test_apply_keeps_the_lf_line_endings_of_the_file(file_client, admin, config_file):
+    config_file.write_bytes(COMMENTED.encode("utf-8"))
+    admin()
+
+    file_client.post(
+        "/admin/api/config/apply",
+        json={"edits": {"port": 9999}},
+        headers=csrf(file_client),
+    )
+
+    assert b"\r" not in config_file.read_bytes()
+
+
+def _preview_restart(client, edits) -> list[str]:
+    response = client.post("/admin/api/config/preview", json={"edits": edits}, headers=csrf(client))
+    assert response.status_code == 200, response.text
+    return response.json()["restart_required"]
+
+
+def test_the_app_knows_which_agents_got_a_route(app_with_file):
+    assert "test_case_set_reviewer" in app_with_file.state.routed_agents
+    assert "test_planner" not in app_with_file.state.routed_agents
+
+
+def test_an_agent_disabled_while_running_can_be_enabled_again_without_a_restart(file_client, admin):
+    admin()
+    key = "agents.test_case_set_reviewer.enabled"
+    applied = file_client.post(
+        "/admin/api/config/apply", json={"edits": {key: False}}, headers=csrf(file_client)
+    ).json()
+
+    assert applied["restart_required"] == []
+    assert _preview_restart(file_client, {key: True}) == []
+
+
+def test_enabling_an_agent_that_got_no_route_at_startup_needs_a_restart(
+    file_client, admin, app_with_file
+):
+    admin()
+    key = "agents.test_case_set_reviewer.enabled"
+    file_client.post(
+        "/admin/api/config/apply", json={"edits": {key: False}}, headers=csrf(file_client)
+    )
+    # As after a start with the agent disabled: no route was registered for it.
+    app_with_file.state.routed_agents = frozenset()
+
+    assert _preview_restart(file_client, {key: True}) == [key]
+    applied = file_client.post(
+        "/admin/api/config/apply", json={"edits": {key: True}}, headers=csrf(file_client)
+    ).json()
+    assert applied["restart_required"] == [key]
+    status = file_client.get("/admin/api/status").json()
+    assert key in status["restart_required"]
+
+
+def test_a_non_admin_can_read_the_raw_file(file_client, admin, config_file):
+    admin(roles=["ProjectUser"])
+
+    response = file_client.get("/admin/api/config/raw")
+
+    assert response.status_code == 200
+    assert response.json()["toml"] == COMMENTED
+
+
+def test_the_raw_file_hides_credentials(file_client, admin, config_file):
+    config_file.write_text(CREDENTIALED, encoding="utf-8")
+    admin(roles=["ProjectUser"])
+
+    toml = file_client.get("/admin/api/config/raw").json()["toml"]
+
+    assert "sk-REAL-SECRET-VALUE" not in toml
+    assert REDACTED_SENTINEL in toml
+    assert "# Provider credential -- must never leave this file." in toml
+
+
+def test_the_raw_file_needs_a_session(file_client):
+    assert file_client.get("/admin/api/config/raw").status_code == 401
+
+
+PLANNER = (
+    COMMENTED
+    + """
+[testbench-ai-service.agents.test_planner]
+enabled = false
+endpoint_path = "/test-planner"
+class_path = "testbench_ai_service.agents.test_planner.agent.TestPlannerAgent"
+
+[testbench-ai-service.agents.test_planner.prompt]
+file = "test_planner/prompt.yaml"
+"""
+)
+KNEE = "agents.test_planner.prompt.vars.knee_percent"
+
+
+def _preview(client, edits) -> dict:
+    response = client.post("/admin/api/config/preview", json={"edits": edits}, headers=csrf(client))
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+@pytest.mark.parametrize("value", [-5.75, 0, "abc", True])
+def test_a_number_variable_outside_its_declaration_is_refused(
+    file_client, admin, config_file, value
+):
+    config_file.write_text(PLANNER, encoding="utf-8")
+    admin()
+
+    preview = _preview(file_client, {KNEE: value})
+
+    assert preview["valid"] is False
+    assert [issue["path"] for issue in preview["issues"]] == [KNEE]
+    applied = file_client.post(
+        "/admin/api/config/apply", json={"edits": {KNEE: value}}, headers=csrf(file_client)
+    )
+    assert applied.status_code == 422
+    assert config_file.read_text(encoding="utf-8") == PLANNER
+
+
+@pytest.mark.parametrize("value", [1, 100, 150.5])
+def test_a_number_variable_within_its_declaration_is_accepted(
+    file_client, admin, config_file, value
+):
+    config_file.write_text(PLANNER, encoding="utf-8")
+    admin()
+
+    assert _preview(file_client, {KNEE: value})["valid"] is True
+
+
+def test_a_project_override_of_a_variable_is_checked_too(file_client, admin, config_file):
+    config_file.write_text(PLANNER, encoding="utf-8")
+    admin()
+    quoted = 'projects."Projekt A".agents.test_planner.prompt.vars.knee_percent'
+
+    for path in (quoted, quoted.replace('"', "")):
+        preview = _preview(file_client, {path: -1})
+
+        assert preview["valid"] is False
+        assert [issue["path"] for issue in preview["issues"]] == [quoted.replace('"', "")]
+
+
+def test_a_bad_variable_already_in_the_file_does_not_block_another_change(
+    file_client, admin, config_file
+):
+    config_file.write_text(
+        PLANNER + "\n[testbench-ai-service.agents.test_planner.prompt.vars]\nknee_percent = -5\n",
+        encoding="utf-8",
+    )
+    admin()
+
+    assert _preview(file_client, {"language": "de"})["valid"] is True
+
+
+def test_the_config_carries_what_the_file_amounts_to(file_client, admin, app_with_file):
+    """`effective` is the file with defaults: it follows a change the running
+    process has not taken up, which `running` cannot."""
+    admin()
+    file_client.post(
+        "/admin/api/config/apply", json={"edits": {"port": 9999}}, headers=csrf(file_client)
+    )
+
+    body = file_client.get("/admin/api/config").json()
+
+    assert body["disk"]["port"] == 9999
+    assert body["running"]["port"] == 8010
+    assert body["effective"]["port"] == 9999
+    # A key the file does not set shows its default there, not nothing.
+    assert body["effective"]["host"] == body["running"]["host"]
+
+
+def test_the_effective_config_falls_back_when_the_file_is_unusable(file_client, admin, config_file):
+    admin()
+    config_file.write_text(COMMENTED.replace("port = 8010", "port = 0"), encoding="utf-8")
+
+    body = file_client.get("/admin/api/config").json()
+
+    assert body["effective"] == body["running"]

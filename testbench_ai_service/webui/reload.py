@@ -12,7 +12,10 @@ Two things cannot:
   once in ``create_app()`` when ``init_webui()`` is called;
 - an agent's ``endpoint_path`` and ``class_path`` are consumed by
   ``init_routers()`` exactly once, at startup, so adding, removing, moving or
-  re-classing an agent cannot change the live routing table.
+  re-classing an agent cannot change the live routing table;
+- an agent that was disabled at startup got no route at all, so enabling it
+  cannot give it an endpoint. Disabling is hot (the route stays and refuses),
+  and so is enabling an agent again that was only disabled while running.
 
 Those changes are still written to disk. They just raise the console's
 "restart needed" banner rather than pretending to take effect. The banner's
@@ -26,6 +29,7 @@ hot-swappable.
 """
 
 import asyncio
+from collections.abc import Collection
 
 from fastapi import FastAPI
 
@@ -66,10 +70,16 @@ def _resolve_dotted_path(obj: object, path: str) -> object:
     return current
 
 
-def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
+def restart_required(
+    old: AppConfig, new: AppConfig, routed_agents: Collection[str] | None = None
+) -> list[str]:
     """Dotted paths of changes between *old* and *new* that a live swap cannot cover.
 
     An empty list means the whole change set can be applied in process.
+
+    *routed_agents* are the keys of the agents that got an endpoint at startup
+    (``app.state.routed_agents``). Enabling an agent outside that set needs a
+    restart. Without it (``None``) every enabling counts, to be on the safe side.
     """
     changed: list[str] = []
 
@@ -96,6 +106,9 @@ def restart_required(old: AppConfig, new: AppConfig) -> list[str]:
         for field in RESTART_AGENT_FIELDS:
             if getattr(old.agents[key], field) != getattr(new.agents[key], field):
                 changed.append(join_path(["agents", key, field]))
+        unrouted = routed_agents is None or key not in routed_agents
+        if new.agents[key].enabled and not old.agents[key].enabled and unrouted:
+            changed.append(join_path(["agents", key, "enabled"]))
 
     return sorted(changed)
 

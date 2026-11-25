@@ -345,3 +345,32 @@ def test_a_hand_written_llm_class_path_is_still_hot_swapped():
     old = make_config(llm_config={"provider": "openai", "class_path": "json.JSONDecoder"})
     new = make_config(llm_config={"provider": "openai", "class_path": "json.JSONEncoder"})
     assert restart_required(old, new) == []
+
+
+def test_enabling_an_agent_without_a_route_needs_a_restart():
+    old = make_config(agents={"reviewer": agent(enabled=False)})
+    new = make_config(agents={"reviewer": agent(enabled=True)})
+
+    assert restart_required(old, new, routed_agents=frozenset()) == ["agents.reviewer.enabled"]
+
+
+def test_enabling_an_agent_that_has_its_route_is_hot():
+    """Disabled while running: the route from startup is still there."""
+    old = make_config(agents={"reviewer": agent(enabled=False)})
+    new = make_config(agents={"reviewer": agent(enabled=True)})
+
+    assert restart_required(old, new, routed_agents=frozenset({"reviewer"})) == []
+
+
+def test_enabling_an_agent_needs_a_restart_when_the_routes_are_unknown():
+    old = make_config(agents={"reviewer": agent(enabled=False)})
+    new = make_config(agents={"reviewer": agent(enabled=True)})
+
+    assert restart_required(old, new) == ["agents.reviewer.enabled"]
+
+
+def test_disabling_an_agent_is_hot():
+    old = make_config(agents={"reviewer": agent(enabled=True)})
+    new = make_config(agents={"reviewer": agent(enabled=False)})
+
+    assert restart_required(old, new, routed_agents=frozenset({"reviewer"})) == []

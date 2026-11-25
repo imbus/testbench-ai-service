@@ -1,3 +1,4 @@
+import { onTestFinished } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -5,6 +6,7 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { Jobs } from './Jobs'
 import type { JobDetail, JobSummary } from '../api/types'
 import * as sessionState from '../state/session'
+import { i18n } from '../i18n'
 
 const base = {
   agent_key: 'coverage_checker',
@@ -318,4 +320,85 @@ test('the detail header names the root key before the items', async () => {
   renderJobs('/admin/jobs/j1')
   const pane = await screen.findByTestId('job-detail')
   await waitFor(() => expect(pane).toHaveTextContent('REQ-ROOT, REQ-1'))
+})
+
+describe('more jobs than one page', () => {
+  const many = (count: number): JobSummary[] =>
+    Array.from({ length: count }, (_, index) => ({ ...FAILED, job_id: `m${index}` }))
+  const requestedLimits = () =>
+    fetchMock.mock.calls
+      .map(([url]) => /[?&]limit=(\d+)/.exec(String(url))?.[1])
+      .filter((limit): limit is string => !!limit)
+
+  test('a full page says that these are only the newest, and offers more', async () => {
+    list = many(50)
+    renderJobs()
+
+    const more = await screen.findByTestId('jobs-more')
+    expect(more).toHaveTextContent(i18n.t('jobsShowingNewest', { count: 50 }))
+    expect(requestedLimits()).toContain('50')
+
+    await userEvent.click(within(more).getByRole('button', { name: i18n.t('jobsShowMore') }))
+
+    await waitFor(() => expect(requestedLimits()).toContain('100'))
+  })
+
+  test('a list shorter than the page ends without the hint', async () => {
+    renderJobs()
+
+    await screen.findByText('coverage_checker')
+    expect(screen.queryByTestId('jobs-more')).not.toBeInTheDocument()
+  })
+})
+
+describe('a job that is not there', () => {
+  test('says so instead of reporting a failed load', async () => {
+    const usual = fetchMock.getMockImplementation()!
+    onTestFinished(() => void fetchMock.mockImplementation(usual))
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(
+        /\/jobs\/\w+$/.test(url)
+          ? new Response(JSON.stringify({ detail: 'Job not found' }), {
+              status: 404,
+              headers: { 'Content-Type': 'application/json' },
+            })
+          : new Response(JSON.stringify(list), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            }),
+      ),
+    )
+    renderJobs('/admin/jobs/doesnotexist')
+
+    expect(await screen.findByText(i18n.t('jobNotFound'))).toBeInTheDocument()
+    expect(screen.queryByText(i18n.t('jobsError'))).not.toBeInTheDocument()
+  })
+})
+
+test('a failed job keeps the line breaks of its error', async () => {
+  const job = { ...FAILED, error: 'first line\nsecond line' }
+  list = [job]
+  details = { j2: detail(job) }
+  renderJobs('/admin/jobs/j2')
+
+  const pane = await screen.findByTestId('job-detail')
+  await waitFor(() => expect(pane.querySelector('.job-error-text')).not.toBeNull())
+  expect(pane.querySelector('.job-error-text')?.textContent).toBe('first line\nsecond line')
+})
+
+test('the JSON view shows the stored text, not what the browser made of the numbers', async () => {
+  const job = { ...FAILED, status: 'succeeded' as const, error: null, report_type: 'mystery' }
+  list = [job]
+  details = {
+    j2: detail(job, {
+      report: { big: 12345678901234567000 },
+      report_json: '{\n  "big": 12345678901234567890\n}',
+    }),
+  }
+  renderJobs('/admin/jobs/j2')
+  const pane = await screen.findByTestId('job-detail')
+
+  await userEvent.click(await within(pane).findByRole('button', { name: 'JSON' }))
+
+  expect(within(pane).getByText(/"big": 12345678901234567890/)).toBeInTheDocument()
 })

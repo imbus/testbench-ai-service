@@ -36,6 +36,19 @@ const CUSTOM = '__custom__'
  * the console already populated (the Projects screen's list, in particular),
  * rather than a private client that would refetch it and could disagree.
  */
+/** The messages a refused test run reports as not rendering, with their reason. */
+function renderFailures(error: unknown): { index: number; role: string; error: string }[] {
+  const detail = (error as { detail?: unknown } | null)?.detail
+  const messages = (detail as { messages?: unknown } | null)?.messages
+  if (!Array.isArray(messages)) return []
+  return messages.flatMap((message, index) => {
+    const entry = message as { role?: unknown; error?: unknown } | null
+    return typeof entry?.error === 'string'
+      ? [{ index, role: String(entry.role ?? ''), error: entry.error }]
+      : []
+  })
+}
+
 export function TestRunPanel({
   messages,
   vars,
@@ -54,7 +67,8 @@ export function TestRunPanel({
   const [customPicked, setCustomPicked] = useState(false)
   const modelInput = useRef<HTMLInputElement>(null)
   const projects = useProjects()
-  const models = useModels(project ?? undefined)
+  // Admin-only route, like the run itself: a read-only viewer does not ask for it.
+  const models = useModels(project ?? undefined, { enabled: isAdmin })
   const test = useTestPrompt()
 
   const providers = models.data?.providers ?? []
@@ -116,6 +130,7 @@ export function TestRunPanel({
               optionGroupLabel="label"
               optionGroupChildren="items"
               placeholder={t('testRunModelPlaceholder')}
+              disabled={!isAdmin}
               onChange={(event) => pickModel(event.value as string)}
             />
           )}
@@ -130,6 +145,7 @@ export function TestRunPanel({
               placeholder={t('testRunModelIdPlaceholder')}
               value={model}
               spellCheck={false}
+              disabled={!isAdmin}
               onChange={(event) => setModel(event.target.value)}
             />
           )}
@@ -151,6 +167,7 @@ export function TestRunPanel({
           <Dropdown
             inputId="testrun-project"
             value={project ?? ''}
+            disabled={!isAdmin}
             options={[
               { label: t('testRunProjectGlobal'), value: '' },
               ...(projects.data?.projects ?? []).map((entry) => ({
@@ -188,8 +205,22 @@ export function TestRunPanel({
         <Message
           severity="error"
           className="testrun-error"
-          text={(test.error as Error)?.message}
           style={{ justifyContent: 'flex-start' }}
+          content={
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0 }}>
+              <div>{(test.error as Error)?.message}</div>
+              {/* A prompt that did not render comes back with the reason per
+                  message; without it the operator knows that, not what. */}
+              {renderFailures(test.error).map((failure) => (
+                <div key={failure.index} data-testid="testrun-render-error">
+                  <b>
+                    {failure.index + 1}. {failure.role}:
+                  </b>{' '}
+                  {failure.error}
+                </div>
+              ))}
+            </div>
+          }
         />
       )}
 
@@ -234,9 +265,11 @@ export function TestRunPanel({
         </div>
       )}
 
-      <div className="testrun-hint">
-        <Link to="/admin/llm">{t('testRunAddHint')}</Link>
-      </div>
+      {isAdmin && (
+        <div className="testrun-hint">
+          <Link to="/admin/llm">{t('testRunAddHint')}</Link>
+        </div>
+      )}
     </section>
   )
 }

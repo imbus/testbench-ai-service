@@ -163,6 +163,31 @@ test('a 401 on any later request means the session has expired', async () => {
   })
 
   expect(result.current.session).toBeNull()
+  expect(result.current.expired).toBe(true)
+})
+
+test('a 401 without a session is not an expiry', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ detail: 'Not signed in' }, 401)))
+  const { result } = renderHook(() => useSession(), { wrapper })
+  await waitFor(() => expect(result.current.loading).toBe(false))
+
+  expect(result.current.expired).toBe(false)
+})
+
+test('signing out is not an expiry', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValueOnce(jsonResponse(session)).mockResolvedValueOnce(jsonResponse({})),
+  )
+  const { result } = renderHook(() => useSession(), { wrapper })
+  await waitFor(() => expect(result.current.session).toEqual(session))
+
+  await act(async () => {
+    await result.current.signOut()
+  })
+
+  expect(result.current.session).toBeNull()
+  expect(result.current.expired).toBe(false)
 })
 
 test('signing in as another operator drops the draft left by the previous one', async () => {

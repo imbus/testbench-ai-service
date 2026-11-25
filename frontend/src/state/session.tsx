@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { ApiError, apiFetch, setUnauthorizedListener } from '../api/client'
 import type { SessionInfo } from '../api/types'
 import { claimStoredDraft, clearStoredDraft } from './draft'
@@ -10,6 +10,8 @@ interface SessionState {
   busy: boolean
   signIn: (username: string, password: string) => Promise<void>
   signOut: () => Promise<void>
+  /** The session ended without the operator signing out (it expired, or was ended elsewhere). */
+  expired?: boolean
 }
 
 const SessionContext = createContext<SessionState | null>(null)
@@ -19,6 +21,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<ApiError | null>(null)
+  const [expired, setExpired] = useState(false)
+  // What the 401 listener reads: it is registered once and must not see a stale session.
+  const sessionRef = useRef<SessionInfo | null>(null)
+  sessionRef.current = session
 
   // A page reload still has the cookie; ask who we are rather than forcing a login.
   useEffect(() => {
@@ -31,7 +37,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   // Any later 401 means the session expired or was revoked on the server:
   // back to the login screen rather than a shell whose every request fails.
   useEffect(() => {
-    setUnauthorizedListener(() => setSession(null))
+    setUnauthorizedListener(() => {
+      // Only a session that existed can expire: the 401 of the first probe on a
+      // fresh page, or of a wrong password, is not an expiry.
+      if (sessionRef.current) setExpired(true)
+      setSession(null)
+    })
     return () => setUnauthorizedListener(null)
   }, [])
 
@@ -44,6 +55,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify({ username, password }),
       })
       claimStoredDraft(signedIn.username)
+      setExpired(false)
       setSession(signedIn)
     } catch (cause) {
       setError(cause instanceof ApiError ? cause : new ApiError('Sign-in failed', 0))
@@ -57,13 +69,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     try {
       await apiFetch('/session', { method: 'DELETE' })
     } finally {
+      // Deliberate: nothing to explain on the login screen.
+      sessionRef.current = null
+      setExpired(false)
       setSession(null)
       clearStoredDraft()
     }
   }, [])
 
   return (
-    <SessionContext.Provider value={{ session, loading, busy, error, signIn, signOut }}>
+    <SessionContext.Provider value={{ session, loading, busy, error, signIn, signOut, expired }}>
       {children}
     </SessionContext.Provider>
   )

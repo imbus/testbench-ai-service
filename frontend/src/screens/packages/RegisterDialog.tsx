@@ -27,7 +27,7 @@ const PRE = {
 function FileDiffDialog({ conflict, onClose }: { conflict: FileConflict; onClose: () => void }) {
   const { t } = useTranslation()
   return (
-    <Modal label={conflict.path} width={1100} maxHeight="85vh">
+    <Modal label={conflict.path} width={1100} maxHeight="85vh" onClose={onClose}>
       <h3 style={{ margin: 0, fontFamily: 'var(--font-code)', fontSize: 15 }}>{conflict.path}</h3>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, minHeight: 0 }}>
         <div style={{ minWidth: 0 }}>
@@ -373,7 +373,7 @@ export function RegisterDialog({
   const { t } = useTranslation()
   const title = t('packagesRegisterTitle', { name, version: version.version })
   return (
-    <Modal label={title} width={760} maxHeight="85vh">
+    <Modal label={title} width={760} maxHeight="85vh" onClose={onClose}>
       <h3 style={{ margin: 0 }}>{title}</h3>
       <RegisterForm
         name={name}
@@ -420,7 +420,7 @@ export function ActivateDialog({
   const title = t('packagesActivateTitle', { name, version })
 
   return (
-    <Modal label={title} width={760} maxHeight="85vh">
+    <Modal label={title} width={760} maxHeight="85vh" onClose={onClose}>
       <h3 style={{ margin: 0 }}>{title}</h3>
       <div style={{ fontSize: 13 }}>{t('packagesActivateHint')}</div>
       {defaultDirs && (

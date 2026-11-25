@@ -61,7 +61,7 @@ export function ProviderDialog({
     )
 
   return (
-    <Modal label={title}>
+    <Modal label={title} onClose={onClose}>
       <h3 style={{ margin: 0 }}>{title}</h3>
       <div style={{ fontSize: 13 }}>{t('packagesProviderHint')}</div>
 
@@ -162,7 +162,7 @@ export function StopProviderDialog({ name, onClose }: { name: string; onClose: (
   const clear = useClearLlmClient()
   const title = t('packagesStopProviderTitle', { name })
   return (
-    <Modal label={title}>
+    <Modal label={title} onClose={onClose}>
       <h3 style={{ margin: 0 }}>{title}</h3>
       <div style={{ fontSize: 13 }}>{t('packagesStopProviderHint')}</div>
       {clear.isError && <PackageError error={clear.error} />}

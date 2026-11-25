@@ -10,6 +10,7 @@ from pydantic import BaseModel, ValidationError
 from testbench_ai_service.validators import (
     raise_field_validation_error,
     validate_class_path,
+    validate_endpoint_path,
     validate_file,
     validate_tb_server_url,
     validate_yaml_to_schema,
@@ -236,3 +237,34 @@ def test_messages_and_steps_together_do_not_match_the_schema(tmp_path):
 
     with pytest.raises(ValueError, match="Schema validation error"):
         validate_yaml_to_schema(path)
+
+
+@pytest.mark.parametrize("path", ["/rate", "/test-case-set-reviews", "/a/b_c", "/administration"])
+def test_endpoint_path_accepts_a_free_path(path):
+    assert validate_endpoint_path(path) == path
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/admin",
+        "/admin/api/agent-packages",
+        "/admin/api/session",
+        "/Admin/api",
+        "/agents/x/trigger",
+        "/jobs/1/view-ticket",
+        "/jobs/",
+        "/",
+        "/docs",
+        "/openapi.json",
+    ],
+)
+def test_endpoint_path_rejects_a_path_of_the_service_itself(path):
+    with pytest.raises(ValueError, match="reserved"):
+        validate_endpoint_path(path)
+
+
+@pytest.mark.parametrize("path", ["", "rate", "admin/api"])
+def test_endpoint_path_must_start_with_a_slash(path):
+    with pytest.raises(ValueError, match="must start with"):
+        validate_endpoint_path(path)

@@ -884,3 +884,61 @@ textarea.input {
 .testrun-hint {
   font-size: 12px;
 }
+
+/* A real fixed-width face for text whose columns matter: a diff, a file's raw
+   contents. `--font-code` is the console's label face for paths and keys and
+   is deliberately proportional. */
+:root {
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace;
+}
+.diff-view {
+  font-family: var(--font-mono);
+  tab-size: 4;
+}
+.diff-line {
+  display: block;
+  min-height: 1.5em;
+}
+.diff-line-add {
+  color: var(--color-success);
+  background: var(--color-success-soft);
+}
+.diff-line-remove {
+  color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+.diff-line-meta {
+  opacity: 0.7;
+}
+
+/* A value, path or server message without a breakable space (a 3000-character
+   key, a Windows path) must wrap inside its own box instead of widening the
+   page. `min-width: 0` lets the flex item that holds it shrink first. */
+.p-message,
+.p-inline-message {
+  min-width: 0;
+  max-width: 100%;
+}
+.p-message .p-message-wrapper,
+.p-message .p-message-text,
+.p-inline-message .p-inline-message-text,
+.p-dialog .p-dialog-content,
+.job-error-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.job-error-text {
+  white-space: pre-wrap;
+}
+
+/* Prose in a job report: Markdown folds a single line break into a space, which
+   turns an agent's plain multi-line text into one run-on line. */
+.report-prose p,
+.report-prose li {
+  white-space: pre-line;
+}
+.report-prose,
+.report-prose pre {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

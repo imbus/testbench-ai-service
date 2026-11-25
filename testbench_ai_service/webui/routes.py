@@ -35,8 +35,13 @@ from testbench_ai_service.webui.auth import (
     set_session_cookies,
 )
 from testbench_ai_service.webui.catalogue import PROVIDER_KEY_NAMES, build_catalogue
-from testbench_ai_service.webui.config_io import build_config_response, read_config_file
-from testbench_ai_service.webui.fork import build_fork, rollback_fork
+from testbench_ai_service.webui.config_io import (
+    build_config_response,
+    read_config_file,
+    redact_toml_text,
+)
+from testbench_ai_service.webui.document import load_document, render_document
+from testbench_ai_service.webui.fork import build_fork, rollback_fork, slugify_project
 from testbench_ai_service.webui.inflight import TaskRegistry, get_task_registry
 from testbench_ai_service.webui.models import (
     ActivityEntry,
@@ -53,6 +58,7 @@ from testbench_ai_service.webui.models import (
     PromptDocumentResponse,
     PromptForkRequest,
     PromptForkResponse,
+    PromptForkTarget,
     PromptMetaResponse,
     PromptPlanResponse,
     PromptSaveRequest,
@@ -60,6 +66,7 @@ from testbench_ai_service.webui.models import (
     PromptTestRequest,
     PromptTestResponse,
     PromptTreeResponse,
+    RawConfigResponse,
     RenderRequest,
     RenderResponse,
     ResolvedRoute,
@@ -76,11 +83,16 @@ from testbench_ai_service.webui.projects import (
     record_projects,
 )
 from testbench_ai_service.webui.prompt_refs import variant_references
-from testbench_ai_service.webui.prompt_render import lint_template, render_messages
+from testbench_ai_service.webui.prompt_render import (
+    context_skeleton,
+    lint_template,
+    render_messages,
+)
 from testbench_ai_service.webui.prompt_test import SingleFlight, run_query, scrub_all, to_messages
 from testbench_ai_service.webui.prompts import (
     build_tree,
     build_write_set,
+    changed_on_disk,
     declared_prompt_file,
     read_prompt_document,
     read_prompt_meta,
@@ -221,6 +233,11 @@ async def sign_out(
     clear_session_cookies(response, config)
 
 
+def _routed_agents(request: Request) -> frozenset[str] | None:
+    """The agents that got an endpoint at startup, or ``None`` when that is unknown."""
+    return getattr(request.app.state, "routed_agents", None)
+
+
 @router.get("/status", response_model=StatusResponse)
 async def read_status(
     request: Request,
@@ -238,7 +255,9 @@ async def read_status(
     see the banner, and process state would not survive either.
     """
     on_disk, _issues = validate_config_dict(read_config_file(Path(request.app.state.config_path)))
-    pending = restart_required(config, on_disk) if on_disk is not None else []
+    pending = (
+        restart_required(config, on_disk, _routed_agents(request)) if on_disk is not None else []
+    )
     token_usage = await read_token_usage(usage_store)
     return await asyncio.to_thread(
         build_status,
@@ -313,7 +332,24 @@ async def read_config(
     open to everyone signed in; only ``preview``/``apply`` require the admin
     role.
     """
-    return build_config_response(config, request.app.state.config_path)
+    config_path = Path(request.app.state.config_path)
+    on_disk, _issues = validate_config_dict(read_config_file(config_path))
+    return build_config_response(config, config_path, on_disk)
+
+
+@router.get("/config/raw", response_model=RawConfigResponse)
+def read_raw_config(
+    request: Request,
+    _: Session = Depends(current_session),
+) -> RawConfigResponse:
+    """``config.toml`` as text, for the read-only view of the Raw screen.
+
+    Open to everyone signed in, like ``GET /config``: it shows the same values
+    in the file's own spelling, with the same credentials redacted. An admin's
+    Raw screen uses ``preview`` instead, which also carries the queued edits.
+    """
+    document = load_document(Path(request.app.state.config_path))
+    return RawConfigResponse(toml=redact_toml_text(render_document(document)))
 
 
 @router.get("/prompts/{lang}/{agent}/meta", response_model=PromptMetaResponse)
@@ -471,7 +507,10 @@ async def preview_config(
     non-admin to explore the config surface.
     """
     preview, _text, _has_write = plan_change(
-        body.edits, Path(request.app.state.config_path), config
+        body.edits,
+        Path(request.app.state.config_path),
+        config,
+        routed_agents=_routed_agents(request),
     )
     preview.in_flight_tasks = registry.count
     return preview
@@ -518,7 +557,9 @@ async def apply_config(
     raised -- the write already succeeded and the response must say so.
     """
     config_path = Path(request.app.state.config_path)
-    preview, proposed_text, has_write = plan_change(body.edits, config_path, config)
+    preview, proposed_text, has_write = plan_change(
+        body.edits, config_path, config, routed_agents=_routed_agents(request)
+    )
 
     if not preview.valid:
         raise HTTPException(
@@ -792,6 +833,33 @@ def read_model_catalogue(
     return build_catalogue(config, project)
 
 
+def _refuse_unknown_agent_fields(agent: str, body: PromptSaveRequest, config: AppConfig) -> None:
+    """Refuse a message that reads an ``agent.*`` field the agent does not provide.
+
+    The service checks exactly this when it starts and refuses to start on a
+    mismatch, so a save that let it through would write a prompt the service
+    cannot boot with -- found only at the next restart, far from its cause.
+    Step messages are left to that start-up check: each step has data of its own.
+    An agent whose fields are not known here (no sample) is not checked.
+    """
+    sample = agent_context_sample(config.agents, agent, config.agent_packages.dir)
+    if not sample:
+        return
+    bodies = [message.content for variant in body.variants for message in variant.messages]
+    unknown = sorted(set(context_skeleton(bodies)) - set(sample))
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "The agent does not provide "
+                + ", ".join(f"agent.{name}" for name in unknown)
+                + ". The service would refuse this prompt at its next start. Available: "
+                + ", ".join(f"agent.{name}" for name in sorted(sample))
+                + "."
+            ),
+        )
+
+
 @router.post("/prompts/{lang}/{agent}/plan", response_model=PromptPlanResponse)
 def plan_prompt_save(
     lang: str,
@@ -812,6 +880,7 @@ def plan_prompt_save(
     prompts_dir = _require_prompts_dir(config)
     path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
     _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
+    _refuse_unknown_agent_fields(agent, body, config)
 
     plan = build_write_set(body, path, prompts_dir)
     return PromptPlanResponse(
@@ -819,6 +888,7 @@ def plan_prompt_save(
         updated=sorted(str(p) for p in plan.writes if p not in plan.creates),
         deleted=[str(p) for p in plan.deletes],
         deletions_skipped=plan.deletions_skipped,
+        changed_on_disk=changed_on_disk(plan, body.revisions),
     )
 
 
@@ -839,8 +909,21 @@ def save_prompt(
     path = resolve_prompt_file(prompts_dir, lang, Path(agent) / "prompt.yaml")
 
     _refuse_orphaned_variants(agent, body, Path(request.app.state.config_path))
+    _refuse_unknown_agent_fields(agent, body, config)
 
     plan = build_write_set(body, path, prompts_dir)
+    changed = changed_on_disk(plan, body.revisions)
+    if changed and not body.overwrite_changed:
+        # Also the answer when a file changed between the plan the operator
+        # confirmed and this save: that plan named no such file.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Not saved: changed on disk since the prompt was opened: "
+                + ", ".join(Path(p).name for p in changed)
+                + ". Reload the prompt to see the change, or save again to overwrite it."
+            ),
+        )
     result = write_all(dict(plan.writes), deletes=plan.deletes)
     return PromptSaveResponse(
         written=[str(p) for p in result.written],
@@ -849,6 +932,26 @@ def save_prompt(
         deletions_skipped=plan.deletions_skipped,
         backups=[str(p) for p in result.backups.values()],
     )
+
+
+@router.get("/prompts/{lang}/{agent}/fork-target", response_model=PromptForkTarget)
+def read_fork_target(
+    lang: str,
+    agent: str,
+    project: str,
+    _session: Session = Depends(current_session),
+    config: AppConfig = Depends(get_app_config),
+) -> PromptForkTarget:
+    """The directory a fork for *project* gets unless the operator names another.
+
+    What the fork dialog shows as its proposal. An empty ``directory`` means the
+    project name yields no usable one and the operator has to type it.
+    """
+    prompts_dir = _require_prompts_dir(config)
+    slug = slugify_project(project)
+    directory = f"{agent}__{slug}" if slug else ""
+    exists = bool(directory) and (Path(prompts_dir) / lang / directory).exists()
+    return PromptForkTarget(directory=directory, exists=exists)
 
 
 @router.post("/prompts/{lang}/{agent}/fork", response_model=PromptForkResponse)

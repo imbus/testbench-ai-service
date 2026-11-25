@@ -227,7 +227,13 @@ async def trigger_agent_execution(
             agent_key,
             context.project_name,
         )
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+        # Still a 404 -- for this project the agent does not exist -- but with the
+        # reason, so the caller is not left to guess between a wrong URL and a setting.
+        where = f" for project '{context.project_name}'" if context.project_name else ""
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"The agent '{agent_key}' is disabled{where}.",
+        )
 
     agent_config = get_agent_config(agent_key, app_config, context.project_name)
     agent = load_agent(agent_config, agent_key, app_config.agent_packages.dir)
@@ -441,7 +447,17 @@ def _package_agent_routable(agent_key: str, agent: AgentConfig, app_config: AppC
 
 def get_agent_routers(app_config: AppConfig) -> list[APIRouter]:
     """Create routers for all enabled agents based on the application configuration."""
-    routers = []
+    return list(get_agent_routers_by_key(app_config).values())
+
+
+def get_agent_routers_by_key(app_config: AppConfig) -> dict[str, APIRouter]:
+    """The router of every enabled agent, by agent key.
+
+    The keys are the agents that get an endpoint for the lifetime of the app: one
+    that is missing here cannot be reached until the service restarts, whatever a
+    later configuration says.
+    """
+    routers: dict[str, APIRouter] = {}
     for agent_key, agent_config in app_config.agents.items():
         if not agent_config.enabled:
             logger.debug("Agent '%s' is disabled in config, skipping router creation", agent_key)
@@ -456,6 +472,5 @@ def get_agent_routers(app_config: AppConfig) -> list[APIRouter]:
             prompt_def = get_prompt_definition(prompt_config.file)
         except Exception:
             prompt_def = None
-        router = create_agent_router(agent_key, agent_config, prompt_def)
-        routers.append(router)
+        routers[agent_key] = create_agent_router(agent_key, agent_config, prompt_def)
     return routers

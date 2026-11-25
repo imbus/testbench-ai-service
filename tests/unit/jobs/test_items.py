@@ -26,7 +26,8 @@ async def test_one_failing_item_keeps_job_running_with_warning(store: JobStore):
         await gather_items([("A", _ok()), ("B", _boom())], LanguageOption.ENGLISH)
     job = store.get("j1", "u1")
     assert job.status == "running"
-    assert job.warnings[-1] == "B: processing failed (RuntimeError('boom'))"
+    # The message, not the Python expression RuntimeError('boom').
+    assert job.warnings[-1] == "B: processing failed (boom)"
 
 
 async def test_all_failing_fails_the_job(store: JobStore):  # noqa: F811

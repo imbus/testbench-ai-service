@@ -96,6 +96,8 @@ export interface ActivityEntry {
 export interface ConfigResponse {
   running: Record<string, unknown>
   disk: Record<string, unknown>
+  /** What the file amounts to with defaults filled in: the config after a restart. */
+  effective?: Record<string, unknown>
   config_path: string
 }
 
@@ -153,6 +155,9 @@ export interface ProjectsResponse {
 export type PromptVarType = 'string' | 'text' | 'boolean' | 'number' | 'enum'
 
 export interface PromptVarDefinition {
+  /** Bounds of a `number` variable, both inclusive. */
+  minimum?: number | null
+  maximum?: number | null
   name: string
   description: string | null
   value_type: PromptVarType
@@ -211,6 +216,9 @@ export type PromptMessageDoc = {
 
 export type VarValueType = 'string' | 'text' | 'boolean' | 'number' | 'enum'
 export type PromptVarDecl = {
+  /** Bounds of a `number` variable, both inclusive. */
+  minimum?: number | null
+  maximum?: number | null
   name: string
   description: string | null
   value_type: VarValueType
@@ -242,6 +250,10 @@ export type PromptDocument = {
   agent_context_skeleton: Record<string, unknown>
   /** Typed sample of every agent.* field the agent provides (`"<str>"` leaves). */
   agent_context_sample?: Record<string, unknown>
+  /** sha256 of each file of the document as loaded, by path; sent back with a save. */
+  revisions?: Record<string, string>
+  /** Keys in prompt.yaml the prompt format does not know; a save does not keep them. */
+  unknown_keys?: string[]
 }
 
 export type LintError = { line: number; column: number; message: string }
@@ -261,6 +273,8 @@ export type PromptPlanResponse = {
   updated: string[]
   deleted: string[]
   deletions_skipped: string | null
+  /** Files the save would replace that changed on disk since the editor loaded them. */
+  changed_on_disk?: string[]
 }
 
 export type PromptForkResponse = {
@@ -353,6 +367,8 @@ export interface JobSummary {
 
 /** `report` is stored as the agent returned it; its shape depends on `report_type`. */
 export interface JobDetail extends JobSummary {
+  /** The report as JSON text exactly as stored; numbers past 2^53 survive only here. */
+  report_json?: string | null
   report: unknown
 }
 
@@ -497,6 +513,8 @@ export interface AgentPackage {
   /** Entry point of the LLM client config.toml takes from this package, if it does. */
   llm_client?: string | null
   loaded: boolean
+  /** The version the running service loaded at startup. */
+  loaded_version?: string | null
   load_error: string | null
 }
 

@@ -340,7 +340,8 @@ function AgentList({
             />
             <span className="text-muted" style={{ fontSize: 11, whiteSpace: 'nowrap' }}>
               {t('activeIn')} <span data-testid="active-count">{row.active.length}</span> ·{' '}
-              <span data-testid="override-count">{row.overriders.length}</span> {t('overrides')}
+              <span data-testid="override-count">{row.overriders.length}</span>{' '}
+              {t('overrides', { count: row.overriders.length })}
             </span>
           </span>
         )}

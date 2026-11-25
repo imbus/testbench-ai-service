@@ -49,6 +49,41 @@ def resolve_prompt_file_path(
     return file
 
 
+# Paths the service serves itself. An agent endpoint under one of them would be
+# registered before the service's own route and answer in its place.
+RESERVED_ENDPOINT_PREFIXES: tuple[str, ...] = ("/admin", "/agents", "/jobs")
+RESERVED_ENDPOINT_PATHS: tuple[str, ...] = ("/", "/docs", "/redoc", "/openapi.json")
+
+
+def validate_endpoint_path(endpoint_path: str) -> str:
+    """
+    Check that an agent's endpoint path cannot shadow a route of the service itself.
+
+    Args:
+        endpoint_path: The HTTP path the agent's trigger route is registered under.
+
+    Returns:
+        The path, unchanged.
+
+    Raises:
+        ValueError: If the path does not start with "/" or is reserved for the service.
+    """
+    if not endpoint_path.startswith("/"):
+        raise ValueError(f"Endpoint path '{endpoint_path}' must start with '/'.")
+    normalized = "/" + endpoint_path.strip("/").casefold()
+    reserved = normalized in RESERVED_ENDPOINT_PATHS or any(
+        normalized == prefix or normalized.startswith(prefix + "/")
+        for prefix in RESERVED_ENDPOINT_PREFIXES
+    )
+    if reserved:
+        raise ValueError(
+            f"Endpoint path '{endpoint_path}' is reserved for the service itself "
+            f"({', '.join(RESERVED_ENDPOINT_PREFIXES)} and "
+            f"{', '.join(RESERVED_ENDPOINT_PATHS)} cannot be used)."
+        )
+    return endpoint_path
+
+
 def raise_field_validation_error(
     model_instance, field: str | tuple, error: ValueError, error_type: str = "value_error"
 ):

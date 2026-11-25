@@ -22,6 +22,8 @@ defeated by ``p.yaml.`` (suffix ``"."``) and ``p.yaml:evil`` (an NTFS alternate
 data stream, suffix ``".yaml:evil"``).
 """
 
+import hashlib
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,8 +36,14 @@ from pydantic import BaseModel, ValidationError
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.language import LanguageOption
-from testbench_ai_service.models.prompt import MessageTemplate, PromptDefinition
+from testbench_ai_service.models.prompt import (
+    MessageTemplate,
+    PromptDefinition,
+    PromptVariableDefinition,
+    PromptVariant,
+)
 from testbench_ai_service.utils.prompt_utils import get_prompt_definition
+from testbench_ai_service.webui.document import line_ending, with_line_ending
 from testbench_ai_service.webui.models import (
     PromptDocumentResponse,
     PromptMessageDoc,
@@ -502,6 +510,76 @@ def read_prompt_document(
         variants=variants,
         agent_context_skeleton=context_skeleton(bodies),
         agent_context_sample=agent_context_sample or {},
+        revisions=document_revisions(prompt_path, base),
+        unknown_keys=unknown_keys(prompt_path),
+    )
+
+
+def _extra_keys(value: Any, model: type[BaseModel], where: str) -> list[str]:
+    """Keys of the mapping *value* that *model* has no field for, as dotted paths."""
+    if not isinstance(value, dict):
+        return []
+    return [f"{where}{key}" for key in value if key not in model.model_fields]
+
+
+def unknown_keys(prompt_path: Path) -> list[str]:
+    """Keys in the prompt YAML that the prompt format does not know.
+
+    The loader ignores them, so a typo (``defualt_model``) or a key from another
+    tool changes nothing and nobody is told; and a save writes the document the
+    editor holds, which does not carry them. Reported so the operator can see
+    both before saving.
+    """
+    try:
+        raw = yaml.safe_load(Path(prompt_path).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        return []
+    found = _extra_keys(raw, PromptDefinition, "")
+    variants = raw.get("variants") if isinstance(raw, dict) else None
+    for index, variant in enumerate(variants if isinstance(variants, list) else []):
+        where = f"variants[{index}]."
+        found += _extra_keys(variant, PromptVariant, where)
+        declared = variant.get("vars") if isinstance(variant, dict) else None
+        for name, definition in (declared if isinstance(declared, dict) else {}).items():
+            found += _extra_keys(definition, PromptVariableDefinition, f"{where}vars.{name}.")
+        messages = variant.get("messages") if isinstance(variant, dict) else None
+        for number, message in enumerate(messages if isinstance(messages, list) else []):
+            found += _extra_keys(message, MessageTemplate, f"{where}messages[{number}].")
+    return found
+
+
+def _file_revision(path: Path) -> str | None:
+    """sha256 of the file's bytes, or ``None`` when there is no readable file."""
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def document_revisions(prompt_path: Path, prompts_dir: Path) -> dict[str, str]:
+    """The revision of ``prompt.yaml`` and of every template it references, by path."""
+    files = {Path(prompt_path), *_previous_template_refs(prompt_path, Path(prompts_dir))}
+    revisions = {str(path): _file_revision(path) for path in sorted(files)}
+    return {path: revision for path, revision in revisions.items() if revision is not None}
+
+
+def changed_on_disk(plan: "WritePlan", revisions: dict[str, str] | None) -> list[str]:
+    """Files *plan* would write or remove that are no longer what the editor loaded.
+
+    *revisions* is what the editor was given with the document. A file it names
+    whose bytes differ now, or that is gone, was changed by someone else since:
+    the editor's copy of it is stale, and the save would replace that change --
+    also in a file the operator never touched, because the editor sends the
+    whole document. A file without a known revision (one this save creates) is
+    never reported, and neither is anything when the editor sent no revisions.
+    """
+    if not revisions:
+        return []
+    known = {Path(path).resolve(): revision for path, revision in revisions.items()}
+    return sorted(
+        str(path)
+        for path in {*plan.writes, *plan.deletes}
+        if path.resolve() in known and _file_revision(path) != known[path.resolve()]
     )
 
 
@@ -850,17 +928,26 @@ def build_write_set(request: PromptSaveRequest, prompt_path: Path, prompts_dir: 
         entry = _variant_entry(variant, messages, steps)
         document["variants"].append(entry)
 
+    _refuse_unusable_variable_names(request)
     _validate_document(document)
     _refuse_invalid_jinja(request)
+
+    # Text is held with "\n" throughout; a file keeps the line ending it has. A
+    # new file takes the one of the prompt.yaml it belongs to.
+    own_ending = line_ending(Path(prompt_path))
+
+    def as_written(target: Path, text: str) -> str:
+        ending = own_ending if target in targets.created else line_ending(target)
+        return with_line_ending(text, ending)
 
     plan = WritePlan(creates=targets.created)
     for target, text in targets.bodies.items():
         if target in targets.created or not _already_on_disk(target, text):
-            plan.writes[target] = text
+            plan.writes[target] = as_written(target, text)
 
     yaml_text = document_to_yaml(document, header=schema_header(Path(prompt_path), base))
     if not _already_on_disk(Path(prompt_path), yaml_text):
-        plan.writes[Path(prompt_path)] = yaml_text
+        plan.writes[Path(prompt_path)] = as_written(Path(prompt_path), yaml_text)
 
     plan.deletes, plan.deletions_skipped = _plan_deletions(
         Path(prompt_path),
@@ -902,6 +989,36 @@ def _refuse_invalid_jinja(request: PromptSaveRequest) -> None:
                     f"line {error.line}: {error.message}"
                 ),
             )
+
+
+_VARIABLE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _refuse_unusable_variable_names(request: PromptSaveRequest) -> None:
+    """Refuse a variable a template could never reference.
+
+    A variable is read as ``{{ vars.<name> }}``, so its name has to be an
+    identifier: ``bad-name`` is a subtraction to Jinja, ``1bad`` and
+    ``with space`` do not parse at all.
+    """
+    bad = sorted(
+        {
+            name
+            for variant in request.variants
+            for name in variant.vars
+            if not _VARIABLE_NAME.match(name)
+        }
+    )
+    if bad:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                "Not a usable variable name: "
+                + ", ".join(repr(name) for name in bad)
+                + ". A name starts with a letter or an underscore and continues with "
+                "letters, digits and underscores."
+            ),
+        )
 
 
 def _validate_document(document: dict[str, Any]) -> None:

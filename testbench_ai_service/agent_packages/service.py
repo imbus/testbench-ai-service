@@ -22,6 +22,7 @@ from testbench_ai_service.agent_packages.manifest import (
 )
 from testbench_ai_service.agent_packages.models import (
     AgentReport,
+    InspectionReport,
     LLMClientReport,
     Manifest,
     PackageVersion,
@@ -30,6 +31,7 @@ from testbench_ai_service.agent_packages.runner import run_inspection
 from testbench_ai_service.agent_packages.wheel import WheelError, extract_wheel, read_wheel
 from testbench_ai_service.config import DEFAULT_AGENTS, PROMPTS_DIR, TEMPLATES_DIR, AppConfig
 from testbench_ai_service.log import logger
+from testbench_ai_service.validators import validate_endpoint_path
 from testbench_ai_service.webui.atomic import write_atomic
 from testbench_ai_service.webui.config_io import read_config_file
 from testbench_ai_service.webui.models import ConfigIssue
@@ -113,7 +115,13 @@ def store_upload(
     max_bytes: int,
     uploaded_by: str | None,
 ) -> PackageVersion:
-    """Store an uploaded wheel, unpack it and inspect it. The version starts inactive.
+    """Inspect an uploaded wheel and store it if it passes. The version starts inactive.
+
+    The wheel is unpacked and inspected in a throw-away directory under ``tmp``; only a
+    wheel with something usable in it reaches the package storage (see ``_usable``). A
+    wheel that fails as a whole can be used by nothing, so it is refused with the reasons
+    and leaves nothing behind. One whose check fails for single entry points only is
+    stored: its report says which, and the others can be registered.
 
     Uploading the same version with the same content again returns the existing entry,
     inspected anew.
@@ -138,6 +146,17 @@ def store_upload(
                 f"{info.name} {info.version} already exists with different content"
             )
 
+        try:
+            extract_wheel(temp, temp.parent / "site")
+        except WheelError as exc:
+            raise PackageInvalid(str(exc)) from exc
+        report = run_inspection(temp.parent / "site")
+        if not _usable(report):
+            raise PackageInvalid(
+                f"{info.name} {info.version} failed the inspection and was not stored: "
+                + "; ".join(_report_errors(report))
+            )
+
         target_wheel = wheel_path(packages_dir, info.filename)
         target_site = site_dir(packages_dir, info.name, info.version)
         # Not in the manifest, so anything here is a leftover of an interrupted upload.
@@ -148,8 +167,8 @@ def store_upload(
         target_wheel.parent.mkdir(parents=True, exist_ok=True)
         temp.replace(target_wheel)
         try:
+            # Unpacked anew: the inspected copy holds the bytecode its imports left behind.
             extract_wheel(target_wheel, target_site)
-            report = run_inspection(target_site)
             entry = PackageVersion(
                 name=info.name,
                 version=info.version,
@@ -170,6 +189,14 @@ def store_upload(
         return entry
     finally:
         shutil.rmtree(temp.parent, ignore_errors=True)
+
+
+def _report_errors(report: InspectionReport) -> list[str]:
+    """Every reason a report failed: the package's own, then each entry point's."""
+    errors = list(report.errors)
+    for name, item in [*report.agents.items(), *report.llm_clients.items()]:
+        errors += [f"{name}: {error}" for error in item.errors]
+    return errors or ["no details"]
 
 
 # --- Configuring the agents of a package ------------------------------------------------
@@ -240,11 +267,23 @@ def _version(manifest: Manifest, name: str, version: str) -> PackageVersion:
     return entry
 
 
+def _usable(report: InspectionReport) -> bool:
+    """Whether anything of the package can be used.
+
+    A finding about the package as a whole (a clashing module, an unmet
+    requirement, a timeout) rules out all of it. A finding about one entry
+    point rules out that entry point only: the others are registered and used
+    on their own, and each such use checks its own entry point.
+    """
+    entries = [*report.agents.values(), *report.llm_clients.values()]
+    return not report.errors and any(entry.ok for entry in entries)
+
+
 def _require_ok(entry: PackageVersion) -> None:
-    if not entry.report.ok:
+    if not _usable(entry.report):
         raise PackageInvalid(
             f"{entry.name} {entry.version} failed the inspection: "
-            + "; ".join(entry.report.errors or ["no details"])
+            + "; ".join(_report_errors(entry.report))
         )
 
 
@@ -524,6 +563,10 @@ def register_agents(
             raise PackageInvalid(f"entry point '{item.entry_point}' is not a usable agent")
         if item.agent_key in taken_keys:
             raise PackageConflict(f"agent '{item.agent_key}' already exists")
+        try:
+            validate_endpoint_path(item.endpoint_path)
+        except ValueError as exc:
+            raise PackageConflict(str(exc)) from exc
         if item.endpoint_path in taken_paths:
             raise PackageConflict(f"endpoint '{item.endpoint_path}' is already in use")
         taken_keys.add(item.agent_key)

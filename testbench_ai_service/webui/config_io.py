@@ -137,7 +137,9 @@ def running_config(config: AppConfig) -> dict[str, Any]:
     return config.model_dump(mode="json")
 
 
-def build_config_response(config: AppConfig, path: Path) -> ConfigResponse:
+def build_config_response(
+    config: AppConfig, path: Path, on_disk: AppConfig | None = None
+) -> ConfigResponse:
     """Assemble the console's config payload: running config, disk config, and
     the path the service loaded from.
 
@@ -148,8 +150,12 @@ def build_config_response(config: AppConfig, path: Path) -> ConfigResponse:
     """
     disk = redact_credentials(read_config_file(path))
     running = redact_credentials(running_config(config))
+    # *on_disk* is the file as a validated configuration; a file the service
+    # could not start with has no effective form, and the running one stands in.
+    effective = redact_credentials(running_config(on_disk)) if on_disk is not None else running
     return ConfigResponse(
         running=running,
         disk=disk,
+        effective=effective,
         config_path=str(Path(path).resolve()),
     )

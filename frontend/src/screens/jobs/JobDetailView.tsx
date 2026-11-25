@@ -120,7 +120,7 @@ function Report({ job }: { job: JobDetail }) {
     return <LinkFinderReport report={job.report as LinkFinderResult} />
   }
   // A report type this UI has no view for is laid out from its shape.
-  if (job.report) return <GenericReport report={job.report} />
+  if (job.report) return <GenericReport report={job.report} json={job.report_json} />
   return null
 }
 
@@ -154,7 +154,7 @@ export function JobDetailView({ job }: { job: JobDetail }) {
       {job.error && (
         <div style={{ color: STATUS_COLORS.failed }}>
           <span className="card-kicker">{t('jobError')}</span>
-          <div>{job.error}</div>
+          <div className="job-error-text">{job.error}</div>
         </div>
       )}
       {job.warnings.length > 0 && (

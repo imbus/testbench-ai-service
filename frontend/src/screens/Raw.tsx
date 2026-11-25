@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from 'primereact/button'
 import { Message } from 'primereact/message'
 import { usePreview } from '../api/mutations'
+import { useRawConfig } from '../api/queries'
 import { useTranslation } from 'react-i18next'
 import { useDraft } from '../state/draft'
 
@@ -11,21 +12,30 @@ import { useDraft } from '../state/draft'
  * It comes from `POST /config/preview` rather than being rendered in the
  * browser: the artboard hand-rolled a `toToml`, and two serializers for one
  * file is two chances to disagree about what is actually on disk.
+ *
+ * Previewing is an admin's action -- it carries edits. A read-only viewer has
+ * none, and gets the file as it is from `GET /config/raw` instead.
  */
-export function Raw() {
+export function Raw({ isAdmin = true }: { isAdmin?: boolean }) {
   const { t } = useTranslation()
   const draft = useDraft()
   const preview = usePreview()
+  const stored = useRawConfig({ enabled: !isAdmin })
   const [copied, setCopied] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | number>()
 
   const edits = JSON.stringify(draft.edits)
   useEffect(() => {
+    if (!isAdmin) return
     preview.mutate(draft.edits)
     // Keyed on the serialized edits: the object identity changes on every
     // render, and re-previewing per render would hammer the endpoint.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [edits])
+  }, [edits, isAdmin])
+
+  const failed = isAdmin ? preview.isError : stored.isError
+  const failure = isAdmin ? preview.error : stored.error
+  const toml = failed ? undefined : isAdmin ? preview.data?.toml : stored.data?.toml
 
   useEffect(() => {
     // Clear any pending timer on unmount to avoid setState on an unmounted component.
@@ -37,7 +47,7 @@ export function Raw() {
   }, [])
 
   const onCopy = () => {
-    void navigator.clipboard.writeText(preview.data?.toml ?? '').then(() => {
+    void navigator.clipboard.writeText(toml ?? '').then(() => {
       // Clear any existing timer before starting a new one, so rapid clicks
       // do not leave the label stuck or double-flip.
       if (timerRef.current) {
@@ -62,10 +72,10 @@ export function Raw() {
           config.toml
         </h2>
         <span className="text-muted" style={{ fontSize: 12 }}>
-          {t('rawSub')}
+          {t(isAdmin ? 'rawSub' : 'rawSubReadOnly')}
         </span>
         <div style={{ flex: 1 }} />
-        {preview.data && !preview.isError && (
+        {toml !== undefined && (
           <Button
             type="button"
             outlined
@@ -75,15 +85,15 @@ export function Raw() {
         )}
       </div>
 
-      {preview.isError && (
+      {failed && (
         <Message
           severity="error"
           style={{ justifyContent: 'flex-start' }}
-          text={(preview.error as Error).message}
+          text={(failure as Error).message}
         />
       )}
 
-      {preview.data && !preview.isError && (
+      {toml !== undefined && (
         <pre
           className="blueprint"
           style={{
@@ -100,7 +110,7 @@ export function Raw() {
           <i className="corner tr" />
           <i className="corner bl" />
           <i className="corner br" />
-          {preview.data.toml}
+          {toml}
         </pre>
       )}
       {/* React Query retains the last successful data even after a failed

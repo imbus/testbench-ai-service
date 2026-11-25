@@ -25,7 +25,7 @@ describe('VarDeclTable', () => {
     render(
       <VarDeclTable vars={{ tone: decl() }} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />,
     )
-    expect(screen.getByText('{{ tone }}')).toBeInTheDocument()
+    expect(screen.getByText('{{ vars.tone }}')).toBeInTheDocument()
   })
 
   it('shows the choices field only for an enum', () => {
@@ -102,5 +102,65 @@ describe('VarDeclTable', () => {
     expect(screen.getByLabelText('Beschreibung')).toBeInTheDocument()
     expect(screen.getByLabelText('Typ')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Entfernen' })).toBeInTheDocument()
+  })
+})
+
+describe('adding a variable', () => {
+  function renderTable(vars: Record<string, PromptVarDecl> = {}) {
+    const onAdd = vi.fn()
+    render(<VarDeclTable vars={vars} onAdd={onAdd} onEdit={vi.fn()} onRemove={vi.fn()} />)
+    return onAdd
+  }
+  const TONE: PromptVarDecl = {
+    name: 'Tone',
+    description: null,
+    value_type: 'string',
+    choices: null,
+    default_value: null,
+    required: false,
+  }
+
+  it.each(['bad-name', '1bad', 'with space'])('refuses %s and says why', async (name) => {
+    const onAdd = renderTable()
+    await userEvent.type(screen.getByLabelText(i18n.t('varNewName')), name)
+
+    expect(screen.getByRole('alert')).toHaveTextContent(i18n.t('varNameInvalid'))
+    expect(screen.getByRole('button', { name: i18n.t('add') })).toBeDisabled()
+    await userEvent.keyboard('{Enter}')
+    expect(onAdd).not.toHaveBeenCalled()
+  })
+
+  it('says that a name is taken instead of silently emptying the box', async () => {
+    const onAdd = renderTable({ tone: TONE })
+    const box = screen.getByLabelText(i18n.t('varNewName'))
+    await userEvent.type(box, 'tone')
+
+    expect(screen.getByRole('alert')).toHaveTextContent(i18n.t('varNameTaken', { name: 'tone' }))
+    await userEvent.keyboard('{Enter}')
+    expect(onAdd).not.toHaveBeenCalled()
+    expect(box).toHaveValue('tone')
+  })
+
+  it('adds a usable name', async () => {
+    const onAdd = renderTable({ tone: TONE })
+    await userEvent.type(screen.getByLabelText(i18n.t('varNewName')), 'max_findings{Enter}')
+
+    expect(onAdd).toHaveBeenCalledExactlyOnceWith('max_findings')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+})
+
+describe('the message for a name that cannot be added', () => {
+  it('stands beside the add row, not inside it', async () => {
+    render(<VarDeclTable vars={{}} onAdd={vi.fn()} onEdit={vi.fn()} onRemove={vi.fn()} />)
+    await userEvent.type(screen.getByLabelText(i18n.t('varNewName')), 'bad-name')
+
+    const message = screen.getByRole('alert')
+    // Inside the one-line flex row it took the whole width and left the box 22 px.
+    expect(message.closest('form')).toBeNull()
+    expect(screen.getByLabelText(i18n.t('varNewName'))).toHaveAttribute(
+      'aria-describedby',
+      message.id,
+    )
   })
 })

@@ -130,6 +130,8 @@ The wheel appears in `dist/`.
 - **No clashing module names.** No top-level module of the wheel may have the name of a module the service already contains (for example `testbench_ai_service`, `fastapi` or `jinja2`).
 - **No environment variables at import.** The check at upload imports the module without the service's environment variables. Read them in `__init__` or `run()`, not at module level, or the upload fails.
 
+The check runs on a temporary copy of the wheel, in a separate process without the service's environment variables and with a time limit of 30 seconds. A wheel that fails it as a whole — a clashing module, an unmet requirement, a timeout, or no entry point that passes — is refused with the reasons and is not stored, so a corrected wheel can be uploaded again under the same version. A wheel in which only single entry points fail is stored: the report names them, and the others can be registered. The upload dialog stays open until the check has answered; it cannot be cancelled.
+
 ---
 
 ## Installing a package

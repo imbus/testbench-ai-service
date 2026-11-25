@@ -237,3 +237,86 @@ describe('Field', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('Invalid language selection')
   })
 })
+
+describe('a number field checks what the browser can know', () => {
+  function Probe({ spec }: { spec: FieldSpec }) {
+    const draft = useDraft()
+    return (
+      <>
+        <Field spec={spec} saved={undefined} />
+        <output data-testid="queued">{JSON.stringify(draft.edits)}</output>
+      </>
+    )
+  }
+  const renderNumber = (spec: Partial<FieldSpec> = {}) =>
+    render(
+      <DraftProvider saved={{}}>
+        <Probe spec={{ key: 'count', type: 'number', hint: '', ...spec }} />
+      </DraftProvider>,
+    )
+
+  it('names a value below the minimum', async () => {
+    renderNumber({ min: 1 })
+    await userEvent.type(screen.getByRole('spinbutton'), '-5')
+
+    expect(screen.getByRole('alert')).toHaveTextContent(i18n.t('fieldNumberMin', { min: 1 }))
+    expect(screen.getByRole('spinbutton')).toHaveAttribute('aria-invalid', 'true')
+  })
+
+  it('names a value above the maximum', async () => {
+    renderNumber({ min: 1, max: 100 })
+    await userEvent.type(screen.getByRole('spinbutton'), '101')
+
+    expect(screen.getByRole('alert')).toHaveTextContent(i18n.t('fieldNumberMax', { max: 100 }))
+  })
+
+  it('accepts a value inside the bounds without a message', async () => {
+    renderNumber({ min: 1, max: 100 })
+    await userEvent.type(screen.getByRole('spinbutton'), '40')
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByTestId('queued')).toHaveTextContent('{"count":40}')
+  })
+
+  it('keeps twenty digits as typed and says they cannot be stored exactly', async () => {
+    renderNumber()
+    await userEvent.type(screen.getByRole('spinbutton'), '12345678901234567890')
+
+    expect(screen.getByRole('alert')).toHaveTextContent(i18n.t('fieldNumberTooLarge'))
+    // Queued as text, never as a number: a number here would already be a
+    // different value. (The exact digits are checked in a real browser; the
+    // test DOM rounds a number input's value itself.)
+    expect(screen.getByTestId('queued')).toHaveTextContent(/^\{"count":"\d{20}"\}$/)
+  })
+})
+
+describe('an issue the server reported', () => {
+  function Issued({ issue }: { issue?: string }) {
+    return (
+      <DraftProvider saved={{ port: 8010 }}>
+        <Field spec={{ key: 'port', type: 'number', hint: '' }} saved={8010} issue={issue} />
+      </DraftProvider>
+    )
+  }
+
+  it('lapses once the operator changes the value it was about', async () => {
+    render(<Issued issue="Input should be greater than 0" />)
+    expect(screen.getByRole('alert')).toHaveTextContent('Input should be greater than 0')
+
+    await userEvent.clear(screen.getByRole('spinbutton'))
+    await userEvent.type(screen.getByRole('spinbutton'), '9000')
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('spinbutton')).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('is shown again when the next review reports it anew', async () => {
+    const { rerender } = render(<Issued issue="first" />)
+    await userEvent.type(screen.getByRole('spinbutton'), '1')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    rerender(<Issued issue="second" />)
+
+    expect(screen.getByRole('alert')).toHaveTextContent('second')
+  })
+})

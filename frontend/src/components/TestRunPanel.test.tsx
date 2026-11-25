@@ -200,8 +200,15 @@ test('the button is disabled while a run is in flight', async () => {
 
 test('a non-admin cannot start a run', async () => {
   renderPanel({ isAdmin: false })
-  await chooseOption(userEvent.setup(), 'Model', /claude-opus-5/)
   expect(screen.getByRole('button', { name: /test run/i })).toBeDisabled()
+})
+
+test('a non-admin gets no live controls and no pointer to the LLM screen', async () => {
+  renderPanel({ isAdmin: false })
+  for (const box of screen.getAllByRole('combobox', { hidden: true })) {
+    expect(box.closest('.p-dropdown')).toHaveClass('p-disabled')
+  }
+  expect(screen.queryByRole('link')).not.toBeInTheDocument()
 })
 
 test('the button is disabled until a model is given', async () => {
@@ -245,4 +252,26 @@ test('the hint to add a model is an in-app link, not a full page load', async ()
   renderPanel()
   const link = await screen.findByRole('link', { name: /llm/i })
   expect(link).toHaveAttribute('href', '/admin/llm')
+})
+
+test('a prompt that did not render names the message and the reason', () => {
+  runState = {
+    isPending: false,
+    isError: true,
+    data: undefined,
+    error: Object.assign(new Error('The prompt did not render, so nothing was sent.'), {
+      detail: {
+        message: 'The prompt did not render, so nothing was sent.',
+        messages: [
+          { role: 'system', content: 'ok', error: null },
+          { role: 'user', content: null, error: "'agent.nope' is undefined" },
+        ],
+      },
+    }),
+  }
+  renderPanel()
+
+  const failures = screen.getAllByTestId('testrun-render-error')
+  expect(failures).toHaveLength(1)
+  expect(failures[0]).toHaveTextContent("2. user: 'agent.nope' is undefined")
 })

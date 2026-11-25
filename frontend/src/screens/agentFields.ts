@@ -152,7 +152,17 @@ export function promptVarField(
   varName: string,
   definition: PromptVarDefinition,
 ): FieldSpec {
-  const hints = [definition.description, definition.required ? 'Required' : null].filter(
+  const min = definition.minimum ?? undefined
+  const max = definition.maximum ?? undefined
+  const range =
+    min !== undefined && max !== undefined
+      ? `${min} – ${max}`
+      : min !== undefined
+        ? `≥ ${min}`
+        : max !== undefined
+          ? `≤ ${max}`
+          : null
+  const hints = [definition.description, range, definition.required ? 'Required' : null].filter(
     (part): part is string => !!part,
   )
 
@@ -167,6 +177,8 @@ export function promptVarField(
     // renders whatever a file actually contains -- an empty select beats a
     // crashed screen on a config the operator can still fix.
     options: definition.value_type === 'enum' ? (definition.choices ?? []) : undefined,
+    min,
+    max,
   }
 }
 

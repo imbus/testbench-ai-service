@@ -1,8 +1,12 @@
+import { useState } from 'react'
 import { Avatar } from 'primereact/avatar'
 import { Button } from 'primereact/button'
 import { BrandMark } from './BrandMark'
 import { LangSeg } from './LangSeg'
 import { ThemeButton } from './ThemeButton'
+import { Modal } from './Modal'
+import { useDraftChangeCount } from '../state/draft'
+import { hasUnsavedPrompt } from '../state/unsaved'
 import { useTranslation } from 'react-i18next'
 import type { Theme } from '../theme'
 import type { SessionInfo } from '../api/types'
@@ -18,6 +22,16 @@ interface TopBarProps {
 
 export function TopBar({ session, theme, serviceLabel, onToggleTheme, onSignOut }: TopBarProps) {
   const { t } = useTranslation()
+  const queuedChanges = useDraftChangeCount()
+  // What signing out would throw away, asked at the click -- `null` while the
+  // question is not open. Signing out clears the queued config changes and
+  // unmounts the prompt editor, and neither can be brought back.
+  const [losing, setLosing] = useState<{ changes: number; prompt: boolean } | null>(null)
+  const askSignOut = () => {
+    const prompt = hasUnsavedPrompt()
+    if (queuedChanges > 0 || prompt) setLosing({ changes: queuedChanges, prompt })
+    else onSignOut()
+  }
   return (
     <header
       style={{
@@ -70,7 +84,7 @@ export function TopBar({ session, theme, serviceLabel, onToggleTheme, onSignOut 
         <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
           <span style={{ fontSize: 13 }}>{session.username}</span>
           <span className="text-muted" style={{ fontSize: 11 }}>
-            {session.is_admin ? t('admin') : t('testManager')}
+            {session.is_admin ? t('admin') : t('roleReadOnly')}
           </span>
         </div>
         <Button
@@ -78,9 +92,30 @@ export function TopBar({ session, theme, serviceLabel, onToggleTheme, onSignOut 
           text
           label={t('logout')}
           style={{ fontSize: 12 }}
-          onClick={onSignOut}
+          onClick={askSignOut}
         />
       </div>
+      {losing && (
+        <Modal label={t('logoutUnsavedTitle')} width={480} onClose={() => setLosing(null)}>
+          <h3 style={{ margin: 0 }}>{t('logoutUnsavedTitle')}</h3>
+          <div style={{ fontSize: 13, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {losing.changes > 0 && <div>{t('logoutUnsavedConfig', { count: losing.changes })}</div>}
+            {losing.prompt && <div>{t('logoutUnsavedPrompt')}</div>}
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <Button type="button" outlined label={t('cancel')} onClick={() => setLosing(null)} />
+            <Button
+              type="button"
+              severity="danger"
+              label={t('logoutAnyway')}
+              onClick={() => {
+                setLosing(null)
+                onSignOut()
+              }}
+            />
+          </div>
+        </Modal>
+      )}
     </header>
   )
 }

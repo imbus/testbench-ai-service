@@ -14,7 +14,7 @@ import {
   type Scope,
 } from '../api/agents'
 import { useForkPrompt } from '../api/mutations'
-import { useConfig, useProjects, usePromptMeta } from '../api/queries'
+import { useConfig, useProjects, usePromptMeta, useForkTarget } from '../api/queries'
 import type { ConfigIssue, PromptForkResponse, PromptVarDefinition } from '../api/types'
 import { Field } from '../components/Field'
 import { Modal } from '../components/Modal'
@@ -190,7 +190,7 @@ export function AgentDetail({
         addable={addable}
         onSelect={setProject}
         globalLabel={t('globalScope')}
-        addLabels={scopeAddLabels(t)}
+        addLabels={scopeAddLabels(t, !isAdmin)}
       />
 
       {meta.isError && (
@@ -362,6 +362,8 @@ export function AgentDetail({
         <ForkPromptDialog
           t={t}
           project={scope.project}
+          language={language}
+          agentKey={agentKey}
           directory={forkDirectory}
           onDirectoryChange={setForkDirectory}
           pending={fork.isPending}
@@ -452,6 +454,8 @@ function VarField({
 function ForkPromptDialog({
   t,
   project,
+  language,
+  agentKey,
   directory,
   onDirectoryChange,
   pending,
@@ -461,6 +465,8 @@ function ForkPromptDialog({
 }: {
   t: TFunction
   project: string
+  language: string
+  agentKey: string
   directory: string
   onDirectoryChange: (value: string) => void
   pending: boolean
@@ -468,8 +474,11 @@ function ForkPromptDialog({
   onCancel: () => void
   onConfirm: () => void
 }) {
+  const target = useForkTarget(language, agentKey, project)
+  const proposed = target.data?.directory ?? ''
+  const taken = !directory.trim() && target.data?.exists === true
   return (
-    <Modal label={t('forkPromptTitle')}>
+    <Modal label={t('forkPromptTitle')} onClose={onCancel}>
       <h3 style={{ margin: 0 }}>{t('forkPromptTitle')}</h3>
       <p style={{ margin: 0, fontSize: 13 }}>{t('forkPromptBody')}</p>
       <div className="text-muted" style={{ fontSize: 12 }}>
@@ -480,9 +489,23 @@ function ForkPromptDialog({
         <InputText
           type="text"
           value={directory}
+          placeholder={proposed}
           onChange={(event) => onDirectoryChange(event.target.value)}
         />
       </label>
+      {/* Left empty, the fork goes where the placeholder says. */}
+      <div className="text-muted" data-testid="fork-target" style={{ fontSize: 12 }}>
+        {proposed || directory.trim()
+          ? t('forkTargetPath', { path: `${language}/${directory.trim() || proposed}/` })
+          : t('forkTargetNone')}
+      </div>
+      {taken && (
+        <Message
+          severity="warn"
+          text={t('forkTargetTaken', { directory: proposed })}
+          style={{ justifyContent: 'flex-start' }}
+        />
+      )}
 
       {/* `Message` carries role="alert". */}
       {error && <Message severity="error" text={error} style={{ justifyContent: 'flex-start' }} />}

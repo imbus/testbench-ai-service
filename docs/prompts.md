@@ -186,6 +186,8 @@ The `vars` object on a variant declares the user-provided variables that the pro
 | `value_type`    | String  | One of `"string"`, `"text"`, `"boolean"`, `"number"`, `"enum"`. | Yes                    |
 | `choices`       | List    | Allowed values (required when `value_type` is `"enum"`).              | Conditional            |
 | `default_value` | Any     | Default value if the variable is not supplied.                            | No                     |
+| `minimum`       | Number  | Smallest accepted value, inclusive (only when `value_type` is `"number"`). The web console refuses a value below it. | No                     |
+| `maximum`       | Number  | Largest accepted value, inclusive (only when `value_type` is `"number"`). The web console refuses a value above it.  | No                     |
 | `required`      | Boolean | Whether the variable must be provided.                                    | No (default `false`) |
 
 A JSON Schema for validation is available at `prompts/prompt.schema.json`.

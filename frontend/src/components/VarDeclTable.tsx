@@ -204,7 +204,8 @@ function VarRow({
   return (
     <div data-testid="var-row" className="var-card">
       <div className="var-card-head">
-        <code className="var-card-name">{`{{ ${name} }}`}</code>
+        {/* As a template reads it: a bare `{{ name }}` does not render. */}
+        <code className="var-card-name">{`{{ vars.${name} }}`}</code>
         <span className="var-card-required">
           <span id={requiredLabelId}>{t('varRequired')}</span>
           <Switch
@@ -288,6 +289,9 @@ function VarRow({
   )
 }
 
+/** What `{{ vars.<name> }}` can reference: an identifier. */
+const VARIABLE_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
+
 export function VarDeclTable({
   vars,
   readOnly,
@@ -303,6 +307,17 @@ export function VarDeclTable({
 }) {
   const { t } = useTranslation()
   const [pending, setPending] = useState('')
+  // Why the name in the box cannot be added, shown under it. A name is read
+  // as `{{ vars.<name> }}`, so it has to be an identifier; and adding one that
+  // exists used to empty the box and do nothing else.
+  const candidate = pending.trim()
+  const problem = !candidate
+    ? null
+    : !VARIABLE_NAME.test(candidate)
+      ? t('varNameInvalid')
+      : candidate in vars
+        ? t('varNameTaken', { name: candidate })
+        : null
 
   return (
     <div className="var-list">
@@ -321,9 +336,8 @@ export function VarDeclTable({
           className="var-add"
           onSubmit={(event) => {
             event.preventDefault()
-            const key = pending.trim()
-            if (!key) return
-            onAdd(key)
+            if (!candidate || problem) return
+            onAdd(candidate)
             setPending('')
           }}
         >
@@ -331,11 +345,25 @@ export function VarDeclTable({
             aria-label={t('varNewName')}
             placeholder={t('varNewName')}
             value={pending}
+            invalid={problem ? true : undefined}
+            aria-invalid={problem ? true : undefined}
+            aria-describedby={problem ? 'var-new-problem' : undefined}
             onChange={(event) => setPending(event.target.value)}
             style={{ flex: 1, minWidth: 0 }}
           />
-          <Button type="submit" outlined label={t('add')} disabled={!pending.trim()} />
+          <Button type="submit" outlined label={t('add')} disabled={!candidate || !!problem} />
         </form>
+      )}
+      {/* Below the row, not inside it: as a third item of that one-line flex
+          row the message took the whole width and squeezed the box to nothing. */}
+      {!readOnly && problem && (
+        <div
+          id="var-new-problem"
+          role="alert"
+          style={{ fontSize: 12, color: 'var(--color-danger)' }}
+        >
+          {problem}
+        </div>
       )}
     </div>
   )

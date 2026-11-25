@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Sequence
 
 from testbench_ai_service.jobs.handle import current_job
+from testbench_ai_service.jobs.models import describe_error
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.utils.i18n import get_translation
 
@@ -32,7 +33,7 @@ async def gather_items(
                 "jobs.item_failed",
                 language,
                 item=label,
-                error=repr(result)[:_ERROR_LIMIT],
+                error=describe_error(result)[:_ERROR_LIMIT],
             )
             await current_job().warn(message)
     if failures == len(items):

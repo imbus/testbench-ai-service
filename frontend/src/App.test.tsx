@@ -85,7 +85,8 @@ test('shows the shell when signed in', async () => {
 
 test('shows a read-only notice to a non-admin', async () => {
   renderApp({ isAdmin: false })
-  await waitFor(() => expect(screen.getByText(/nur lesend/i)).toBeInTheDocument())
+  // The banner; the top bar names the role with the same words.
+  await waitFor(() => expect(screen.getByText(/nur lesend — änderungen/i)).toBeInTheDocument())
 })
 
 test('renders nothing decisive while the session is still loading', () => {
@@ -101,7 +102,7 @@ it('shows the pending-changes banner when the draft has edits', async () => {
 
   // The console starts in German (i18n/index.ts), so the banner text
   // is the German translation of "unapplied changes" -- see i18n/de.ts.
-  expect(await screen.findByRole('status')).toHaveTextContent('nicht übernommene Änderungen')
+  expect(await screen.findByRole('status')).toHaveTextContent('1 nicht übernommene Änderung')
 })
 
 it('shows no pending-changes banner for a clean draft', async () => {
@@ -433,7 +434,11 @@ it('clears the marker when the session ends', async () => {
   // The session ends -- an expired session surfaces as `session` becoming
   // null exactly like an explicit sign-out does, so this covers both.
   await userEvent.click(screen.getByRole('button', { name: 'Abmelden' }))
-  await waitFor(() => expect(screen.getByRole('button', { name: /anmelden/i })).toBeInTheDocument())
+  // A queued change would be lost, so signing out asks first.
+  await userEvent.click(await screen.findByRole('button', { name: 'Trotzdem abmelden' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Mit TestBench anmelden' })).toBeInTheDocument(),
+  )
 
   // A different operator signs in on the same machine.
   await userEvent.type(screen.getByLabelText('Benutzername'), 'b.schmidt')

@@ -61,6 +61,15 @@ export function useJob(jobId: string | null) {
   })
 }
 
+/** `config.toml` as text, for a viewer who may not preview edits (credentials redacted). */
+export function useRawConfig({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: ['config', 'raw'],
+    queryFn: () => apiFetch<{ toml: string }>('/config/raw'),
+    enabled,
+  })
+}
+
 export function useConfig({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['config'],
@@ -156,6 +165,24 @@ export function usePromptTree() {
  * prompt file) is a real answer the editor renders around, so it is surfaced
  * rather than retried.
  */
+/** The directory a fork for *project* would get by default, and whether it is taken. */
+export function useForkTarget(
+  lang: string | undefined,
+  agent: string | undefined,
+  project: string | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: ['prompts', 'fork-target', lang, agent, project],
+    queryFn: () =>
+      apiFetch<{ directory: string; exists: boolean }>(
+        `/prompts/${encodeURIComponent(lang!)}/${encodeURIComponent(agent!)}/fork-target?project=${encodeURIComponent(project!)}`,
+      ),
+    enabled: enabled && Boolean(lang && agent && project),
+    retry: false,
+  })
+}
+
 export function usePromptDocument(lang: string | undefined, agent: string | undefined) {
   return useQuery({
     queryKey: ['prompts', 'doc', lang, agent],

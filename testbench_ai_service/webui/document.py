@@ -17,12 +17,15 @@ import tomlkit
 from fastapi import HTTPException, status
 from tomlkit.container import OutOfOrderTableProxy
 from tomlkit.exceptions import TOMLKitError
-from tomlkit.items import InlineTable, Table
+from tomlkit.items import Comment, InlineTable, Table
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.utils.config import CONFIG_PREFIX
 from testbench_ai_service.webui.edits import ConfigEdits
 from testbench_ai_service.webui.paths import split_path
+
+LF = "\n"
+CRLF = "\r\n"
 
 
 def load_document(path: Path) -> tomlkit.TOMLDocument:
@@ -55,6 +58,39 @@ def load_document(path: Path) -> tomlkit.TOMLDocument:
 def render_document(document: tomlkit.TOMLDocument) -> str:
     """Serialize *document* back to TOML text."""
     return tomlkit.dumps(document)
+
+
+def line_ending(path: Path) -> str:
+    """The line ending *path* is written with: CRLF or LF.
+
+    Parsing reads the file with every line ending as LF, so the document does not
+    know what the operator's editor wrote. A file with both kinds goes by the
+    majority; an absent, empty or unreadable one counts as LF.
+    """
+    try:
+        data = Path(path).read_bytes()
+    except OSError:
+        return LF
+    crlf = data.count(CRLF.encode())
+    return CRLF if crlf and crlf * 2 >= data.count(LF.encode()) else LF
+
+
+def with_line_ending(text: str, ending: str) -> str:
+    """*text*, as rendered with LF line endings, with *ending* instead."""
+    return text if ending == LF else text.replace(LF, ending)
+
+
+def render_edited(document: tomlkit.TOMLDocument, before: str) -> str:
+    """Serialize *document* after :func:`apply_edits`; *before* is its text from before.
+
+    A table the edits added as the last thing in the file carries the blank line
+    every new table gets (see ``_set_key``), which there would be an empty last
+    line the file did not have.
+    """
+    text = render_document(document)
+    if text.endswith(LF + LF) and not before.endswith(LF + LF):
+        text = text.rstrip(LF) + LF
+    return text
 
 
 def service_table(document: tomlkit.TOMLDocument) -> Table | OutOfOrderTableProxy:
@@ -172,20 +208,54 @@ def _set_key(
     root: Table | OutOfOrderTableProxy, path: str, segments: list[str], value: Any
 ) -> None:
     node: Any = root
+    created: Any = None
     for segment in segments[:-1]:
+        existed = segment in node
         node = _child_table(node, segment, path)
+        if not existed:
+            created = node
     node[segments[-1]] = _toml_value(value)
+    if created is not None and node is created:
+        # A new table is rendered right after its parent's own keys, in front of
+        # whatever header came next -- and the blank line that used to stand
+        # before that header now stands before the new one. Give the new table
+        # its own, so the next header is not glued to its last key.
+        node.add(tomlkit.nl())
+
+
+def _holds_nothing(table: Any) -> bool:
+    """Whether *table* has no key left and no comment worth keeping its header for."""
+    if len(table) > 0:
+        return False
+    container = getattr(table, "value", None)
+    body = getattr(container, "body", [])
+    return not any(isinstance(item, Comment) for _key, item in body)
 
 
 def _remove_key(root: Table | OutOfOrderTableProxy, segments: list[str]) -> None:
+    """Remove the key at *segments*, and every table that removal leaves empty.
+
+    An emptied table would otherwise stay behind as a bare ``[header]``: valid
+    TOML, but it reads as a setting, and for ``projects."<name>"`` it even
+    counts as one. The ``[testbench-ai-service]`` table itself always stays,
+    and so does a table that still carries a comment.
+    """
+    chain: list[tuple[Any, str]] = []
     node: Any = root
     for segment in segments[:-1]:
         child = node.get(segment) if hasattr(node, "get") else None
         if child is None:
             return
+        chain.append((node, segment))
         node = child
-    if hasattr(node, "get") and segments[-1] in node:
-        del node[segments[-1]]
+    if not hasattr(node, "get") or segments[-1] not in node:
+        return
+    del node[segments[-1]]
+    for parent, key in reversed(chain):
+        child = parent.get(key)
+        if not isinstance(child, (Table, OutOfOrderTableProxy)) or not _holds_nothing(child):
+            break
+        del parent[key]
 
 
 def _toml_value(value: Any) -> Any:

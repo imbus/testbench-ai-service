@@ -26,6 +26,9 @@ export interface FieldSpec {
    * and "no variant" is what makes the prompt's own `default_variant` apply.
    */
   allowEmpty?: boolean
+  /** Smallest and largest value a `number` field accepts, both inclusive. */
+  min?: number
+  max?: number
   /**
    * Which setting of an agent this field edits (`enabled`, `prompt.file`,
    * `prompt.variant`), independent of the scope its `key` addresses.

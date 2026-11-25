@@ -135,7 +135,9 @@ test('an issue on a different row does not mark this one', () => {
 
 test('a read-only operator cannot add or remove', () => {
   renderTable({ readOnly: true })
-  expect(screen.getByRole('button', { name: /add/i })).toBeDisabled()
+  // No row to add with at all, rather than one with half its controls live.
+  expect(screen.queryByRole('button', { name: /add/i })).not.toBeInTheDocument()
+  expect(screen.queryByLabelText(/new model/i)).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: /remove/i })).toBeDisabled()
 })
 

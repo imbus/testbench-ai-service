@@ -2,6 +2,7 @@ import pytest
 import yaml
 from fastapi import HTTPException
 
+from testbench_ai_service.models.prompt import PromptVariableDefinition
 from testbench_ai_service.webui.models import (
     PromptMessageDoc,
     PromptSaveRequest,
@@ -233,7 +234,8 @@ def test_a_changed_crlf_template_is_still_written(prompt):
         prompt / "de/explainer/prompt.yaml",
         prompt,
     )
-    assert plan.writes[template] == "line one\nline three\n"
+    # Changed, so it is written -- with the line ending the file already has.
+    assert plan.writes[template] == "line one\r\nline three\r\n"
 
 
 def test_an_unchanged_yaml_is_left_out_of_the_write_set(prompt):
@@ -422,3 +424,87 @@ def test_an_unreadable_step_template_is_never_overwritten(steps_prompt):
         )
 
     assert caught.value.status_code == 409
+
+
+def test_a_crlf_prompt_yaml_keeps_its_line_endings(prompt):
+    path = prompt / "de/explainer/prompt.yaml"
+    path.write_bytes(ON_DISK.replace("\n", "\r\n").encode("utf-8"))
+
+    plan = build_write_set(request_with([inline("hallo")]), path, prompt)
+
+    written = plan.writes[path]
+    assert "\r\n" in written
+    assert written.count("\r\n") == written.count("\n")
+
+
+def test_a_new_template_takes_the_line_ending_of_its_prompt(prompt):
+    path = prompt / "de/explainer/prompt.yaml"
+    path.write_bytes(ON_DISK.replace("\n", "\r\n").encode("utf-8"))
+
+    plan = build_write_set(
+        request_with([external("system.jinja", "old body"), external("fresh.jinja", "a\nb\n")]),
+        path,
+        prompt,
+    )
+
+    assert plan.writes[prompt / "de/explainer/fresh.jinja"] == "a\r\nb\r\n"
+
+
+def _as_lf(prompt):
+    """The fixture is written in text mode, which is CRLF on Windows."""
+    for file in (prompt / "de/explainer").iterdir():
+        file.write_bytes(file.read_bytes().replace(b"\r\n", b"\n"))
+
+
+def test_an_lf_file_stays_lf(prompt):
+    _as_lf(prompt)
+    path = prompt / "de/explainer/prompt.yaml"
+
+    plan = build_write_set(request_with([external("system.jinja", "x\ny\n")]), path, prompt)
+
+    assert "\r" not in plan.writes[prompt / "de/explainer/system.jinja"]
+    assert "\r" not in plan.writes.get(path, "")
+
+
+def test_a_multi_line_message_typed_with_crlf_is_written_as_a_block(prompt):
+    """An editor on Windows hands over CRLF for a newly typed message."""
+    _as_lf(prompt)
+    path = prompt / "de/explainer/prompt.yaml"
+
+    plan = build_write_set(
+        request_with([inline("first line\r\nsecond line \U0001f600\r\nthird")]), path, prompt
+    )
+
+    text = plan.writes[path]
+    assert "text: |-\n" in text
+    assert "second line \U0001f600\n" in text
+    assert "\\r" not in text
+    assert "\\U0001F600" not in text
+    parsed = yaml.safe_load(text)
+    assert parsed["variants"][0]["messages"][0]["text"] == (
+        "first line\nsecond line \U0001f600\nthird"
+    )
+
+
+@pytest.mark.parametrize("name", ["bad-name", "1bad", "with space", "", "\u00e4"])
+def test_a_variable_name_no_template_could_reference_is_refused(prompt, name):
+    request = request_with([inline("hallo")])
+    request.variants[0].vars = {
+        name: PromptVariableDefinition(name="Label", value_type="string"),
+    }
+
+    with pytest.raises(HTTPException) as e:
+        build_write_set(request, prompt / "de/explainer/prompt.yaml", prompt)
+
+    assert e.value.status_code == 422
+    assert "Not a usable variable name" in e.value.detail
+
+
+@pytest.mark.parametrize("name", ["glossary", "max_findings", "_private", "v2"])
+def test_an_identifier_is_accepted_as_a_variable_name(prompt, name):
+    request = request_with([inline("hallo")])
+    request.variants[0].vars = {name: PromptVariableDefinition(name="Label", value_type="string")}
+
+    plan = build_write_set(request, prompt / "de/explainer/prompt.yaml", prompt)
+
+    assert name in plan.writes[prompt / "de/explainer/prompt.yaml"]

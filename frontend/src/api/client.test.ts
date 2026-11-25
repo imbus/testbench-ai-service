@@ -106,3 +106,34 @@ test('non-JSON error body uses fallback message and leaves detail undefined', as
     detail: undefined,
   })
 })
+
+test('spells out a request-validation 422 instead of only naming the status', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          detail: [
+            {
+              type: 'string_pattern_mismatch',
+              loc: ['body', 'agents', 0, 'agent_key'],
+              msg: "String should match pattern '^[a-z][a-z0-9_]{0,63}$'",
+            },
+            { type: 'missing', loc: ['body', 'endpoint_path'], msg: 'Field required' },
+          ],
+        }),
+        { status: 422, headers: { 'Content-Type': 'application/json' } },
+      ),
+    ),
+  )
+
+  const error = await apiFetch('/agent-packages/x/1/register', { method: 'POST' }).catch(
+    (cause: unknown) => cause as ApiError,
+  )
+
+  expect(error).toBeInstanceOf(ApiError)
+  expect((error as ApiError).message).toBe(
+    "agents.0.agent_key: String should match pattern '^[a-z][a-z0-9_]{0,63}$'; endpoint_path: Field required",
+  )
+  expect(Array.isArray((error as ApiError).detail)).toBe(true)
+})

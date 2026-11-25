@@ -462,7 +462,7 @@ A disabled agent registers no HTTP endpoint at all, and is exempt from the start
 | Option            | Type    | Description                                                 | Required |
 | ----------------- | ------- | ----------------------------------------------------------- | -------- |
 | `enabled`       | Boolean | Whether this agent is active. A disabled agent registers no endpoint. | For a new agent |
-| `endpoint_path` | String  | The HTTP endpoint path (e.g.,`"/test-case-set-reviews"`). | For a new agent |
+| `endpoint_path` | String  | The HTTP endpoint path (e.g.,`"/test-case-set-reviews"`). Must start with `/` and must not be a path of the service itself: anything under `/admin`, `/agents` or `/jobs`, or `/`, `/docs`, `/redoc`, `/openapi.json`. | For a new agent |
 | `class_path`    | String  | Full Python class path to the agent service implementation. | For a new agent |
 
 :::note
@@ -607,6 +607,11 @@ file_name = "testbench-ai-service.log"
 log_level = "INFO"
 log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 ```
+
+At `DEBUG`, every request and response is logged with its body. Only JSON and
+plain-text bodies are written, shortened to 10,000 characters; anything else —
+the console's scripts, styles and fonts, an uploaded package — is logged as its
+media type and size only.
 
 ### Activity log
 

@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 from typing import Any, Literal
 
@@ -13,6 +14,9 @@ class PromptVariableDefinition(BaseModel):
     choices: list[str] | None = None
     default_value: Any = None
     required: bool = False
+    #: Smallest and largest value a ``number`` variable accepts, both inclusive.
+    minimum: float | None = None
+    maximum: float | None = None
 
     @model_validator(mode="after")
     def validate_choices(self) -> "PromptVariableDefinition":
@@ -21,6 +25,42 @@ class PromptVariableDefinition(BaseModel):
         if self.value_type != "enum" and self.choices is not None:
             raise ValueError("'choices' may only be set when value_type is 'enum'.")
         return self
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "PromptVariableDefinition":
+        if self.value_type != "number" and (self.minimum is not None or self.maximum is not None):
+            raise ValueError("'minimum' and 'maximum' may only be set when value_type is 'number'.")
+        if self.minimum is not None and self.maximum is not None and self.minimum > self.maximum:
+            raise ValueError("'minimum' must not be greater than 'maximum'.")
+        if self.value_type == "number" and self.default_value is not None:
+            problem = self.problem_with(self.default_value)
+            if problem is not None:
+                raise ValueError(f"'default_value' is not a valid value: {problem}")
+        return self
+
+    def problem_with(self, value: Any) -> str | None:
+        """Why *value* is not a value this variable accepts, or ``None`` if it is.
+
+        Checks what the declaration states: the type, an enum's choices, a
+        number's bounds. Anything further is the agent's own business at run time.
+        """
+        if self.value_type == "number":
+            # bool is an int to Python; "true" for a count is a mistake, not a 1.
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return "a number is expected."
+            if not math.isfinite(value):
+                return "a finite number is expected."
+            if self.minimum is not None and value < self.minimum:
+                return f"must be at least {self.minimum:g}."
+            if self.maximum is not None and value > self.maximum:
+                return f"must be at most {self.maximum:g}."
+            return None
+        if self.value_type == "boolean":
+            return None if isinstance(value, bool) else "true or false is expected."
+        if self.value_type == "enum":
+            choices = self.choices or []
+            return None if value in choices else f"must be one of: {', '.join(choices)}."
+        return None if isinstance(value, str) else "text is expected."
 
 
 class MessageTemplate(BaseModel):

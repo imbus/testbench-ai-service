@@ -96,3 +96,51 @@ class TestContextSkeleton:
 
     def test_an_unparseable_template_contributes_nothing(self):
         assert context_skeleton(["{% if %}"]) == {}
+
+
+class TestLintBeyondSyntax:
+    def test_an_unclosed_block_is_reported_where_it_opens(self):
+        content = "line one\n{% if agent.x %}\n" + "body\n" * 40 + "last line"
+
+        result = lint_template(content)
+
+        assert result.ok is False
+        assert result.errors[0].line == 2
+        assert "{% endif %}" in result.errors[0].message
+
+    def test_the_innermost_unclosed_block_is_the_one_named(self):
+        result = lint_template("{% for x in agent.items %}\n{% if x %}\n{{ x }}\n{% endfor %}")
+
+        assert result.ok is False
+        assert "{% if %}" in result.errors[0].message
+        assert result.errors[0].line == 2
+
+    def test_a_closed_block_and_an_inline_set_are_fine(self):
+        content = "{% set n = 1 %}\n{% if n %}a{% else %}b{% endif %}\n{% set t %}x{% endset %}"
+
+        assert lint_template(content).ok is True
+
+    def test_an_unknown_filter_is_reported_at_its_line(self):
+        result = lint_template("ok\n{{ agent.name|nosuchfilter }}")
+
+        assert result.ok is False
+        assert (result.errors[0].line, result.errors[0].message) == (
+            2,
+            "No filter named 'nosuchfilter'.",
+        )
+
+    def test_an_unknown_test_is_reported(self):
+        result = lint_template("{% if agent.name is nosuchtest %}x{% endif %}")
+
+        assert result.ok is False
+        assert result.errors[0].message == "No test named 'nosuchtest'."
+
+    def test_a_known_filter_and_test_pass(self):
+        assert lint_template("{{ agent.name|upper }}{% if agent.n is defined %}x{% endif %}").ok
+
+    def test_loading_another_file_is_reported(self):
+        result = lint_template("a\n{% include 'other.jinja' %}")
+
+        assert result.ok is False
+        assert result.errors[0].line == 2
+        assert "cannot load other files" in result.errors[0].message

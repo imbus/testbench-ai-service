@@ -107,6 +107,9 @@ def run_inspection(site_dir: Path, timeout: float = INSPECT_TIMEOUT_SECONDS) -> 
     """
     # From source, the running service's package must be first on the child's sys.path.
     cwd = None if _frozen() else Path(testbench_ai_service.__file__).resolve().parent.parent
+    # The child runs in that directory, not in the service's: a path relative to the
+    # service's working directory (the default ``data/agent_packages``) means nothing there.
+    site_dir = Path(site_dir).resolve()
     try:
         completed = subprocess.run(
             inspection_command(site_dir),

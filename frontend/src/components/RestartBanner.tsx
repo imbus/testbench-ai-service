@@ -149,7 +149,7 @@ export function RestartBanner({ fields, restart }: { fields: string[]; restart?:
         }
       />
       {phase.kind === 'confirm' && restart && (
-        <Modal label={t('restartTitle')}>
+        <Modal label={t('restartTitle')} onClose={() => setPhase({ kind: 'idle' })}>
           <h3 style={{ margin: 0 }}>{t('restartTitle')}</h3>
           <p style={{ margin: 0 }}>{t('restartExplain')}</p>
           {restart.inFlight > 0 && (

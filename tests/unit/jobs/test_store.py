@@ -6,7 +6,7 @@ import pytest
 import sqlalchemy as sa
 
 from testbench_ai_service.jobs import store as store_module
-from testbench_ai_service.jobs.models import JobProgress, JobSummary
+from testbench_ai_service.jobs.models import JobProgress, JobSummary, describe_error
 from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.usage import UsageStore
 
@@ -233,3 +233,39 @@ def test_database_path_with_url_special_characters(tmp_path, name):
     _create(store, "j1", "u1")
     assert store.get("j1", "u1") is not None
     assert (tmp_path / name / "usage.sqlite").exists()
+
+
+def test_a_job_carries_its_report_as_the_json_text_that_was_stored(store):
+    """A browser reads numbers as doubles; past 2^53 only the text keeps the value."""
+    _create(store, "j1")
+    store.set_report("j1", "generic", {"big": 12345678901234567890, "text": "Prüfung"})
+
+    detail = store.get("j1", "u1")
+
+    assert detail.report["big"] == 12345678901234567890
+    assert '"big": 12345678901234567890' in detail.report_json
+    assert "Prüfung" in detail.report_json
+
+
+def test_a_job_without_a_report_has_no_report_text(store):
+    _create(store, "j1")
+
+    assert store.get("j1", "u1").report_json is None
+
+
+@pytest.mark.parametrize(
+    ("error", "shown"),
+    [
+        (
+            ValueError("API key for provider 'azure_openai' not found."),
+            "API key for provider 'azure_openai' not found.",
+        ),
+        (RuntimeError("first line\nsecond line"), "first line\nsecond line"),
+        (KeyError("nope"), "KeyError: 'nope'"),
+        (TypeError("x must be str"), "TypeError: x must be str"),
+        (ValueError(), "ValueError"),
+        (RuntimeError("   "), "RuntimeError"),
+    ],
+)
+def test_an_error_is_described_by_its_message_not_its_python_expression(error, shown):
+    assert describe_error(error) == shown

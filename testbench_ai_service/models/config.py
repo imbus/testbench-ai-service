@@ -1,11 +1,22 @@
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider, RoutingFamily
 from testbench_ai_service.models.language import LanguageOption
-from testbench_ai_service.validators import raise_field_validation_error, validate_class_path
+from testbench_ai_service.validators import (
+    raise_field_validation_error,
+    validate_class_path,
+    validate_endpoint_path,
+)
 
 ALLOWED_ROUTING: dict[LLMProvider, frozenset[RoutingFamily]] = {
     LLMProvider.OPENAI: frozenset(
@@ -228,6 +239,11 @@ class AgentConfig(BaseModel):
         default=None,
         description="Name of the uploaded agent package that provides class_path.",
     )
+
+    @field_validator("endpoint_path")
+    @classmethod
+    def _endpoint_path_is_not_reserved(cls, value: str) -> str:
+        return validate_endpoint_path(value)
 
 
 class ProjectAgentConfig(BaseModel):

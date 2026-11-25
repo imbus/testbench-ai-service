@@ -11,7 +11,7 @@ from fastapi import FastAPI
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from testbench_ai_service import __version__
-from testbench_ai_service.agents.routes import get_agent_routers
+from testbench_ai_service.agents.routes import get_agent_routers_by_key
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.exceptions import http_exception_handler
 from testbench_ai_service.jobs.routes import router as jobs_router
@@ -69,9 +69,12 @@ def init_routers(app: FastAPI):
     app.include_router(jobs_router)
     app.include_router(job_view_router)
 
-    agent_routers = get_agent_routers(app.state.config)
-    for agent_router in agent_routers:
+    agent_routers = get_agent_routers_by_key(app.state.config)
+    for agent_router in agent_routers.values():
         app.include_router(agent_router)
+    # Read by the console to tell an agent it can switch on in process from one
+    # that has no endpoint until the next start.
+    app.state.routed_agents = frozenset(agent_routers)
 
 
 def init_webui(app: FastAPI):

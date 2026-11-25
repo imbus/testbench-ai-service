@@ -98,6 +98,28 @@ class OutboundRequestLoggingMiddleware:
 _REDACTED = "<redacted>"
 #: Bodies of these paths carry credentials as a whole and are never logged.
 _NEVER_LOG_BODY = frozenset({"/admin/api/session"})
+#: Bodies of these media types are text a reader of the log can use. Everything else
+#: (the console's scripts, styles and fonts, an uploaded wheel) is named, not logged.
+_LOGGED_MEDIA_TYPES = frozenset({"application/json", "application/problem+json", "text/plain"})
+#: Longest body written to the log, in characters.
+MAX_LOGGED_BODY = 10_000
+
+
+def _media_type(headers) -> str:
+    return headers.get("content-type", "").split(";")[0].strip().lower()
+
+
+def _not_logged(headers) -> str:
+    """What stands in the log for a body that is not written to it."""
+    size = headers.get("content-length")
+    kind = _media_type(headers) or "unknown media type"
+    return f"<{kind}, {size} bytes, not logged>" if size else f"<{kind}, not logged>"
+
+
+def _shorten(text: str) -> str:
+    if len(text) <= MAX_LOGGED_BODY:
+        return text
+    return f"{text[:MAX_LOGGED_BODY]}... <shortened, {len(text)} characters in total>"
 
 
 def _mask(value):
@@ -133,9 +155,16 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         )
         logger.debug(f"Request: {request.method} {request.url} from {client_addr}")
         if request.method in ("POST", "PUT", "PATCH"):
-            body_bytes = await request.body()
-            body_text = body_bytes.decode("utf-8", errors="replace") if body_bytes else ""
-            logger.debug(f"Request Body: {redact_body(request.url.path, body_text)}")
+            if _media_type(request.headers) in _LOGGED_MEDIA_TYPES:
+                body_bytes = await request.body()
+                body_text = body_bytes.decode("utf-8", errors="replace") if body_bytes else ""
+                body_text = _shorten(redact_body(request.url.path, body_text))
+            elif request.headers.get("content-length", "0") == "0":
+                body_text = ""
+            else:
+                # Not read at all: an upload would be held in memory just to be logged.
+                body_text = _not_logged(request.headers)
+            logger.debug(f"Request Body: {body_text}")
 
         # Process request and get response
         response = await call_next(request)
@@ -145,7 +174,12 @@ class LoggingMiddleware(BaseHTTPMiddleware):
         # Paths to skip response body logging, e.g. docs, openapi
         skip_paths = ["/", request.app.docs_url, request.app.redoc_url, request.app.openapi_url]
 
-        if request.url.path not in skip_paths:
+        if request.url.path in skip_paths:
+            pass
+        elif _media_type(response.headers) not in _LOGGED_MEDIA_TYPES:
+            # The body is left alone, so a large file still streams to the client.
+            logger.debug(f"Response Body: {_not_logged(response.headers)}")
+        else:
             # Capture response body chunks from body_iterator and cache them
             if hasattr(response, "body_iterator"):
                 response_body_chunks = [chunk async for chunk in response.body_iterator]
@@ -155,7 +189,8 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 # For non-streaming responses fallback - may not apply often
                 response_body = getattr(response, "body", b"").decode("utf-8", errors="replace")
 
-            logger.debug(f"Response Body: {redact_body(request.url.path, response_body)}")
+            logged_body = _shorten(redact_body(request.url.path, response_body))
+            logger.debug(f"Response Body: {logged_body}")
 
         process_time = time.time() - start_time
         logger.debug(f"Processed in {process_time:.3f} seconds")

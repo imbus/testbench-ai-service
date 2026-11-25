@@ -75,7 +75,8 @@ export function ConfigSection({
   // cannot render.
   const project = section === 'llm' ? params.get('project') : null
   const scope: Scope = project === null ? { kind: 'global' } : { kind: 'project', project }
-  const catalogue = useModels(project ?? undefined)
+  // The catalogue is an admin-only route: a read-only viewer does not ask for it.
+  const catalogue = useModels(project ?? undefined, { enabled: isAdmin })
 
   if (config.isLoading) return <div style={{ padding: 28 }}>…</div>
   if (config.isError || !config.data) {
@@ -106,7 +107,10 @@ export function ConfigSection({
     )
   }
 
-  const running = config.data.running
+  // What a key the file does not set amounts to. `effective` is the file with
+  // its defaults; `running` differs from it while a restart is pending, and
+  // would show a setting that was just removed as if it were still in force.
+  const running = config.data.effective ?? config.data.running
   let fields: FieldSpec[]
   if (section === 'service') {
     fields = (SERVICE_TABS.find((entry) => entry.key === tab) ?? SERVICE_TABS[0]).fields
@@ -180,7 +184,7 @@ export function ConfigSection({
               setParams(next === null ? {} : { project: next })
             }}
             globalLabel={t('globalScope')}
-            addLabels={scopeAddLabels(t)}
+            addLabels={scopeAddLabels(t, !isAdmin)}
           />
           {project !== null && (
             <div className="text-muted" style={{ fontSize: 12 }}>

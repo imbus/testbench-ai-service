@@ -92,10 +92,12 @@ function Inline({ value }: { value: unknown }) {
   return <>{String(value)}</>
 }
 
-function RawJson({ value }: { value: unknown }) {
+function RawJson({ value, text }: { value: unknown; text?: string | null }) {
   return (
     <pre style={{ margin: 0, overflowX: 'auto', fontFamily: 'var(--font-code)', fontSize: 12 }}>
-      {JSON.stringify(value, null, 2)}
+      {/* The server's own text when there is one: re-serialising what the
+          browser parsed would print a number past 2^53 as a different number. */}
+      {text ?? JSON.stringify(value, null, 2)}
     </pre>
   )
 }
@@ -148,7 +150,9 @@ function Block({ value, depth }: { value: unknown; depth: number }) {
     // Markdown, never HTML: a report carries TestBench data and model output,
     // which must not become markup (see MarkdownView).
     return (
-      <div className="markdown-body">
+      // `report-prose` keeps a single line break a line break: an agent's
+      // plain multi-line output is not Markdown that happens to wrap.
+      <div className="markdown-body report-prose">
         <Markdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
           {value}
         </Markdown>
@@ -290,7 +294,14 @@ function Row({
  * as a label/value list, lists of objects as tables, prose as Markdown, nested
  * objects as sections. The stored JSON stays one click away.
  */
-export function GenericReport({ report }: { report: unknown }) {
+export function GenericReport({
+  report,
+  json,
+}: {
+  report: unknown
+  /** The stored JSON text, shown as it is in the JSON view. */
+  json?: string | null
+}) {
   const { t } = useTranslation()
   const [mode, setMode] = useState<Mode>('formatted')
   return (
@@ -313,7 +324,7 @@ export function GenericReport({ report }: { report: unknown }) {
         pt={{ button: { style: { padding: '2px 8px', fontSize: 11 } } }}
       />
       {mode === 'json' ? (
-        <RawJson value={report} />
+        <RawJson value={report} text={json} />
       ) : isRecord(report) ? (
         <Fields record={report} depth={0} />
       ) : (

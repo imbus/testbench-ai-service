@@ -118,3 +118,32 @@ describe('GenericReport', () => {
     expect(document.querySelector('pre')).not.toBeNull()
   })
 })
+
+describe('prose and the JSON view', () => {
+  it('marks multi-line prose so that its single line breaks are kept', () => {
+    const { container } = render(<GenericReport report={{ note: 'line one\nline two' }} />)
+
+    const prose = container.querySelector('.report-prose')
+    expect(prose).not.toBeNull()
+    expect(prose?.textContent).toContain('line one\nline two')
+  })
+
+  it('shows the stored JSON text when it is given', async () => {
+    render(
+      <GenericReport
+        report={{ big: 12345678901234567000 }}
+        json={'{\n  "big": 12345678901234567890\n}'}
+      />,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'JSON' }))
+
+    expect(screen.getByText(/12345678901234567890/)).toBeInTheDocument()
+  })
+
+  it('falls back to its own rendering without the stored text', async () => {
+    render(<GenericReport report={{ answer: 42 }} />)
+    await userEvent.click(screen.getByRole('button', { name: 'JSON' }))
+
+    expect(screen.getByText(/"answer": 42/)).toBeInTheDocument()
+  })
+})

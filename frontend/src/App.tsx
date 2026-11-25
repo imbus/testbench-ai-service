@@ -24,7 +24,7 @@ import { useTranslation } from 'react-i18next'
 import { applyTheme, preferredTheme, storedTheme, type Theme } from './theme'
 
 export function App() {
-  const { session, loading, busy, error, signIn, signOut } = useSession()
+  const { session, loading, busy, error, signIn, signOut, expired } = useSession()
   const [theme, setTheme] = useState<Theme>(() => storedTheme() ?? preferredTheme())
   const [issues, setIssues] = useState<ConfigIssue[]>([])
   const { t } = useTranslation()
@@ -60,6 +60,7 @@ export function App() {
         theme={theme}
         busy={busy}
         error={error}
+        expired={expired}
         onSignIn={(username, password) => {
           void signIn(username, password).catch(() => undefined)
         }}
@@ -159,7 +160,7 @@ export function App() {
                 path="/admin/projects"
                 element={<Projects isAdmin={session.is_admin} issues={issues} />}
               />
-              <Route path="/admin/raw" element={<Raw />} />
+              <Route path="/admin/raw" element={<Raw isAdmin={session.is_admin} />} />
               {/* Under /admin like every other screen: vite's `base` is
                   `/admin/` and static.py mounts the SPA at `/admin`, so a
                   route outside it click-throughs fine but 404s on a refresh,

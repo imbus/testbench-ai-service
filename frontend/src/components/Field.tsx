@@ -1,5 +1,5 @@
 import { lastSegment } from '../api/paths'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from 'primereact/button'
 import { Dropdown } from 'primereact/dropdown'
 import { InputSwitch } from 'primereact/inputswitch'
@@ -114,12 +114,44 @@ export function Field({
     draft.setValue(spec.key, parse(raw))
   }
 
+  // What the browser can tell about a number before the server is asked: text
+  // that is no number, a number too long to keep exactly, one outside the
+  // field's bounds. `badInput` is the one case with nothing to queue -- a
+  // number input reports letters as an empty value.
+  const [badInput, setBadInput] = useState(false)
+  useEffect(() => {
+    if (!changed) setBadInput(false)
+  }, [changed])
+  const numberProblem = (): string | undefined => {
+    if (spec.type !== 'number') return undefined
+    if (badInput) return t('fieldNumberInvalid')
+    if (inheriting || value === null || value === undefined || value === '') return undefined
+    if (typeof value === 'string')
+      return /^[-+]?\d+$/.test(value.trim()) ? t('fieldNumberTooLarge') : t('fieldNumberInvalid')
+    if (typeof value !== 'number') return undefined
+    if (spec.min !== undefined && value < spec.min) return t('fieldNumberMin', { min: spec.min })
+    if (spec.max !== undefined && value > spec.max) return t('fieldNumberMax', { max: spec.max })
+    return undefined
+  }
+  // The server's issue is about the value it was shown. Once the operator has
+  // changed that value -- typed something else, or reverted -- it describes
+  // an entry that is no longer there, so it lapses until the next review.
+  const valueStamp = JSON.stringify(draftValue ?? null)
+  const issueSeen = useRef<{ issue: string | undefined; stamp: string }>({
+    issue,
+    stamp: valueStamp,
+  })
+  if (issueSeen.current.issue !== issue) issueSeen.current = { issue, stamp: valueStamp }
+  const serverIssue = issue && issueSeen.current.stamp === valueStamp ? issue : undefined
+  // The server's word comes first: it has seen the whole configuration.
+  const shownIssue = serverIssue ?? numberProblem()
+
   // Every control reports the issue the same way: Prime's `invalid` for the
   // red border, `aria-invalid`/`aria-describedby` for assistive tech.
   const invalidProps = {
-    invalid: issue ? true : undefined,
-    'aria-invalid': issue ? true : undefined,
-    'aria-describedby': issue ? issueId : undefined,
+    invalid: shownIssue ? true : undefined,
+    'aria-invalid': shownIssue ? true : undefined,
+    'aria-describedby': shownIssue ? issueId : undefined,
   }
 
   const control = () => {
@@ -169,15 +201,29 @@ export function Field({
             {...invalidProps}
             placeholder={placeholder}
             value={inputText}
-            onChange={(event) =>
+            min={spec.min}
+            max={spec.max}
+            onChange={(event) => {
+              // Letters in a number input arrive as an empty value: that is not
+              // the operator clearing the field, so nothing is queued for it.
+              if (event.target.validity?.badInput) {
+                setBadInput(true)
+                return
+              }
+              setBadInput(false)
               commit(event.target.value, (text) => {
                 const parsed = Number(text)
                 // A half-typed "1e" parses to NaN, which JSON.stringify turns
                 // into null and the server would read as a removal. Keep the
                 // raw text instead and let the server's validation say so.
-                return Number.isNaN(parsed) ? text : parsed
+                if (Number.isNaN(parsed)) return text
+                // Past 2^53 a whole number no longer survives the round trip:
+                // twenty digits would be written as a different number. The
+                // text is kept as typed, and reported, instead.
+                if (Number.isInteger(parsed) && !Number.isSafeInteger(parsed)) return text
+                return parsed
               })
-            }
+            }}
             style={{ width: '100%' }}
           />
         )
@@ -307,10 +353,15 @@ export function Field({
             {t('inherit')} · {inheritedFrom.label}: {asNote(inheritedFrom.value)}
           </span>
         )}
-        {issue && (
+        {shownIssue && (
           // `Message` carries role="alert"; the id is what `aria-describedby`
           // on the control points at.
-          <Message id={issueId} severity="error" text={issue} style={{ alignSelf: 'flex-start' }} />
+          <Message
+            id={issueId}
+            severity="error"
+            text={shownIssue}
+            style={{ alignSelf: 'flex-start' }}
+          />
         )}
       </div>
     </div>

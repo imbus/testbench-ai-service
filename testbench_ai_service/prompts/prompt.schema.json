@@ -41,7 +41,15 @@
                   "description": "Required when value_type is 'enum'. Lists the allowed values."
                 },
                 "default_value": {},
-                "required": { "type": "boolean", "default": false }
+                "required": { "type": "boolean", "default": false },
+                "minimum": {
+                  "type": "number",
+                  "description": "Smallest accepted value (inclusive). Only for value_type 'number'."
+                },
+                "maximum": {
+                  "type": "number",
+                  "description": "Largest accepted value (inclusive). Only for value_type 'number'."
+                }
               },
               "if": {
                 "properties": { "value_type": { "const": "enum" } },

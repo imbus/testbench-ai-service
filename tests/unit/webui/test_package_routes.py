@@ -503,3 +503,13 @@ def test_rejected_requests_do_not_wait_for_the_lock(pkg_client, admin, route):
     finally:
         pkg_client.portal.call(lock.release)
     assert good  # the admin session itself was valid
+
+
+def test_the_listing_names_the_version_the_service_loaded(pkg_client, admin, tmp_path):
+    headers = admin()
+    _upload(pkg_client, _wheel(tmp_path), headers)
+
+    assert pkg_client.get(URL).json()["packages"][0]["loaded_version"] is None
+
+    with patch.object(loaded, "loaded_version", return_value="0.9.0"):
+        assert pkg_client.get(URL).json()["packages"][0]["loaded_version"] == "0.9.0"

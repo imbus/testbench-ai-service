@@ -261,6 +261,7 @@ class TestTriggerTestCaseSetReviews:
                 "/test-case-set-reviews", json=self.valid_request.model_dump()
             )
             assert response.status_code == 404
+            assert "'test_case_set_reviewer' is disabled" in response.json()["detail"]
         finally:
             self.app.dependency_overrides.pop(get_app_config, None)
 
@@ -275,6 +276,10 @@ class TestTriggerTestCaseSetReviews:
                 "/test-case-set-reviews", json=self.valid_request.model_dump()
             )
             assert response.status_code == 404
+            # The reason, so the caller can tell a setting from a wrong URL.
+            assert response.json()["detail"] == (
+                f"The agent 'test_case_set_reviewer' is disabled for project '{self.project_name}'."
+            )
         finally:
             self.app.dependency_overrides.pop(get_app_config, None)
 

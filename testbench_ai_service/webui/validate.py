@@ -11,8 +11,10 @@ input, in both the dotted spelling the console's forms use and the
 ``[section]`` spelling ``config.toml`` uses.
 """
 
+import logging
 import os
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -21,13 +23,23 @@ from pydantic import ValidationError
 
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.log import logger
-from testbench_ai_service.utils.config import CONFIG_PREFIX
+from testbench_ai_service.utils.config import CONFIG_PREFIX, get_prompt_config
+from testbench_ai_service.utils.prompt_utils import get_prompt_definition
 from testbench_ai_service.webui.models import ConfigIssue
-from testbench_ai_service.webui.paths import join_path
+from testbench_ai_service.webui.paths import join_path, split_path
 
 _BARE_KEY = re.compile(r"^[A-Za-z0-9_-]+$")
 _LOG_FILE_SECTION = f"[{CONFIG_PREFIX}.logging.file]"
 _ACTIVITY_SECTION = f"[{CONFIG_PREFIX}.logging.activity]"
+_CONSOLE_SECTION = f"[{CONFIG_PREFIX}.logging.console]"
+
+# What Windows refuses in a file or directory name, whatever the directory.
+_WINDOWS_FORBIDDEN = frozenset('<>:"|?*')
+_WINDOWS_DEVICES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{n}" for n in range(1, 10)}
+    | {f"LPT{n}" for n in range(1, 10)}
+)
 
 
 def _quote_key(segment: str) -> str:
@@ -105,6 +117,53 @@ def _missing_leaf_problem(parent: Path) -> str | None:
     return None
 
 
+def _windows_name_problem(path: Path) -> str | None:
+    """Why Windows cannot create *path*, judged by its names alone.
+
+    The directory check passes for such a name -- its parent exists and is
+    writable -- and only opening the file fails, which is after the write.
+    """
+    for part in path.parts[1:] if path.anchor else path.parts:
+        if any(char in _WINDOWS_FORBIDDEN or ord(char) < 32 for char in part):  # noqa: PLR2004
+            return f"'{part}' contains a character Windows does not allow in a file name."
+        if part.split(".")[0].strip().upper() in _WINDOWS_DEVICES:
+            return f"'{part}' is a device name on Windows and cannot be a file."
+        if part not in {".", ".."} and part != part.rstrip(". "):
+            return f"'{part}' must not end with a dot or a space on Windows."
+    return None
+
+
+def _log_format_problem(log_format: str) -> str | None:
+    """Why *log_format* cannot format a log record, or ``None`` if it can.
+
+    ``logging`` only checks the format when a handler is built from it, and an
+    unknown field only when the first record is written -- both after the write.
+    Formatting one record here finds either.
+    """
+    record = logging.LogRecord("name", logging.INFO, __file__, 1, "message", None, None)
+    try:
+        logging.Formatter(log_format).format(record)
+    except KeyError as e:
+        return f"Unknown log record field {e} in the log format."
+    except (ValueError, TypeError) as e:
+        return f"Not a usable log format: {e}"
+    return None
+
+
+def _log_format_issues(config: AppConfig) -> list[ConfigIssue]:
+    """Check the console and file log formats the way ``setup_logging`` will use them."""
+    candidates = [
+        ("logging.console.log_format", config.logging.console.log_format, _CONSOLE_SECTION),
+        ("logging.file.log_format", config.logging.file.log_format, _LOG_FILE_SECTION),
+    ]
+    issues = []
+    for path, log_format, section in candidates:
+        message = _log_format_problem(log_format)
+        if message is not None:
+            issues.append(ConfigIssue(path=path, message=message, toml_section=section))
+    return issues
+
+
 def _log_file_problem(file_name: str) -> str | None:
     """Why *file_name* cannot be used as the log file, or ``None`` if it can.
 
@@ -117,6 +176,10 @@ def _log_file_problem(file_name: str) -> str | None:
         return "The log file path must not be empty."
 
     path = Path(file_name)
+    if os.name == "nt":
+        name_problem = _windows_name_problem(path)
+        if name_problem is not None:
+            return name_problem
     if path.exists():
         return _existing_path_problem(path)
     return _missing_leaf_problem(path.parent)
@@ -148,6 +211,66 @@ def _log_file_writability_issues(config: AppConfig) -> list[ConfigIssue]:
     return issues
 
 
+def _scope_var_issues(
+    config: AppConfig, agent_key: str, project: str | None, values: dict[str, Any]
+) -> list[ConfigIssue]:
+    """Check the prompt variables one scope sets for one agent against their declarations."""
+    try:
+        prompt_config = get_prompt_config(agent_key, config, project)
+        definition = get_prompt_definition(prompt_config.file)
+    except Exception:
+        # An unreadable prompt is reported where it is configured, not once per variable.
+        return []
+    name = prompt_config.variant or definition.default_variant
+    variant = next((v for v in definition.variants if v.name == name), None)
+    if variant is None:
+        return []
+    scope: tuple[str, ...] = () if project is None else ("projects", project)
+    issues = []
+    for var_name, value in values.items():
+        declared = variant.vars.get(var_name)
+        problem = declared.problem_with(value) if declared is not None else None
+        if problem is None:
+            continue
+        location = (*scope, "agents", agent_key, "prompt", "vars", var_name)
+        issues.append(
+            ConfigIssue(
+                path=_issue_path(location),
+                message=f"{declared.name}: {problem}",
+                toml_section=_toml_section(location),
+            )
+        )
+    return issues
+
+
+def prompt_var_issues(config: AppConfig, edited: Iterable[str]) -> list[ConfigIssue]:
+    """Prompt variable values among *edited* that their declaration does not accept.
+
+    A variable is declared in the prompt file -- its type, an enum's choices, a
+    number's bounds -- and ``AppConfig`` knows none of that, so a count of
+    ``-5`` or ``"abc"`` is a valid configuration to it and only fails when the
+    agent runs. Limited to the paths being edited: a value already in the file
+    must not stand in the way of an unrelated change.
+    """
+    # Compared segment by segment: the same path may arrive with or without
+    # quotes around a project name.
+    edited_paths = [split_path(path) for path in edited]
+    if not any("vars" in segments for segments in edited_paths):
+        return []
+    issues: list[ConfigIssue] = []
+    for agent_key, agent in config.agents.items():
+        issues += _scope_var_issues(config, agent_key, None, agent.prompt.vars or {})
+    for project, project_config in config.projects.items():
+        for agent_key, agent in (project_config.agents or {}).items():
+            if agent_key in config.agents and agent.prompt is not None:
+                issues += _scope_var_issues(config, agent_key, project, agent.prompt.vars or {})
+    return [
+        issue
+        for issue in issues
+        if any(split_path(issue.path)[: len(path)] == path for path in edited_paths)
+    ]
+
+
 def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[ConfigIssue]]:
     """Construct :class:`AppConfig` from *data*.
 
@@ -157,7 +280,7 @@ def validate_config_dict(data: dict[str, Any]) -> tuple[AppConfig | None, list[C
     """
     try:
         config = AppConfig(**data)
-        log_issues = _log_file_writability_issues(config)
+        log_issues = _log_file_writability_issues(config) + _log_format_issues(config)
     except ValidationError as e:
         issues = [
             ConfigIssue(

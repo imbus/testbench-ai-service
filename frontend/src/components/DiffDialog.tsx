@@ -83,11 +83,23 @@ function IssueList({ issues }: { issues: RenderableIssue[] }) {
  * off disk and constructs an AppConfig (which imports agent classes), so it is
  * not something to run per character.
  */
+/** Which kind of unified-diff line this is, for its colour. */
+function diffLineClass(line: string): string {
+  if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@'))
+    return 'diff-line diff-line-meta'
+  if (line.startsWith('+')) return 'diff-line diff-line-add'
+  if (line.startsWith('-')) return 'diff-line diff-line-remove'
+  return 'diff-line'
+}
+
 export function DiffDialog({
   onClose,
   onIssues,
+  onApplied,
 }: {
   onClose: () => void
+  /** Called once an apply went through cleanly, just before the dialog closes. */
+  onApplied?: () => void
   /** Field-addressed validation failures, forwarded up to `App` so the config
    * screens can mark the offending inputs. Optional so callers that don't
    * care about issue markers (and existing tests) need not supply it. */
@@ -145,13 +157,16 @@ export function DiffDialog({
         // that exact case the reason cannot be written to the log, so this
         // dialog is the operator's only channel for it. Stay open to show it
         // instead of closing out from under the message.
-        if (!response.reload_detail) onClose()
+        if (!response.reload_detail) {
+          onApplied?.()
+          onClose()
+        }
       },
     })
   }
 
   return (
-    <Modal label={t('viewDiff')} width={900} maxHeight="85vh">
+    <Modal label={t('viewDiff')} width={900} maxHeight="85vh" onClose={onClose}>
       <h3 style={{ margin: 0 }}>{t('viewDiff')}</h3>
 
       {preview.isPending && <div>…</div>}
@@ -199,6 +214,7 @@ export function DiffDialog({
               {entry.removed}
             </div>
             <pre
+              className="diff-view"
               style={{
                 margin: 0,
                 padding: 12,
@@ -208,10 +224,17 @@ export function DiffDialog({
                 border: '1px solid var(--color-divider)',
                 fontSize: 12.5,
                 lineHeight: 1.5,
-                fontFamily: 'var(--font-code)',
               }}
             >
-              {entry.diff}
+              {entry.diff
+                .replace(/\n$/, '')
+                .split('\n')
+                .map((line, index) => (
+                  <span key={index} className={diffLineClass(line)}>
+                    {line}
+                    {'\n'}
+                  </span>
+                ))}
             </pre>
           </div>
         ))}

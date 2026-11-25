@@ -547,11 +547,82 @@ describe('saving', () => {
     const dialog = await screen.findByRole('dialog')
     // The dialog's file list comes from the server's plan, not from the
     // browser's own diff -- `findByText` waits for that plan to resolve.
-    expect(await within(dialog).findByText('/p/de/explainer/prompt.yaml')).toBeInTheDocument()
+    expect(await within(dialog).findByText('…/de/explainer/prompt.yaml')).toBeInTheDocument()
     expect(putCalls()).toHaveLength(0)
 
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
     await waitFor(() => expect(putCalls()).toHaveLength(1))
+  })
+
+  it('sends the loaded revisions and overwrites changed files only once confirmed', async () => {
+    docBody = { ...DOC, revisions: { '/p/de/explainer/prompt.yaml': 'abc' } }
+    planResult = {
+      status: 200,
+      body: {
+        created: [],
+        updated: ['/p/de/explainer/prompt.yaml'],
+        deleted: [],
+        deletions_skipped: null,
+        changed_on_disk: ['/p/de/explainer/prompt.yaml'],
+      },
+    }
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMeta()
+    await userEvent.clear(promptName())
+    await userEvent.type(promptName(), 'Renamed')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      await within(dialog).findByText(
+        'These files were changed on the server since the prompt was opened:',
+      ),
+    ).toBeInTheDocument()
+    const planCall = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/plan'))!
+    const planned = JSON.parse(String((planCall[1] as RequestInit).body))
+    expect(planned.revisions).toEqual({ '/p/de/explainer/prompt.yaml': 'abc' })
+    expect(planned.overwrite_changed).toBe(false)
+    expect(putCalls()).toHaveLength(0)
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Overwrite anyway' }))
+    await waitFor(() => expect(putCalls()).toHaveLength(1))
+    const saved = JSON.parse(String((putCalls()[0][1] as RequestInit).body))
+    expect(saved.overwrite_changed).toBe(true)
+    expect(saved.revisions).toEqual({ '/p/de/explainer/prompt.yaml': 'abc' })
+  })
+
+  it('opens the save confirmation on Ctrl+S, and only when there is something to save', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+    await openMeta()
+
+    await userEvent.keyboard('{Control>}s{/Control}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    await userEvent.clear(promptName())
+    await userEvent.type(promptName(), 'Renamed')
+    await userEvent.keyboard('{Control>}s{/Control}')
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
+    expect(putCalls()).toHaveLength(0)
+  })
+
+  it('names keys the prompt format does not know, and that a save drops them', async () => {
+    docBody = { ...DOC, unknown_keys: ['defualt_model', 'variants[0].colour'] }
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    const notice = await screen.findByTestId('unknown-keys')
+    expect(notice).toHaveTextContent('saving removes them')
+    expect(notice).toHaveTextContent('defualt_model, variants[0].colour')
+  })
+
+  it('shows no such notice for a clean prompt', async () => {
+    renderEditor({ lang: 'en' })
+    await ready()
+
+    expect(screen.queryByTestId('unknown-keys')).not.toBeInTheDocument()
   })
 
   it('names a deletion the browser could not have computed', async () => {
@@ -565,7 +636,7 @@ describe('saving', () => {
     await userEvent.type(promptName(), 'Renamed')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(await screen.findByText('/p/de/explainer/user.jinja')).toBeInTheDocument()
+    expect(await screen.findByText('…/de/explainer/user.jinja')).toBeInTheDocument()
     expect(screen.getByText('Deleted (no prompt references it any more):')).toBeInTheDocument()
   })
 
@@ -1551,7 +1622,7 @@ describe('workbench navigation', () => {
     docBody = { ...DOC, summary: 'New summary' }
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
     const dialog = await screen.findByRole('dialog')
-    await within(dialog).findByText('/p/de/explainer/prompt.yaml')
+    await within(dialog).findByText('…/de/explainer/prompt.yaml')
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
     // Clean again: the draft was reset from the refetched document.
     await waitFor(() => expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled())
@@ -1678,7 +1749,7 @@ describe('editor tabs', () => {
     await userEvent.type(screen.getByLabelText('user'), '!')
     await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
     const dialog = await screen.findByRole('dialog')
-    await within(dialog).findByText('/p/de/explainer/prompt.yaml')
+    await within(dialog).findByText('…/de/explainer/prompt.yaml')
     await userEvent.click(within(dialog).getByRole('button', { name: /^confirm$/i }))
     await waitFor(() => expect(putCalls()).toHaveLength(1))
     expect(

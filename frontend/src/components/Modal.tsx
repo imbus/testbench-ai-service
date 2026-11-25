@@ -7,9 +7,11 @@ import { Dialog } from 'primereact/dialog'
  *
  * Callers still mount it only while it is open and draw their own title and
  * buttons, so the dialog is always `visible`, has no header bar and no close
- * icon. Escape stays inert as before: `onHide` has nobody to tell, and a
- * dialog that vanished without its caller knowing would leave stale state
- * behind. What Prime adds for free is a focus trap and focus-on-show.
+ * icon. What Prime adds for free is a focus trap and focus-on-show.
+ *
+ * Escape closes the dialog when the caller passes `onClose` -- the same
+ * handler its Cancel button calls, so the caller always knows the dialog is
+ * gone and no stale state is left behind. Without `onClose` Escape is inert.
  *
  * Prime labels the dialog through `aria-labelledby` pointing at its header;
  * with the header hidden that id resolves to nothing, so the root takes the
@@ -23,21 +25,24 @@ export function Modal({
   label,
   width = 560,
   maxHeight,
+  onClose,
   children,
 }: {
   label: string
   width?: number
   maxHeight?: CSSProperties['maxHeight']
+  /** What Cancel does. Given, Escape does the same. */
+  onClose?: () => void
   children: ReactNode
 }) {
   return (
     <Dialog
       visible
       modal
-      onHide={() => {}}
+      onHide={() => onClose?.()}
       showHeader={false}
-      closable={false}
-      closeOnEscape={false}
+      closable={onClose !== undefined}
+      closeOnEscape={onClose !== undefined}
       draggable={false}
       resizable={false}
       style={{ width: `min(${width}px, calc(100vw - 48px))` }}

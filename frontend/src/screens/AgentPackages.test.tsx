@@ -226,3 +226,41 @@ describe('agent packages screen', () => {
     expect(within(only).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
   })
 })
+
+describe('a package whose loaded version is not the active one', () => {
+  it('names the loaded version instead of calling the active one loaded', async () => {
+    body = packages({ packages: [pkg({ loaded: true, loaded_version: '1.1.0' })] })
+    renderScreen()
+
+    const card = await screen.findByTestId('package-acme-tb-agents')
+    expect(within(card).getByText('loaded: 1.1.0 · restart needed')).toBeInTheDocument()
+  })
+
+  it('offers no delete for the version the service still has loaded', async () => {
+    body = packages({ packages: [pkg({ loaded: true, loaded_version: '1.1.0' })] })
+    renderScreen()
+
+    const row = await screen.findByTestId('package-version-1.1.0')
+    expect(within(row).getByText('loaded')).toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('still offers delete for an inactive version that is not loaded', async () => {
+    body = packages({ packages: [pkg({ loaded: true, loaded_version: '1.2.0' })] })
+    renderScreen()
+
+    const row = await screen.findByTestId('package-version-1.1.0')
+    expect(within(row).getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+  })
+
+  it('offers neither registering nor activating a version that failed as a whole', async () => {
+    const failed = version({ version: '1.1.0', active: false })
+    failed.report = { ...failed.report, ok: false, errors: ['requires nosuchlib>=1'] }
+    body = packages({ packages: [pkg({ versions: [version(), failed] })] })
+    renderScreen()
+
+    const row = await screen.findByTestId('package-version-1.1.0')
+    expect(within(row).queryByRole('button', { name: 'Activate' })).not.toBeInTheDocument()
+    expect(within(row).queryByRole('button', { name: 'Register agents' })).not.toBeInTheDocument()
+  })
+})

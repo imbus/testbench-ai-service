@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from testbench_ai_service.llm.base import LLMProvider, RoutingFamily, TokenUsage
 from testbench_ai_service.models.config import PromptVarValue
@@ -173,11 +173,23 @@ class ConfigResponse(BaseModel):
     """The service's configuration, as loaded and as stored.
 
     ``running`` is what the process is using; ``disk`` is what the file says.
+    ``effective`` is what the file amounts to once the defaults are filled in:
+    the configuration the service would run after a restart. It differs from
+    ``running`` exactly while a restart is pending, and is what a form shows
+    for a key the file does not set -- showing ``running`` there would present
+    a setting that was just removed as if it were still in force.
     """
 
     running: dict
     disk: dict
+    effective: dict
     config_path: str
+
+
+class RawConfigResponse(BaseModel):
+    """``config.toml`` as it is on disk, credentials replaced by the sentinel."""
+
+    toml: str
 
 
 class ActivityEntry(BaseModel):
@@ -268,6 +280,19 @@ class PromptMessageDoc(BaseModel):
     content: str = ""
     readable: bool = True
 
+    @field_validator("content")
+    @classmethod
+    def _line_feeds_only(cls, value: str) -> str:
+        """A message body always uses ``\\n`` in transit.
+
+        An editor on Windows starts a new, empty buffer with CRLF, so a freshly
+        typed message arrived with ``\\r\\n``: YAML then cannot write it as a
+        block and falls back to one escaped line, and the carriage returns would
+        reach the model. What a file is written with is decided at the write,
+        from the file itself.
+        """
+        return value.replace("\r\n", "\n").replace("\r", "\n")
+
 
 class LintError(BaseModel):
     """One Jinja syntax error, addressed for an editor gutter."""
@@ -346,6 +371,12 @@ class PromptDocumentResponse(BaseModel):
     variants: list[PromptVariantDoc] = []
     agent_context_skeleton: dict[str, Any] = {}
     agent_context_sample: dict[str, Any] = {}
+    # sha256 of prompt.yaml and of every template it references, by path, as read
+    # for this response. The editor hands them back with a save.
+    revisions: dict[str, str] = {}
+    # Keys in prompt.yaml the prompt format does not know, as dotted paths. They
+    # are ignored when the prompt runs and are not written back by a save.
+    unknown_keys: list[str] = []
 
 
 class PromptSaveRequest(BaseModel):
@@ -355,6 +386,11 @@ class PromptSaveRequest(BaseModel):
     default_model: str
     default_variant: str
     variants: list[PromptVariantDoc] = []
+    # The ``revisions`` of the document this save was edited from. With them, a file
+    # that changed on disk in the meantime is reported instead of overwritten.
+    revisions: dict[str, str] | None = None
+    # Set once the operator has seen that report and wants the save anyway.
+    overwrite_changed: bool = False
 
 
 class PromptSaveResponse(BaseModel):
@@ -372,6 +408,16 @@ class PromptPlanResponse(BaseModel):
     updated: list[str] = []
     deleted: list[str] = []
     deletions_skipped: str | None = None
+    # Files the save would write or remove that changed on disk since the editor
+    # loaded them: saving replaces someone else's change.
+    changed_on_disk: list[str] = []
+
+
+class PromptForkTarget(BaseModel):
+    """Where a fork for one project would go when no directory is named."""
+
+    directory: str
+    exists: bool
 
 
 class PromptForkRequest(BaseModel):

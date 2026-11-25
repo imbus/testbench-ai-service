@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from 'primereact/button'
 import { InputText } from 'primereact/inputtext'
 import { Message } from 'primereact/message'
@@ -15,6 +15,8 @@ interface LoginProps {
   theme: Theme
   busy: boolean
   error: ApiError | null
+  /** The previous session ended on its own; say so instead of showing a bare form. */
+  expired?: boolean
   onSignIn: (username: string, password: string) => void
   onToggleTheme: () => void
 }
@@ -49,10 +51,20 @@ function signInErrorKeys(status: number): [keyof Translations, keyof Translation
  * role segmented control is not ported, because the role comes from the JWT
  * TestBench issues and is not the operator's to choose.
  */
-export function Login({ theme, busy, error, onSignIn, onToggleTheme }: LoginProps) {
+export function Login({ theme, busy, error, expired, onSignIn, onToggleTheme }: LoginProps) {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  // Set by a submit with an empty field, cleared by the next keystroke.
+  const [missing, setMissing] = useState(false)
+  // The server's answer the operator has moved on from, by editing a field or
+  // submitting again. It answered one attempt: shown over a form that no longer
+  // holds what was sent, it reads as the verdict on what is typed now. A new
+  // failed attempt is a new error object and shows again.
+  const [staleError, setStaleError] = useState<ApiError | null>(null)
+  const shownError = error !== staleError ? error : null
+  const userInput = useRef<HTMLInputElement>(null)
+  const passInput = useRef<HTMLInputElement>(null)
 
   return (
     <div
@@ -96,7 +108,13 @@ export function Login({ theme, busy, error, onSignIn, onToggleTheme }: LoginProp
         }}
         onSubmit={(event) => {
           event.preventDefault()
-          if (!username || !password) return
+          if (!username || !password) {
+            // Say why nothing happened, and put the cursor where the gap is.
+            setMissing(true)
+            setStaleError(error)
+            ;(username ? passInput : userInput).current?.focus()
+            return
+          }
           onSignIn(username, password)
         }}
       >
@@ -119,8 +137,14 @@ export function Login({ theme, busy, error, onSignIn, onToggleTheme }: LoginProp
             autoFocus
             placeholder="a.mueller"
             style={{ width: '100%' }}
+            ref={userInput}
             value={username}
-            onChange={(event) => setUsername(event.target.value)}
+            aria-invalid={missing && !username ? true : undefined}
+            onChange={(event) => {
+              setMissing(false)
+              setStaleError(error)
+              setUsername(event.target.value)
+            }}
           />
         </div>
 
@@ -131,14 +155,34 @@ export function Login({ theme, busy, error, onSignIn, onToggleTheme }: LoginProp
             inputId="login-pass"
             feedback={false}
             autoComplete="current-password"
+            inputRef={passInput}
             value={password}
-            onChange={(event) => setPassword(event.target.value)}
+            aria-invalid={missing && !password ? true : undefined}
+            onChange={(event) => {
+              setMissing(false)
+              setStaleError(error)
+              setPassword(event.target.value)
+            }}
             style={{ display: 'flex' }}
             inputStyle={{ width: '100%' }}
           />
         </div>
 
-        {error && <SignInError error={error} />}
+        {expired && !shownError && !missing && (
+          <Message
+            severity="info"
+            style={{ justifyContent: 'flex-start' }}
+            text={t('sessionExpired')}
+          />
+        )}
+        {missing && (
+          <Message
+            severity="warn"
+            style={{ justifyContent: 'flex-start' }}
+            text={t('loginMissing')}
+          />
+        )}
+        {shownError && !missing && <SignInError error={shownError} />}
 
         <Button
           className="blueprint"

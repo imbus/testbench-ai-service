@@ -153,3 +153,60 @@ describe('UploadDialog', () => {
     )
   })
 })
+
+describe('UploadDialog: what it says and offers after the upload', () => {
+  async function uploadWith(
+    uploaded: ReturnType<typeof version>,
+    list = packages({ packages: [] }),
+  ) {
+    fetchMock.mockResolvedValue(ok(uploaded))
+    const user = userEvent.setup()
+    const handlers = renderDialog({ list })
+    await user.upload(screen.getByLabelText('Wheel file (.whl)'), WHEEL)
+    await user.click(screen.getByRole('button', { name: 'Import agent wheel' }))
+    return { user, ...handlers }
+  }
+
+  it('says that a wheel it already knew is unchanged', async () => {
+    const known = version({ active: false })
+    await uploadWith(known, packages({ packages: [pkg({ versions: [known] })] }))
+
+    expect(
+      await screen.findByText(/acme-tb-agents 1\.2\.0 was already there and is unchanged/),
+    ).toBeInTheDocument()
+  })
+
+  it('offers no registering when the package as a whole failed its check', async () => {
+    const failed = version({ active: false })
+    failed.report = { ...failed.report, ok: false, errors: ['requires nosuchlib>=1'] }
+    await uploadWith(failed)
+
+    expect(await screen.findByText(/does not pass the check/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Next: register agents' })).not.toBeInTheDocument()
+  })
+
+  it('still offers registering when only one entry point failed', async () => {
+    await uploadWith(version({ active: false }))
+
+    expect(await screen.findByRole('button', { name: 'Next: register agents' })).toBeEnabled()
+  })
+
+  it('cannot be closed while the wheel is being checked', async () => {
+    let finish: (response: Response) => void = () => {}
+    fetchMock.mockReturnValue(new Promise<Response>((resolve) => (finish = resolve)))
+    const user = userEvent.setup()
+    const { onClose } = renderDialog()
+    await user.upload(screen.getByLabelText('Wheel file (.whl)'), WHEEL)
+    await user.click(screen.getByRole('button', { name: 'Import agent wheel' }))
+
+    for (const button of screen.getAllByRole('button', { name: 'Close' })) {
+      expect(button).toBeDisabled()
+    }
+    await user.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+    expect(screen.getByText(/cannot be cancelled/)).toBeInTheDocument()
+
+    finish(ok(version({ active: false })))
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Close' })[0]).toBeEnabled())
+  })
+})

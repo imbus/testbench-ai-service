@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useBlocker, useParams } from 'react-router-dom'
+import { setUnsavedPrompt } from '../state/unsaved'
 import { Button } from 'primereact/button'
 import { Message } from 'primereact/message'
 import type { Scope } from '../api/agents'
@@ -146,7 +147,11 @@ function variantsWithEmptyEnum(doc: PromptDocument): string[] {
 }
 
 /** What `PUT /prompts/{lang}/{agent}` actually accepts -- the draft minus its read-only metadata. */
-function toSaveRequest(doc: PromptDocument) {
+function toSaveRequest(
+  doc: PromptDocument,
+  revisions: Record<string, string> | undefined,
+  overwriteChanged = false,
+) {
   return {
     name: doc.name,
     summary: doc.summary,
@@ -154,6 +159,10 @@ function toSaveRequest(doc: PromptDocument) {
     default_model: doc.default_model,
     default_variant: doc.default_variant,
     variants: withoutMessageUids(doc.variants),
+    // What the files were when this draft was loaded: the server compares them
+    // with the disk, so someone else's change is reported, not overwritten.
+    revisions,
+    overwrite_changed: overwriteChanged,
   }
 }
 
@@ -400,6 +409,29 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
     return () => window.removeEventListener('beforeunload', handler)
   }, [dirty, t('unsavedChangesWarning')])
 
+  // Signing out is neither a navigation nor an unload: the top bar asks first,
+  // and this is how it knows there is something to lose.
+  useEffect(() => {
+    setUnsavedPrompt(dirty)
+    return () => setUnsavedPrompt(false)
+  }, [dirty])
+
+  // Ctrl+S / Cmd+S does what the Save button does. The handler is registered
+  // once, up here with the other effects; what it calls is set further down,
+  // once this render knows whether saving is possible at all. The browser's
+  // own "save page" is suppressed either way -- it is never what is meant here.
+  const saveShortcutRef = useRef<(() => void) | null>(null)
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== 's')
+        return
+      event.preventDefault()
+      saveShortcutRef.current?.()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   // Blocks an IN-APP navigation (a `<Link>`/`NavLink` click elsewhere in the
   // console) the same way the effect above blocks a tab close or refresh.
   // Needs a data router -- see main.tsx and dev/preview.tsx, both switched to
@@ -593,16 +625,20 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
   // guess at what will change -- it asks the server what saving WOULD do,
   // and the dialog renders that answer once it arrives (D8: only the server
   // can name a deletion).
+  const canSave = dirty && emptyEnumVariants.length === 0 && invalidAll.length === 0
   const openConfirm = () => {
     setConfirmOpen(true)
-    plan.mutate(toSaveRequest(draft), {
+    plan.mutate(toSaveRequest(draft, document.data?.revisions), {
       onSuccess: () => setSaveFieldError(null),
       onError: markSaveError,
     })
   }
 
   const confirmSave = () => {
-    save.mutate(toSaveRequest(draft), {
+    // Confirming a plan that named changed files IS the decision to overwrite
+    // them. A file that changed only after that plan still gets refused.
+    const overwrite = (plan.data?.changed_on_disk?.length ?? 0) > 0
+    save.mutate(toSaveRequest(draft, document.data?.revisions, overwrite), {
       onSuccess: () => {
         setConfirmOpen(false)
         setSaveFieldError(null)
@@ -610,6 +646,8 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
       onError: markSaveError,
     })
   }
+
+  saveShortcutRef.current = isAdmin && canSave && !confirmOpen ? openConfirm : null
 
   const closeConfirm = () => {
     setConfirmOpen(false)
@@ -1244,7 +1282,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
         selectedVariant={variantName}
         onVariant={pickVariant}
         showSave={isAdmin}
-        canSave={dirty && emptyEnumVariants.length === 0 && invalidAll.length === 0}
+        canSave={canSave}
         onSave={openConfirm}
       />
 
@@ -1273,6 +1311,17 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
                 )
                 .join(' · ')}
             </>
+          }
+        />
+      )}
+      {(document.data?.unknown_keys?.length ?? 0) > 0 && (
+        <Message
+          severity="warn"
+          style={alertStyle}
+          content={
+            <div data-testid="unknown-keys">
+              {t('promptUnknownKeys')} <code>{(document.data?.unknown_keys ?? []).join(', ')}</code>
+            </div>
           }
         />
       )}
@@ -1310,7 +1359,7 @@ export function PromptEditor({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       {blocker.state === 'blocked' && (
-        <Modal label={t('unsavedNavTitle')} width={480}>
+        <Modal label={t('unsavedNavTitle')} width={480} onClose={() => blocker.reset?.()}>
           <h3 style={{ margin: 0 }}>{t('unsavedNavTitle')}</h3>
           <div style={{ fontSize: 13 }}>{t('unsavedNavBody')}</div>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

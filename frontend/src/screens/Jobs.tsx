@@ -1,3 +1,5 @@
+import { ApiError } from '../api/client'
+import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Button } from 'primereact/button'
 import { Column } from 'primereact/column'
@@ -22,6 +24,9 @@ import {
 } from './jobs/JobDetailView'
 
 const STATUSES: JobStatus[] = ['running', 'succeeded', 'failed']
+/** How many jobs one step of the list adds, and the most one request may ask for. */
+const JOBS_PAGE = 50
+const JOBS_MAX = 200
 
 /**
  * The item a job is for: the unique ID of its tree root. Jobs from before the
@@ -34,7 +39,18 @@ function itemLabel(job: JobSummary): string | null {
 function JobPane({ jobId }: { jobId: string }) {
   const { t } = useTranslation()
   const job = useJob(jobId)
-  if (job.isError) return <Message severity="error" text={t('jobsError')} />
+  // "Not there" is not "could not load": an unknown id, or a job of somebody
+  // else, is answered with 404 either way, and the list itself is fine.
+  if (job.isError) {
+    const missing = job.error instanceof ApiError && job.error.status === 404
+    return (
+      <Message
+        severity={missing ? 'info' : 'error'}
+        text={t(missing ? 'jobNotFound' : 'jobsError')}
+        style={{ justifyContent: 'flex-start' }}
+      />
+    )
+  }
   return job.data ? <JobDetailView job={job.data} /> : null
 }
 
@@ -50,7 +66,10 @@ export function Jobs() {
   const agent = params.get('agent') ?? undefined
   const rawStatus = params.get('status')
   const status = STATUSES.find((s) => s === rawStatus)
-  const jobs = useJobs({ agent, status })
+  // The server hands out the newest jobs first, a page at a time; the page
+  // grows on request up to what one request may ask for.
+  const [limit, setLimit] = useState(JOBS_PAGE)
+  const jobs = useJobs({ agent, status }, limit)
   const search = params.size > 0 ? `?${params}` : ''
 
   const setFilter = (key: 'agent' | 'status', value: string | undefined) => {
@@ -72,7 +91,15 @@ export function Jobs() {
       {jobId ? (
         <JobPage jobId={jobId} rows={jobs.data ?? []} search={search} />
       ) : (
-        <JobList jobs={jobs} agent={agent} status={status} search={search} setFilter={setFilter} />
+        <JobList
+          jobs={jobs}
+          agent={agent}
+          status={status}
+          search={search}
+          setFilter={setFilter}
+          limit={limit}
+          onMore={() => setLimit((current) => Math.min(current + JOBS_PAGE, JOBS_MAX))}
+        />
       )}
     </div>
   )
@@ -84,12 +111,16 @@ function JobList({
   status,
   search,
   setFilter,
+  limit,
+  onMore,
 }: {
   jobs: ReturnType<typeof useJobs>
   agent: string | undefined
   status: JobStatus | undefined
   search: string
   setFilter: (key: 'agent' | 'status', value: string | undefined) => void
+  limit: number
+  onMore: () => void
 }) {
   const { t } = useTranslation()
   const lang = useLang()
@@ -163,6 +194,29 @@ function JobList({
             body={(job: JobSummary) => <Duration job={job} />}
           />
         </DataTable>
+      )}
+      {/* A full page means there may be more: say so, instead of ending the
+          list as if these were all. */}
+      {rows.length >= limit && (
+        <div
+          data-testid="jobs-more"
+          className="text-muted"
+          style={{ display: 'flex', gap: 12, alignItems: 'center', fontSize: 13 }}
+        >
+          <span>{t('jobsShowingNewest', { count: rows.length })}</span>
+          {limit < JOBS_MAX ? (
+            <Button
+              type="button"
+              outlined
+              size="small"
+              label={t('jobsShowMore')}
+              loading={jobs.isFetching}
+              onClick={onMore}
+            />
+          ) : (
+            <span>{t('jobsNarrowDown')}</span>
+          )}
+        </div>
       )}
     </>
   )

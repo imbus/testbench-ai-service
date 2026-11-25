@@ -257,6 +257,17 @@ def test_register_rejects_existing_key(env, key):
         env.register(key=key)
 
 
+@pytest.mark.parametrize("path", ["/admin/api/agent-packages", "/admin/api/session", "/jobs/x"])
+def test_register_rejects_an_endpoint_path_of_the_service(env, path):
+    install_package(env.packages, active=False)
+
+    with pytest.raises(PackageConflict, match="reserved"):
+        env.register(
+            agents=[RegisterAgent(entry_point="acme_rater", agent_key="rater2", endpoint_path=path)]
+        )
+    assert "rater2" not in read_config_file(env.config_path).get("agents", {})
+
+
 def test_register_rejects_duplicate_keys_and_endpoints(env):
     install_package(env.packages, active=False)
     env.register()
@@ -295,10 +306,13 @@ def test_register_rejects_failed_entry_point(env):
 def test_register_rejects_a_failed_package(env):
     entry = install_package(env.packages, active=False)
     manifest = load_manifest(env.packages)
-    manifest.packages[PACKAGE][entry.version].report.ok = False
+    report = manifest.packages[PACKAGE][entry.version].report
+    report.ok = False
+    # What the inspector writes for a failure of the package as a whole.
+    report.errors = ["a top-level module clashes with the service's own"]
     service.save_manifest(env.packages, manifest)
 
-    with pytest.raises(PackageInvalid):
+    with pytest.raises(PackageInvalid, match="clashes"):
         env.register()
 
 
@@ -526,3 +540,37 @@ def test_delete_last_version_drops_the_package(env):
     delete_version(env.packages, PACKAGE, "1.0.0")
 
     assert PACKAGE not in load_manifest(env.packages).packages
+
+
+def _rewrite_report(env, **changes) -> None:
+    manifest = load_manifest(env.packages)
+    stored = manifest.packages[PACKAGE]["1.0.0"]
+    stored.report = stored.report.model_copy(update=changes)
+    service.save_manifest(env.packages, manifest)
+
+
+def test_register_works_beside_an_entry_point_that_failed_its_check(env):
+    """One broken entry point rules out that one, not the whole package."""
+    install_package(env.packages, active=False)
+    broken = rater_report(
+        entry_point="acme.broken:Missing", class_path="acme.broken.Missing", ok=False
+    )
+    broken.errors = ["cannot import 'acme.broken:Missing'"]
+    _rewrite_report(env, ok=False, agents={"acme_rater": rater_report(), "acme_broken": broken})
+
+    env.register()
+
+    assert "rater2" in read_config_file(env.config_path)["agents"]
+    with pytest.raises(PackageInvalid, match="not a usable agent"):
+        env.register(
+            agents=[RegisterAgent(entry_point="acme_broken", agent_key="b", endpoint_path="/b")]
+        )
+
+
+def test_register_is_refused_when_the_package_as_a_whole_failed(env):
+    install_package(env.packages, active=False)
+    _rewrite_report(env, ok=False, errors=["requires nosuchlib>=1, which is not installed"])
+
+    with pytest.raises(PackageInvalid, match="failed the inspection: requires nosuchlib"):
+        env.register()
+    assert "rater2" not in read_config_file(env.config_path).get("agents", {})

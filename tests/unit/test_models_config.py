@@ -152,6 +152,18 @@ def test_agent_config_package_defaults_to_none():
     assert agent.package is None
 
 
+@pytest.mark.parametrize("path", ["/admin/api/session", "/jobs/x", "no-slash"])
+def test_agent_config_rejects_an_endpoint_path_of_the_service(path):
+    with pytest.raises(ValidationError) as excinfo:
+        AgentConfig(
+            enabled=True,
+            endpoint_path=path,
+            class_path="a.B",
+            prompt=PromptConfig(file=Path("x/prompt.yaml")),
+        )
+    assert excinfo.value.errors()[0]["loc"] == ("endpoint_path",)
+
+
 def test_custom_with_package_is_not_imported():
     config = LLMConfig(
         provider=LLMProvider.CUSTOM, class_path="not_installed.mod.Client", package="acme"

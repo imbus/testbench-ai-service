@@ -72,6 +72,10 @@ class PackageView(BaseModel):
         description="Entry point of the LLM client config.toml on disk takes from this package.",
     )
     loaded: bool
+    loaded_version: str | None = Field(
+        default=None,
+        description="The version the running service loaded at startup, if any.",
+    )
     load_error: str | None = None
 
 
@@ -196,6 +200,7 @@ def _read_packages(config: AppConfig, config_path: Path) -> PackagesResponse:
             registered=_registered(manifest, name, disk_agents),
             llm_client=_llm_client(manifest, name, section),
             loaded=loaded.is_loaded(name),
+            loaded_version=loaded.loaded_version(name),
             load_error=failures.get(name),
         )
         for name, versions in sorted(manifest.packages.items())

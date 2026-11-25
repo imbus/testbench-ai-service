@@ -8,9 +8,12 @@ from fastapi import HTTPException
 from testbench_ai_service.webui.config_io import read_config_file
 from testbench_ai_service.webui.document import (
     apply_edits,
+    line_ending,
     load_document,
     render_document,
+    render_edited,
     service_table,
+    with_line_ending,
 )
 from testbench_ai_service.webui.edits import merge_edits
 
@@ -413,3 +416,122 @@ class TestQuotedPaths:
 
         merged = merge_edits(read_config_file(config_file), edits)
         assert tomllib.loads(render_document(document))["testbench-ai-service"] == merged
+
+
+@pytest.mark.parametrize(
+    ("content", "expected"),
+    [
+        (b"a = 1\r\nb = 2\r\n", "\r\n"),
+        (b"a = 1\nb = 2\n", "\n"),
+        (b"a = 1\r\nb = 2\r\nc = 3\n", "\r\n"),
+        (b"a = 1\nb = 2\nc = 3\r\n", "\n"),
+        (b"", "\n"),
+    ],
+)
+def test_line_ending_is_the_one_the_file_mostly_uses(tmp_path: Path, content, expected):
+    path = tmp_path / "config.toml"
+    path.write_bytes(content)
+    assert line_ending(path) == expected
+
+
+def test_line_ending_of_an_absent_file_is_lf(tmp_path: Path):
+    assert line_ending(tmp_path / "nope.toml") == "\n"
+
+
+def test_with_line_ending_converts_every_line():
+    assert with_line_ending("a = 1\nb = 2\n", "\r\n") == "a = 1\r\nb = 2\r\n"
+    assert with_line_ending("a = 1\nb = 2\n", "\n") == "a = 1\nb = 2\n"
+
+
+TIDY = """\
+[testbench-ai-service]
+port = 8010  # keep
+
+[testbench-ai-service.llm_config]
+provider = "openai"
+
+[testbench-ai-service.agents.reviewer]
+enabled = true
+
+[testbench-ai-service.agents.reviewer.prompt]
+file = "r/prompt.yaml"
+
+[testbench-ai-service.agents.describer]
+enabled = true
+"""
+
+
+def _edited(tmp_path: Path, *edit_sets: dict, source: str = TIDY) -> str:
+    path = tmp_path / "config.toml"
+    path.write_text(source, encoding="utf-8")
+    document = load_document(path)
+    for edits in edit_sets:
+        apply_edits(document, edits)
+    return render_edited(document, source)
+
+
+def test_removing_the_last_key_removes_the_table_header(tmp_path: Path):
+    text = _edited(tmp_path, {"llm_config.provider": None})
+
+    assert "[testbench-ai-service.llm_config]" not in text
+    assert text == TIDY.replace('[testbench-ai-service.llm_config]\nprovider = "openai"\n\n', "")
+
+
+def test_removing_the_last_key_removes_every_table_it_emptied(tmp_path: Path):
+    key = "projects.Projekt A.agents.reviewer.enabled"
+
+    text = _edited(tmp_path, {key: False}, {key: None})
+
+    assert text == TIDY
+
+
+def test_a_table_that_still_has_keys_stays(tmp_path: Path):
+    text = _edited(tmp_path, {"agents.reviewer.enabled": None})
+
+    assert "[testbench-ai-service.agents.reviewer.prompt]" in text
+    assert 'file = "r/prompt.yaml"' in text
+
+
+def test_an_emptied_table_with_a_comment_keeps_its_header(tmp_path: Path):
+    source = TIDY.replace('provider = "openai"', '# pick one\nprovider = "openai"')
+
+    text = _edited(tmp_path, {"llm_config.provider": None}, source=source)
+
+    assert "[testbench-ai-service.llm_config]\n# pick one\n" in text
+
+
+def test_the_service_table_itself_is_never_removed(tmp_path: Path):
+    source = "[testbench-ai-service]\nport = 8010\n"
+
+    text = _edited(tmp_path, {"port": None}, source=source)
+
+    assert text.startswith("[testbench-ai-service]")
+
+
+def test_a_new_table_is_followed_by_a_blank_line(tmp_path: Path):
+    text = _edited(tmp_path, {"agents.reviewer.prompt.vars.glossary": "x"})
+
+    assert (
+        '[testbench-ai-service.agents.reviewer.prompt.vars]\nglossary = "x"\n\n'
+        "[testbench-ai-service.agents.describer]\n"
+    ) in text
+
+
+def test_a_new_table_at_the_end_adds_no_empty_last_line(tmp_path: Path):
+    text = _edited(tmp_path, {"projects.Projekt A.agents.reviewer.enabled": False})
+
+    assert text.endswith("enabled = false\n")
+    assert not text.endswith("\n\n")
+
+
+def test_edited_text_still_parses_to_the_merged_config(tmp_path: Path):
+    edits = {"agents.reviewer.prompt.vars.glossary": "x", "llm_config.provider": None}
+    path = tmp_path / "config.toml"
+    path.write_text(TIDY, encoding="utf-8")
+
+    text = _edited(tmp_path, edits)
+
+    merged = merge_edits(read_config_file(path), edits)
+    parsed = tomllib.loads(text)["testbench-ai-service"]
+    assert parsed["agents"] == merged["agents"]
+    assert "llm_config" not in parsed

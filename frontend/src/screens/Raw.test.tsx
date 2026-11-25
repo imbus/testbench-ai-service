@@ -12,12 +12,12 @@ beforeEach(() => i18n.changeLanguage('en'))
 const fetchMock = vi.fn()
 const TOML = '[testbench-ai-service]\nport = 9999\n'
 
-function renderRaw() {
+function renderRaw(isAdmin = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
       <DraftProvider saved={{ port: 8010 }}>
-        <Raw />
+        <Raw isAdmin={isAdmin} />
       </DraftProvider>
     </QueryClientProvider>,
   )
@@ -184,5 +184,23 @@ describe('Raw', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('Raw for a read-only viewer', () => {
+  it('shows the file from the read route and never asks for a preview', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ toml: '[testbench-ai-service]\nport = 8010\n' }),
+    } as Response)
+
+    renderRaw(false)
+
+    expect(await screen.findByText(/port = 8010/)).toBeInTheDocument()
+    expect(screen.getByText('The file as it is on the server · read-only')).toBeInTheDocument()
+    const urls = fetchMock.mock.calls.map(([url]) => String(url))
+    expect(urls.some((url) => url.endsWith('/config/raw'))).toBe(true)
+    expect(urls.some((url) => url.includes('/config/preview'))).toBe(false)
   })
 })

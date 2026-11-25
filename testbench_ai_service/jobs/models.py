@@ -40,6 +40,28 @@ class JobDetail(JobSummary):
     """A job including its report."""
 
     report: Any | None = None
+    #: The report as JSON text, exactly as stored. A browser reads numbers as
+    #: doubles, so past 2^53 its own rendering of ``report`` shows another value.
+    report_json: str | None = None
+
+
+#: Exceptions whose text alone says nothing: ``KeyError('x')`` reads "'x'".
+_BARE_ERRORS = (LookupError, AttributeError, TypeError, AssertionError, NotImplementedError)
+
+
+def describe_error(error: BaseException) -> str:
+    """An exception as a job shows it to the person who started the job.
+
+    The message, not the Python expression: ``ValueError("API key not found")``
+    is stored as "API key not found". Where the message is empty or means
+    nothing without the kind of error, the kind is put in front.
+    """
+    text = str(error).strip()
+    if not text:
+        return type(error).__name__
+    if isinstance(error, _BARE_ERRORS):
+        return f"{type(error).__name__}: {text}"
+    return text
 
 
 class JobViewTicket(BaseModel):

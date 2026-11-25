@@ -269,7 +269,10 @@ class JobStore:
             ).first()
         if row is None:
             return None
-        return JobDetail(**_summary_fields(row), report=row.report)
+        report_json = (
+            None if row.report is None else json.dumps(row.report, indent=2, ensure_ascii=False)
+        )
+        return JobDetail(**_summary_fields(row), report=row.report, report_json=report_json)
 
     def list_for_user(
         self,

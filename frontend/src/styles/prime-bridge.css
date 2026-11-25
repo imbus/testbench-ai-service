@@ -172,6 +172,14 @@
   background: transparent;
   border-color: var(--color-divider);
 }
+/* A scrollable table's header is sticky, and Prime's theme gives it its own
+   light background so rows do not show through. It has to be opaque, so it
+   takes the page colour of the current theme instead of that fixed white. */
+.p-datatable.p-datatable-scrollable .p-datatable-thead,
+.p-datatable.p-datatable-scrollable .p-datatable-tfoot,
+.p-datatable .p-frozen-column {
+  background: var(--color-bg);
+}
 .p-datatable .p-datatable-tbody > tr {
   background: transparent;
   color: var(--color-text);

@@ -219,54 +219,63 @@ export function ModelTable({
         />
       </DataTable>
 
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 1fr 1fr auto',
-          gap: 12,
-          alignItems: 'end',
-        }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label htmlFor="model-new-name" style={{ fontSize: 11 }}>
-            {t('modelNewName')}
-          </label>
-          <InputText
-            id="model-new-name"
-            value={newName}
+      {/* Adding is the only thing this row does, so a read-only viewer gets no row. */}
+      {!readOnly && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr 1fr auto',
+            gap: 12,
+            alignItems: 'end',
+          }}
+        >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label htmlFor="model-new-name" style={{ fontSize: 11 }}>
+              {t('modelNewName')}
+            </label>
+            <InputText
+              id="model-new-name"
+              value={newName}
+              disabled={readOnly}
+              onChange={(event) => setNewName(event.target.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label htmlFor="model-new-provider" style={{ fontSize: 11 }}>
+              {t('modelNewProvider')}
+            </label>
+            <Dropdown
+              inputId="model-new-provider"
+              value={newProvider}
+              disabled={readOnly}
+              options={PROVIDERS.map((provider) => ({
+                value: provider,
+                label: PROVIDER_LABELS[provider] ?? provider,
+              }))}
+              onChange={(event) => onProviderChange(event.value)}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <label htmlFor="model-new-routing" style={{ fontSize: 11 }}>
+              {t('modelNewRouting')}
+            </label>
+            <Dropdown
+              inputId="model-new-routing"
+              value={newRouting}
+              disabled={readOnly}
+              options={routingChoicesFor(newProvider)}
+              onChange={(event) => setNewRouting(event.value as RoutingFamily)}
+            />
+          </div>
+          <Button
+            type="button"
+            outlined
+            label={t('modelAdd')}
             disabled={readOnly}
-            onChange={(event) => setNewName(event.target.value)}
+            onClick={onAdd}
           />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label htmlFor="model-new-provider" style={{ fontSize: 11 }}>
-            {t('modelNewProvider')}
-          </label>
-          <Dropdown
-            inputId="model-new-provider"
-            value={newProvider}
-            disabled={readOnly}
-            options={PROVIDERS.map((provider) => ({
-              value: provider,
-              label: PROVIDER_LABELS[provider] ?? provider,
-            }))}
-            onChange={(event) => onProviderChange(event.value)}
-          />
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <label htmlFor="model-new-routing" style={{ fontSize: 11 }}>
-            {t('modelNewRouting')}
-          </label>
-          <Dropdown
-            inputId="model-new-routing"
-            value={newRouting}
-            disabled={readOnly}
-            options={routingChoicesFor(newProvider)}
-            onChange={(event) => setNewRouting(event.value as RoutingFamily)}
-          />
-        </div>
-        <Button type="button" outlined label={t('modelAdd')} disabled={readOnly} onClick={onAdd} />
-      </div>
+      )}
     </SectionPanel>
   )
 }

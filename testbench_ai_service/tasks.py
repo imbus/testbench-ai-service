@@ -5,6 +5,7 @@ from testbench_cli_reporter.testbench import Connection as TBConnection
 
 from testbench_ai_service.agents.base import Agent
 from testbench_ai_service.jobs.handle import JobHandle, current_job, job_scope
+from testbench_ai_service.jobs.models import describe_error
 from testbench_ai_service.jobs.store import JobStore
 from testbench_ai_service.llm.base import LLMClient, NoLLMClient
 from testbench_ai_service.llm.factory import LLMFactory
@@ -125,4 +126,6 @@ async def _run_agent(
         )
         if job_store is not None and job_id is not None:
             # A fail() the agent called before already ended the job; finish keeps that first outcome.
-            await job_store.run(job_store.finish, job_id, "failed", repr(e)[:_MAX_ERROR_LENGTH])
+            await job_store.run(
+                job_store.finish, job_id, "failed", describe_error(e)[:_MAX_ERROR_LENGTH]
+            )

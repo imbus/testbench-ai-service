@@ -67,7 +67,8 @@ describe('DiffDialog', () => {
 
     renderDialog()
 
-    expect(await screen.findByText(/\/tmp\/config\.toml/)).toBeInTheDocument()
+    // Once per header line of the unified diff, each its own line element.
+    expect(await screen.findAllByText(/\/tmp\/config\.toml/)).toHaveLength(2)
   })
 
   it('warns that the change needs a restart', async () => {

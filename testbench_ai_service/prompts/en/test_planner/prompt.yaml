@@ -23,6 +23,7 @@ variants:
         name: "Selection size (% of the knee)"
         description: "100 ends at the knee. Higher values select more test cases, lower values fewer, e.g. 150 = one and a half times as many."
         value_type: "number"
+        minimum: 1
         default_value: 100
         required: false
     messages: []
@@ -33,6 +34,7 @@ variants:
       count:
         name: "Number of test cases"
         value_type: "number"
+        minimum: 1
         default_value: 40
         required: false
     messages: []
@@ -43,6 +45,7 @@ variants:
       budget_minutes:
         name: "Time budget (minutes)"
         value_type: "number"
+        minimum: 1
         default_value: 240
         required: false
     messages: []
@@ -53,6 +56,8 @@ variants:
       coverage_percent:
         name: "Target coverage (%)"
         value_type: "number"
+        minimum: 1
+        maximum: 100
         default_value: 100
         required: false
     messages: []

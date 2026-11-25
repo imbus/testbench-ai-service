@@ -50,16 +50,84 @@ def _render_env() -> SandboxedEnvironment:
     )
 
 
-def lint_template(content: str) -> LintResponse:
-    """Parse *content* as Jinja and report a syntax error, if any."""
+#: Tags that open a block which must be closed by ``end<tag>``.
+_BLOCK_TAGS = frozenset(
+    {"if", "for", "macro", "call", "filter", "with", "block", "raw", "autoescape", "trans"}
+)
+
+
+def _unclosed_block(content: str) -> tuple[str, int] | None:
+    """The innermost block *content* opens and never closes, with its line.
+
+    Jinja reports an unclosed block where it noticed -- at the end of the
+    template -- which for a long prompt is a screen away from the ``{% if %}``
+    that needs its ``{% endif %}``. Walking the tags finds where it started.
+    """
+    open_blocks: list[tuple[str, int]] = []
     try:
-        _lint_env().parse(content)
-    except TemplateSyntaxError as e:
-        return LintResponse(
-            ok=False,
-            errors=[LintError(line=e.lineno or 1, column=1, message=e.message or "Syntax error")],
+        tokens = list(_lint_env().lex(content))
+    except TemplateSyntaxError:
+        return None
+    for index, (line, kind, _value) in enumerate(tokens):
+        if kind != "block_begin":
+            continue
+        name = next((value for _l, k, value in tokens[index + 1 :] if k != "whitespace"), "")
+        if name in _BLOCK_TAGS:
+            open_blocks.append((name, line))
+        elif name == "set":
+            # `{% set x %}...{% endset %}` is a block; `{% set x = 1 %}` is not.
+            rest = [k for _l, k, _v in tokens[index + 1 :]]
+            end = rest.index("block_end") if "block_end" in rest else len(rest)
+            if "operator" not in rest[:end]:
+                open_blocks.append((name, line))
+        elif name.startswith("end") and open_blocks and open_blocks[-1][0] == name[3:]:
+            open_blocks.pop()
+    return open_blocks[-1] if open_blocks else None
+
+
+def _unusable_nodes(template: nodes.Template) -> list[LintError]:
+    """What parses but cannot render here: unknown filters and tests, other files.
+
+    The render environment has no loader and only the built-in filters, so these
+    fail at the first render -- for a prompt in use, in the middle of an agent run.
+    """
+    env = _render_env()
+    errors: list[LintError] = []
+    for node in template.find_all((nodes.Filter, nodes.Test)):
+        known = env.filters if isinstance(node, nodes.Filter) else env.tests
+        kind = "filter" if isinstance(node, nodes.Filter) else "test"
+        if node.name not in known:
+            errors.append(
+                LintError(line=node.lineno, column=1, message=f"No {kind} named '{node.name}'.")
+            )
+    for node in template.find_all((nodes.Include, nodes.Import, nodes.FromImport, nodes.Extends)):
+        tag = type(node).__name__.replace("FromImport", "from").lower()
+        errors.append(
+            LintError(
+                line=node.lineno,
+                column=1,
+                message=f"'{{% {tag} %}}' is not available: a prompt cannot load other files.",
+            )
         )
-    return LintResponse(ok=True, errors=[])
+    return sorted(errors, key=lambda error: error.line)
+
+
+def lint_template(content: str) -> LintResponse:
+    """Check *content* as a prompt template: its syntax, and that it can render here."""
+    try:
+        template = _lint_env().parse(content)
+    except TemplateSyntaxError as e:
+        line, message = e.lineno or 1, e.message or "Syntax error"
+        # Both of Jinja's ways of saying "a block was left open": it ran out of
+        # template, or it met an end tag that belongs to an outer block.
+        left_open = "end of template" in message or "needs to be closed" in message
+        unclosed = _unclosed_block(content) if left_open else None
+        if unclosed is not None:
+            tag, line = unclosed
+            message = f"'{{% {tag} %}}' is never closed: '{{% end{tag} %}}' is missing."
+        return LintResponse(ok=False, errors=[LintError(line=line, column=1, message=message)])
+    errors = _unusable_nodes(template)
+    return LintResponse(ok=not errors, errors=errors)
 
 
 def render_messages(

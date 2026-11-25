@@ -82,6 +82,22 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
           typeof (body.detail as Record<string, unknown>).message === 'string'
         ) {
           message = (body.detail as Record<string, unknown>).message as string
+        } else if (Array.isArray(body.detail)) {
+          // FastAPI's own request validation: a list of { loc, msg }. Without
+          // this the operator is told "status 422" and nothing about which
+          // input was wrong.
+          const parts = (body.detail as unknown[])
+            .map((entry) => {
+              if (entry === null || typeof entry !== 'object') return null
+              const { loc, msg } = entry as { loc?: unknown; msg?: unknown }
+              if (typeof msg !== 'string') return null
+              const where = Array.isArray(loc)
+                ? loc.filter((part) => part !== 'body' && part !== 'query').join('.')
+                : ''
+              return where ? `${where}: ${msg}` : msg
+            })
+            .filter((part): part is string => part !== null)
+          if (parts.length > 0) message = parts.join('; ')
         }
       }
     } catch {

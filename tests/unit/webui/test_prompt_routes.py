@@ -1,5 +1,6 @@
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi import HTTPException
@@ -614,3 +615,188 @@ def test_a_fork_does_not_take_up_a_pending_restart_only_change(admin_client, app
     assert response.status_code == 200
     assert response.json()["reloaded"] is False
     assert app.state.config.port == running_port
+
+
+# --- A file that changed on disk while the editor had it open ---------------------------
+
+DOC_URL = "/admin/api/prompts/de/explainer"
+
+
+def _loaded_save_body(admin_client, **changes) -> dict:
+    """The document as the editor would save it right after loading, plus *changes*."""
+    doc = admin_client.get(DOC_URL).json()
+    keep = ("name", "summary", "description", "default_model", "default_variant", "variants")
+    return {**{key: doc[key] for key in keep}, "revisions": doc["revisions"], **changes}
+
+
+def _edit_system_message(body: dict, content: str) -> dict:
+    body["variants"][0]["messages"][0]["content"] = content
+    return body
+
+
+def test_the_document_carries_a_revision_per_file(admin_client, prompt_tree):
+    revisions = admin_client.get(DOC_URL).json()["revisions"]
+
+    agent = prompt_tree / "de" / "explainer"
+    assert {Path(path) for path in revisions} == {
+        agent / "prompt.yaml",
+        agent / "system.jinja",
+        agent / "user.jinja",
+    }
+
+
+def test_the_plan_names_a_file_someone_else_changed(admin_client, prompt_tree):
+    body = _edit_system_message(_loaded_save_body(admin_client), "Mein Text")
+    user = prompt_tree / "de/explainer/user.jinja"
+    user.write_text("Von jemand anderem", encoding="utf-8")
+
+    plan = admin_client.post(f"{DOC_URL}/plan", json=body).json()
+
+    # The editor never touched user.jinja, yet its stale copy would replace the change.
+    assert plan["changed_on_disk"] == [str(user)]
+    assert str(user) in plan["updated"]
+
+
+def test_a_plan_without_outside_changes_reports_none(admin_client):
+    body = _edit_system_message(_loaded_save_body(admin_client), "Mein Text")
+
+    assert admin_client.post(f"{DOC_URL}/plan", json=body).json()["changed_on_disk"] == []
+
+
+def test_a_save_over_a_file_someone_else_changed_is_refused(admin_client, prompt_tree):
+    body = _edit_system_message(_loaded_save_body(admin_client), "Mein Text")
+    agent = prompt_tree / "de/explainer"
+    (agent / "user.jinja").write_text("Von jemand anderem", encoding="utf-8")
+
+    response = admin_client.put(DOC_URL, json=body)
+
+    assert response.status_code == 409
+    assert "user.jinja" in response.json()["detail"]
+    assert (agent / "user.jinja").read_text(encoding="utf-8") == "Von jemand anderem"
+    assert (agent / "system.jinja").read_text(encoding="utf-8") == "Du bist {{ agent.role }}"
+
+
+def test_a_save_is_refused_when_the_file_being_edited_changed_too(admin_client, prompt_tree):
+    body = _edit_system_message(_loaded_save_body(admin_client), "Mein Text")
+    system = prompt_tree / "de/explainer/system.jinja"
+    system.write_text("Parallel bearbeitet", encoding="utf-8")
+
+    assert admin_client.put(DOC_URL, json=body).status_code == 409
+    assert system.read_text(encoding="utf-8") == "Parallel bearbeitet"
+
+
+def test_a_confirmed_save_overwrites_the_changed_file(admin_client, prompt_tree):
+    body = _edit_system_message(
+        _loaded_save_body(admin_client, overwrite_changed=True), "Mein Text"
+    )
+    agent = prompt_tree / "de/explainer"
+    (agent / "user.jinja").write_text("Von jemand anderem", encoding="utf-8")
+
+    response = admin_client.put(DOC_URL, json=body)
+
+    assert response.status_code == 200, response.text
+    assert (agent / "user.jinja").read_text(encoding="utf-8") == "Nutzer-Text"
+    assert (agent / "system.jinja").read_text(encoding="utf-8") == "Mein Text"
+
+
+def test_a_change_to_a_file_the_save_leaves_alone_is_no_conflict(admin_client, prompt_tree):
+    """Someone else's edit and this save agree on user.jinja: the save does not write it."""
+    agent = prompt_tree / "de/explainer"
+    (agent / "user.jinja").write_text("Von jemand anderem", encoding="utf-8")
+    body = _loaded_save_body(admin_client)
+    (agent / "system.jinja").write_text("Du bist {{ agent.role }}", encoding="utf-8")
+    body = _edit_system_message(body, "Mein Text")
+
+    assert admin_client.put(DOC_URL, json=body).status_code == 200
+    assert (agent / "user.jinja").read_text(encoding="utf-8") == "Von jemand anderem"
+
+
+def test_a_save_without_revisions_is_not_checked(admin_client, prompt_tree):
+    body = _edit_system_message(_loaded_save_body(admin_client), "Mein Text")
+    del body["revisions"]
+    (prompt_tree / "de/explainer/user.jinja").write_text("Von jemand anderem", encoding="utf-8")
+
+    assert admin_client.put(DOC_URL, json=body).status_code == 200
+
+
+def test_a_second_save_after_reloading_is_accepted(admin_client, prompt_tree):
+    first = _edit_system_message(_loaded_save_body(admin_client), "Erster Stand")
+    assert admin_client.put(DOC_URL, json=first).status_code == 200
+
+    second = _edit_system_message(_loaded_save_body(admin_client), "Zweiter Stand")
+
+    assert admin_client.put(DOC_URL, json=second).status_code == 200
+    system = prompt_tree / "de/explainer/system.jinja"
+    assert system.read_text(encoding="utf-8") == "Zweiter Stand"
+
+
+# --- Keys the prompt format does not know, and the fork proposal ------------------------
+
+
+def test_the_document_names_keys_the_format_does_not_know(admin_client, prompt_tree):
+    path = prompt_tree / "de/explainer/prompt.yaml"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(
+        "defualt_model: typo\n" + text.replace('- name: "A"', '- name: "A"\n    colour: blue', 1),
+        encoding="utf-8",
+    )
+
+    unknown = admin_client.get(DOC_URL).json()["unknown_keys"]
+
+    assert "defualt_model" in unknown
+    assert any(key.endswith(".colour") for key in unknown)
+
+
+def test_a_clean_document_names_no_unknown_keys(admin_client):
+    assert admin_client.get(DOC_URL).json()["unknown_keys"] == []
+
+
+def test_the_fork_target_is_what_a_fork_without_a_directory_would_use(admin_client, prompt_tree):
+    target = admin_client.get(f"{DOC_URL}/fork-target", params={"project": "Car Configurator"})
+
+    assert target.json() == {"directory": "explainer__car-configurator", "exists": False}
+
+    (prompt_tree / "de" / "explainer__car-configurator").mkdir()
+    again = admin_client.get(f"{DOC_URL}/fork-target", params={"project": "Car Configurator"})
+    assert again.json()["exists"] is True
+
+
+def test_a_project_name_without_a_usable_slug_proposes_nothing(admin_client):
+    target = admin_client.get(f"{DOC_URL}/fork-target", params={"project": "..."})
+
+    assert target.json() == {"directory": "", "exists": False}
+
+
+# --- A field the agent does not provide --------------------------------------------------
+
+_SAMPLE = "testbench_ai_service.webui.routes.agent_context_sample"
+
+
+def test_a_save_reading_a_field_the_agent_lacks_is_refused(admin_client, prompt_tree):
+    """The service refuses such a prompt when it starts; the save must not write it."""
+    body = _edit_system_message(_loaded_save_body(admin_client), "Du bist {{ agent.nope }}")
+
+    with patch(_SAMPLE, return_value={"role": "<str>"}):
+        planned = admin_client.post(f"{DOC_URL}/plan", json=body)
+        saved = admin_client.put(DOC_URL, json=body)
+
+    assert planned.status_code == 422
+    assert saved.status_code == 422
+    assert "agent.nope" in saved.json()["detail"]
+    assert "agent.role" in saved.json()["detail"]
+    system = prompt_tree / "de/explainer/system.jinja"
+    assert system.read_text(encoding="utf-8") == "Du bist {{ agent.role }}"
+
+
+def test_a_save_reading_only_fields_the_agent_provides_goes_through(admin_client):
+    body = _edit_system_message(_loaded_save_body(admin_client), "Rolle: {{ agent.role }}!")
+
+    with patch(_SAMPLE, return_value={"role": "<str>"}):
+        assert admin_client.put(DOC_URL, json=body).status_code == 200
+
+
+def test_an_agent_whose_fields_are_unknown_is_not_checked(admin_client):
+    body = _edit_system_message(_loaded_save_body(admin_client), "Du bist {{ agent.nope }}")
+
+    with patch(_SAMPLE, return_value={}):
+        assert admin_client.put(DOC_URL, json=body).status_code == 200

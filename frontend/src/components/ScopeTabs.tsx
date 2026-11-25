@@ -16,13 +16,22 @@ export interface ScopeAddLabels {
 
 /** The picker texts from the console dictionary, for both screens that use the tabs. */
 export function scopeAddLabels(
-  t: (key: 'addProjectOverride' | 'scopeSearch' | 'scopeNoMatch' | 'scopePickHint') => string,
+  t: (
+    key:
+      | 'addProjectOverride'
+      | 'scopeSearch'
+      | 'scopeNoMatch'
+      | 'scopePickHint'
+      | 'scopePickHintReadOnly',
+  ) => string,
+  /** A viewer who cannot change anything is not told about saving. */
+  readOnly = false,
 ): ScopeAddLabels {
   return {
     button: t('addProjectOverride'),
     search: t('scopeSearch'),
     noMatch: t('scopeNoMatch'),
-    hint: t('scopePickHint'),
+    hint: t(readOnly ? 'scopePickHintReadOnly' : 'scopePickHint'),
   }
 }
 

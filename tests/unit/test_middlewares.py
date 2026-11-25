@@ -3,12 +3,13 @@ import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from starlette.testclient import TestClient
 
 from testbench_ai_service.log import LogContextFilter, log_in_request
 from testbench_ai_service.log import logger as service_logger
 from testbench_ai_service.middlewares import (
+    MAX_LOGGED_BODY,
     LoggingMiddleware,
     OutboundRequestLoggingMiddleware,
     RequestScopeMiddleware,
@@ -120,6 +121,82 @@ class TestLoggingMiddlewareRedaction:
         TestClient(app).post("/admin/api/session", json={"username": "a", "password": "geheim"})
         logged = " ".join(str(c) for c in mock_logger.debug.call_args_list)
         assert "geheim" not in logged
+
+
+def _debug_lines(mock_logger) -> list[str]:
+    return [str(call.args[0]) for call in mock_logger.debug.call_args_list]
+
+
+class TestLoggingMiddlewareBodies:
+    """Only text a reader can use is written to the log (console assets, uploads are not)."""
+
+    @staticmethod
+    def _app() -> FastAPI:
+        app = FastAPI()
+        app.add_middleware(LoggingMiddleware)
+
+        @app.get("/asset.js")
+        async def asset():
+            return Response("const secret = 'bundle-content'", media_type="text/javascript")
+
+        @app.get("/font.woff2")
+        async def font():
+            return Response(b"wOF2" + bytes(range(256)), media_type="font/woff2")
+
+        @app.get("/big")
+        async def big():
+            return {"data": "x" * (MAX_LOGGED_BODY * 2)}
+
+        @app.post("/upload")
+        async def upload(request: Request):
+            return {"size": len(await request.body())}
+
+        return app
+
+    @patch("testbench_ai_service.middlewares.logger")
+    def test_a_script_is_named_but_not_logged(self, mock_logger):
+        response = TestClient(self._app()).get("/asset.js")
+
+        assert response.text == "const secret = 'bundle-content'"
+        lines = _debug_lines(mock_logger)
+        assert "Response Body: <text/javascript, 31 bytes, not logged>" in lines
+        assert not any("bundle-content" in line for line in lines)
+
+    @patch("testbench_ai_service.middlewares.logger")
+    def test_a_binary_file_reaches_the_client_whole_and_is_not_logged(self, mock_logger):
+        response = TestClient(self._app()).get("/font.woff2")
+
+        assert response.content == b"wOF2" + bytes(range(256))
+        assert not any("wOF2" in line for line in _debug_lines(mock_logger))
+
+    @patch("testbench_ai_service.middlewares.logger")
+    def test_a_json_response_is_still_logged(self, mock_logger):
+        TestClient(_make_app()).get("/ping")
+
+        assert 'Response Body: {"pong": true}' in _debug_lines(mock_logger)
+
+    @patch("testbench_ai_service.middlewares.logger")
+    def test_a_long_json_response_is_shortened_in_the_log_only(self, mock_logger):
+        response = TestClient(self._app()).get("/big")
+
+        assert len(response.json()["data"]) == MAX_LOGGED_BODY * 2
+        body = next(line for line in _debug_lines(mock_logger) if line.startswith("Response Body"))
+        assert len(body) < MAX_LOGGED_BODY + 200
+        assert "shortened" in body
+
+    @patch("testbench_ai_service.middlewares.logger")
+    def test_an_uploaded_file_is_named_but_not_logged(self, mock_logger):
+        response = TestClient(self._app()).post(
+            "/upload", files={"file": ("a.whl", b"PK-wheel-bytes", "application/octet-stream")}
+        )
+
+        assert response.json()["size"] > len(b"PK-wheel-bytes")
+        lines = _debug_lines(mock_logger)
+        assert any(
+            line.startswith("Request Body: <multipart/form-data, ") and "not logged" in line
+            for line in lines
+        )
+        assert not any("PK-wheel-bytes" in line for line in lines)
 
 
 class _Capture(logging.Handler):

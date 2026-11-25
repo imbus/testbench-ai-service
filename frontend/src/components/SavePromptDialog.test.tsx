@@ -27,17 +27,17 @@ describe('SavePromptDialog', () => {
     // is exactly the behaviour this component exists to avoid.
     const created = within(screen.getByTestId('confirm-created'))
     expect(created.getByText('Neu angelegt:')).toBeInTheDocument()
-    expect(created.getByText('/p/de/x/fresh.jinja')).toBeInTheDocument()
+    expect(created.getByText('…/de/x/fresh.jinja')).toBeInTheDocument()
 
     const updated = within(screen.getByTestId('confirm-updated'))
     expect(updated.getByText('Geändert:')).toBeInTheDocument()
-    expect(updated.getByText('/p/de/x/prompt.yaml')).toBeInTheDocument()
+    expect(updated.getByText('…/de/x/prompt.yaml')).toBeInTheDocument()
 
     const deleted = within(screen.getByTestId('confirm-deleted'))
     expect(
       deleted.getByText('Gelöscht (wird von keinem Prompt mehr verwendet):'),
     ).toBeInTheDocument()
-    expect(deleted.getByText('/p/de/x/old.jinja')).toBeInTheDocument()
+    expect(deleted.getByText('…/de/x/old.jinja')).toBeInTheDocument()
   })
 
   it('explains why nothing will be deleted', () => {
@@ -112,5 +112,51 @@ describe('SavePromptDialog', () => {
       />,
     )
     expect(screen.getByRole('button', { name: 'Wird gespeichert…' })).toBeDisabled()
+  })
+
+  it('names files changed on disk and asks to overwrite them', () => {
+    render(
+      <SavePromptDialog
+        plan={{ ...PLAN, changed_on_disk: ['/p/de/x/user.jinja'] }}
+        error={null}
+        pending={false}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    )
+    const warning = within(screen.getByTestId('confirm-changed-on-disk'))
+    expect(warning.getByText('…/de/x/user.jinja')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Trotzdem überschreiben' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Bestätigen' })).not.toBeInTheDocument()
+  })
+
+  it('shows no overwrite warning when nothing changed on disk', () => {
+    render(
+      <SavePromptDialog
+        plan={{ ...PLAN, changed_on_disk: [] }}
+        error={null}
+        pending={false}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    )
+    expect(screen.queryByTestId('confirm-changed-on-disk')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Trotzdem überschreiben' })).not.toBeInTheDocument()
+  })
+
+  it('shows the file name of a long server path and keeps the full path as the tooltip', () => {
+    const long =
+      'C:\\Users\\someone\\AppData\\Local\\Temp\\prompts\\de\\defect_explainer\\detail_user.jinja'
+    render(
+      <SavePromptDialog
+        plan={{ ...PLAN, updated: [long] }}
+        error={null}
+        pending={false}
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    )
+    const entry = screen.getByText('…/de/defect_explainer/detail_user.jinja')
+    expect(entry).toHaveAttribute('title', long)
   })
 })

@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 import tomllib
 
-from testbench_ai_service.webui.validate import validate_config_dict
+from testbench_ai_service.webui.validate import _windows_name_problem, validate_config_dict
 
 TB_URL = "https://localhost:9443/api/"
 
@@ -434,3 +434,65 @@ def test_both_bad_log_paths_are_reported(tmp_path):
         "logging.file.file_name",
         "logging.activity.file_name",
     ]
+
+
+@pytest.mark.parametrize("section", ["console", "file"])
+@pytest.mark.parametrize(
+    "log_format",
+    ["%(levelname", "%(nosuchfield)s %(message)s", "%(message)d", "%(levelname)s %z", "plain text"],
+)
+def test_a_log_format_that_cannot_format_a_record_is_addressed_to_its_field(section, log_format):
+    config, issues = validate_config_dict({"logging": {section: {"log_format": log_format}}})
+
+    assert config is None
+    assert [issue.path for issue in issues] == [f"logging.{section}.log_format"]
+    assert issues[0].toml_section == f"[testbench-ai-service.logging.{section}]"
+
+
+@pytest.mark.parametrize(
+    "log_format",
+    ["%(asctime)s - %(levelname)8s - %(name)s - %(message)s", "%(message)s", ""],
+)
+def test_a_usable_log_format_is_accepted(log_format):
+    config, issues = validate_config_dict(
+        {"logging": {"console": {"log_format": log_format}, "file": {"log_format": log_format}}}
+    )
+
+    assert issues == []
+    assert config is not None
+
+
+@pytest.mark.parametrize(
+    "file_name",
+    [
+        "a<b>|?*.log",
+        "logs/what?.log",
+        "NUL",
+        "nul.log",
+        "logs/COM1",
+        "service.log.",
+        "bad\tname.log",
+    ],
+)
+def test_a_name_windows_cannot_create_is_named(file_name):
+    assert _windows_name_problem(Path(file_name)) is not None
+
+
+@pytest.mark.parametrize(
+    "file_name",
+    ["testbench-ai-service.log", "logs/service.log", "../logs/service.log", "./a.log", "null.log"],
+)
+def test_an_ordinary_name_passes_the_windows_check(file_name):
+    assert _windows_name_problem(Path(file_name)) is None
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows file name rules")
+def test_a_windows_drive_path_passes_and_a_forbidden_name_is_rejected(tmp_path):
+    assert _windows_name_problem(tmp_path / "service.log") is None
+
+    config, issues = validate_config_dict(
+        {"logging": {"file": {"file_name": str(tmp_path / "a<b>.log")}}}
+    )
+
+    assert config is None
+    assert [issue.path for issue in issues] == ["logging.file.file_name"]

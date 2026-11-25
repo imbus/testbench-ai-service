@@ -50,6 +50,7 @@ every request that changes state.
 
 A session ends after 60 minutes without activity, after 8 hours in total, or as
 soon as you sign out — whichever comes first.
+When it ends on its own, the sign-in screen says so.
 
 If the sign-in fails, the console names the likely cause — wrong credentials,
 TestBench not reachable, an invalid `tb_server_url`, or the service itself not
@@ -70,6 +71,9 @@ The console reads your global TestBench roles at sign-in:
 Editing is Administrator-only. A non-admin session sees the same screens with
 the values displayed rather than as form fields, and every route that changes
 something refuses a non-admin regardless of what the browser sends.
+The top bar names such a session **Read only**, whatever the TestBench role
+behind it. The raw `config.toml` screen shows a read-only viewer the file as it
+is on the server, with credentials hidden.
 
 ---
 
@@ -87,7 +91,8 @@ Edits are queued, reviewed, then written — nothing is saved as you type.
    throws the queued changes away after you confirm.
 
 Queued changes live in your browser, so they survive a page reload and are not
-visible to anyone else. Two administrators editing at once do not clobber each
+visible to anyone else. Signing out discards them; the console asks first, as
+it does for unsaved edits in the prompt editor. Two administrators editing at once do not clobber each
 other silently: the diff is always computed against the file as it is on disk at
 that moment, so the second one to apply sees the first one's changes in the
 diff.
@@ -101,6 +106,8 @@ every default.
 
 Clearing a field removes its key rather than writing an empty value, so the
 setting returns to its documented default.
+A table whose last key is removed this way is removed with it, unless it still
+holds a comment; a table the console adds is set apart by a blank line.
 
 The previous contents are kept as `config.toml.bak` next to the file. That is a
 single undo step, not a history: each save overwrites it.
@@ -124,6 +131,7 @@ These cannot be swapped in a running process:
 | `trusted_proxies` | Fixed when the middleware stack is built |
 | `admin_ui.enabled` | The console and its static files are mounted once, at startup |
 | An agent's `endpoint_path` or `class_path` | Agent routes are registered once, at startup |
+| Enabling an agent that was disabled when the service started | A disabled agent gets no route at startup. Disabling is immediate, and so is enabling an agent again that was only disabled since the last start |
 
 Note that `admin_ui.require_loopback` is hot-swappable — it is read per request,
 unlike its sibling `admin_ui.enabled`.
@@ -193,9 +201,9 @@ instead.
 
 ## Jobs
 
-The **Jobs** screen lists the agent runs you triggered, newest first: agent, item (the unique ID of the element the agent was triggered on), project, start time, status and duration. The duration ticks every second while a job runs. Narrow the list by agent, and by status with the chips **All**, **Running**, **Succeeded** and **Failed**.
+The **Jobs** screen lists the agent runs you triggered, newest first: agent, item (the unique ID of the element the agent was triggered on), project, start time, status and duration. The duration ticks every second while a job runs. Narrow the list by agent, and by status with the chips **All**, **Running**, **Succeeded** and **Failed**. The list starts with the newest 50 jobs and says so when there are more; **Load more** adds older ones, up to 200 — beyond that, narrow the filters.
 
-Each row is a link to the job's own page, `/admin/jobs/<job id>`, so you can open a job in a new tab, copy its link or compare two reports side by side. The page shows project, element, progress, warnings, the error of a failed run and, if the agent stores one, its report. **Newer job** and **Older job** step through the filtered list; **All jobs** returns to it with the filters kept. The same view opens outside the console when the TestBench plugin links to a job (see [Agents](agents/index.md)).
+Each row is a link to the job's own page, `/admin/jobs/<job id>`, so you can open a job in a new tab, copy its link or compare two reports side by side. The page shows project, element, progress, warnings, the error of a failed run and, if the agent stores one, its report. **Newer job** and **Older job** step through the filtered list; **All jobs** returns to it with the filters kept. The same view opens outside the console when the TestBench plugin links to a job (see [Agents](agents/index.md)). A report without a view of its own is laid out from its shape; its **JSON** view shows the stored text exactly, including numbers too large for the browser to hold. A job id that does not exist, or belongs to someone else, is answered with a plain "this job does not exist".
 
 The list refreshes every few seconds while a job runs, otherwise every ten seconds and whenever you switch back to the tab, so jobs you start from TestBench show up without a reload. You only ever see your own jobs, administrators included. Jobs are deleted after `retention_days` (see [Configuration](configuration.md#jobs)).
 
@@ -348,10 +356,13 @@ another template file. **Render** renders one step at a time: pick it in
 the **Step** field beside the output. Opened from a step message, Render
 starts on that message's step. The test run below does not cover steps yet.
 
-A message body is edited in a Jinja-aware code editor. The **Lint** button
-checks every message of the selected variant at once, on demand — it does not
-check continuously as you type — and reports the line of the first error in
-each. It is available to any signed-in session. **Render** evaluates the
+A message body is edited in a Jinja-aware code editor. The open message is
+checked as you type; the **Lint** button checks every message of the selected
+variant at once. The check covers the syntax and what could not render here:
+a filter or test the service does not have, and `{% include %}`, `{% import %}`
+or `{% extends %}`, since a prompt cannot load other files. A block that is
+never closed is reported on the line that opens it. Lint is available to any
+signed-in session. **Render** evaluates the
 variant's messages against its variables and the agent's own context, and is
 **Administrator-only** — unlike lint, it executes the template text, so a
 non-admin session sees lint errors but no Render button. Preview always runs
@@ -409,6 +420,22 @@ server against the files as they are on disk at that moment, not guessed in
 the browser, so it is the same work the save itself will do. A save the server
 would refuse is refused in that dialog, with the reason, before anything is
 written.
+
+A save keeps the line endings each file already has; a new template file takes
+those of its `prompt.yaml`. A variable name must be usable as `{{ vars.<name> }}`
+— a letter or underscore, then letters, digits and underscores — and a save
+with another name is refused. If `prompt.yaml` holds keys the prompt format
+does not know (a typo, a key from another tool), the editor names them: the
+service refuses such a file at its next start, and a save removes them.
+
+If a file the save would replace was changed on the server after you opened
+the prompt — by a colleague in the console, or by hand — the dialog names it
+and the button reads **Overwrite anyway**. The editor always sends the whole
+prompt, so this also covers a file you did not touch yourself. Cancel and
+reload the page to take the other change over, or confirm to replace it with
+what the editor holds; the replaced content is kept in the `.bak` file. A file
+that changes between the dialog and the save is not overwritten: the save is
+refused and names it.
 
 ### Moving a message between the YAML and its own file
 
@@ -481,8 +508,9 @@ prompts_dir/<language>/<agent>__<project-slug>/
 
 so it appears in the Prompts tree and can be opened in the editor on the next
 request. The project name is slugged for the directory name; the dialog shows
-the proposed path and lets you correct that last segment. A directory that
-already exists is refused by name rather than silently given a different one.
+the proposed path, takes it when the field is left empty, and lets you type
+another last segment. A directory that already exists is named in the dialog
+and refused rather than silently given a different one.
 
 The copy contains the prompt's `prompt.yaml` plus a copy of every template it
 references, each under its own file name, with the YAML's `file:` references
@@ -523,9 +551,8 @@ if you want them gone.
 
 ### Still not available from the console
 
-Running a prompt against the configured model, editing a project's
-`llm_config`, and repointing an agent at a renamed variant (still refused,
-see above) are not available from the console.
+Editing a project's `llm_config` and repointing an agent at a renamed variant
+(still refused, see above) are not available from the console.
 
 ---
 

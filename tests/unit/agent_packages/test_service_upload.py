@@ -137,14 +137,101 @@ def test_not_a_wheel(tmp_path):
     assert not manifest_path(packages).exists()
 
 
+def _stored(packages: Path) -> list[Path]:
+    return [*(packages / "wheels").glob("*"), *(packages / "site").rglob("*")]
+
+
 def test_failure_after_move_cleans_up(tmp_path, monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("boom")
 
-    monkeypatch.setattr(service, "run_inspection", boom)
+    monkeypatch.setattr(service, "save_manifest", boom)
     packages = tmp_path / "packages"
     with pytest.raises(RuntimeError):
         _upload(packages, _wheel(tmp_path))
-    assert not list((packages / "wheels").glob("*"))
-    assert not list((packages / "site").rglob("*"))
+    assert _stored(packages) == []
     assert _leftovers(packages) == []
+
+
+def test_a_wheel_that_fails_the_inspection_is_not_stored(tmp_path):
+    packages = tmp_path / "packages"
+    broken = {
+        **VALID_AGENT_FILES,
+        "acme/rater/agent.py": "raise RuntimeError('broken at import')\n",
+    }
+
+    with pytest.raises(PackageInvalid, match=r"was not stored.*broken at import"):
+        _upload(packages, _wheel(tmp_path, files=broken))
+
+    assert _stored(packages) == []
+    assert _leftovers(packages) == []
+    assert not manifest_path(packages).exists()
+
+
+def test_a_wheel_without_entry_points_is_not_stored(tmp_path):
+    packages = tmp_path / "packages"
+    src = tmp_path / "src"
+    src.mkdir()
+    wheel = build_wheel(src, version="1.0.0", files=VALID_AGENT_FILES, entry_points={})
+
+    with pytest.raises(PackageInvalid, match="no entry point"):
+        _upload(packages, wheel)
+
+    assert _stored(packages) == []
+    assert _leftovers(packages) == []
+
+
+def test_a_wheel_is_inspected_outside_the_package_storage(tmp_path, monkeypatch):
+    packages = tmp_path / "packages"
+    inspected: list[Path] = []
+    run = service.run_inspection
+
+    def spy(site: Path):
+        inspected.append(site)
+        assert _stored(packages) == []
+        return run(site)
+
+    monkeypatch.setattr(service, "run_inspection", spy)
+    _upload(packages, _wheel(tmp_path))
+
+    assert [site.parent.parent for site in inspected] == [packages / "tmp"]
+
+
+def test_a_rejected_wheel_can_be_uploaded_again_once_fixed(tmp_path):
+    packages = tmp_path / "packages"
+    broken = {**VALID_AGENT_FILES, "acme/rater/agent.py": "raise RuntimeError('broken')\n"}
+    with pytest.raises(PackageInvalid):
+        _upload(packages, _wheel(tmp_path, files=broken, subdir="broken"))
+
+    assert _upload(packages, _wheel(tmp_path)).report.ok
+
+
+def test_a_wheel_with_one_broken_entry_point_is_stored_for_the_others(tmp_path):
+    """A finding about one entry point rules out that one, not the package."""
+    packages = tmp_path / "packages"
+    src = tmp_path / "src"
+    src.mkdir()
+    wheel = build_wheel(
+        src,
+        version="1.0.0",
+        files={**VALID_AGENT_FILES, "acme/broken.py": "raise RuntimeError('broken at import')\n"},
+        entry_points={**VALID_ENTRY_POINTS, "acme_broken": "acme.broken:Missing"},
+    )
+
+    entry = _upload(packages, wheel)
+
+    assert entry.report.ok is False
+    assert entry.report.agents["acme_rater"].ok is True
+    assert entry.report.agents["acme_broken"].ok is False
+    assert site_dir(packages, entry.name, entry.version).is_dir()
+
+
+def test_upload_works_with_a_packages_dir_relative_to_the_working_directory(tmp_path, monkeypatch):
+    """The default ``data/agent_packages`` is relative, and the inspection runs elsewhere."""
+    wheel = _wheel(tmp_path)
+    monkeypatch.chdir(tmp_path)
+
+    entry = _upload(Path("data") / "agent_packages", wheel)
+
+    assert entry.report.ok, entry.report.errors
+    assert (tmp_path / "data" / "agent_packages" / "wheels" / entry.filename).is_file()

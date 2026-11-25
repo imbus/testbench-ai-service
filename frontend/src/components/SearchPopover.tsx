@@ -14,6 +14,10 @@ const EDGE = 8
  * the anchor and the popup calls `onDismiss`; `anchor` should hold the
  * trigger, or pressing the trigger would close and reopen. Escape calls
  * `onEscape`, Enter in the search field calls `onEnter`.
+ *
+ * Arrow Down and Arrow Up walk the entries: from the search field into the
+ * list, through its buttons, and back up into the field. The entry that has
+ * focus is the one Enter picks, as for any button.
  */
 export function SearchPopover({
   anchor,
@@ -84,6 +88,24 @@ export function SearchPopover({
         if (event.key === 'Escape') {
           event.stopPropagation()
           onEscape()
+          return
+        }
+        if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+        const root = popup.current
+        if (!root) return
+        const search = root.querySelector<HTMLInputElement>('input[type="search"]')
+        const entries = Array.from(
+          root.querySelectorAll<HTMLButtonElement>('ul button:not([disabled])'),
+        )
+        if (entries.length === 0) return
+        event.preventDefault()
+        const at = entries.indexOf(document.activeElement as HTMLButtonElement)
+        if (event.key === 'ArrowDown') {
+          entries[Math.min(at + 1, entries.length - 1)].focus()
+        } else if (at <= 0) {
+          search?.focus()
+        } else {
+          entries[at - 1].focus()
         }
       }}
     >

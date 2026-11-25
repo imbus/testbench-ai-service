@@ -5,6 +5,12 @@ import type { PromptPlanResponse } from '../api/types'
 import { useTranslation } from 'react-i18next'
 import { Modal } from './Modal'
 
+/** The last three segments of a path: `<language>/<prompt>/<file>`. */
+export function shortPath(path: string): string {
+  const parts = path.split(/[\\/]/).filter(Boolean)
+  return parts.length <= 3 ? parts.join('/') : `…/${parts.slice(-3).join('/')}`
+}
+
 function FileGroup({
   heading,
   files,
@@ -20,8 +26,12 @@ function FileGroup({
       <div style={{ fontSize: 13 }}>{heading}</div>
       <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, fontFamily: 'var(--font-code)' }}>
         {files.map((file) => (
-          <li key={file} data-testid="confirm-file">
-            {file}
+          // The file's name is what tells the entries apart, and the server's
+          // absolute path used to push it off the edge of the dialog. The
+          // language and prompt folders are kept for context; the full path
+          // is the tooltip.
+          <li key={file} data-testid="confirm-file" title={file}>
+            {shortPath(file)}
           </li>
         ))}
       </ul>
@@ -65,9 +75,10 @@ export function SavePromptDialog({
   children?: ReactNode
 }) {
   const { t } = useTranslation()
+  const changedOnDisk = plan?.changed_on_disk ?? []
 
   return (
-    <Modal label={t('confirmSaveTitle')}>
+    <Modal label={t('confirmSaveTitle')} onClose={onCancel}>
       <h3 style={{ margin: 0 }}>{t('confirmSaveTitle')}</h3>
 
       {plan && (
@@ -101,6 +112,26 @@ export function SavePromptDialog({
         </>
       )}
 
+      {changedOnDisk.length > 0 && (
+        <Message
+          severity="warn"
+          style={{ justifyContent: 'flex-start', fontSize: 12 }}
+          content={
+            <div data-testid="confirm-changed-on-disk">
+              <div>{t('confirmSaveChangedOnDisk')}</div>
+              <ul style={{ margin: 0, paddingLeft: 18, fontFamily: 'var(--font-code)' }}>
+                {changedOnDisk.map((file) => (
+                  <li key={file} title={file}>
+                    {shortPath(file)}
+                  </li>
+                ))}
+              </ul>
+              <div>{t('confirmSaveChangedOnDiskHint')}</div>
+            </div>
+          }
+        />
+      )}
+
       {children}
 
       {error && (
@@ -115,7 +146,16 @@ export function SavePromptDialog({
         <Button type="button" outlined label={t('cancel')} onClick={onCancel} />
         <Button
           type="button"
-          label={pending ? (plan === null ? t('planning') : t('saving')) : t('confirm')}
+          label={
+            pending
+              ? plan === null
+                ? t('planning')
+                : t('saving')
+              : changedOnDisk.length > 0
+                ? t('confirmSaveOverwrite')
+                : t('confirm')
+          }
+          severity={changedOnDisk.length > 0 ? 'danger' : undefined}
           onClick={onConfirm}
           disabled={pending || plan === null}
         />

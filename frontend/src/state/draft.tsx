@@ -13,6 +13,34 @@ import { valueAt } from '../screens/fields'
 export const DRAFT_STORAGE_KEY = 'tbai_admin_draft'
 /** Who queued the stored draft, so another operator never inherits it. */
 export const DRAFT_OWNER_STORAGE_KEY = 'tbai_admin_draft_owner'
+/** On which screen each queued edit was made: dotted path to screen key. */
+export const DRAFT_ORIGIN_STORAGE_KEY = 'tbai_admin_draft_origins'
+
+/** The console screens that queue config edits, by the route they live under. */
+const ORIGIN_SCREENS = ['service', 'llm', 'logging', 'agents', 'projects'] as const
+export type DraftOrigin = (typeof ORIGIN_SCREENS)[number]
+
+/**
+ * The screen the operator is on right now, if it is one that queues edits.
+ *
+ * Read off the address rather than passed in by every caller: one setting can
+ * be edited on more than one screen (a project's agent switch sits on Projects
+ * and on Agents), so the path alone cannot say where a change was made.
+ */
+function currentScreen(): DraftOrigin | undefined {
+  const match = /\/admin\/([a-z-]+)/.exec(window.location.pathname)
+  return ORIGIN_SCREENS.find((screen) => screen === match?.[1])
+}
+
+function readOrigins(): Record<string, DraftOrigin> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(DRAFT_ORIGIN_STORAGE_KEY) ?? '{}')
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return parsed as Record<string, DraftOrigin>
+  } catch {
+    return {}
+  }
+}
 
 /**
  * The operator's uncommitted edits: dotted config path to new value.
@@ -35,6 +63,8 @@ export interface DraftApi {
   unsetSubtree: (path: string) => void
   revert: (path: string) => void
   discardAll: () => void
+  /** The screen a queued edit was made on, when that is known. */
+  originOf?: (path: string) => DraftOrigin | undefined
 }
 
 const DraftContext = createContext<DraftApi | null>(null)
@@ -123,47 +153,77 @@ export function DraftProvider({
     }
   }, [effective, saved])
 
-  const setValue = useCallback((path: string, value: unknown) => {
-    setEdits((current) => ({ ...current, [path]: value }))
+  // Where each edit was made. Kept beside the edits rather than inside them:
+  // the edits object is what is sent to the server, verbatim.
+  const [origins, setOrigins] = useState<Record<string, DraftOrigin>>(readOrigins)
+  const noteOrigin = useCallback((path: string) => {
+    const screen = currentScreen()
+    if (screen) setOrigins((current) => ({ ...current, [path]: screen }))
   }, [])
+  useEffect(() => {
+    if (saved === undefined) return
+    try {
+      const kept = Object.fromEntries(Object.entries(origins).filter(([path]) => path in effective))
+      if (Object.keys(kept).length === 0) window.localStorage.removeItem(DRAFT_ORIGIN_STORAGE_KEY)
+      else window.localStorage.setItem(DRAFT_ORIGIN_STORAGE_KEY, JSON.stringify(kept))
+    } catch {
+      // Losing the origins only costs the strip its exact chip.
+    }
+  }, [origins, effective, saved])
 
-  const unsetValue = useCallback((path: string) => {
-    setEdits((current) => ({ ...current, [path]: null }))
-  }, [])
+  const setValue = useCallback(
+    (path: string, value: unknown) => {
+      noteOrigin(path)
+      setEdits((current) => ({ ...current, [path]: value }))
+    },
+    [noteOrigin],
+  )
 
-  const unsetSubtree = useCallback((path: string) => {
-    // Removing a table and editing something inside it are the same overlay
-    // saying two things about one address, and the server refuses the pair
-    // (`_check_path_prefix_collisions`) -- so "Remove all overrides" followed
-    // by any earlier edit under that project would 400 on preview with no way
-    // back except discarding the whole draft. The removal supersedes them, so
-    // they go with it, in one update rather than a revert-then-unset race.
-    setEdits((current) => {
-      let target: string[]
-      try {
-        target = splitPath(path)
-      } catch {
-        return { ...current, [path]: null }
-      }
-      const next: Edits = {}
-      for (const [key, value] of Object.entries(current)) {
-        let segments: string[]
+  const unsetValue = useCallback(
+    (path: string) => {
+      noteOrigin(path)
+      setEdits((current) => ({ ...current, [path]: null }))
+    },
+    [noteOrigin],
+  )
+
+  const unsetSubtree = useCallback(
+    (path: string) => {
+      noteOrigin(path)
+      // Removing a table and editing something inside it are the same overlay
+      // saying two things about one address, and the server refuses the pair
+      // (`_check_path_prefix_collisions`) -- so "Remove all overrides" followed
+      // by any earlier edit under that project would 400 on preview with no way
+      // back except discarding the whole draft. The removal supersedes them, so
+      // they go with it, in one update rather than a revert-then-unset race.
+      setEdits((current) => {
+        let target: string[]
         try {
-          segments = splitPath(key)
+          target = splitPath(path)
         } catch {
-          // A path this build cannot tokenize is not one we can prove is
-          // inside the subtree; leave it exactly as it is.
-          next[key] = value
-          continue
+          return { ...current, [path]: null }
         }
-        const inside =
-          segments.length > target.length && target.every((part, i) => segments[i] === part)
-        if (!inside) next[key] = value
-      }
-      next[path] = null
-      return next
-    })
-  }, [])
+        const next: Edits = {}
+        for (const [key, value] of Object.entries(current)) {
+          let segments: string[]
+          try {
+            segments = splitPath(key)
+          } catch {
+            // A path this build cannot tokenize is not one we can prove is
+            // inside the subtree; leave it exactly as it is.
+            next[key] = value
+            continue
+          }
+          const inside =
+            segments.length > target.length && target.every((part, i) => segments[i] === part)
+          if (!inside) next[key] = value
+        }
+        next[path] = null
+        return next
+      })
+    },
+    [noteOrigin],
+  )
 
   const revert = useCallback((path: string) => {
     setEdits((current) => {
@@ -186,11 +246,17 @@ export function DraftProvider({
       unsetSubtree,
       revert,
       discardAll,
+      originOf: (path) => (path in effective ? origins[path] : undefined),
     }),
-    [effective, setValue, unsetValue, unsetSubtree, revert, discardAll],
+    [effective, origins, setValue, unsetValue, unsetSubtree, revert, discardAll],
   )
 
   return <DraftContext.Provider value={api}>{children}</DraftContext.Provider>
+}
+
+/** How many edits are queued; 0 where there is no draft at all (outside a provider). */
+export function useDraftChangeCount(): number {
+  return useContext(DraftContext)?.changeCount ?? 0
 }
 
 export function useDraft(): DraftApi {
@@ -209,6 +275,7 @@ export function useDraft(): DraftApi {
  */
 export function clearStoredDraft(): void {
   try {
+    window.localStorage.removeItem(DRAFT_ORIGIN_STORAGE_KEY)
     window.localStorage.removeItem(DRAFT_STORAGE_KEY)
   } catch {
     // Errors accessing storage should not break logout.

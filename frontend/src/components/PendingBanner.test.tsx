@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
-import { PendingBanner } from './PendingBanner'
+import { PendingBanner, sectionOf } from './PendingBanner'
 import { i18n } from '../i18n'
 
 // The assertions match the English copy.
@@ -76,7 +76,7 @@ describe('PendingBanner', () => {
 
     await userEvent.click(screen.getByText('seed'))
 
-    expect(screen.getByRole('status')).toHaveTextContent('1 unapplied changes')
+    expect(screen.getByRole('status')).toHaveTextContent('1 unapplied change')
   })
 
   it('counts the changes per section, each linking to its screen', async () => {
@@ -127,6 +127,73 @@ describe('PendingBanner', () => {
     ).toHaveLength(0)
   })
 
+  it('keeps the dialog open to show why the reload failed after an apply', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/config/apply')
+        ? ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              written: ['/tmp/config.toml'],
+              backup: 'config.toml.bak',
+              restart_required: [],
+              reloaded: false,
+              reload_detail: 'Could not open the log file for writing.',
+            }),
+          } as Response)
+        : DIFF_RESPONSE,
+    )
+    renderBanner()
+
+    await userEvent.click(screen.getByText('seed'))
+    await userEvent.click(screen.getByRole('button', { name: 'Review & apply…' }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Apply' }))
+
+    // The draft is empty now, so the strip is gone; the dialog and its reason are not.
+    expect(await screen.findByText('Could not open the log file for writing.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+
+  it('says that the changes were applied once a clean apply closed the dialog', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      String(url).includes('/config/apply')
+        ? ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              written: ['/tmp/config.toml'],
+              backup: 'config.toml.bak',
+              restart_required: [],
+              reloaded: true,
+              reload_detail: null,
+            }),
+          } as Response)
+        : DIFF_RESPONSE,
+    )
+    renderBanner()
+
+    await userEvent.click(screen.getByText('seed'))
+    await userEvent.click(screen.getByRole('button', { name: 'Review & apply…' }))
+    const dialog = await screen.findByRole('dialog')
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Apply' }))
+
+    expect(await screen.findByText('The changes have been applied.')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('colours added and removed lines of the diff', async () => {
+    fetchMock.mockResolvedValue(DIFF_RESPONSE)
+    renderBanner()
+
+    await userEvent.click(screen.getByText('seed'))
+    await userEvent.click(screen.getByRole('button', { name: 'Review & apply…' }))
+
+    expect(await screen.findByText(/\+port = 9999/)).toHaveClass('diff-line-add')
+    expect(screen.getByText(/-port = 8010/)).toHaveClass('diff-line-remove')
+  })
+
   it('asks before discarding, and keeps the changes on cancel', async () => {
     renderBanner()
 
@@ -136,7 +203,7 @@ describe('PendingBanner', () => {
     expect(screen.getByRole('status')).toHaveTextContent('Discard 1 unapplied change?')
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    expect(screen.getByRole('status')).toHaveTextContent('1 unapplied changes')
+    expect(screen.getByRole('status')).toHaveTextContent('1 unapplied change')
     expect(screen.getByRole('button', { name: 'Discard…' })).toBeInTheDocument()
   })
 
@@ -148,5 +215,35 @@ describe('PendingBanner', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
 
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
+  })
+})
+
+describe('which screen a queued change is counted under', () => {
+  it('follows where a setting is edited, not the table it is stored in', () => {
+    expect(sectionOf('llm_config.agent_models.reviewer')).toBe('agents')
+    expect(sectionOf('llm_config.model')).toBe('llm')
+    expect(sectionOf('projects.Projekt A.agents.reviewer.prompt.vars.glossary')).toBe('agents')
+    expect(sectionOf('projects.Projekt A.llm_config.agent_models.reviewer')).toBe('agents')
+    expect(sectionOf('projects.Projekt A.llm_config.model')).toBe('llm')
+    expect(sectionOf('projects.Projekt A.language')).toBe('projects')
+    expect(sectionOf('projects.Projekt A.agents.reviewer.enabled')).toBe('projects')
+    expect(sectionOf('agents.reviewer.enabled')).toBe('agents')
+    expect(sectionOf('port')).toBe('service')
+  })
+
+  it('counts a change under the screen it was made on', async () => {
+    // A project's agent switch can be flipped on Projects and on Agents: only
+    // the address at the time of the edit says which.
+    window.history.pushState({}, '', '/admin/agents/reviewer')
+    try {
+      renderBanner({}, { 'projects.Projekt A.agents.reviewer.enabled': false })
+      await userEvent.click(screen.getByText('seed'))
+
+      const strip = within(screen.getByRole('status'))
+      expect(strip.getByRole('link', { name: /agents/i })).toBeInTheDocument()
+      expect(strip.queryByRole('link', { name: /projects/i })).not.toBeInTheDocument()
+    } finally {
+      window.history.pushState({}, '', '/')
+    }
   })
 })

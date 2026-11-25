@@ -164,19 +164,25 @@ class TestCloseServices:
 class TestInitRouters:
     def test_includes_main_router(self):
         app = MagicMock()
-        with patch("testbench_ai_service.main.get_agent_routers", return_value=[]):
+        with patch("testbench_ai_service.main.get_agent_routers_by_key", return_value={}):
             init_routers(app)
 
         app.include_router.assert_called()
+        assert app.state.routed_agents == frozenset()
 
     def test_includes_agent_routers(self):
         mock_agent_router = MagicMock()
         app = MagicMock()
 
-        with patch("testbench_ai_service.main.get_agent_routers", return_value=[mock_agent_router]):
+        with patch(
+            "testbench_ai_service.main.get_agent_routers_by_key",
+            return_value={"reviewer": mock_agent_router},
+        ):
             init_routers(app)
 
         assert app.include_router.call_count >= 2
+        app.include_router.assert_any_call(mock_agent_router)
+        assert app.state.routed_agents == frozenset({"reviewer"})
 
 
 class TestLifespan:

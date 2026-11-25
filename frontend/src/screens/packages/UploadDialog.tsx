@@ -69,13 +69,40 @@ export function UploadDialog({
   const [registering, setRegistering] = useState(false)
   const uploaded = upload.data
   const forProvider = kind === 'provider'
+  // A finding about the package as a whole rules out every use of it; one
+  // about a single entry point only that entry point.
+  const usable = !!uploaded && (uploaded.report.errors ?? []).length === 0
   const registrable =
-    !forProvider && uploaded && Object.values(uploaded.report.agents).some((agent) => agent.ok)
+    !forProvider && usable && Object.values(uploaded.report.agents).some((agent) => agent.ok)
   const providable =
     forProvider &&
     !!onUseProvider &&
-    !!uploaded &&
+    usable &&
     Object.values(uploaded.report.llm_clients ?? {}).some((client) => client.ok)
+  // The versions the console knew when the upload started: a wheel that comes
+  // back as one of them was stored before, and nothing was added now.
+  const knownBefore = useRef<Set<string>>(new Set())
+  const startUpload = (wheel: File) => {
+    knownBefore.current = new Set(
+      (packages.packages ?? []).flatMap((entry) =>
+        entry.versions.map((version) => `${entry.name}@${version.version}`),
+      ),
+    )
+    upload.mutate(wheel)
+  }
+  const uploadedText = !uploaded
+    ? ''
+    : !usable
+      ? t('packagesUploadedFailed', { name: uploaded.name, version: uploaded.version })
+      : knownBefore.current.has(`${uploaded.name}@${uploaded.version}`)
+        ? t('packagesUploadedAgain', { name: uploaded.name, version: uploaded.version })
+        : forProvider
+          ? t('packagesUploadedProvider', { name: uploaded.name, version: uploaded.version })
+          : t('packagesUploaded', { name: uploaded.name, version: uploaded.version })
+  // Checking a wheel cannot be called back once it is sent: the server finishes
+  // it and stores the wheel if it passes. The dialog stays until the answer is
+  // in, so the operator sees what happened instead of finding the package later.
+  const close = upload.isPending ? undefined : onClose
   const known = uploaded && (packages.packages ?? []).find((entry) => entry.name === uploaded.name)
   const otherActive =
     !!uploaded &&
@@ -109,7 +136,7 @@ export function UploadDialog({
   const position = t('packagesStepOf', { step: step + 1, total: steps.length })
 
   return (
-    <Modal label={title} width={780} maxHeight="85vh">
+    <Modal label={title} width={780} maxHeight="85vh" onClose={close}>
       <div style={HEADER}>
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -129,6 +156,7 @@ export function UploadDialog({
             severity="secondary"
             aria-label={t('close')}
             icon={<Icon d={CLOSE} />}
+            disabled={upload.isPending}
             onClick={onClose}
           />
         </div>
@@ -178,6 +206,7 @@ export function UploadDialog({
                     <span style={MUTED}>{t('packagesCheckHint')}</span>
                   </div>
                   <ProgressBar mode="indeterminate" style={{ height: 6 }} />
+                  <span style={MUTED}>{t('packagesUploadNoCancel')}</span>
                 </div>
               </div>
             )}
@@ -187,7 +216,7 @@ export function UploadDialog({
                 <Message
                   severity={uploaded.report.ok ? 'success' : 'warn'}
                   style={{ justifyContent: 'flex-start' }}
-                  text={t('packagesUploaded', { name: uploaded.name, version: uploaded.version })}
+                  text={uploadedText}
                 />
                 <ReportTable report={uploaded.report} />
                 {elsewhere && (
@@ -209,7 +238,14 @@ export function UploadDialog({
           </div>
 
           <WizardFooter position={position}>
-            <Button type="button" outlined label={t('close')} onClick={onClose} />
+            <Button
+              type="button"
+              outlined
+              label={t('close')}
+              disabled={upload.isPending}
+              title={upload.isPending ? t('packagesUploadNoCancel') : undefined}
+              onClick={onClose}
+            />
             {uploaded ? (
               otherActive ? (
                 <Button
@@ -241,7 +277,7 @@ export function UploadDialog({
                 label={forProvider ? t('providerPackagesUpload') : t('packagesUpload')}
                 disabled={!file || upload.isPending}
                 loading={upload.isPending}
-                onClick={() => file && upload.mutate(file)}
+                onClick={() => file && startUpload(file)}
               />
             )}
           </WizardFooter>

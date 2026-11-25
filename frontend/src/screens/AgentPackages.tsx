@@ -286,6 +286,9 @@ export function PackageCard({
   const forProvider = kind === 'provider'
   // "loaded" is said of the side this card shows.
   const usedHere = forProvider ? provides : registered
+  // Loaded, but another version than the active one: the switch waits for a restart.
+  const staleLoad =
+    pkg.loaded && !!active && !!pkg.loaded_version && pkg.loaded_version !== active.version
   const shownClients = shown ? Object.keys(shown.report.llm_clients ?? {}).length : 0
   const date = shown ? formatDate(shown.uploaded_at, i18n.language) : ''
 
@@ -351,13 +354,23 @@ export function PackageCard({
                 style={{ padding: '1px 8px', fontSize: 11 }}
               />
             )}
-            {usedHere && (
-              <Tag
-                severity={pkg.loaded ? 'success' : 'warning'}
-                value={pkg.loaded ? t('packagesLoaded') : t('packagesNotLoaded')}
-                style={{ padding: '1px 8px', fontSize: 11 }}
-              />
-            )}
+            {usedHere &&
+              (staleLoad ? (
+                // The service still runs another version than the active one:
+                // "loaded" beside the active version's number would say the
+                // opposite of what is true until the next restart.
+                <Tag
+                  severity="warning"
+                  value={t('packagesLoadedOther', { version: pkg.loaded_version ?? '' })}
+                  style={{ padding: '1px 8px', fontSize: 11 }}
+                />
+              ) : (
+                <Tag
+                  severity={pkg.loaded ? 'success' : 'warning'}
+                  value={pkg.loaded ? t('packagesLoaded') : t('packagesNotLoaded')}
+                  style={{ padding: '1px 8px', fontSize: 11 }}
+                />
+              ))}
           </div>
           {shown && (
             <span className="text-muted" style={{ fontSize: 12 }}>
@@ -440,6 +453,13 @@ export function PackageCard({
                 {entry.active && (
                   <Tag value={t('packagesActive')} style={{ padding: '1px 8px', fontSize: 11 }} />
                 )}
+                {pkg.loaded && pkg.loaded_version === entry.version && !entry.active && (
+                  <Tag
+                    severity="warning"
+                    value={t('packagesLoaded')}
+                    style={{ padding: '1px 8px', fontSize: 11 }}
+                  />
+                )}
                 {!entry.report.ok && (
                   <Tag
                     severity="danger"
@@ -455,8 +475,19 @@ export function PackageCard({
                   <VersionActions
                     version={entry}
                     otherActive={!!active && !entry.active}
-                    registrable={!forProvider && hasUnregistered(entry, pkg.registered)}
-                    providable={forProvider && !provides && hasUsableClient(entry)}
+                    // A finding about the package as a whole rules out all of
+                    // it; one about a single entry point only that one.
+                    registrable={
+                      !forProvider && packageUsable(entry) && hasUnregistered(entry, pkg.registered)
+                    }
+                    providable={
+                      forProvider && !provides && packageUsable(entry) && hasUsableClient(entry)
+                    }
+                    // The running service holds the loaded version's files open
+                    // until it restarts; the server refuses deleting it.
+                    deletable={
+                      !entry.active && !(pkg.loaded && pkg.loaded_version === entry.version)
+                    }
                     onUseProvider={() => onUseProvider(entry)}
                     onUse={() => onUse(entry)}
                     onActivate={() => onActivate(entry.version)}
@@ -483,6 +514,15 @@ function hasUnregistered(version: PackageVersion, registered: Record<string, str
   )
 }
 
+/**
+ * Whether anything of a version can be used at all: its check found nothing
+ * wrong with the package as a whole. The server refuses registering,
+ * activating and using a client from a version that fails this.
+ */
+export function packageUsable(version: PackageVersion): boolean {
+  return (version.report.errors ?? []).length === 0
+}
+
 /** Whether a version has an LLM client that passed the check. */
 function hasUsableClient(version: PackageVersion): boolean {
   return Object.values(version.report.llm_clients ?? {}).some((client) => client.ok)
@@ -500,6 +540,7 @@ function VersionActions({
   otherActive,
   registrable,
   providable,
+  deletable,
   onUse,
   onUseProvider,
   onActivate,
@@ -509,6 +550,7 @@ function VersionActions({
   otherActive: boolean
   registrable: boolean
   providable: boolean
+  deletable: boolean
   onUseProvider: () => void
   onUse: () => void
   onActivate: () => void
@@ -518,13 +560,15 @@ function VersionActions({
   return (
     <span style={{ display: 'flex', gap: 6 }}>
       {otherActive ? (
-        <Button
-          type="button"
-          outlined
-          size="small"
-          label={t('packagesActivate')}
-          onClick={onActivate}
-        />
+        packageUsable(version) && (
+          <Button
+            type="button"
+            outlined
+            size="small"
+            label={t('packagesActivate')}
+            onClick={onActivate}
+          />
+        )
       ) : (
         <>
           {registrable && (
@@ -547,7 +591,7 @@ function VersionActions({
           )}
         </>
       )}
-      {!version.active && (
+      {deletable && (
         <Button
           type="button"
           text
@@ -574,7 +618,7 @@ function DeleteDialog({
   const remove = useDeleteVersion()
   const title = t('packagesDeleteTitle', { name, version })
   return (
-    <Modal label={title}>
+    <Modal label={title} onClose={onClose}>
       <h3 style={{ margin: 0 }}>{title}</h3>
       <div style={{ fontSize: 13 }}>{t('packagesDeleteHint')}</div>
       {remove.isError && <PackageError error={remove.error} />}
@@ -615,7 +659,7 @@ function RemoveDialog({ pkg, onClose }: { pkg: AgentPackage; onClose: () => void
   const projects = projectsUsing(config.data?.disk, keys)
   const title = t('packagesRemoveTitle', { name: pkg.name })
   return (
-    <Modal label={title}>
+    <Modal label={title} onClose={onClose}>
       <h3 style={{ margin: 0 }}>{title}</h3>
       {keys.length === 0 ? (
         <div style={{ fontSize: 13 }}>{t('packagesRemoveNoAgents')}</div>
