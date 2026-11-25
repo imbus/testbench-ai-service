@@ -330,59 +330,5 @@ def test_a_quoted_path_that_is_too_deep_is_still_refused():
     assert exc.value.status_code == 400
 
 
-@pytest.mark.parametrize(
-    "path",
-    ["agent_packages.allow_upload", "agent_packages.dir", "agents.reviewer.package"],
-)
-def test_edit_paths_reject_package_settings(path):
-    with pytest.raises(HTTPException) as e:
-        validate_edit_paths({path: True})
-    assert e.value.status_code == 400
-    assert "can only be changed in config.toml on the server" in e.value.detail
-
-
-@pytest.mark.parametrize(
-    "edits",
-    [
-        {"agents.reviewer": {"package": "x"}},
-        {"agents": {"r": {"package": "x"}}},
-        {"agents": {"r": {"enabled": True}, "s": {"package": "x"}}},
-        {"agent_packages": {"allow_upload": True}},
-    ],
-)
-def test_nested_values_cannot_smuggle_package_settings(edits):
-    with pytest.raises(HTTPException) as e:
-        validate_edit_paths(edits)
-    assert e.value.status_code == 400
-
-
-def test_a_nested_value_without_package_settings_is_accepted():
-    validate_edit_paths({"agents": {"r": {"enabled": True, "args": {"package": "x"}}}})
-
-
-def test_server_side_edits_may_set_the_package():
-    validate_edit_paths({"agents.r.package": "acme"}, allow_server_only=True)
-
-
-@pytest.mark.parametrize(
-    "edits",
-    [
-        {"llm_config.package": "x"},
-        {"llm_config": {"package": "x"}},
-        {"projects.P.llm_config.package": "x"},
-        {"projects.P": {"llm_config": {"package": "x"}}},
-        {"projects": {"P": {"llm_config": {"package": "x"}}}},
-    ],
-)
-def test_the_llm_client_package_cannot_be_set_from_the_console(edits):
-    with pytest.raises(HTTPException) as e:
-        validate_edit_paths(edits)
-    assert e.value.status_code == 400
-
-
-def test_server_side_edits_may_set_the_llm_client_package():
-    validate_edit_paths({"llm_config.package": "acme"}, allow_server_only=True)
-
-
 def test_other_llm_settings_stay_editable():
     validate_edit_paths({"llm_config.model": "x", "projects.P.llm_config.model": "y"})

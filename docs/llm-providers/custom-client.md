@@ -128,59 +128,6 @@ For any other configuration your client needs (for example, base URLs or custom 
 
 ---
 
-## Upload as a package
-
-Instead of steps 2 and 3 you can pack the client into a Python wheel and install it from the [web console](../web-console.md). You need no shell access to the server and you do not edit `config.toml` by hand. The mechanism is the one [agent packages](../agents/agent-packages.md) use: same upload switch (`agent_packages.allow_upload`), same checks, same storage. Read that page for how to turn uploads on, the limits and the security note. A wheel may carry agents, LLM clients or both.
-
-The service supports **one** custom provider. Using a package's client replaces a custom provider configured before, and it applies globally, not per project.
-
-### Entry point
-
-The service finds the clients of a package through the entry-point group `testbench_ai_service.llm_clients`:
-
-```toml
-# pyproject.toml
-[project.entry-points."testbench_ai_service.llm_clients"]
-acme_llm = "acme_llm.client:AcmeLLMClient"
-```
-
-A complete example is in [`examples/llm_client_package`](https://github.com/imbus/testbench-ai-service/tree/main/examples/llm_client_package). Build it with `python -m build --wheel`. A client for a real target, [Ollama](https://ollama.com), is in [`examples/ollama_llm_package`](https://github.com/imbus/testbench-ai-service/tree/main/examples/ollama_llm_package); its README lists the environment variables it reads.
-
-At upload the wheel is examined in a separate process. For each client the check requires that
-
-- the class can be imported and is a subclass of `LLMClient`,
-- `query_llm` and `close` are implemented,
-- the constructor accepts what the service passes: the API key as first argument and the keywords `timeout` and `max_retries`. Accept `**kwargs` to be safe.
-
-### Use it as the provider
-
-1. **Upload.** On the console's **LLM** screen, in the **Upload custom LLM provider** section, click **Import provider wheel** and choose the `.whl`. The **Agents** screen lists only packages with agents. A wheel that carries both shows its LLM client here and its agents there.
-2. **Use as LLM provider.** Enter the model names the client serves, one per line. These are the names you later pick for agents; the service passes the chosen name to `query_llm` as `model`. By default the first name also becomes the default model.
-3. **Restart the service.** The package code is not imported before the restart. An administrator can restart from the console's "restart needed" strip (**Restart now**).
-
-The console writes this for you:
-
-```toml
-[testbench-ai-service.llm_config]
-provider = "custom"
-class_path = "acme_llm.client.AcmeLLMClient"
-package = "acme-llm"        # set by the console only
-model = "acme-large"
-
-[testbench-ai-service.llm_config.extra_models]
-acme-large = { provider = "custom", routing = "fallback" }
-```
-
-:::note
-Model names starting with `gpt-`, `claude-` or `o<digit>` (such as `o3-mini`) always go to OpenAI or Anthropic, whatever the configured provider is. The console refuses them for a custom client; give your models other names.
-:::
-
-**Stop using as provider** returns the service to the default provider (OpenAI) and removes the package's models from the configuration, including where one is set as default model or as an agent's model. Project overrides are left alone. A package cannot be removed while its client is in use. Switching to another version of the package is refused if that version no longer has the client.
-
-If the package is missing or its client cannot be created, the service still starts. Requests that need the client fail with a message naming the reason, and the **Status** and **LLM** screens show it.
-
----
-
 ## API key
 
 No environment variable is required for custom clients — the service passes `None` as `api_key` by default. If your provider requires authentication, read the key from the environment yourself inside `__init__`:

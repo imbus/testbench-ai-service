@@ -14,12 +14,10 @@ else:
 
 from pydantic import BaseModel, ValidationError
 
-from testbench_ai_service.agent_packages.loaded import activate_packages
 from testbench_ai_service.config import PROMPTS_DIR, TEMPLATES_DIR, AppConfig
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
-    DEFAULT_AGENT_PACKAGES_DIR,
     AgentConfig,
     LLMConfig,
     ProjectPromptConfig,
@@ -292,15 +290,8 @@ def load_config_from_file(config_path: str, config_prefix: str = CONFIG_PREFIX) 
             sys.exit(1)
             return None  # type: ignore[unreachable]
 
-    section = config_dict[config_prefix]
-    # Before validation, so agents of loaded packages are imported, not checked
-    # against their report. The only place package code is put on sys.path.
-    packages = section.get("agent_packages", {}) if isinstance(section, dict) else {}
-    packages_dir = packages.get("dir") if isinstance(packages, dict) else None
-    activate_packages(Path(packages_dir or DEFAULT_AGENT_PACKAGES_DIR))
-
     try:
-        config = AppConfig(**section)
+        config = AppConfig(**config_dict[config_prefix])
     except ValidationError as e:
         print_config_errors(e, config_file_path, config_prefix)
         sys.exit(1)

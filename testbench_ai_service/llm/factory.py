@@ -16,10 +16,6 @@ from testbench_ai_service.utils.import_utils import load_class_from_path
 from testbench_ai_service.utils.naming import normalize_project_name
 
 
-class LLMClientUnavailable(RuntimeError):  # noqa: N818
-    """The LLM client an uploaded package provides cannot be used right now."""
-
-
 class LLMFactory:
     """
     Manages creation, caching, and retrieval of LLM clients for multiple LLM providers.
@@ -205,47 +201,10 @@ class LLMFactory:
 
         if provider == LLMProvider.CUSTOM:
             assert config.class_path is not None
-            client_class: type[LLMClient]
-            if config.package is not None:
-                client_class = self._package_client_class(config.package, config.class_path)
-            else:
-                client_class = load_class_from_path(config.class_path)
+            client_class: type[LLMClient] = load_class_from_path(config.class_path)
             return client_class(self._as_api_key(credential), **common_kwargs)
 
         raise NotImplementedError(f"Unsupported LLM provider: '{provider}'.")
-
-    def _package_client_class(self, package: str, class_path: str) -> type[LLMClient]:
-        """The client class an uploaded package provides.
-
-        Only a package this process loaded at startup is imported; the reason a
-        client is unavailable is kept for the status screen.
-
-        Raises:
-            LLMClientUnavailable: The package is not loaded, or the class cannot be
-                imported or is no ``LLMClient``.
-        """
-        # Imported here: agent_packages.manifest -> webui.security -> config -> llm.
-        from testbench_ai_service.agent_packages import loaded  # noqa: PLC0415
-
-        def unavailable(message: str) -> LLMClientUnavailable:
-            loaded.mark_llm_client_failed(message)
-            return LLMClientUnavailable(message)
-
-        if not loaded.is_loaded(package):
-            reason = loaded.failures().get(package) or "restart the service to load it"
-            raise unavailable(f"LLM client package '{package}' is not loaded: {reason}")
-        try:
-            client_class = load_class_from_path(class_path)
-        except (Exception, SystemExit) as e:  # package code may even call sys.exit()
-            raise unavailable(
-                f"cannot import '{class_path}' from package '{package}': {e!r}"
-            ) from e
-        if not (isinstance(client_class, type) and issubclass(client_class, LLMClient)):
-            raise unavailable(
-                f"'{class_path}' of package '{package}' is not a subclass of LLMClient"
-            )
-        loaded.mark_llm_client_failed(None)
-        return client_class
 
     def _as_api_key(self, credential: str | EntraIdCredentials | None) -> str | None:
         """

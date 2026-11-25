@@ -1,6 +1,5 @@
 import logging
 import shutil
-import sys
 from pathlib import Path
 from typing import get_type_hints
 from unittest.mock import patch
@@ -8,7 +7,6 @@ from unittest.mock import patch
 import pytest
 from pydantic import ValidationError
 
-from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.agents.test_case_set_reviewer.agent import (
     TestCaseSetReviewerAgentData as ReviewerData,
 )
@@ -30,14 +28,6 @@ from testbench_ai_service.models.config import (
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.models.logging import LoggingConfig
-from tests.helpers.packages import (
-    BROKEN_CLASS_PATH,
-    CLASS_PATH,
-    PACKAGE,
-    install_package,
-    install_two_agent_package,
-    rater_report,
-)
 
 
 def _make_app_config(**kwargs):
@@ -581,139 +571,3 @@ class TestJobsConfig:
 
 
 REVIEWER_FIELDS = list(get_type_hints(ReviewerData))
-
-
-class TestPackageAgents:
-    """Agents from uploaded packages are validated against their inspection report.
-
-    The package code must not be imported unless the package was put on
-    ``sys.path`` at startup.
-    """
-
-    def _agent(self, **kwargs) -> AgentConfig:
-        values = {
-            "enabled": True,
-            "endpoint_path": "/acme",
-            "class_path": CLASS_PATH,
-            "prompt": PromptConfig(file=Path("test_case_set_reviewer/prompt.yaml")),
-            "package": PACKAGE,
-        }
-        values.update(kwargs)
-        return AgentConfig(**values)
-
-    def _config(self, packages_dir, agent=None, **kwargs):
-        with patch("testbench_ai_service.config.validate_tb_server_url"):
-            return AppConfig(
-                tb_server_url="https://localhost:9443/api/",
-                agents={**DEFAULT_AGENTS, "acme": agent or self._agent()},
-                agent_packages={"dir": packages_dir},
-                **kwargs,
-            )
-
-    def test_appconfig_accepts_unloaded_package_agent(self, tmp_path):
-        install_package(tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS))
-
-        cfg = self._config(tmp_path)
-
-        assert "acme" in cfg.agents
-        assert "acme" not in sys.modules
-
-    def test_appconfig_rejects_prompt_variables_the_report_lacks(self, tmp_path):
-        install_package(tmp_path, report=rater_report(data_fields=["title"]))
-
-        with pytest.raises(ValidationError, match="variables are incompatible"):
-            self._config(tmp_path)
-        assert "acme" not in sys.modules
-
-    def test_appconfig_rejects_steps_the_report_lacks(self, tmp_path):
-        install_package(
-            tmp_path,
-            report=rater_report(data_fields=REVIEWER_FIELDS, step_fields={"plan": ["title"]}),
-        )
-
-        with pytest.raises(ValidationError, match="Step 'plan' is missing"):
-            self._config(tmp_path)
-
-    def test_appconfig_rejects_args_against_report_schema(self, tmp_path):
-        schema = {
-            "type": "object",
-            "properties": {"max_items": {"type": "integer"}},
-            "additionalProperties": False,
-        }
-        install_package(
-            tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS, args_schema=schema)
-        )
-
-        with pytest.raises(ValidationError) as exc_info:
-            self._config(tmp_path, agent=self._agent(args={"max_items": "many"}))
-
-        assert exc_info.value.errors()[0]["loc"] == ("agents", "acme", "args")
-        assert "acme" not in sys.modules
-
-    def test_appconfig_rejects_project_args_against_report_schema(self, tmp_path):
-        schema = {"type": "object", "properties": {"max_items": {"type": "integer"}}}
-        install_package(
-            tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS, args_schema=schema)
-        )
-        projects = {
-            "P": ProjectConfig(agents={"acme": ProjectAgentConfig(args={"max_items": "many"})})
-        }
-
-        with pytest.raises(ValidationError) as exc_info:
-            self._config(tmp_path, projects=projects)
-
-        assert exc_info.value.errors()[0]["loc"] == ("projects", "P", "agents", "acme", "args")
-
-    def test_appconfig_accepts_args_matching_report_schema(self, tmp_path):
-        schema = {"type": "object", "properties": {"max_items": {"type": "integer"}}}
-        install_package(
-            tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS, args_schema=schema)
-        )
-
-        cfg = self._config(tmp_path, agent=self._agent(args={"max_items": 3}))
-
-        assert cfg.agents["acme"].args == {"max_items": 3}
-
-    def test_appconfig_skips_package_agent_without_manifest(self, tmp_path, caplog):
-        with caplog.at_level(logging.WARNING, logger="testbench_ai_service"):
-            cfg = self._config(tmp_path / "missing")
-
-        assert "acme" in cfg.agents
-        assert PACKAGE in caplog.text
-
-    def test_appconfig_validates_a_loaded_package_agent_by_importing_it(self, tmp_path):
-        install_package(tmp_path, report=rater_report(data_fields=REVIEWER_FIELDS))
-        loaded.activate_packages(tmp_path)
-
-        # A loaded package is imported, its report ignored: the class declares only
-        # ``title``, which does not cover the reviewer prompt's variables.
-        with pytest.raises(ValidationError, match="variables are incompatible"):
-            self._config(tmp_path)
-
-    @pytest.mark.parametrize("enabled", [True, False])
-    def test_appconfig_rejects_a_class_the_loaded_package_lacks(self, tmp_path, enabled):
-        install_package(tmp_path)
-        loaded.activate_packages(tmp_path)
-        agent = self._agent(class_path="acme.rater.agent.Typo", enabled=enabled)
-
-        with pytest.raises(ValidationError) as exc_info:
-            self._config(tmp_path, agent=agent)
-
-        assert exc_info.value.errors()[0]["loc"] == ("agents", "acme", "class_path")
-        assert loaded.is_loaded(PACKAGE)
-        assert loaded.failures() == {}
-        assert loaded.agent_failures() == {}
-
-    def test_appconfig_skips_a_loaded_agent_whose_import_exits(self, tmp_path, caplog):
-        install_two_agent_package(tmp_path)
-        loaded.activate_packages(tmp_path)
-        agent = self._agent(class_path=BROKEN_CLASS_PATH)
-
-        with caplog.at_level(logging.WARNING, logger="testbench_ai_service"):
-            cfg = self._config(tmp_path, agent=agent)
-
-        assert "acme" in cfg.agents
-        assert "SystemExit" in caplog.text
-        assert loaded.is_loaded(PACKAGE)
-        assert loaded.failures() == {}
-        assert loaded.agent_failures() == {}

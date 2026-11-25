@@ -3,72 +3,14 @@ from unittest.mock import MagicMock, patch
 
 import requests
 
-from testbench_ai_service.agent_packages import loaded
-from testbench_ai_service.agent_packages.manifest import site_dir
-from testbench_ai_service.config import DEFAULT_AGENTS
 from testbench_ai_service.llm.base import TokenUsage
 from testbench_ai_service.models.config import (
-    AgentConfig,
     ProjectAgentConfig,
     ProjectConfig,
-    PromptConfig,
 )
 from testbench_ai_service.models.language import LanguageOption
 from testbench_ai_service.usage import UsageStore
 from testbench_ai_service.webui.status import agent_summary
-from tests.helpers.packages import CLASS_PATH, PACKAGE, install_package
-
-
-def test_status_lists_unloaded_package_agent(make_app, tmp_path):
-    packages_dir = tmp_path / "packages"
-    install_package(packages_dir)
-    prompt = site_dir(packages_dir, PACKAGE, "1.0.0") / "acme/rater/prompts/en/prompt.yaml"
-    agent = AgentConfig(
-        enabled=True,
-        endpoint_path="/acme",
-        class_path=CLASS_PATH,
-        prompt=PromptConfig(file=prompt),
-        package=PACKAGE,
-    )
-    app = make_app(agents={**DEFAULT_AGENTS, "acme": agent}, agent_packages={"dir": packages_dir})
-    loaded.mark_failed("broken-pkg", "cannot import 'broken.Agent'")
-
-    summary = agent_summary(app.state.config)
-
-    assert set(summary.unloaded_packages) == {PACKAGE, "broken-pkg"}
-    assert summary.unloaded_packages["broken-pkg"] == "cannot import 'broken.Agent'"
-    assert "restart" in summary.unloaded_packages[PACKAGE].lower()
-
-
-def test_status_lists_no_loaded_package(make_app):
-    summary = agent_summary(make_app().state.config)
-    assert summary.unloaded_packages == {}
-    assert summary.failed_agents == {}
-
-
-def test_status_says_a_package_missing_from_the_manifest_is_missing(make_app, tmp_path):
-    agent = AgentConfig(
-        enabled=True,
-        endpoint_path="/acme",
-        class_path=CLASS_PATH,
-        prompt=PromptConfig(file="test_case_set_reviewer/prompt.yaml"),
-        package="gone-pkg",
-    )
-    app = make_app(
-        agents={**DEFAULT_AGENTS, "acme": agent}, agent_packages={"dir": tmp_path / "packages"}
-    )
-
-    summary = agent_summary(app.state.config)
-
-    assert "missing" in summary.unloaded_packages["gone-pkg"]
-
-
-def test_status_lists_agents_that_failed_at_startup(make_app):
-    loaded.mark_agent_failed("acme_broken", "cannot import 'acme.broken.BrokenAgent'")
-
-    summary = agent_summary(make_app().state.config)
-
-    assert summary.failed_agents == {"acme_broken": "cannot import 'acme.broken.BrokenAgent'"}
 
 
 def _status(client):

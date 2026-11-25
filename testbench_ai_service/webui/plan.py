@@ -26,7 +26,6 @@ def plan_change(
     config_path: Path,
     running: AppConfig,
     *,
-    allow_server_only: bool = False,
     routed_agents: Collection[str] | None = None,
 ) -> tuple[PreviewResponse, str, bool]:
     """Work out what applying *edits* would do, without doing any of it.
@@ -46,10 +45,8 @@ def plan_change(
     ``routed_agents`` are the agents that got an endpoint at startup; see
     :func:`~testbench_ai_service.webui.reload.restart_required`.
 
-    ``allow_server_only`` lets server-side callers (agent package registration) set
-    ``agents.<key>.package``, which the console's own edits may never touch.
     """
-    validate_edit_paths(edits, allow_server_only=allow_server_only)
+    validate_edit_paths(edits)
 
     document = load_document(config_path)
     current_text = render_document(document)

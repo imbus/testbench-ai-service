@@ -1,16 +1,13 @@
 import importlib
 import inspect
-import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, get_type_hints
+from typing import Any, get_type_hints
 
-import jsonschema
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from testbench_ai_service.log import logger
 from testbench_ai_service.models.config import (
     AgentConfig,
-    AgentPackagesConfig,
     JobsConfig,
     LLMConfig,
     ProjectConfig,
@@ -27,7 +24,6 @@ from testbench_ai_service.transport import (
 )
 from testbench_ai_service.utils.prompt_utils import (
     step_agent_variable_errors,
-    step_field_errors,
     template_variables,
     validate_agent_variable,
 )
@@ -38,9 +34,6 @@ from testbench_ai_service.validators import (
     validate_prompt_file,
     validate_tb_server_url,
 )
-
-if TYPE_CHECKING:
-    from testbench_ai_service.agent_packages.agent_info import AgentInfo
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8010
@@ -182,7 +175,6 @@ class AppConfig(BaseModel):
         description="Browser console served at /admin",
     )
     jobs: JobsConfig = Field(default_factory=JobsConfig)
-    agent_packages: AgentPackagesConfig = Field(default_factory=AgentPackagesConfig)
     agents: dict[str, AgentConfig] = DEFAULT_AGENTS
     projects: dict[str, ProjectConfig] = Field(default_factory=dict)
     loaded_from: Path | None = Field(
@@ -350,70 +342,16 @@ class AppConfig(BaseModel):
                     )
         return self
 
-    def _package_agent_info(
-        self, agent_key: str, agent: AgentConfig, warn: bool = True
-    ) -> "AgentInfo | None":
-        """The info of a package agent, or ``None`` (logged) if it is unavailable."""
-        # Imported here: agent_packages.manifest -> webui.security -> this module.
-        from testbench_ai_service.agent_packages.agent_info import (  # noqa: PLC0415
-            AgentUnavailable,
-            UnknownAgentClass,
-            agent_info,
-        )
-
-        try:
-            return agent_info(agent, self.agent_packages.dir)
-        except UnknownAgentClass as e:
-            # A typo in class_path of a loaded package: reject like any other typo.
-            raise_field_validation_error(
-                self, ("agents", agent_key, "class_path"), ValueError(str(e))
-            )
-            return None  # unreachable: the call above raises
-        except AgentUnavailable as e:
-            logger.log(
-                logging.WARNING if warn else logging.DEBUG,
-                "Agent '%s' from package '%s' is not validated: %s",
-                agent_key,
-                agent.package,
-                e,
-            )
-            return None
-
-    def _validate_package_agent(self, agent_key: str, agent: AgentConfig) -> None:
-        """Check the prompt of a package agent against its fields, without importing it
-        unless the package was loaded at startup."""
-        info = self._package_agent_info(agent_key, agent)
-        if info is None:
-            return
-        prompt_path = Path(self.prompts_dir, self.language.value, agent.prompt.file)  # type: ignore[arg-type]
-        user_variables = template_variables(prompt_file=prompt_path)
-        if not validate_agent_variable(user_variables, info.data_fields):
-            logger.error(
-                "Template validation failed. User variables: %s do not match agent data requirements.",
-                user_variables,
-            )
-            raise ValueError(
-                "Failed to validate template: variables are incompatible with the agent."
-            )
-        step_errors = step_field_errors(prompt_path, info.step_fields)
-        if step_errors:
-            raise ValueError(
-                f"Failed to validate the steps of '{prompt_path}': {' | '.join(step_errors)}"
-            )
-
     @model_validator(mode="after")
     def validate_config(self):
-        for agent_key, agent in self.agents.items():
+        for agent in self.agents.values():
             if not agent.enabled:
                 continue
 
             if not agent.class_path:
                 raise ValueError("'class_path' must be set.")
 
-            if agent.package is not None:
-                self._validate_package_agent(agent_key, agent)
-            else:
-                self._validate_imported_agent(agent)
+            self._validate_imported_agent(agent)
         return self
 
     def _validate_imported_agent(self, agent: AgentConfig) -> None:
@@ -463,18 +401,8 @@ class AppConfig(BaseModel):
         validated merged over it, so a project can only override keys.
         """
         for agent_key, agent in self.agents.items():
-            if agent.package is not None:
-                # validate_config already warned about an unavailable enabled agent.
-                info = self._package_agent_info(agent_key, agent, warn=not agent.enabled)
-                if info is None:
-                    continue
-                if info.agent_class is None:
-                    self._validate_args_against_schema(agent_key, agent, info.args_schema)
-                    continue
-                agent_class = info.agent_class
-            else:
-                module_path, class_name = agent.class_path.rsplit(".", 1)
-                agent_class = getattr(importlib.import_module(module_path), class_name)
+            module_path, class_name = agent.class_path.rsplit(".", 1)
+            agent_class = getattr(importlib.import_module(module_path), class_name)
             args_class = getattr(agent_class, "ARGS_CLASS", None)
             if args_class is None:
                 continue
@@ -495,33 +423,3 @@ class AppConfig(BaseModel):
                         self, ("projects", proj_key, "agents", agent_key, "args"), e
                     )
         return self
-
-    def _validate_args_against_schema(
-        self, agent_key: str, agent: AgentConfig, schema: dict[str, Any] | None
-    ) -> None:
-        """Validate the ``args`` of an agent that is not imported against the JSON
-        schema of its ``ARGS_CLASS`` from the inspection report."""
-        if schema is None:
-            return
-        targets: list[tuple[tuple[str, ...], dict[str, Any]]] = [
-            (("agents", agent_key, "args"), agent.args)
-        ]
-        for proj_key, project in self.projects.items():
-            agent_override = (project.agents or {}).get(agent_key)
-            if agent_override is None or agent_override.args is None:
-                continue
-            targets.append(
-                (
-                    ("projects", proj_key, "agents", agent_key, "args"),
-                    merge_agent_args(agent.args, agent_override.args),
-                )
-            )
-        for loc, args in targets:
-            try:
-                jsonschema.validate(args, schema)
-            except jsonschema.ValidationError as e:
-                raise_field_validation_error(self, loc, ValueError(e.message))
-            except jsonschema.SchemaError as e:
-                raise_field_validation_error(
-                    self, loc, ValueError(f"the package's args schema is invalid: {e.message}")
-                )

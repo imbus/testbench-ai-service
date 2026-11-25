@@ -257,7 +257,6 @@ For step-by-step instructions on configuring each provider see the [LLM Provider
 | `azure_endpoint` | String  | Azure OpenAI endpoint URL (required when `provider = "azure_openai"`).                  | —               |
 | `api_version`    | String  | Azure OpenAI API version (required when `provider = "azure_openai"`).                   | —               |
 | `class_path`     | String  | Full Python class path for a custom LLM client (required when `provider = "custom"`).   | —               |
-| `package`        | String  | Uploaded package that provides `class_path`. Written by the web console when a package's LLM client is put to use; see [Custom LLM Client](llm-providers/custom-client.md#upload-as-a-package). Not editable in the console's LLM form. | _unset_ |
 | `timeout`        | Float   | Seconds to wait for an LLM response before giving up. Must be greater than 0. Unset uses the provider SDK's default. | _unset_ |
 | `max_retries`    | Integer | How often the provider SDK retries a failed request. 0 disables retries. Unset uses the SDK's default.           | _unset_ |
 
@@ -610,7 +609,7 @@ log_format = "%(asctime)s - %(levelname)8s - %(name)s - %(message)s"
 
 At `DEBUG`, every request and response is logged with its body. Only JSON and
 plain-text bodies are written, shortened to 10,000 characters; anything else —
-the console's scripts, styles and fonts, an uploaded package — is logged as its
+the console's scripts, styles and fonts — is logged as its
 media type and size only.
 
 ### Activity log

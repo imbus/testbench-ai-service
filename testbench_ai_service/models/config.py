@@ -53,14 +53,6 @@ class LLMConfig(BaseModel):
     azure_endpoint: str | None = None
     api_version: str | None = None
     class_path: str | None = None
-    package: str | None = Field(
-        default=None,
-        description=(
-            "Uploaded agent package that provides 'class_path'. Set by the console when a "
-            "package's LLM client is put to use; the class is then loaded from the package "
-            "after a restart instead of being imported while the configuration is checked."
-        ),
-    )
     timeout: float | None = Field(
         default=None,
         gt=0,
@@ -103,18 +95,7 @@ class LLMConfig(BaseModel):
                 ),
             )
 
-        if self.provider == LLMProvider.CUSTOM and self.package is not None:
-            # The class comes from an uploaded package, whose code may only run after a
-            # restart: it is checked by the package inspection, never imported here.
-            if not self.class_path or "." not in self.class_path.strip("."):
-                raise_field_validation_error(
-                    self,
-                    "class_path",
-                    ValueError(
-                        "'class_path' must be a valid import path, e.g. 'package.module.ClassName'."
-                    ),
-                )
-        elif self.provider == LLMProvider.CUSTOM:
+        if self.provider == LLMProvider.CUSTOM:
             try:
                 validate_class_path(self.class_path)
             except ValueError as e:
@@ -212,33 +193,12 @@ class JobsConfig(BaseModel):
     )
 
 
-DEFAULT_AGENT_PACKAGES_DIR = Path("data/agent_packages")
-
-
-class AgentPackagesConfig(BaseModel):
-    allow_upload: bool = Field(
-        default=False,
-        description="Let admins upload agent packages (Python wheels) in the console.",
-    )
-    dir: Path = Field(
-        default=DEFAULT_AGENT_PACKAGES_DIR,
-        description="Directory the uploaded agent packages are stored in.",
-    )
-    max_upload_mb: int = Field(
-        default=20, ge=1, le=500, description="Largest accepted package upload in megabytes."
-    )
-
-
 class AgentConfig(BaseModel):
     enabled: bool
     endpoint_path: str
     class_path: str
     prompt: PromptConfig
     args: dict[str, Any] = Field(default_factory=dict)
-    package: str | None = Field(
-        default=None,
-        description="Name of the uploaded agent package that provides class_path.",
-    )
 
     @field_validator("endpoint_path")
     @classmethod

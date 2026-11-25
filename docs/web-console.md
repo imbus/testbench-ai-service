@@ -142,7 +142,7 @@ running with its old values until it restarts.
 
 An administrator can restart it from that strip with **Restart now**. The
 restart happens inside the running process: the web server shuts down, the
-configuration and the agent packages are read again, and a new server starts
+configuration is read again, and a new server starts
 with them. It therefore works the same in a terminal, from the executable and
 as a Windows service. While it restarts:
 

@@ -56,13 +56,6 @@ it('offers the agents and projects screens to an admin', () => {
   expect(screen.getByRole('link', { name: /Projekte/ })).toHaveAttribute('href', '/admin/projects')
 })
 
-it('has no entry of its own for the agent packages, a section of the agents screen', () => {
-  renderNav(true)
-
-  const links = screen.getAllByRole('link').map((link) => link.getAttribute('href'))
-  expect(links).not.toContain('/admin/agent-packages')
-})
-
 it('keeps agents and projects readable for a non-admin', () => {
   // Both screens render read-only for a session without the admin role, the
   // same way Status does — so gating the link would hide information the

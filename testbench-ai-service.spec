@@ -10,12 +10,7 @@
 #
 # Output: dist/testbench-ai-service/  (onedir)
 
-from PyInstaller.utils.hooks import (
-    collect_all,
-    collect_data_files,
-    collect_submodules,
-    copy_metadata,
-)
+from PyInstaller.utils.hooks import collect_all, collect_data_files, collect_submodules
 
 # Collect everything from packages that use dynamic internal imports or
 # have data files / lazy-loaded sub-packages.
@@ -26,13 +21,8 @@ sqlalchemy_datas, sqlalchemy_binaries, sqlalchemy_hiddenimports = collect_all("s
 # Package data files (prompts YAML/schema, locale JSON files)
 pkg_datas = collect_data_files("testbench_ai_service")
 
-# Distribution metadata of the service and all its dependencies: the agent package
-# inspection checks a package's Requires-Dist with importlib.metadata.version().
-metadata_datas = copy_metadata("testbench-ai-service", recursive=True)
-
 datas = (
     pkg_datas
-    + metadata_datas
     + uvicorn_datas
     + fastapi_datas
     + sqlalchemy_datas
@@ -58,11 +48,7 @@ hiddenimports = (
     + collect_submodules("aiohttp")
     + collect_submodules("msal")
     + collect_submodules("msal_extensions")
-    # The agent package inspection runs in a subprocess of the binary
-    # (`inspect-agent-package`); it imports the inspector lazily and needs packaging.
-    + collect_submodules("packaging")
     + [
-        "testbench_ai_service.agent_packages.inspector",
         # uvicorn server implementation modules loaded by string at runtime
         "uvicorn.lifespan.on",
         "uvicorn.lifespan.off",

@@ -7,10 +7,9 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 import testbench_ai_service.utils.config as config_module
-from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.llm.base import AzureAuthMethod, LLMProvider
-from testbench_ai_service.models.config import DEFAULT_AGENT_PACKAGES_DIR, LLMConfig, ProjectConfig
+from testbench_ai_service.models.config import LLMConfig, ProjectConfig
 from testbench_ai_service.utils.config import (
     CONFIG_PREFIX,
     get_agent_config,
@@ -22,7 +21,6 @@ from testbench_ai_service.utils.config import (
     merge_model_dicts,
     merge_prompt_configs,
 )
-from tests.helpers.packages import PACKAGE, install_package
 
 
 class _SimpleModel(BaseModel):
@@ -55,27 +53,6 @@ class TestLoadConfigFromFile:
             result = load_config_from_file(path)
 
         assert isinstance(result, AppConfig)
-
-    def test_activates_agent_packages_before_validating(self, tmp_path):
-        packages_dir = tmp_path / "packages"
-        install_package(packages_dir)
-        path = tmp_path / "config.toml"
-        path.write_text(
-            f"[{CONFIG_PREFIX}.agent_packages]\ndir = '{packages_dir.as_posix()}'\n",
-            encoding="utf-8",
-        )
-
-        load_config_from_file(str(path))
-
-        assert loaded.is_loaded(PACKAGE)
-
-    def test_activates_the_default_agent_packages_dir(self, tmp_path):
-        path = _write_toml(str(tmp_path), CONFIG_PREFIX, {"port": 8010})
-
-        with patch.object(config_module, "activate_packages", return_value=[]) as activate:
-            load_config_from_file(str(path))
-
-        activate.assert_called_once_with(DEFAULT_AGENT_PACKAGES_DIR)
 
     @patch("testbench_ai_service.utils.config.sys.exit")
     def test_missing_file_exits_with_code_1(self, mock_exit):

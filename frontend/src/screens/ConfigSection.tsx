@@ -13,7 +13,6 @@ import { ScopeTabs, scopeAddLabels } from '../components/ScopeTabs'
 import { SectionPanel } from '../components/SectionPanel'
 import { useTranslation } from 'react-i18next'
 import { LOGGING_FIELDS, SERVICE_TABS, llmFields, valueAt, type FieldSpec } from './fields'
-import { ProviderPackagesSection } from './packages/ProviderPackagesSection'
 
 type Section = 'service' | 'llm' | 'logging'
 
@@ -144,11 +143,6 @@ export function ConfigSection({
   // print one. Defaulted rather than assumed: `/models` can be absent, failed
   // or still loading, and none of those is worth a crashed screen.
   const credentials = catalogue.data?.providers ?? []
-  // Set by the console when an uploaded package provides the custom LLM client.
-  const clientPackage =
-    valueAt(config.data.disk, 'llm_config.provider') === 'custom'
-      ? valueAt(config.data.disk, 'llm_config.package')
-      : undefined
 
   return (
     <div
@@ -227,14 +221,6 @@ export function ConfigSection({
         </TabView>
       )}
 
-      {section === 'llm' && scope.kind === 'global' && typeof clientPackage === 'string' && (
-        <Message
-          severity="info"
-          style={{ justifyContent: 'flex-start' }}
-          text={t('llmClassPathFromPackage', { name: clientPackage })}
-        />
-      )}
-
       {/* The LLM screen has several sections, each in a panel with a header
           bar; Service and Logging are one list of fields and need none. */}
       <FieldGroup title={section === 'llm' ? t('llmSettings') : undefined}>
@@ -300,10 +286,6 @@ export function ConfigSection({
           issues={issues}
           readOnly={!isAdmin}
         />
-      )}
-
-      {section === 'llm' && scope.kind === 'global' && (
-        <ProviderPackagesSection isAdmin={isAdmin} />
       )}
 
       {section === 'llm' && scope.kind === 'project' && credentials.length > 0 && (

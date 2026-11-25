@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from testbench_ai_service.agent_packages import loaded
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
 from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_llm_factory, get_tb_connection
@@ -15,13 +14,6 @@ CYCLE_KEY = "3"
 USER_KEY = "0"
 PROJECT_NAME = "Car Configurator"
 TB_SERVER_URL = "https://localhost:9443/api/"
-
-
-@pytest.fixture(autouse=True)
-def reset_loaded_agent_packages():
-    """Agent packages put on ``sys.path`` are process-global; undo them after each test."""
-    yield
-    loaded.reset()
 
 
 @pytest.fixture

@@ -319,28 +319,6 @@ def test_restart_required_for_new_agent():
     assert "agents.acme.class_path" in restart_required(old, new)
 
 
-def test_restart_required_for_agent_packages_dir():
-    new = make_config(agent_packages={"dir": "elsewhere"})
-
-    assert "agent_packages.dir" in restart_required(make_config(), new)
-
-
-def _packaged(class_path: str = "acme_llm.client.AcmeClient", package: str | None = "acme-llm"):
-    return {"provider": "custom", "class_path": class_path, "package": package}
-
-
-def test_a_new_llm_client_package_needs_a_restart():
-    old = make_config()
-    new = make_config(llm_config=_packaged())
-    assert "llm_config.package" in restart_required(old, new)
-
-
-def test_a_moved_class_of_a_packaged_llm_client_needs_a_restart():
-    old = make_config(llm_config=_packaged())
-    new = make_config(llm_config=_packaged(class_path="acme_llm.other.AcmeClient"))
-    assert restart_required(old, new) == ["llm_config.class_path"]
-
-
 def test_a_hand_written_llm_class_path_is_still_hot_swapped():
     old = make_config(llm_config={"provider": "openai", "class_path": "json.JSONDecoder"})
     new = make_config(llm_config={"provider": "openai", "class_path": "json.JSONEncoder"})

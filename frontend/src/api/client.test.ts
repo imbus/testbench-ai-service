@@ -127,7 +127,7 @@ test('spells out a request-validation 422 instead of only naming the status', as
     ),
   )
 
-  const error = await apiFetch('/agent-packages/x/1/register', { method: 'POST' }).catch(
+  const error = await apiFetch('/config/apply', { method: 'POST' }).catch(
     (cause: unknown) => cause as ApiError,
   )
 

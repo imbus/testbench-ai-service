@@ -132,10 +132,6 @@ class AgentSummary(BaseModel):
     enabled: int
     project_overrides: int
     projects: int
-    # Agent package name -> why it is not in use (failed, or needs a restart).
-    unloaded_packages: dict[str, str] = {}
-    # Agent key -> why its class failed to import at startup (it has no route).
-    failed_agents: dict[str, str] = {}
 
 
 class ModelUsageEntry(BaseModel):
@@ -163,10 +159,6 @@ class StatusResponse(BaseModel):
     in_flight_tasks: int = 0
     restart_required: list[str] = []
     token_usage: UsageSummary = Field(default_factory=UsageSummary)
-    llm_client_error: str | None = Field(
-        default=None,
-        description="Why the LLM client an uploaded package provides is not in use.",
-    )
 
 
 class ConfigResponse(BaseModel):

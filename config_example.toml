@@ -172,13 +172,6 @@ name = "TestCaseSetReviewer"
 # [testbench-ai-service.jobs]
 # retention_days = 90
 
-# Agent packages: Python wheels with custom agents that admins upload in the console.
-# These settings can only be changed here, never from the console.
-# [testbench-ai-service.agent_packages]
-# allow_upload = false
-# dir = "data/agent_packages"
-# max_upload_mb = 20
-
 # Browser console served at /admin
 [testbench-ai-service.admin_ui]
 enabled = true

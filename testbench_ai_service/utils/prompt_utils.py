@@ -1,4 +1,4 @@
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from functools import partial
 from pathlib import Path
 from typing import get_type_hints
@@ -188,17 +188,6 @@ def step_agent_variable_errors(
             step: partial(_type_hint_names, data_class)
             for step, data_class in step_data_classes.items()
         },
-    )
-
-
-def step_field_errors(prompt_file: Path, step_fields: Mapping[str, Sequence[str]]) -> list[str]:
-    """Like :func:`step_agent_variable_errors`, with each step's field names given directly.
-
-    Used for agents described by an inspection report instead of their imported class.
-    """
-    return _step_errors(
-        prompt_file,
-        {step: partial(list, fields) for step, fields in step_fields.items()},
     )
 
 

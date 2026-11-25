@@ -74,7 +74,7 @@ describe('RestartBanner', () => {
       if (url.endsWith('/restart')) return jsonResponse({ ...here(), in_flight_tasks: 0 }, 202)
       return jsonResponse({ service: { started_at: '2026-11-18T09:00:00Z' } })
     })
-    renderBanner(['agent_packages'], OFFER)
+    renderBanner(['port'], OFFER)
 
     await userEvent.click(screen.getByRole('button', { name: 'Restart now' }))
     await userEvent.click(screen.getByRole('button', { name: 'Restart now' }))

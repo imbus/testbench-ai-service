@@ -48,7 +48,6 @@ RESTART_FIELDS: tuple[str, ...] = (
     "trusted_proxies",
     "admin_ui.enabled",
     "usage_file",
-    "agent_packages.dir",
 )
 
 RESTART_AGENT_FIELDS: tuple[str, ...] = ("endpoint_path", "class_path")
@@ -86,16 +85,6 @@ def restart_required(
     for field in RESTART_FIELDS:
         if _resolve_dotted_path(old, field) != _resolve_dotted_path(new, field):
             changed.append(field)
-
-    # An LLM client from an uploaded package is loaded at startup only. A hand-written
-    # class_path (no package) is importable already and is swapped in process.
-    if old.llm_config.package != new.llm_config.package:
-        changed.append("llm_config.package")
-    elif (
-        new.llm_config.package is not None
-        and old.llm_config.class_path != new.llm_config.class_path
-    ):
-        changed.append("llm_config.class_path")
 
     old_keys = set(old.agents)
     new_keys = set(new.agents)

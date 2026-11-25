@@ -1,4 +1,3 @@
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, TypedDict
@@ -12,7 +11,6 @@ from testbench_ai_service.webui.agent_context import (
     agent_data_sample,
     describe,
 )
-from tests.helpers.packages import CLASS_PATH, PACKAGE, install_package, rater_report
 
 
 @dataclass
@@ -116,17 +114,3 @@ class TestAgentContextSample:
     def test_an_unimportable_class_contributes_nothing(self):
         agents = {"r": _agent("no.such.module.Agent", "reviewer/prompt.yaml")}
         assert agent_context_sample(agents, "reviewer") == {}
-
-    def test_an_unloaded_package_agent_contributes_its_report_sample(self, tmp_path):
-        install_package(tmp_path, report=rater_report(context_sample={"title": "<str>"}))
-        agent = _agent(CLASS_PATH, "acme/prompt.yaml").model_copy(update={"package": PACKAGE})
-
-        sample = agent_context_sample({"acme": agent}, "acme", tmp_path)
-
-        assert sample == {"title": "<str>"}
-        assert "acme" not in sys.modules
-
-    def test_a_package_agent_without_report_contributes_nothing(self, tmp_path):
-        agent = _agent(CLASS_PATH, "acme/prompt.yaml").model_copy(update={"package": PACKAGE})
-
-        assert agent_context_sample({"acme": agent}, "acme", tmp_path / "missing") == {}

@@ -16,7 +16,6 @@ import { Prompts } from './screens/Prompts'
 import { Raw } from './screens/Raw'
 import { Status } from './screens/Status'
 import type { ConfigIssue } from './api/types'
-import { useNotedRestart } from './api/packages'
 import { useConfig, useStatus } from './api/queries'
 import { DraftProvider } from './state/draft'
 import { useSession } from './state/session'
@@ -37,7 +36,6 @@ export function App() {
   // 15 seconds for data nothing there uses.
   const config = useConfig({ enabled: !!session })
   const status = useStatus({ enabled: !!session })
-  const notedRestart = useNotedRestart(status.data?.service?.uptime_seconds)
 
   useEffect(() => applyTheme(theme), [theme])
 
@@ -72,9 +70,7 @@ export function App() {
   // Derived from the status query rather than remembered from the apply
   // response: an operator who edits config.toml by hand, or who reloads the
   // console after applying, must still see the banner.
-  // Plus what package changes noted in this page: switching a package version
-  // changes no config.toml key the status could derive a restart from.
-  const restartFields = [...new Set([...(status.data?.restart_required ?? []), ...notedRestart])]
+  const restartFields = status.data?.restart_required ?? []
   const service = status.data?.service
 
   return (
@@ -149,12 +145,6 @@ export function App() {
               <Route
                 path="/admin/agents/:agentKey"
                 element={<AgentDetail isAdmin={session.is_admin} issues={issues} />}
-              />
-              {/* The packages are a section of the agents screen now; the
-                  old address stays for bookmarks. */}
-              <Route
-                path="/admin/agent-packages"
-                element={<Navigate to="/admin/agents" replace />}
               />
               <Route
                 path="/admin/projects"

@@ -657,7 +657,7 @@ def read_prompt_doc(
         prompts_dir,
         lang,
         agent,
-        agent_context_sample(config.agents, agent, config.agent_packages.dir),
+        agent_context_sample(config.agents, agent),
     )
 
 
@@ -842,7 +842,7 @@ def _refuse_unknown_agent_fields(agent: str, body: PromptSaveRequest, config: Ap
     Step messages are left to that start-up check: each step has data of its own.
     An agent whose fields are not known here (no sample) is not checked.
     """
-    sample = agent_context_sample(config.agents, agent, config.agent_packages.dir)
+    sample = agent_context_sample(config.agents, agent)
     if not sample:
         return
     bodies = [message.content for variant in body.variants for message in variant.messages]

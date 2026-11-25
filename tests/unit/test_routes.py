@@ -1,6 +1,3 @@
-import shutil
-import sys
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -8,22 +5,11 @@ import requests
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from testbench_ai_service.agent_packages import loaded
-from testbench_ai_service.agent_packages.manifest import site_dir
-from testbench_ai_service.agents.routes import get_agent_routers, load_agent
 from testbench_ai_service.auth import AuthInfo, AuthType, validate_auth_token
-from testbench_ai_service.config import DEFAULT_AGENTS, AppConfig
+from testbench_ai_service.config import AppConfig
 from testbench_ai_service.dependencies import get_app_config
 from testbench_ai_service.main import create_app
-from testbench_ai_service.models.config import AgentConfig, PromptConfig
 from testbench_ai_service.routes import _resolve_project_name
-from tests.helpers.packages import (
-    BROKEN_CLASS_PATH,
-    CLASS_PATH,
-    PACKAGE,
-    install_package,
-    install_two_agent_package,
-)
 
 
 def _make_auth_info() -> AuthInfo:
@@ -157,150 +143,3 @@ class TestResolveProjectName:
         with pytest.raises(HTTPException) as exc_info:
             _resolve_project_name(MagicMock(), "1")
         assert exc_info.value.status_code == 502
-
-
-class TestPackageAgentRouters:
-    @staticmethod
-    def _config(packages_dir: Path, class_path: str = CLASS_PATH) -> AppConfig:
-        prompt = site_dir(packages_dir, PACKAGE, "1.0.0") / "acme/rater/prompts/en/prompt.yaml"
-        agent = AgentConfig(
-            enabled=True,
-            endpoint_path="/acme",
-            class_path=class_path,
-            prompt=PromptConfig(file=prompt),
-            package=PACKAGE,
-        )
-        with patch("testbench_ai_service.config.validate_tb_server_url"):
-            return AppConfig(
-                tb_server_url="https://localhost:9443/api/",
-                agents={**DEFAULT_AGENTS, "acme": agent},
-                agent_packages={"dir": packages_dir},
-            )
-
-    @staticmethod
-    def _paths(routers) -> set[str]:
-        return {route.path for router in routers for route in router.routes}
-
-    def test_routers_skip_unloaded_package_agent(self, tmp_path):
-        install_package(tmp_path)
-        config = self._config(tmp_path)
-
-        paths = self._paths(get_agent_routers(config))
-
-        assert "/acme" not in paths
-        assert "/test-case-set-reviews" in paths
-        assert "acme" not in sys.modules
-
-    def test_routers_include_loaded_package_agent(self, tmp_path):
-        install_package(tmp_path)
-        loaded.activate_packages(tmp_path)
-        config = self._config(tmp_path)
-
-        assert "/acme" in self._paths(get_agent_routers(config))
-
-    def test_routers_skip_only_the_package_agent_whose_import_fails(self, tmp_path):
-        install_two_agent_package(tmp_path)
-        loaded.activate_packages(tmp_path)
-        config = self._config(tmp_path)
-        broken = config.agents["acme"].model_copy(
-            update={"class_path": BROKEN_CLASS_PATH, "endpoint_path": "/broken"}
-        )
-        config.agents["acme_broken"] = broken
-
-        paths = self._paths(get_agent_routers(config))
-
-        assert "/acme" in paths
-        assert "/broken" not in paths
-        assert set(loaded.agent_failures()) == {"acme_broken"}
-        assert "SystemExit" in loaded.agent_failures()["acme_broken"]
-        assert loaded.is_loaded(PACKAGE)
-        assert loaded.failures() == {}
-
-
-class TestLoadPackageAgent:
-    @staticmethod
-    def _agent(class_path: str = CLASS_PATH, **kwargs) -> AgentConfig:
-        return AgentConfig(
-            enabled=True,
-            endpoint_path="/acme",
-            class_path=class_path,
-            prompt=PromptConfig(file=Path("acme/prompt.yaml")),
-            package=PACKAGE,
-            **kwargs,
-        )
-
-    def test_loads_an_agent_of_a_loaded_package(self, tmp_path):
-        install_package(tmp_path)
-        loaded.activate_packages(tmp_path)
-
-        assert type(load_agent(self._agent(), "acme")).__name__ == "RaterAgent"
-
-    def test_refuses_an_agent_of_a_package_that_is_not_loaded(self, tmp_path):
-        install_package(tmp_path)
-
-        with pytest.raises(HTTPException) as exc_info:
-            load_agent(self._agent(), "acme", tmp_path)
-
-        assert exc_info.value.status_code == 503
-        assert "acme" not in sys.modules
-        assert "Restart the service" in exc_info.value.detail
-
-    def test_tells_to_upload_again_when_the_package_is_missing(self, tmp_path):
-        with pytest.raises(HTTPException) as exc_info:
-            load_agent(self._agent(), "acme", tmp_path)
-
-        assert exc_info.value.status_code == 503
-        detail = exc_info.value.detail
-        assert "missing or failed to load" in detail
-        assert "Restart" not in detail
-
-    def test_tells_to_upload_again_when_the_package_files_are_missing(self, tmp_path):
-        install_package(tmp_path)
-        shutil.rmtree(site_dir(tmp_path, PACKAGE, "1.0.0"))
-
-        with pytest.raises(HTTPException) as exc_info:
-            load_agent(self._agent(), "acme", tmp_path)
-
-        assert "missing or failed to load" in exc_info.value.detail
-
-    def test_tells_to_fix_a_package_that_failed_at_startup(self, tmp_path):
-        install_package(tmp_path, sha256="0" * 64)
-        loaded.activate_packages(tmp_path)
-
-        with pytest.raises(HTTPException) as exc_info:
-            load_agent(self._agent(), "acme", tmp_path)
-
-        detail = exc_info.value.detail
-        assert "missing or failed to load" in detail
-        assert "Restart" not in detail
-        assert "hash" not in detail
-
-    def test_refuses_an_agent_that_failed_at_startup(self, tmp_path):
-        install_package(tmp_path)
-        loaded.activate_packages(tmp_path)
-        loaded.mark_agent_failed("acme", "boom")
-
-        with pytest.raises(HTTPException) as exc_info:
-            load_agent(self._agent(), "acme")
-
-        assert exc_info.value.status_code == 503
-        assert "boom" in exc_info.value.detail
-
-    def test_refuses_an_agent_whose_import_exits(self, tmp_path):
-        install_two_agent_package(tmp_path)
-        loaded.activate_packages(tmp_path)
-
-        with pytest.raises(HTTPException) as exc_info:
-            load_agent(self._agent(BROKEN_CLASS_PATH), "acme_broken")
-
-        assert exc_info.value.status_code == 503
-
-    def test_refuses_invalid_args_with_503(self, tmp_path):
-        install_package(tmp_path)
-        loaded.activate_packages(tmp_path)
-
-        with pytest.raises(HTTPException) as exc_info:
-            load_agent(self._agent(args={"typo": 1}), "acme")
-
-        assert exc_info.value.status_code == 503
-        assert "typo" in exc_info.value.detail

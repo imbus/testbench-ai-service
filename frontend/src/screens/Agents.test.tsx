@@ -9,7 +9,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DraftProvider, useDraft } from '../state/draft'
 import type { ConfigResponse, ProjectsResponse, PromptMeta } from '../api/types'
 import { Agents } from './Agents'
-import { pkg, version } from './packages/fixtures'
 import { i18n } from '../i18n'
 import { openPicker, pickFrom } from '../test/pickers'
 
@@ -362,90 +361,6 @@ describe('a config payload with nothing in it', () => {
     })
     renderAgents()
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument())
-  })
-})
-
-describe('agents from an agent package', () => {
-  const withPackage = {
-    ...DISK,
-    agents: {
-      ...DISK.agents,
-      rater: {
-        enabled: true,
-        endpoint_path: '/acme-risk-rater',
-        class_path: 'acme.risk:RiskRater',
-        package: 'acme-tb-agents',
-      },
-    },
-  }
-
-  function serve({ unloaded = {} as Record<string, string> } = {}) {
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url.startsWith('/admin/api/config'))
-        return ok({ running: withPackage, disk: withPackage, config_path: 'x' })
-      if (url.startsWith('/admin/api/projects')) return ok(PROJECTS)
-      if (url === '/admin/api/agent-packages')
-        return ok({
-          allow_upload: true,
-          default_dirs: false,
-          packages: [pkg({ versions: [version()], registered: { rater: 'risk_rater' } })],
-        })
-      if (url === '/admin/api/status')
-        return ok({
-          agents: {
-            total: 3,
-            enabled: 2,
-            project_overrides: 0,
-            projects: 0,
-            unloaded_packages: unloaded,
-            failed_agents: { explainer: 'ImportError: a.b' },
-          },
-        })
-      return { ok: false, status: 404, json: async () => ({ detail: 'no' }) } as Response
-    })
-  }
-
-  it('names the package and its active version', async () => {
-    serve()
-    renderAgents()
-
-    const row = await screen.findByTestId('agent-row-rater')
-    await waitFor(() =>
-      expect(within(row).getByTestId('agent-package')).toHaveTextContent('acme-tb-agents 1.2.0'),
-    )
-    expect(within(row).queryByText('not loaded')).toBeNull()
-    expect(
-      within(screen.getByTestId('agent-row-reviewer')).queryByTestId('agent-package'),
-    ).toBeNull()
-  })
-
-  it('puts the wheel import in the header and the packages below the agents', async () => {
-    serve()
-    renderAgents()
-
-    const button = await screen.findByRole('button', { name: 'Import agent wheel' })
-    expect(button).toBeEnabled()
-    const section = screen.getByRole('region', { name: 'Agent packages' })
-    expect(await within(section).findByTestId('package-acme-tb-agents')).toBeInTheDocument()
-  })
-
-  it('shows a non-admin the packages without the import button', async () => {
-    serve()
-    renderAgents({ isAdmin: false })
-
-    await screen.findByTestId('package-acme-tb-agents')
-    expect(screen.queryByRole('button', { name: 'Import agent wheel' })).toBeNull()
-  })
-
-  it('marks a package agent that is not loaded, and an agent that failed to import', async () => {
-    serve({ unloaded: { 'acme-tb-agents': 'waits for a restart' } })
-    renderAgents()
-
-    const row = await screen.findByTestId('agent-row-rater')
-    const badge = await within(row).findByText('not loaded')
-    expect(badge.closest('.p-tag')).toHaveAttribute('title', 'waits for a restart')
-    const failed = await within(screen.getByTestId('agent-row-explainer')).findByText('not loaded')
-    expect(failed.closest('.p-tag')).toHaveAttribute('title', 'ImportError: a.b')
   })
 })
 
