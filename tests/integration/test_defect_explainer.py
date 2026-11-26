@@ -23,6 +23,8 @@ _PATCH_GET_PROJECT_NAME = "testbench_ai_service.utils.agent.get_project_name"
 _PATCH_GET_CATALOG = "testbench_ai_service.agents.defect_explainer.agent.get_test_case_set_catalog"
 _PATCH_GET_TREE = "testbench_ai_service.utils.testbench.get_test_structure_tree"
 _PATCH_GET_PROJECT_ROLES = "testbench_ai_service.agents.routes.get_project_roles"
+_PATCH_GET_TOV_DETAILS = "testbench_ai_service.agents.defect_explainer.agent.get_tov_details"
+_PATCH_IS_JSON_TOV = "testbench_ai_service.agents.defect_explainer.agent.is_json_based_tov"
 _PATCH_CLEAN_UP = "testbench_ai_service.agents.defect_explainer.agent.clean_up_comment"
 _PATCH_ADD_EXPLANATIONS = (
     "testbench_ai_service.agents.defect_explainer.agent.add_explanations_to_comment"
@@ -37,6 +39,8 @@ def patches(mocker):
         get_project_name=mocker.patch(_PATCH_GET_PROJECT_NAME, return_value=PROJECT_NAME),
         get_catalog=mocker.patch(_PATCH_GET_CATALOG, return_value=build_tcs_catalog()),
         get_tree=mocker.patch(_PATCH_GET_TREE, return_value=build_unlocked_structure_tree("exec")),
+        get_tov_details=mocker.patch(_PATCH_GET_TOV_DETAILS),
+        is_json_tov=mocker.patch(_PATCH_IS_JSON_TOV, return_value=True),
         get_project_roles=mocker.patch(
             _PATCH_GET_PROJECT_ROLES,
             return_value=[ProjectRole.Tester],
@@ -100,6 +104,16 @@ class TestErrorPaths:
         patches.get_tree.return_value = build_locked_structure_tree("exec")
 
         assert post(_ENDPOINT, cycle_key=CYCLE_KEY).status_code == status.HTTP_409_CONFLICT
+
+    def test_xml_based_tov_returns_409(self, post, patches):
+        """Only JSON-based test object versions are supported."""
+        patches.is_json_tov.return_value = False
+
+        response = post(_ENDPOINT, cycle_key=CYCLE_KEY, language="en")
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert "XML-based test object versions" in response.json()["detail"]
+        patches.get_tree.assert_not_called()
 
     def test_insufficient_role_returns_403(self, post, patches):
         patches.get_project_roles.return_value = []

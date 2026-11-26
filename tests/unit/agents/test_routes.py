@@ -98,6 +98,8 @@ class TestTriggerTestCaseSetReviews:
         self.mock_reviewer_class = reviewer_patcher.start()
         self.mock_reviewer = AsyncMock()
         self.mock_reviewer.ALLOWED_ROLES = TestCaseSetReviewer.ALLOWED_ROLES
+        # The route validates the prompt's ``agent.*`` variables against this class.
+        self.mock_reviewer.AGENT_DATA_CLASS = TestCaseSetReviewer.AGENT_DATA_CLASS
         self.mock_reviewer.precheck.return_value = PrecheckResult(passed=True)
         self.mock_reviewer_class.__name__ = "TestCaseSetReviewer"
         self.mock_reviewer_class.return_value = self.mock_reviewer
@@ -231,16 +233,18 @@ class TestTriggerTestCaseSetReviews:
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
         assert response.status_code == 403
 
-    def test_unsupported_testbench_version_returns_426(self):
+    def test_unsupported_testbench_version_returns_409(self):
+        """The version check is part of the agent's precheck, so it surfaces as a conflict."""
         self.mock_tb_connection.server_version = [4, 0, 3]
+        self.mock_reviewer.precheck = TestCaseSetReviewer().precheck
 
         response = self.client.post("/test-case-set-reviews", json=self.valid_request.model_dump())
 
-        assert response.status_code == 426
+        assert response.status_code == 409
         assert response.json()["detail"] == (
-            "Der KI-Agent erfordert TestBench 4.1 oder neuer. "
-            "Der verbundene TestBench-Server hat die Version 4.0.3. "
-            "Aktualisieren Sie TestBench und versuchen Sie es erneut."
+            "Die Vorabprüfung ist fehlgeschlagen:\n"
+            "Ihre aktuelle TestBench-Version 4.0.3 wird nicht unterstützt. "
+            "Für den KI-Agenten ist Version 4.1 erforderlich."
         )
 
     def test_double_digit_minor_version_is_supported(self):

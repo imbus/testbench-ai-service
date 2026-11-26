@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException, status
 
 from testbench_ai_service.auth import AuthInfo, AuthType
+from testbench_ai_service.config import TEMPLATES_DIR
 from testbench_ai_service.llm.base import LLMProvider
 from testbench_ai_service.models.config import LLMConfig, PromptConfig
 from testbench_ai_service.models.language import LanguageOption
@@ -24,6 +25,13 @@ def _session_auth(user_key: str = "U1") -> AuthInfo:
 
 def _jwt_auth(token: str, user_key: str = "U1") -> AuthInfo:
     return AuthInfo(auth_type=AuthType.JWT_TOKEN, token=token, user_key=user_key, conn=MagicMock())
+
+
+def _app_config() -> MagicMock:
+    """App config stand-in; ``templates_dir`` must be a real path for ``ExecutionContext``."""
+    app_config = MagicMock()
+    app_config.templates_dir = TEMPLATES_DIR
+    return app_config
 
 
 @pytest.fixture
@@ -69,7 +77,7 @@ class TestBuildExecutionContextSessionToken:
 
     def test_builds_context_with_resolved_fields(self, resolved_mocks, base_request):
         ctx = build_execution_context(
-            "test_case_set_reviewer", base_request, MagicMock(), MagicMock(), _session_auth()
+            "test_case_set_reviewer", base_request, MagicMock(), _app_config(), _session_auth()
         )
 
         assert ctx.user_key == "U1"
@@ -78,16 +86,19 @@ class TestBuildExecutionContextSessionToken:
         assert ctx.tov_key == "TOV1"
         assert ctx.cycle_key == "CYCLE1"
         assert ctx.language == "en"
+        assert ctx.templates_dir == TEMPLATES_DIR
 
     def test_user_key_comes_from_auth_info(self, resolved_mocks, base_request):
         ctx = build_execution_context(
-            "uc", base_request, MagicMock(), MagicMock(), _session_auth(user_key="custom-user")
+            "uc", base_request, MagicMock(), _app_config(), _session_auth(user_key="custom-user")
         )
         assert ctx.user_key == "custom-user"
 
     def test_request_language_overrides_config_language(self, resolved_mocks, base_request):
         base_request.language = "de"
-        ctx = build_execution_context("uc", base_request, MagicMock(), MagicMock(), _session_auth())
+        ctx = build_execution_context(
+            "uc", base_request, MagicMock(), _app_config(), _session_auth()
+        )
 
         resolved_mocks["language"].assert_not_called()
         assert ctx.language == "de"
@@ -95,7 +106,9 @@ class TestBuildExecutionContextSessionToken:
     def test_filtering_is_forwarded_to_context(self, resolved_mocks, base_request):
         filtering = FilteringOptions(appliedFilters=None)
         base_request.filtering = filtering
-        ctx = build_execution_context("uc", base_request, MagicMock(), MagicMock(), _session_auth())
+        ctx = build_execution_context(
+            "uc", base_request, MagicMock(), _app_config(), _session_auth()
+        )
 
         assert ctx.filtering is filtering
 
@@ -106,7 +119,7 @@ class TestBuildExecutionContextSessionToken:
         )
 
         with pytest.raises(HTTPException) as exc_info:
-            build_execution_context("uc", base_request, MagicMock(), MagicMock(), _session_auth())
+            build_execution_context("uc", base_request, MagicMock(), _app_config(), _session_auth())
 
         assert exc_info.value.status_code == status.HTTP_404_NOT_FOUND
 
@@ -123,7 +136,7 @@ class TestBuildExecutionContextJwtToken:
 
     def test_keys_extracted_from_jwt_scope(self, resolved_mocks, base_request):
         ctx = build_execution_context(
-            "uc", base_request, MagicMock(), MagicMock(), _jwt_auth(self._JWT)
+            "uc", base_request, MagicMock(), _app_config(), _jwt_auth(self._JWT)
         )
 
         assert ctx.project_key == "JP1"
@@ -134,7 +147,7 @@ class TestBuildExecutionContextJwtToken:
         base_request.project_key = "IGNORED"
         base_request.tov_key = "IGNORED"
         ctx = build_execution_context(
-            "uc", base_request, MagicMock(), MagicMock(), _jwt_auth(self._JWT)
+            "uc", base_request, MagicMock(), _app_config(), _jwt_auth(self._JWT)
         )
         assert ctx.project_key == "JP1"
 
@@ -142,7 +155,7 @@ class TestBuildExecutionContextJwtToken:
         filtering = FilteringOptions(appliedFilters=None)
         base_request.filtering = filtering
         ctx = build_execution_context(
-            "uc", base_request, MagicMock(), MagicMock(), _jwt_auth(self._JWT)
+            "uc", base_request, MagicMock(), _app_config(), _jwt_auth(self._JWT)
         )
         assert ctx.filtering is filtering
 
@@ -150,7 +163,7 @@ class TestBuildExecutionContextJwtToken:
         bad_jwt = "not.a.validjwt!!!"
         with pytest.raises(HTTPException) as exc_info:
             build_execution_context(
-                "uc", base_request, MagicMock(), MagicMock(), _jwt_auth(bad_jwt)
+                "uc", base_request, MagicMock(), _app_config(), _jwt_auth(bad_jwt)
             )
         assert exc_info.value.status_code == status.HTTP_401_UNAUTHORIZED
 

@@ -96,6 +96,14 @@ class TestDefectExplainerPrecheck:
     def setup(self):
         load_translations()
         self.service = DefectExplainer()
+        with (
+            patch(
+                f"{_AGENT_MODULE}.get_tov_details",
+                return_value=MagicMock(exchangeFormat="JSON"),
+            ),
+            patch(f"{_AGENT_MODULE}.is_json_based_tov", return_value=True) as self.mock_is_json_tov,
+        ):
+            yield
 
     async def test_outdated_testbench_version_fails_before_any_lookup(self):
         context = _make_context()
@@ -141,17 +149,44 @@ class TestDefectExplainerPrecheck:
         assert len(result.warnings) == 1
         assert "no execution data" in result.warnings[0]
 
-    async def test_verdict_not_to_verify_adds_warning_and_excludes(self):
+    async def test_xml_based_tov_fails_before_structure_lookup(self):
         context = _make_context()
         conn = _make_conn()
-        node = _make_tc_node("iTB-TC-1", verdict=VerdictStatus.Fail)
+        self.mock_is_json_tov.return_value = False
+
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes") as mock_nodes:
+            result = await self.service.precheck(context, conn)
+
+        assert not result.passed
+        assert len(result.warnings) == 1
+        assert "XML-based" in result.warnings[0]
+        mock_nodes.assert_not_called()
+
+    @pytest.mark.parametrize("verdict", [VerdictStatus.ToVerify, VerdictStatus.Fail])
+    async def test_to_verify_and_fail_verdicts_are_accepted(self, verdict):
+        context = _make_context()
+        conn = _make_conn()
+        node = _make_tc_node("iTB-TC-1", verdict=verdict)
+
+        with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
+            result = await self.service.precheck(context, conn)
+
+        assert result.passed
+        assert result.items == ["iTB-TC-1"]
+        assert result.warnings == []
+
+    @pytest.mark.parametrize("verdict", [VerdictStatus.Pass, VerdictStatus.Undefined])
+    async def test_unsupported_verdict_adds_warning_and_excludes(self, verdict):
+        context = _make_context()
+        conn = _make_conn()
+        node = _make_tc_node("iTB-TC-1", verdict=verdict)
 
         with patch(f"{_AGENT_MODULE}.get_test_case_set_nodes", return_value=[node]):
             result = await self.service.precheck(context, conn)
 
         assert not result.passed
         assert len(result.warnings) == 1
-        assert "To Verify" in result.warnings[0]
+        assert "'To Verify' or 'Fail'" in result.warnings[0]
 
     async def test_status_not_performed_adds_warning_and_excludes(self):
         context = _make_context()

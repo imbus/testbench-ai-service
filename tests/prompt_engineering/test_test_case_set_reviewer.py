@@ -56,7 +56,7 @@ class TestTestCaseSetReviewerPromptingEnglish:
             """
         ).strip()
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -83,7 +83,7 @@ class TestTestCaseSetReviewerPromptingEnglish:
             """
         ).strip()
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -105,7 +105,7 @@ class TestTestCaseSetReviewerPromptingEnglish:
             """
         ).strip()
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -126,7 +126,7 @@ class TestTestCaseSetReviewerPromptingEnglish:
             """
         ).strip()
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -154,7 +154,7 @@ class TestTestCaseSetReviewerPromptingEnglish:
         ).strip()
         test_case_set_description = "Checks if temporary user accounts can delete admin accounts."
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -191,7 +191,7 @@ class TestTestCaseSetReviewerPromptingEnglish:
             vars={"glossary": self.glossary},
         )
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,
@@ -246,7 +246,7 @@ class TestTestCaseSetReviewerPromptingGerman:
             """
         ).strip()
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -273,7 +273,7 @@ class TestTestCaseSetReviewerPromptingGerman:
             """
         ).strip()
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -295,7 +295,7 @@ class TestTestCaseSetReviewerPromptingGerman:
             """
         ).strip()
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -316,7 +316,7 @@ class TestTestCaseSetReviewerPromptingGerman:
             """
         ).strip()
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -346,7 +346,7 @@ class TestTestCaseSetReviewerPromptingGerman:
             "Prüft, ob ein Admin durch einen temporären Nutzer gelöscht werden kann."
         )
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -383,7 +383,7 @@ class TestTestCaseSetReviewerPromptingGerman:
             vars={"glossary": self.glossary},
         )
 
-        response = await self.reviewer._get_ai_response(
+        response = await self.reviewer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=prompt_config,

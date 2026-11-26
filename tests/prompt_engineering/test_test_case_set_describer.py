@@ -49,7 +49,7 @@ class TestTestCaseSetDescriberPromptingEnglish:
             """
         )
 
-        response = await self.describer._get_ai_response(
+        response = await self.describer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -81,7 +81,7 @@ class TestTestCaseSetDescriberPromptingEnglish:
             """
         )
 
-        response = await self.describer._get_ai_response(
+        response = await self.describer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -132,7 +132,7 @@ class TestTestCaseSetDescriberPromptingGerman:
             """
         )
 
-        response = await self.describer._get_ai_response(
+        response = await self.describer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,
@@ -164,7 +164,7 @@ class TestTestCaseSetDescriberPromptingGerman:
             """
         )
 
-        response = await self.describer._get_ai_response(
+        response = await self.describer.get_ai_response(
             llm_client=self.llm_client,
             llm_config=self.llm_config,
             prompt_config=self.prompt_config,

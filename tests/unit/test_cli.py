@@ -97,11 +97,14 @@ class TestInitAction:
         mock_args.path = "my.toml"
         mock_args.force = True
         mock_args.prompts_dir = "prompts"
+        mock_args.templates_dir = "templates"
 
         with patch("testbench_ai_service.cli.create_default_config_file") as mock_create:
             init_action(mock_args)
 
-        mock_create.assert_called_once_with("my.toml", force=True, prompts_dir="prompts")
+        mock_create.assert_called_once_with(
+            "my.toml", force=True, prompts_dir="prompts", templates_dir="templates"
+        )
 
 
 class TestStartAction:
